@@ -1,0 +1,352 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Estilos personalizados para garantir visibilidade dos toasts */
+.custom-toast-viewport {
+  z-index: 9999 !important;
+  position: fixed !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  max-width: 420px !important;
+  padding: 1rem !important;
+  pointer-events: none !important;
+}
+
+.custom-toast {
+  pointer-events: auto !important;
+  background: white !important;
+  color: #111827 !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+  padding: 1rem !important;
+  margin-bottom: 0.5rem !important;
+  min-width: 300px !important;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: slideInFromRight 0.3s ease-out !important;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.custom-toast[data-variant='destructive'] {
+  background: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+
+.custom-toast-title {
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.custom-toast-description {
+  font-size: 0.8125rem !important;
+  opacity: 0.9 !important;
+}
+
+.custom-toast-close {
+  position: absolute !important;
+  top: 0.5rem !important;
+  right: 0.5rem !important;
+  opacity: 0.7 !important;
+  background: none !important;
+  border: none !important;
+  cursor: pointer !important;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .custom-toast {
+    background: #1f2937 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+  }
+
+  .custom-toast[data-variant='destructive'] {
+    background: #7f1d1d !important;
+    border-color: #dc2626 !important;
+    color: #fef2f2 !important;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none;
+  }
+}
+
+/* Oculta o checkbox nativo */
+.checkbox-container input[type='checkbox'] {
+  display: none;
+}
+
+/* Estilo do label que envolve o checkbox e o texto */
+.custom-checkbox-label {
+  display: flex;
+  align-items: center; /* Alinha verticalmente o checkbox e o texto */
+  gap: 8px; /* Espaçamento entre o checkbox e o texto */
+  cursor: pointer;
+  font-size: 14px; /* Tamanho do texto */
+  color: #374151; /* Cor do texto */
+}
+
+/* Estilo do checkbox personalizado */
+.custom-checkbox {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background-color: #ffffff; /* Cor de fundo inicial */
+  border: 2px solid #cccccc; /* Borda */
+  border-radius: 4px; /* Cantos arredondados */
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  position: relative; /* Importante para o posicionamento do ícone */
+}
+
+/* Altera a cor de fundo quando o checkbox está marcado */
+.checkbox-container
+  input[type='checkbox']:checked
+  + .custom-checkbox-label
+  .custom-checkbox {
+  background-color: #4caf50; /* Cor de fundo quando marcado */
+  border-color: #4caf50; /* Cor da borda quando marcado */
+}
+
+/* Adiciona um ícone de check (opcional) */
+.checkbox-container
+  input[type='checkbox']:checked
+  + .custom-checkbox-label
+  .custom-checkbox::after {
+  content: '✔'; /* Ícone de check */
+  font-size: 14px;
+  color: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.custom-toast {
+  background-color: #333;
+  color: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.custom-toast-title {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.custom-toast-description {
+  font-size: 14px;
+}
+
+.custom-toast-close {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+.custom-toast-viewport {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 9999;
+}
+
+/* ============================================
+   React DatePicker - Dark Mode Styles
+   ============================================ */
+.dark .react-datepicker {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark .react-datepicker__header {
+  background-color: #374151 !important;
+  border-bottom-color: #4b5563 !important;
+}
+
+.dark .react-datepicker__current-month,
+.dark .react-datepicker__day-name,
+.dark .react-datepicker-time__header {
+  color: #f9fafb !important;
+}
+
+.dark .react-datepicker__day {
+  color: #e5e7eb !important;
+}
+
+.dark .react-datepicker__day:hover {
+  background-color: #4b5563 !important;
+  color: #ffffff !important;
+}
+
+.dark .react-datepicker__day--selected,
+.dark .react-datepicker__day--keyboard-selected {
+  background-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+.dark .react-datepicker__day--today {
+  background-color: transparent !important;
+  color: #60a5fa !important;
+  font-weight: bold !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 4px !important;
+}
+
+.dark .react-datepicker__day--today.react-datepicker__day--selected {
+  background-color: #3b82f6 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.dark .react-datepicker__day--disabled {
+  color: #6b7280 !important;
+}
+
+.dark .react-datepicker__day--outside-month {
+  color: #6b7280 !important;
+}
+
+.dark .react-datepicker__navigation-icon::before {
+  border-color: #9ca3af !important;
+}
+
+.dark .react-datepicker__navigation:hover *::before {
+  border-color: #ffffff !important;
+}
+
+.dark .react-datepicker__triangle {
+  display: none;
+}
+
+.dark .react-datepicker__month-container {
+  background-color: #1f2937 !important;
+}
+
+.dark .react-datepicker-popper {
+  z-index: 9999 !important;
+}
+
+/* Year and Month dropdowns */
+.dark .react-datepicker__year-dropdown,
+.dark .react-datepicker__month-dropdown {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+}
+
+.dark .react-datepicker__year-option,
+.dark .react-datepicker__month-option {
+  color: #e5e7eb !important;
+}
+
+.dark .react-datepicker__year-option:hover,
+.dark .react-datepicker__month-option:hover {
+  background-color: #374151 !important;
+}

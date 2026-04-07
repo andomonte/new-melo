@@ -1,0 +1,2752 @@
+[2025-11-06T18:29:31.278Z] [33m[39m
+[33m🔍 Conectando ao Oracle...[39m
+[2025-11-06T18:29:31.849Z] [31m[39m
+[31m❌ Erro: ORA-01017: invalid username/password; logon denied[39m
+[31mHelp: https://docs.oracle.com/error-help/db/ora-01017/[39m
+[2025-11-06T18:30:19.876Z] [33m[39m
+[33m🔍 Conectando ao Oracle...[39m
+[2025-11-06T18:30:22.293Z] [31m[39m
+[31m❌ Erro: ORA-01017: invalid username/password; logon denied[39m
+[31mHelp: https://docs.oracle.com/error-help/db/ora-01017/[39m
+[2025-11-13T07:29:07.180Z] [33m[39m
+[33m🔍 Conectando ao Oracle...[39m
+[2025-11-13T07:29:07.543Z] [32m✅ Conectado com sucesso ao Oracle![39m
+[32m[39m
+[2025-11-13T07:29:07.547Z] [36m================================================================================[39m
+[2025-11-13T07:29:07.553Z] [36m1. PROCEDURES COM 'REMESSA' NO NOME[39m
+[2025-11-13T07:29:07.557Z] [36m================================================================================[39m
+[2025-11-13T07:29:07.784Z] 
+📦 [1mCOMPRAS_REMESSA_BOSCH[22m (PACKAGE)
+[2025-11-13T07:29:07.787Z]    Status: VALID
+[2025-11-13T07:29:07.791Z]    Criado em: 06/11/2025 16:34:30
+[2025-11-13T07:29:07.794Z]    Última modificação: 06/11/2025 16:34:39
+[2025-11-13T07:29:07.798Z] 
+📦 [1mREMESSABANCO[22m (PACKAGE)
+[2025-11-13T07:29:07.801Z]    Status: VALID
+[2025-11-13T07:29:07.805Z]    Criado em: 06/11/2025 16:34:30
+[2025-11-13T07:29:07.808Z]    Última modificação: 06/11/2025 16:34:44
+[2025-11-13T07:29:07.812Z] 
+📦 [1mREMESSA_ANALISE_LOC[22m (PROCEDURE)
+[2025-11-13T07:29:07.816Z]    Status: VALID
+[2025-11-13T07:29:07.819Z]    Criado em: 06/11/2025 16:34:36
+[2025-11-13T07:29:07.823Z]    Última modificação: 06/11/2025 16:39:02
+[2025-11-13T07:29:07.826Z] 
+📦 [1mREMESSA_BOLETO[22m (PACKAGE)
+[2025-11-13T07:29:07.830Z]    Status: VALID
+[2025-11-13T07:29:07.834Z]    Criado em: 06/11/2025 16:34:30
+[2025-11-13T07:29:07.838Z]    Última modificação: 06/11/2025 16:34:44
+[2025-11-13T07:29:07.842Z] 
+📦 [1mREMESSA_INC[22m (PROCEDURE)
+[2025-11-13T07:29:07.846Z]    Status: VALID
+[2025-11-13T07:29:07.849Z]    Criado em: 06/11/2025 16:34:36
+[2025-11-13T07:29:07.853Z]    Última modificação: 06/11/2025 16:39:02
+[2025-11-13T07:29:07.856Z] 
+📦 [1mSELECIONA_REMESSA_EQUIFAX[22m (PROCEDURE)
+[2025-11-13T07:29:07.859Z]    Status: VALID
+[2025-11-13T07:29:07.863Z]    Criado em: 06/11/2025 16:34:36
+[2025-11-13T07:29:07.867Z]    Última modificação: 06/11/2025 16:39:15
+[2025-11-13T07:29:07.870Z] [36m[39m
+[36m================================================================================[39m
+[2025-11-13T07:29:07.874Z] [36m2. PROCEDURES COM 'REMESSA' NO CÓDIGO[39m
+[2025-11-13T07:29:07.877Z] [36m================================================================================[39m
+[2025-11-13T07:29:08.147Z] 
+📝 Encontradas 25 procedures/funções:
+
+[2025-11-13T07:29:08.163Z]    • [1mBBRASIL[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.168Z]    • [1mBBRASILNOVO[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.172Z]    • [1mBRADESCO[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.176Z]    • [1mBRADESCONOVO[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.180Z]    • [1mBREAL[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.185Z]    • [1mCALCULO_IMPOSTO[22m (PACKAGE BODY) - [33m24[39m ocorrências
+[2025-11-13T07:29:08.189Z]    • [1mCOMPRAS_REMESSA_BOSCH[22m (PACKAGE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.194Z]    • [1mCOMPRAS_REMESSA_BOSCH[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.198Z]    • [1mFATURAMENTOS_NF_ELETRONICA[22m (PACKAGE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.202Z]    • [1mFATURAMENTOS_NF_ELETRONICA[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.207Z]    • [1mFATURAMENTOS_NF_ELETRONICA_2[22m (PACKAGE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.210Z]    • [1mFATURAMENTOS_NF_ELETRONICA_2[22m (PACKAGE BODY) - [33m9[39m ocorrências
+[2025-11-13T07:29:08.215Z]    • [1mFAT_NFE[22m (PACKAGE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.220Z]    • [1mFAT_NFE[22m (PACKAGE BODY) - [33m27[39m ocorrências
+[2025-11-13T07:29:08.224Z]    • [1mITAU[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.229Z]    • [1mREMESSABANCO[22m (PACKAGE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.233Z]    • [1mREMESSABANCO[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.238Z]    • [1mREMESSA_ANALISE_LOC[22m (PROCEDURE) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.242Z]    • [1mREMESSA_BOLETO[22m (PACKAGE) - [33m6[39m ocorrências
+[2025-11-13T07:29:08.246Z]    • [1mREMESSA_BOLETO[22m (PACKAGE BODY) - [33m11[39m ocorrências
+[2025-11-13T07:29:08.251Z]    • [1mREMESSA_INC[22m (PROCEDURE) - [33m9[39m ocorrências
+[2025-11-13T07:29:08.255Z]    • [1mRURAL[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.259Z]    • [1mSAFRA[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.263Z]    • [1mSELECIONA_REMESSA_EQUIFAX[22m (PROCEDURE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.268Z]    • [1mXXCONSULTA_NOTAS[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.272Z] [36m[39m
+[36m================================================================================[39m
+[2025-11-13T07:29:08.279Z] [36m3. PROCEDURES COM 'CNAB' OU 'BOLETO' NO CÓDIGO[39m
+[2025-11-13T07:29:08.283Z] [36m================================================================================[39m
+[2025-11-13T07:29:08.615Z] 
+💰 Encontradas 55 procedures/funções:
+
+[2025-11-13T07:29:08.619Z]    • [1mALT_BANCO_CLIENTE[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.625Z]    • [1mALT_FATURA[22m (PACKAGE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.630Z]    • [1mALT_FATURA[22m (PACKAGE BODY) - [33m8[39m ocorrências
+[2025-11-13T07:29:08.635Z]    • [1mANALISE_DETALHADA_FATURAMENTO[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.640Z]    • [1mANALISE_DETALHADA_FATURA_DIAS[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.644Z]    • [1mANALISE_DETALHADA_FATURA_MES[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.648Z]    • [1mANALISE_DET_BANCO[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.652Z]    • [1mANALISE_DET_DADOS_GERAIS[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.656Z]    • [1mANALISE_DET_DADOS_GERAIS_DIA[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.661Z]    • [1mANALISE_DET_DADOS_GERAIS_MES[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.666Z]    • [1mBBRASIL[22m (PACKAGE BODY) - [33m3[39m ocorrências
+[2025-11-13T07:29:08.670Z]    • [1mBBRASILNOVO[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.674Z]    • [1mBOLETO[22m (PACKAGE) - [33m3[39m ocorrências
+[2025-11-13T07:29:08.679Z]    • [1mBOLETO[22m (PACKAGE BODY) - [33m6[39m ocorrências
+[2025-11-13T07:29:08.682Z]    • [1mBOLETOS_IMPRESSAO_CADASTRADOS[22m (PROCEDURE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.687Z]    • [1mBOLETOS_IMPRESSAO_CADASTRADOS2[22m (PROCEDURE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.691Z]    • [1mBOLETOS_IMPRESSAO_CADASTROS_T[22m (PROCEDURE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.696Z]    • [1mBOLETOS_IMPRESSAO_TESTE[22m (PROCEDURE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.700Z]    • [1mBOLETOS_NOTA[22m (PROCEDURE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.704Z]    • [1mBOLETO_IMPRESSAO[22m (PROCEDURE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.708Z]    • [1mBOLETO_IMPRESSAO_2[22m (PROCEDURE) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.713Z]    • [1mBOLETO_OBTER_GPS_CODRECEB[22m (PROCEDURE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.716Z]    • [1mBRADESCO[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.720Z]    • [1mBRADESCONOVO[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.724Z]    • [1mBREAL[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.729Z]    • [1mCAIXA[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.733Z]    • [1mCANCELAMENTO_FATURA[22m (PACKAGE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.737Z]    • [1mCANCELAMENTO_FATURA[22m (PACKAGE BODY) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.741Z]    • [1mCLIENTE_ALT_BANCO[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.745Z]    • [1mCONTASR[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.750Z]    • [1mCRECEB_CONSULTA_DETALHE[22m (PROCEDURE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.754Z]    • [1mFATURAMENTOS[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.757Z]    • [1mFATURAMENTOS_NF_ELETRONICA_2[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.762Z]    • [1mFATURAMENTO_IMPRESSAO[22m (PACKAGE) - [33m3[39m ocorrências
+[2025-11-13T07:29:08.765Z]    • [1mFATURAMENTO_IMPRESSAO[22m (PACKAGE BODY) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.770Z]    • [1mFAT_NFE[22m (PACKAGE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.775Z]    • [1mFAT_NFE[22m (PACKAGE BODY) - [33m8[39m ocorrências
+[2025-11-13T07:29:08.780Z]    • [1mFLUXOCX[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.784Z]    • [1mITAU[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.789Z]    • [1mPRETCOBRANCA[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.794Z]    • [1mREGRAS_VENDAS[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.798Z]    • [1mRELATO[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.803Z]    • [1mREMESSABANCO[22m (PACKAGE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.807Z]    • [1mREMESSABANCO[22m (PACKAGE BODY) - [33m3[39m ocorrências
+[2025-11-13T07:29:08.811Z]    • [1mREMESSA_BOLETO[22m (PACKAGE) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.814Z]    • [1mREMESSA_BOLETO[22m (PACKAGE BODY) - [33m6[39m ocorrências
+[2025-11-13T07:29:08.818Z]    • [1mRURAL[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.822Z]    • [1mSAFRA[22m (PACKAGE BODY) - [33m5[39m ocorrências
+[2025-11-13T07:29:08.826Z]    • [1mSERASA[22m (PACKAGE BODY) - [33m4[39m ocorrências
+[2025-11-13T07:29:08.831Z]    • [1mTCOBRANCA[22m (PACKAGE BODY) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.835Z]    • [1mTEMP[22m (PACKAGE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.839Z]    • [1mTEMP[22m (PACKAGE BODY) - [33m3[39m ocorrências
+[2025-11-13T07:29:08.844Z]    • [1mTESTE_MAIKEL[22m (PACKAGE) - [33m1[39m ocorrências
+[2025-11-13T07:29:08.848Z]    • [1mTESTE_MAIKEL[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.852Z]    • [1mVENDAWEB[22m (PACKAGE BODY) - [33m2[39m ocorrências
+[2025-11-13T07:29:08.857Z] [36m[39m
+[36m================================================================================[39m
+[2025-11-13T07:29:08.861Z] [36m4. TABELAS COM 'REMESSA' NO NOME[39m
+[2025-11-13T07:29:08.866Z] [36m================================================================================[39m
+[2025-11-13T07:29:08.999Z] 
+🗄️  [1mDBREMESSA_ARQUIVO[22m
+[2025-11-13T07:29:09.002Z]    Linhas: 3312
+[2025-11-13T07:29:09.007Z] 
+🗄️  [1mDBREMESSA_DETALHE[22m
+[2025-11-13T07:29:09.012Z]    Linhas: 548678
+[2025-11-13T07:29:09.018Z] 
+🗄️  [1mREMESSA[22m
+[2025-11-13T07:29:09.022Z]    Linhas: 4339
+[2025-11-13T07:29:09.028Z] [36m[39m
+[36m================================================================================[39m
+[2025-11-13T07:29:09.032Z] [36m5. TABELAS DE BOLETO/TÍTULO/COBRANÇA[39m
+[2025-11-13T07:29:09.037Z] [36m================================================================================[39m
+[2025-11-13T07:29:09.223Z]    • [1mDADOSBOLETOBB[22m - 2 linhas
+[2025-11-13T07:29:09.226Z]    • [1mDBBANCO[22m - 80 linhas
+[2025-11-13T07:29:09.230Z]    • [1mDBBANCOCENTRAL[22m - 39 linhas
+[2025-11-13T07:29:09.235Z]    • [1mDBBANCOVENDEDOR[22m - 2980106 linhas
+[2025-11-13T07:29:09.241Z]    • [1mDBBANCO_COBRANCA[22m - 9 linhas
+[2025-11-13T07:29:09.246Z]    • [1mDBBANCO_NUMERO[22m - 8 linhas
+[2025-11-13T07:29:09.250Z]    • [1mDBCOBRANCA_PDF[22m - 29186 linhas
+[2025-11-13T07:29:09.255Z]    • [1mDBDADOS_BANCO[22m - 4 linhas
+[2025-11-13T07:29:09.260Z]    • [1mDBDOCBODERO_BAIXA_BANCO[22m - 105 linhas
+[2025-11-13T07:29:09.265Z]    • [1mDBEMPRESTIMO_BANCO[22m - 12 linhas
+[2025-11-13T07:29:09.270Z]    • [1mDBPRETCOBRANCA[22m - 6524751 linhas
+[2025-11-13T07:29:09.275Z]    • [1mDBTCOBRANCA[22m - 1555394 linhas
+[2025-11-13T07:29:09.280Z]    • [1mDBUSUARIO_BAIXA_BANCO[22m - 13 linhas
+[2025-11-13T07:29:09.285Z]    • [1mSAV_TITULOS[22m - 4118682 linhas
+[2025-11-13T07:29:09.290Z]    • [1mTMP_FLUXO_TITULOS[22m - 40410 linhas
+[2025-11-13T07:29:09.295Z]    • [1mTMP_FLUXO_TITULOS2[22m - 221093 linhas
+[2025-11-13T07:29:09.300Z]    • [1mTMP_TITULOS_AVENCER[22m - 49 linhas
+[2025-11-13T07:29:09.304Z]    • [1mVOLAP_TITULOS[22m - 1419818 linhas
+[2025-11-13T07:29:09.309Z] [36m[39m
+[36m================================================================================[39m
+[2025-11-13T07:29:09.314Z] [36m6. CÓDIGO FONTE DAS PROCEDURES DE REMESSA[39m
+[2025-11-13T07:29:09.319Z] [36m================================================================================[39m
+[2025-11-13T07:29:09.325Z] [33m[39m
+[33m================================================================================[39m
+[2025-11-13T07:29:09.330Z] [33m📄 CÓDIGO DE: BBRASIL[39m
+[2025-11-13T07:29:09.334Z] [33m================================================================================[39m
+[2025-11-13T07:29:09.523Z] package BBRASIL is
+package body BBRASIL is
+
+ ------------------------------------------------------------
+ ------------------------------------------------------------------------
+ -- para preparac?o do arquivo de remessa --
+ -- Author  : PATRIANE                                                 --
+ ------------------------------------------------------------
+ -- Created : 17/04/2003 14:18:16                                      --
+ 
+ -- Purpose : Procedures e Functions para layout de Cobranca Brandesco --
+ --carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+ ------------------------------------------------------------------------
+ PROCEDURE BBrasil_Titulo_Cadastro(
+  
+                                    vDt1 in Date,
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+                                    vDt2 in Date,
+ PROCEDURE BBrasil_Titulo_Cadastro(
+                                    vTipo in varchar2,
+                                    vDt1 in Date,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vDt2 in Date,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    vTipo in varchar2,
+ BEGIN
+                                    vCodConta in dbConta.Cod_Conta%type,
+  if vTipo='17' then 
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+     Open cur_titulos for
+
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+ PROCEDURE BBrasil_Titulo_AltVencto(
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                                     vDt1 in Date,                                     
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                                     vDt2 in Date,
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                                     vTipo in varchar2,
+                   R.NRO_DOCBANCO AS NRO_BANCO
+                                     vCodConta in dbConta.Cod_Conta%type,
+        From DbReceb r, DbConta ct, Dbclien c, DbBairro b
+                                     cur_titulos out cursorgenerico.tipocursorgenerico);
+        Where 
+ 
+             --(r.dt_emissao<='16/09/2004') 
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+              r.dt_venc<=vdt2 and               
+ PROCEDURE BBrasil_Titulo_AltValor(
+              r.cancel='N' and r.valor_rec = 0 and r.rec='N' and 
+                                    vDt1 in Date,
+              r.forma_fat = '2' and 
+                                    vDt2 in Date,
+              r.bradesco = 'N' and r.banco='1' and             
+                                    vTipo in varchar2,
+              r.dt_venc = r.venc_ant and 
+                                    vCodConta in dbConta.Cod_Conta%type,
+              r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and 
+                                    vCodCli in dbReceb.Codcli%type,
+              r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+                                    vTpFiltro in varchar2,
+        Order by R.DT_VENC, R.CODCLI;
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+  else 
+                                    
+  if vTipo='31' then 
+ -- carrega titulos para envio para pedido de protesto
+     Open cur_titulos for
+ PROCEDURE BBrasil_Titulo_Protesto(
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+                                    vDt1 in Date,
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+                                    vDt2 in Date,
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                                    vCodCli in dbClien.CodCli%type,
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+
+                   R.NRO_DOCBANCO AS NRO_BANCO
+ -- carrega todos os clientes
+        From DbReceb r, DbConta ct, Dbclien c, DbBairro b
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico);
+        Where r.dt_emissao >= '17/09/2004' and  r.dt_emissao <= vdt2 and 
+
+              r.cancel='N' and r.valor_rec = 0 and r.rec='N' and 
+ -- pesquisa se o docto ja foi incluido no bodero
+              r.forma_fat = '2' and 
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+              r.bradesco = 'N' and r.banco='1' and             
+              r.dt_venc = r.venc_ant and 
+                               vNro out integer);
+
+              r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and 
+ -- devolve o valor de abatimento a ser concedido                               
+              r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+        Order by R.DT_VENC, R.CODCLI;
+                            vValor out dbReceb.Valor_Pgto%type);
+   end if; end if;   
+                               
+ END BBrasil_Titulo_Cadastro;
+ -- inclui cabecalho do bodero
+
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+                       vDtInicial in dbBodero.Dtinicial%type,
+ PROCEDURE BBrasil_Titulo_AltVencto(
+                       vDtFinal in dbBodero.Dtfinal%type,
+                                     vDt1 in Date,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                                     vDt2 in Date,
+                       vCodBodero out dbBodero.Cod_bodero%type);
+                                     vTipo in varchar2,
+ 
+                                     vCodConta in dbConta.Cod_Conta%type,
+ -- inclui doctos do bodero
+                                     cur_titulos out cursorgenerico.tipocursorgenerico) is
+ PROCEDURE Inc_DocBoderobb (vCodBodero in dbDocBodero.Cod_bodero%type,
+ BEGIN
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+  if vTipo='17' then  
+                         vDigito in dbDocBodero.Digito%type,
+       Open cur_titulos for
+                         vOperacao in dbDocBodero.Operacao%type);
+          Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+
+                     R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_DocBanco%type,
+                     C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                                          curReceb out cursorgenerico.tipocursorgenerico);
+                     C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                       
+                     B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                     R.NRO_DOCBANCO AS NRO_BANCO
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+          From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+                                           curBodero out cursorgenerico.tipocursorgenerico);
+          Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+
+                --r.dt_emissao<='16/09/2004' and 
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                r.cancel = 'N' and r.dt_venc <> r.venc_ant and
+                                                 curBodero out cursorgenerico.tipocursorgenerico);
+                r.cod_conta = vcodconta and r.forma_fat = '2' and 
+                                           
+                r.bradesco = 'N' and r.banco='1' and 
+ end BBRASIL;
+                r.cod_conta = ct.cod_conta and
+
+                r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+ 
+          Order by R.DT_VENC, R.CODCLI;          
+ 
+  else 
+ 
+  if vTipo='31' then 
+ 
+     Open cur_titulos for
+           Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+                     R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+                     C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                     C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                     B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                     R.NRO_DOCBANCO AS NRO_BANCO
+          From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+          Where r.dt_emissao>='17/09/2004' and r.dt_emissao <= vdt2 and                
+                r.cancel = 'N' and r.dt_venc <> r.venc_ant and
+                r.cod_conta = vcodconta and r.forma_fat = '2' and 
+                r.bradesco = 'N' and r.banco='1' and 
+                r.cod_conta = ct.cod_conta and
+                r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+          Order by R.DT_VENC, R.CODCLI;          
+   end if; end if;             
+ END BBrasil_Titulo_AltVencto;
+ 
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+ PROCEDURE BBrasil_Titulo_AltValor(
+                                    vDt1 in Date,
+                                    vDt2 in Date,
+                                    vTipo in varchar2,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vCodCli in dbReceb.Codcli%type,
+                                    vTpFiltro in varchar2,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+  if vTipo = '17' then
+   if vTpFiltro = 'P' then -- filtro todos do periodo
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                   R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and 
+              --r.dt_emissao <= '16/09/2004' and
+              r.rec = 'N' and 
+              r.cod_conta=vcodconta and 
+              r.cancel = 'N' and
+              r.forma_fat = '2' and 
+              r.banco = '1' and                   
+              r.bradesco <> 'B' and
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and fr.brandesco = 'N' and 
+              fr.brandesco= 'N'  and 
+              r.codcli = c.codcli and c.codbairrocobr=b.codbairro
+        Order by R.DT_VENC, R.CODCLI;       
+   end if;
+   if vTpFiltro = 'C' then -- filtro pelo cliente
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+               R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.codcli = vCodCli and              
+              r.dt_emissao <= '16/09/2004' and
+              r.cod_conta=vcodconta and 
+              r.forma_fat = '2' and 
+              r.cancel = 'N' and
+              r.banco='1' and 
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and 
+              fr.brandesco = 'N' and 
+              fr.brandesco = 'N'  and 
+              r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+        Order by R.DT_VENC, R.CODCLI;     
+   end if; 
+  end if;
+  if vTipo = '31' then
+   if vTpFiltro = 'P' then -- filtro todos do periodo
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+               R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and 
+              r.dt_emissao >='17/09/2004' and        
+              r.rec = 'N' and 
+              r.cod_conta=vcodconta and 
+              r.cancel = 'N' and
+              r.forma_fat = '2' and 
+              r.banco = '1' and                   
+              r.bradesco <> 'B' and
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and fr.brandesco = 'N' and 
+              fr.brandesco= 'N'  and 
+              r.codcli = c.codcli and c.codbairrocobr=b.codbairro
+        Order by R.DT_VENC, R.CODCLI;       
+   end if;
+   if vTpFiltro = 'C' then -- filtro pelo cliente
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                   R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.codcli = vCodCli and              
+              r.dt_emissao >='17/09/2004' and        
+              r.cod_conta=vcodconta and 
+                  r.forma_fat = '2' and 
+                  r.cancel = 'N' and
+                  r.banco='1' and 
+                  r.cod_receb = fr.cod_receb and 
+                  fr.tipo = '05' and 
+                  fr.brandesco = 'N' and 
+                  fr.brandesco = 'N'  and 
+                  r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+        Order by R.DT_VENC, R.CODCLI;     
+   end if; 
+ end if;
+ END BBrasil_Titulo_AltValor;
+
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE BBrasil_Titulo_Protesto(
+                                    vDt1 in Date,
+                                    vDt2 in Date,
+                                    vCodCli in dbClien.CodCli%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open cur_titulos for
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+               R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_DOCBANCO AS NRO_BANCO
+    From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+          r.forma_fat = '2' and r.bradesco = 'S' and 
+          r.banco = '1' and r.bradesco = 'S' and 
+          r.cancel = 'N' and r.rec = 'N' and 
+          r.codcli = vCodCli and r.codcli = c.codcli and           
+          r.cod_conta = ct.cod_conta and c.codbairrocobr = b.codbairro
+    Order by R.DT_VENC, R.CODCLI;
+ END BBrasil_Titulo_Protesto;
+
+ -- carrega todos os clientes
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open curCliente for
+     Select CodCli, Nome From dbClien Order by Nome;
+ END Clientes;
+ 
+ -- pesquisa se o docto ja foi incluido no bodero
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                               vNro out integer) is           
+ BEGIN
+   Select count(*) into vNro 
+   from dbDocBoderoBB
+   where Cod_Receb = vCod_Receb;
+   if vNro is null then vNro := 0;
+   end if;
+ END Pesquisa_DocBodero;
+
+ -- devolve o valor de abatimento a ser concedido
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+                            vValor out dbReceb.Valor_Pgto%type) is
+ BEGIN
+   Select Sum(fr.Valor) Into vValor
+    From dbFReceb fr
+    Where Cod_Receb = vCod_Receb and fr.tipo = '05' and SF = 'S';
+   if vValor is null then vValor := 0; 
+   end if;
+ END Valor_Abatimento;                                       
+
+ -- inclui cabecalho do bodero
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+                       vDtInicial in dbBodero.Dtinicial%type,
+                       vDtFinal in dbBodero.Dtfinal%type,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                       vCodBodero out dbBodero.Cod_bodero%type) is 
+      nro integer;                       
+ BEGIN
+      Select count(*) into nro from dbBoderoBB;
+      if nro > 0 then 
+         Select Max(To_Number(Cod_Bodero)) Into vCodBodero From dbBoderobb;
+      else 
+         vCodBodero := '0';  
+      end if;
+      nro := To_Number(vCodBodero) + 1;
+      vCodBodero := Geral.Strzero(nro,9);
+      Insert Into dbBoderobb(Cod_bodero,Cod_Conta,Dtinicial,Dtfinal,Dtemissao,Cancel)
+                               Values(vCodBodero,vCodConta,vDtInicial,vDtFinal,vDtEmissao,'N');
+ END Inc_Boderobb;
+ 
+ -- inclui doctos do bodero
+ PROCEDURE Inc_DocBoderobb(
+                         vCodBodero in dbDocBodero.Cod_bodero%type,
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+                         vDigito in dbDocBodero.Digito%type,
+                         vOperacao in dbDocBodero.Operacao%type) is                                    
+      vValor dbReceb.Valor_Pgto%type;
+      vData  dbReceb.Dt_Venc%type;                         
+ BEGIN
+   If (vOperacao = 'I') or (vOperacao = 'D') then
+       Select Valor_Pgto, Dt_Venc Into vValor, vData 
+         From dbReceb Where Cod_Receb = vCodReceb;
+       Update dbReceb Set Bradesco = 'S' where Cod_Receb = vCodReceb;
+       Insert into dbDocBoderoBB(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                     Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+   end if;
+   if vOperacao = 'V' then
+       Select Dt_Venc Into vData 
+        From dbReceb Where Cod_Receb = vCodReceb;
+       Select Sum(Valor) Into vValor From dbFReceb
+        Where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+
+       Update dbFReceb Set Brandesco = 'S' 
+       where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+  
+       Insert into dbDocBoderobb(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                     Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+   end if;
+ END Inc_DocBoderobb;
+ 
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_DocBanco%type,
+                                          curReceb out cursorgenerico.tipocursorgenerico) is           
+ BEGIN
+   Open curReceb for
+    Select r.COD_RECEB, r.CODCLI, r.NRO_DOC, r.DT_VENC , c.NOME
+    from dbReceb r, dbClien c
+    where r.nro_docbanco = vNro_Banco and r.CodCli=c.CodCli and Substr(r.nro_docbanco,1,1)<>'1';--Eu...;
+ END Dados_Receb;
+
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+                                           curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for 
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel
+     from dbBoderoBB b where DtEmissao=vDt_Emissao and Cod_Conta=vCod_Conta;
+ END Navega_Bodero;
+
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                                                 curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for     
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel,
+                r.cod_receb, r.nro_doc, r.valor_pgto as valor_doc, r.dt_venc, r.dt_emissao,
+                r.nro_docbanco as nro_banco, r.venc_ant,
+                c.cpfcgc, c.codcli, c.nome as nomecli, c.tipo, 
+                c.ender, c.cepcobr as cep, bai.cidade, bai.uf,                
+                bai.descr as bairro,
+                db.digito, db.operacao, db.valor as valor_operacao, db.digito
+     from dbDocBoderoBB db, dbBoderoBB b, dbReceb r, dbClien c, dbBairro bai
+     where  b.cod_bodero = vCod_Bodero and 
+                 b.cod_bodero = db.cod_bodero and
+                 db.cod_receb = r.cod_receb and 
+                 r.codcli = c.codcli and c.codbairrocobr=bai.codbairro
+     order by db.operacao;
+ END Navega_DocBodero;
+
+end BBRASIL;
+
+[2025-11-13T07:29:09.540Z] [32m[39m
+[32m✅ Código salvo em: procedure_BBRASIL.sql[39m
+[2025-11-13T07:29:09.545Z] [33m[39m
+[33m================================================================================[39m
+[2025-11-13T07:29:09.552Z] [33m📄 CÓDIGO DE: BBRASILNOVO[39m
+[2025-11-13T07:29:09.558Z] [33m================================================================================[39m
+[2025-11-13T07:29:09.707Z] package BBRASILNOVO is
+package body BBRASILNOVO is
+
+ ------------------------------------------------------------
+ ------------------------------------------------------------------------
+ -- para preparac?o do arquivo de remessa --
+ -- Author  : PATRIANE                                                 --
+ ------------------------------------------------------------
+ -- Created : 17/04/2003 14:18:16                                      --
+ 
+ -- Purpose : Procedures e Functions para layout de Cobranca Brandesco --
+ --carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+ ------------------------------------------------------------------------
+ PROCEDURE BBrasilNovo_Titulo_Cadastro(
+  
+                                    vDt1 in Date,
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+                                    vDt2 in Date,
+ PROCEDURE BBrasilNovo_Titulo_Cadastro(
+                                    vTipo in varchar2,
+                                    vDt1 in Date,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vDt2 in Date,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    vTipo in varchar2,
+ Sel LONG;
+                                    vCodConta in dbConta.Cod_Conta%type,
+ tabela LONG;
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+ onde LONG;
+
+ ordem LONG;
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+ BEGIN
+ PROCEDURE BBrasilNovo_Titulo_AltVencto(
+  Sel := 'SELECT R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, ' ||
+                                     vDt1 in Date,                                     
+         'R.VALOR_PGTO, R.NRO_BANCO AS NRO_BANCO, ' ||
+                                     vDt2 in Date,
+         'C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO, ' ||
+                                     vTipo in varchar2,
+         'C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP, ' ||
+                                     vCodConta in dbConta.Cod_Conta%type,
+         'B.DESCR AS BAIRRO, B.CIDADE, B.UF ';
+                                     cur_titulos out cursorgenerico.tipocursorgenerico);
+  Tabela := 'FROM DbReceb r, DbConta ct, Dbclien c, DbBairro b ';
+ 
+  Onde := 'WHERE r.cancel=''N'' and r.valor_rec = 0 and r.rec = ''N'' and ' ||
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+          'r.forma_fat = ''2'' and r.bradesco = ''N'' and r.banco = ''1'' and ' ||
+ PROCEDURE BBrasilNovo_Titulo_AltValor(
+          'r.dt_venc = r.venc_ant and r.cod_conta = ''' || vcodconta || ''' and '||
+                                    vDt1 in Date,
+          'r.cod_conta = ct.cod_conta and r.codcli = c.codcli and ' ||
+                                    vDt2 in Date,
+          'c.codbairrocobr = b.codbairro and R.NRO_BANCO is not null and ';
+                                    vTipo in varchar2,
+  Ordem := 'ORDER BY R.DT_VENC, R.CODCLI';
+                                    vCodConta in dbConta.Cod_Conta%type,
+ 
+                                    vCodCli in dbReceb.Codcli%type,
+  if vTipo = 'V'
+                                    vTpFiltro in varchar2,
+   then Onde := Onde || 'r.dt_venc <= ''' || vdt2 || ''' ';
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+  else if vTipo = 'E'
+                                    
+   then Onde := Onde || 'r.dt_emissao <= ''' || vdt2 || ''' ';
+ -- carrega titulos para envio para pedido de protesto
+  end if; end if;
+ PROCEDURE BBrasilNovo_Titulo_Protesto(
+  
+                                    vDt1 in Date,
+  OPEN cur_titulos FOR
+                                    vDt2 in Date,
+    sel || tabela || onde || ordem;
+                                    vCodCli in dbClien.CodCli%type,
+   
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+ END BBrasilNovo_Titulo_Cadastro;
+
+
+ -- carrega todos os clientes
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico);
+ PROCEDURE BBrasilNovo_Titulo_AltVencto(
+
+                                     vDt1 in Date,
+ -- pesquisa se o docto ja foi incluido no bodero
+                                     vDt2 in Date,
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                                     vTipo in varchar2,
+                               vNro out integer);
+                                     vCodConta in dbConta.Cod_Conta%type,
+
+                                     cur_titulos out cursorgenerico.tipocursorgenerico) is
+ -- devolve o valor de abatimento a ser concedido                               
+ Sel LONG;
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+ tabela LONG;
+                            vValor out dbReceb.Valor_Pgto%type);
+ onde LONG;
+                               
+ ordem LONG;
+ -- inclui cabecalho do bodero
+ BEGIN
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+  Sel := 'SELECT R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, ' ||
+                       vDtInicial in dbBodero.Dtinicial%type,
+         'R.VENC_ANT, R.VALOR_PGTO, R.NRO_BANCO AS NRO_BANCO, ' ||
+                       vDtFinal in dbBodero.Dtfinal%type,
+         'C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO, ' ||
+                       vDtEmissao in dbBodero.Dtemissao%type,
+         'C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP, ' ||
+                       vCodBodero out dbBodero.Cod_bodero%type);
+         'B.DESCR AS BAIRRO, B.CIDADE, B.UF ';
+ 
+  Tabela := 'FROM DbReceb r, DbConta ct, Dbclien c, DbBairro b ';
+ -- inclui doctos do bodero
+  Onde := 'WHERE r.cancel = ''N'' and r.cod_conta = ''' || vcodconta || ''' and ' ||
+ PROCEDURE Inc_DocBoderobb (vCodBodero in dbDocBodero.Cod_bodero%type,
+          'r.dt_venc <> r.venc_ant and ' ||
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+          'r.forma_fat = ''2'' and r.bradesco = ''N'' and r.banco = ''1'' and ' ||
+                         vDigito in dbDocBodero.Digito%type,
+          'r.cod_conta = ct.cod_conta and r.codcli = c.codcli and ' ||
+                         vOperacao in dbDocBodero.Operacao%type);
+          'c.codbairrocobr = b.codbairro and R.NRO_BANCO is not null and ';
+
+  Ordem := 'ORDER BY R.DT_VENC, R.CODCLI';
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_Banco%type,
+ 
+                                          curReceb out cursorgenerico.tipocursorgenerico);
+  if vTipo = 'V'
+                       
+   then Onde := Onde || 'r.dt_venc >= ''' || vdt1 ||''' and r.dt_venc <= ''' || vdt2 || ''' ';
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+  else if vTipo = 'E'
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+   then Onde := Onde || 'r.dt_emissao >= ''' || vdt1 ||''' and r.dt_emissao <= ''' || vdt2 || ''' ';
+                                           curBodero out cursorgenerico.tipocursorgenerico);
+  end if; end if;
+
+  
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+  OPEN cur_titulos FOR
+                                                 curBodero out cursorgenerico.tipocursorgenerico);
+    sel || tabela || onde || ordem; 
+                                           
+
+ end BBRASILNOVO;
+ END BBrasilNovo_Titulo_AltVencto;
+
+ 
+ 
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+ 
+ PROCEDURE BBrasilNovo_Titulo_AltValor(
+ 
+                                    vDt1 in Date,
+ 
+                                    vDt2 in Date,
+                                     vTipo in varchar2,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vCodCli in dbReceb.Codcli%type,
+                                    vTpFiltro in varchar2,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+Sel LONG;
+ tabela LONG;
+ onde LONG;
+ ordem LONG;
+ BEGIN
+  Sel := 'SELECT R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, ' ||
+         'R.VALOR_PGTO, R.NRO_BANCO AS NRO_BANCO, ' ||
+         'C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO, ' ||
+         'C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP, ' ||
+         'B.DESCR AS BAIRRO, B.CIDADE, B.UF ';
+  Tabela := 'FROM DbReceb r, Dbclien c, dbFReceb fr, DbBairro b ';
+  Onde := 'WHERE r.cod_conta = ''' || vcodconta || ''' and ' ||
+          'r.forma_fat = ''2'' and r.cancel = ''N'' and ' ||
+          'r.banco = ''1'' and r.cod_receb = fr.cod_receb and ' ||
+          'fr.tipo = ''05'' and fr.brandesco = ''N'' and ' ||
+          'fr.brandesco = ''N''  and r.codcli = c.codcli and ' ||
+          'c.codbairrocobr = b.codbairro and R.NRO_BANCO is not null and ';
+  Ordem := 'ORDER BY R.DT_VENC, R.CODCLI';
+
+  if vTpFiltro = 'C'
+   then Onde := Onde || 'r.codcli = ''' || vCodCli ||''' ';
+  else if vTpFiltro = 'P'
+   then if vTipo = 'V'
+   then Onde := Onde || 'r.dt_venc >= ''' || vdt1 ||''' and r.dt_venc <= ''' || vdt2 || ''' and r.bradesco <> ''B'' and r.rec = ''N'' ';
+  else if vTipo = 'E'
+   then Onde := Onde || 'r.dt_emissao >= ''' || vdt1 ||''' and r.dt_emissao <= ''' || vdt2 || ''' and r.bradesco <> ''B'' and r.rec = ''N'' ';
+  end if; end if; end if; end if;
+  
+  OPEN cur_titulos FOR
+    sel || tabela || onde || ordem; 
+
+ END BBrasilNovo_Titulo_AltValor;
+
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE BBrasilNovo_Titulo_Protesto(
+                                    vDt1 in Date,
+                                    vDt2 in Date,
+                                    vCodCli in dbClien.CodCli%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open cur_titulos for
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+               R.VENC_ANT, R.VALOR_PGTO, R.NRO_BANCO AS DIG_BOLETO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_BANCO AS NRO_BANCO
+    From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+          r.forma_fat = '2' and r.bradesco = 'S' and 
+          r.banco = '1' and r.bradesco = 'S' and 
+          r.cancel = 'N' and r.rec = 'N' and 
+          r.codcli = vCodCli and r.codcli = c.codcli and           
+          r.cod_conta = ct.cod_conta and c.codbairrocobr = b.codbairro and
+                R.NRO_BANCO is not null
+    Order by R.DT_VENC, R.CODCLI;
+ END BBrasilNovo_Titulo_Protesto;
+
+ -- carrega todos os clientes
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open curCliente for
+     Select CodCli, Nome From dbClien Order by Nome;
+ END Clientes;
+ 
+ -- pesquisa se o docto ja foi incluido no bodero
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                               vNro out integer) is           
+ BEGIN
+   Select count(*) into vNro 
+   from dbDocBoderoBB
+   where Cod_Receb = vCod_Receb;
+   if vNro is null then vNro := 0;
+   end if;
+ END Pesquisa_DocBodero;
+
+ -- devolve o valor de abatimento a ser concedido
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+                            vValor out dbReceb.Valor_Pgto%type) is
+ BEGIN
+   Select Sum(fr.Valor) Into vValor
+    From dbFReceb fr
+    Where Cod_Receb = vCod_Receb and fr.tipo = '05' and SF = 'S';
+   if vValor is null then vValor := 0; 
+   end if;
+ END Valor_Abatimento;                                       
+
+ -- inclui cabecalho do bodero
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+                       vDtInicial in dbBodero.Dtinicial%type,
+                       vDtFinal in dbBodero.Dtfinal%type,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                       vCodBodero out dbBodero.Cod_bodero%type) is 
+      nro integer;                       
+ BEGIN
+      Select count(*) into nro from dbBoderoBB;
+      if nro > 0 then 
+         Select Max(To_Number(Cod_Bodero)) Into vCodBodero From dbBoderobb;
+      else 
+         vCodBodero := '0';  
+      end if;
+      nro := To_Number(vCodBodero) + 1;
+      vCodBodero := Geral.Strzero(nro,9);
+      Insert Into dbBoderobb(Cod_bodero,Cod_Conta,Dtinicial,Dtfinal,Dtemissao,Cancel)
+                               Values(vCodBodero,vCodConta,vDtInicial,vDtFinal,vDtEmissao,'N');
+ END Inc_Boderobb;
+ 
+ -- inclui doctos do bodero
+ PROCEDURE Inc_DocBoderobb(
+                         vCodBodero in dbDocBodero.Cod_bodero%type,
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+                         vDigito in dbDocBodero.Digito%type,
+                         vOperacao in dbDocBodero.Operacao%type) is                                    
+      vValor dbReceb.Valor_Pgto%type;
+      vData  dbReceb.Dt_Venc%type;                         
+      xCount number;
+ BEGIN
+   select count(*)into xCount from dbDocBoderobb where cod_bodero = vCodBodero and cod_receb = vCodReceb;
+   if (xCount = 0)
+     then
+       If (vOperacao = 'I') or (vOperacao = 'D') then
+           Select Valor_Pgto, Dt_Venc Into vValor, vData 
+             From dbReceb Where Cod_Receb = vCodReceb;
+           Update dbReceb Set Bradesco = 'S' where Cod_Receb = vCodReceb;
+           Insert into dbDocBoderoBB(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                         Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+       if vOperacao = 'V' then
+           Select Dt_Venc Into vData 
+            From dbReceb Where Cod_Receb = vCodReceb;
+           Select Sum(Valor) Into vValor From dbFReceb
+            Where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+
+           Update dbFReceb Set Brandesco = 'S' 
+           where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+      
+           Insert into dbDocBoderobb(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                         Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+   end if;
+ END Inc_DocBoderobb;
+ 
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_Banco%type,
+                                          curReceb out cursorgenerico.tipocursorgenerico) is           
+ BEGIN
+   Open curReceb for
+    Select r.COD_RECEB, r.CODCLI, r.NRO_DOC, r.DT_VENC , c.NOME, r.dt_emissao
+    from dbReceb r, dbClien c
+    where r.nro_banco = vNro_Banco and r.CodCli=c.CodCli
+    order by dt_emissao;
+ END Dados_Receb;
+
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+                                           curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for 
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel
+     from dbBoderoBB b where DtEmissao=vDt_Emissao and Cod_Conta=vCod_Conta;
+ END Navega_Bodero;
+
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                                                 curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for     
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel,
+                r.cod_receb, r.nro_doc, r.valor_pgto as valor_doc, r.dt_venc, r.dt_emissao,
+                r.nro_banco as nro_banco, r.venc_ant,
+                c.cpfcgc, c.codcli, c.nome as nomecli, c.tipo, 
+                c.ender, c.cepcobr as cep, bai.cidade, bai.uf,                
+                bai.descr as bairro,
+                db.digito, db.operacao, db.valor as valor_operacao, db.digito
+     from dbDocBoderoBB db, dbBoderoBB b, dbReceb r, dbClien c, dbBairro bai
+     where  b.cod_bodero = vCod_Bodero and 
+                 b.cod_bodero = db.cod_bodero and
+                 db.cod_receb = r.cod_receb and 
+                 r.codcli = c.codcli and c.codbairrocobr=bai.codbairro
+     order by db.operacao;
+ END Navega_DocBodero;
+
+end BBRASILNOVO;
+
+[2025-11-13T07:29:09.721Z] [32m[39m
+[32m✅ Código salvo em: procedure_BBRASILNOVO.sql[39m
+[2025-11-13T07:29:09.729Z] [33m[39m
+[33m================================================================================[39m
+[2025-11-13T07:29:09.733Z] [33m📄 CÓDIGO DE: BRADESCO[39m
+[2025-11-13T07:29:09.740Z] [33m================================================================================[39m
+[2025-11-13T07:29:09.852Z] package BRADESCO is
+package body BRADESCO is
+
+ ------------------------------------------------------------
+ ------------------------------------------------------------------------
+ -- para preparac?o do arquivo de remessa --
+ -- Author  : PATRIANE                                                 --
+ ------------------------------------------------------------
+ -- Created : 17/04/2003 14:18:16                                      --
+ 
+ -- Purpose : Procedures e Functions para layout de Cobranca Brandesco --
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+ ------------------------------------------------------------------------
+ PROCEDURE Bradesco_Titulo_Cadastro(vDt1 in Date,
+  
+                                    vDt2 in Date,
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+                                    vCodConta in dbConta.Cod_Conta%type,
+ PROCEDURE Bradesco_Titulo_Cadastro(vDt1 in Date,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    vDt2 in Date,
+ BEGIN
+                                    vCodConta in dbConta.Cod_Conta%type,
+   Open cur_titulos for
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+
+           R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO, R.NRO_BANCO,
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+           C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+ PROCEDURE Bradesco_Titulo_AltVencto(vDt1 in Date,
+           C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP           
+                                     vDt2 in Date,
+    From DbReceb r, DbConta ct, Dbclien c
+                                     vCodConta in dbConta.Cod_Conta%type,
+    Where --r.dt_venc >= vdt1 and           
+                                     cur_titulos out cursorgenerico.tipocursorgenerico);
+          r.dt_venc <= vdt2 and 
+ 
+          r.forma_fat = '2' and r.bradesco = 'N' and
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+          r.cancel='N' and r.valor_rec = 0 and r.rec='N' and 
+ PROCEDURE Bradesco_Titulo_AltValor(vDt1 in Date,
+          r.dt_venc = r.venc_ant and 
+                                    vDt2 in Date,
+          r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and 
+                                    vCodConta in dbConta.Cod_Conta%type,
+          r.codcli = c.codcli and r.nro_banco is not null
+                                    vCodCli in dbReceb.Codcli%type,
+    Order by R.DT_VENC, R.CODCLI;
+                                    vTpFiltro in varchar2,
+ END Bradesco_Titulo_Cadastro;
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+
+                                    
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE Bradesco_Titulo_AltVencto(vDt1 in Date,
+ PROCEDURE Bradesco_Titulo_Protesto(vDt1 in Date,
+                                     vDt2 in Date,
+                                    vDt2 in Date,
+                                     vCodConta in dbConta.Cod_Conta%type,
+                                    vCodCli in dbClien.CodCli%type,
+                                     cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);                                   
+ BEGIN
+
+   Open cur_titulos for
+ -- carrega todos os clientes
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico);
+           R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,R.NRO_BANCO,
+
+           C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+ -- pesquisa se o docto ja foi incluido no bodero
+           C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+    From DbReceb r, DbConta ct, Dbclien c
+                               vNro out integer);
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+
+          r.forma_fat = '2' and r.bradesco = 'N' and
+ -- devolve o valor de abatimento a ser concedido                               
+          r.cancel = 'N' and r.dt_venc <> r.venc_ant and
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+          r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and
+                            vValor out dbReceb.Valor_Pgto%type);
+          r.codcli = c.codcli and r.nro_banco is not null
+                               
+    Order by R.DT_VENC, R.CODCLI;          
+ -- inclui cabecalho do bodero
+ END Bradesco_Titulo_AltVencto;
+ PROCEDURE Inc_Bodero (vCodConta in dbBodero.Cod_Conta%type,
+ 
+                       vDtInicial in dbBodero.Dtinicial%type,
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+                       vDtFinal in dbBodero.Dtfinal%type,
+ PROCEDURE Bradesco_Titulo_AltValor(vDt1 in Date,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                                    vDt2 in Date,
+                       vCodBodero in dbBodero.Cod_bodero%type);
+                                    vCodConta in dbConta.Cod_Conta%type,
+ 
+                                    vCodCli in dbReceb.Codcli%type,
+ -- inclui doctos do bodero
+                                    vTpFiltro in varchar2,
+ PROCEDURE Inc_DocBodero(vCodBodero in dbDocBodero.Cod_bodero%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+ BEGIN
+                         vDigito in dbDocBodero.Digito%type,
+   if vTpFiltro = 'P' then -- filtro todos do periodo
+                         vOperacao in dbDocBodero.Operacao%type);
+      Open cur_titulos for
+
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+ PROCEDURE Dados_Receb(vCod_Receb in dbReceb.Nro_Banco%type,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,R.NRO_BANCO,
+                       curReceb out cursorgenerico.tipocursorgenerico);
+               C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+                       
+        From DbReceb r, Dbclien c, dbFReceb fr
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+        Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and 
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+              r.forma_fat = '2' and r.cancel = 'N' and 
+                                           curBodero out cursorgenerico.tipocursorgenerico);
+              r.rec = 'N' and 
+
+              r.cod_conta=vcodconta and 
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+              r.cod_receb = fr.cod_receb and r.bradesco <> 'B' and
+                                                 curBodero out cursorgenerico.tipocursorgenerico);
+              fr.tipo = '05' and fr.brandesco = 'N' and              
+                                           
+              r.codcli = c.codcli and r.nro_banco is not null
+ end BRADESCO;
+        Order by R.DT_VENC, R.CODCLI;       
+
+   end if;
+ 
+   if vTpFiltro = 'C' then -- filtro pelo cliente
+ 
+      Open cur_titulos for
+ 
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+ 
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,R.NRO_BANCO,
+                C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+        From DbReceb r, Dbclien c, dbFReceb fr
+        Where r.codcli = vCodCli and              
+              r.cod_conta=vcodconta and 
+              r.forma_fat = '2' and r.cancel = 'N' and               
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and fr.brandesco = 'N' and              
+              r.codcli = c.codcli and r.nro_banco is not null
+        Order by R.DT_VENC, R.CODCLI;     
+   end if; 
+ END Bradesco_Titulo_AltValor;
+
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE Bradesco_Titulo_Protesto(vDt1 in Date,
+                                    vDt2 in Date,
+                                    vCodCli in dbClien.CodCli%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open cur_titulos for
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+           R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+           C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,R.NRO_BANCO,
+           C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+    From DbReceb r, DbConta ct, Dbclien c
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+          r.forma_fat = '2' and r.bradesco = 'S' and
+          r.cancel = 'N' and r.rec = 'N' and 
+          r.codcli = vCodCli and r.codcli = c.codcli and 
+          r.cod_conta = ct.cod_conta 
+    Order by R.DT_VENC, R.CODCLI;
+ END Bradesco_Titulo_Protesto;
+
+ -- carrega todos os clientes
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open curCliente for
+     Select CodCli, Nome From dbClien Order by Nome;
+ END Clientes;
+ 
+ -- pesquisa se o docto ja foi incluido no bodero
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                               vNro out integer) is           
+ BEGIN
+   Select count(*) into vNro 
+   from dbDocBodero 
+   where Cod_Receb = vCod_Receb;
+   if vNro is null then vNro := 0;
+   end if;
+ END Pesquisa_DocBodero;
+
+ -- devolve o valor de abatimento a ser concedido
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+                            vValor out dbReceb.Valor_Pgto%type) is
+ BEGIN
+   Select Sum(fr.Valor) Into vValor
+    From dbFReceb fr
+    Where Cod_Receb = vCod_Receb and fr.tipo = '05' and SF = 'S';
+   if vValor is null then vValor := 0; 
+   end if;
+ END Valor_Abatimento;                                       
+
+ -- inclui cabecalho do bodero
+ PROCEDURE Inc_Bodero (vCodConta in dbBodero.Cod_Conta%type,
+                       vDtInicial in dbBodero.Dtinicial%type,
+                       vDtFinal in dbBodero.Dtfinal%type,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                       vCodBodero in dbBodero.Cod_bodero%type) is 
+-- nro integer;                       
+ BEGIN
+  /* Select count(*) into nro from dbBodero;
+   if nro > 0 then 
+     Select Max(To_Number(Cod_Bodero)) Into vCodBodero From dbBodero;
+   else 
+     vCodBodero := '0';  
+   end if;
+   nro := To_Number(vCodBodero) + 1;
+   vCodBodero := Geral.Strzero(nro,9);
+  */ 
+   Insert Into dbBodero(Cod_bodero,Cod_Conta,Dtinicial,Dtfinal,Dtemissao,Cancel)
+                 Values(vCodBodero,vCodConta,vDtInicial,vDtFinal,vDtEmissao,'N');
+ END Inc_Bodero;
+ 
+ -- inclui doctos do bodero
+ PROCEDURE Inc_DocBodero(vCodBodero in dbDocBodero.Cod_bodero%type,
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+                         vDigito in dbDocBodero.Digito%type,
+                         vOperacao in dbDocBodero.Operacao%type) is                                    
+ vValor dbReceb.Valor_Pgto%type;
+ vData  dbReceb.Dt_Venc%type;                         
+ xCount number;
+ BEGIN
+   select count(*)into xCount from dbDocBoderobb where cod_bodero = vCodBodero and cod_receb = vCodReceb;
+   if (xCount = 0)
+     then
+       If (vOperacao = 'I') or (vOperacao = 'D') then
+         Select Valor_Pgto, Dt_Venc Into vValor, vData 
+          From dbReceb Where Cod_Receb = vCodReceb;
+         Update dbReceb Set Bradesco = 'S' where Cod_Receb = vCodReceb;
+         Insert into dbDocBodero(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                          Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+       if vOperacao = 'V' then
+         Select Dt_Venc Into vData 
+          From dbReceb Where Cod_Receb = vCodReceb;
+         Select Sum(Valor) Into vValor From dbFReceb
+          Where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+         Update dbFReceb Set Brandesco = 'S'
+          where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+         Insert into dbDocBodero(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                          Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+    end if;
+ END Inc_DocBodero;
+ 
+ PROCEDURE Dados_Receb(vCod_Receb in dbReceb.Nro_Banco%type,
+                       curReceb out cursorgenerico.tipocursorgenerico) is           
+ xsel long;
+ xcont number;
+ BEGIN
+   select count(r.COD_RECEB) into xcont
+   from dbReceb r
+   where r.Nro_Banco = vCod_Receb;
+  
+   xsel := 'Select r.COD_RECEB, r.CODCLI, r.NRO_DOC, r.DT_VENC , c.NOME,R.NRO_BANCO ' ||
+           'from dbReceb r, dbClien c ' ||
+           'where r.CodCli=c.CodCli and ';
+   if xcont > 0
+     then xsel := xsel || 'r.Nro_Banco = ''' || vCod_Receb || ''' ';
+     else xsel := xsel || 'r.Cod_Receb = ''' || substr(vCod_Receb,3,9) || ''' ';
+   end if;
+   Open curReceb for
+     xsel;
+ END Dados_Receb;
+
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+                                           curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for 
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel
+     from dbBodero b where DtEmissao=vDt_Emissao and Cod_Conta=vCod_Conta;
+ END Navega_Bodero;
+
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                                                 curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for     
+     Select --b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel,                            
+                r.cod_receb, r.nro_doc, r.valor_pgto, r.dt_venc, r.dt_emissao,R.NRO_BANCO,
+                c.cpfcgc, c.codcli, c.nome, c.tipo, c.ender, c.cepcobr as cep,
+                db.digito, db.operacao, db.valor as valor_operacao
+       from dbDocBodero db, dbReceb r, dbClien c, dbBairro b
+     where db.cod_bodero = vCod_Bodero and db.cod_receb = r.cod_receb and 
+                r.codcli = c.codcli and c.codbairrocobr=b.codbairro;
+ END Navega_DocBodero;
+
+end BRADESCO;
+
+[2025-11-13T07:29:09.861Z] [32m[39m
+[32m✅ Código salvo em: procedure_BRADESCO.sql[39m
+[2025-11-13T07:29:09.866Z] [36m[39m
+[36m================================================================================[39m
+[2025-11-13T07:29:09.871Z] [36m7. PROCEDURES DE TÍTULO/COBRANÇA[39m
+[2025-11-13T07:29:09.876Z] [36m================================================================================[39m
+[2025-11-13T07:29:10.049Z] 
+📋 Encontradas 88 procedures:
+
+[2025-11-13T07:29:10.054Z]    • [1mASSISTENCIA_TECNICA[22m (PACKAGE)
+[2025-11-13T07:29:10.059Z]    • [1mATUALIZA_DEBITO[22m (PROCEDURE)
+[2025-11-13T07:29:10.064Z]    • [1mBAIXA_CHEQUE_PRE[22m (PROCEDURE)
+[2025-11-13T07:29:10.068Z]    • [1mBANCO_COBRANCA_ALT[22m (PROCEDURE)
+[2025-11-13T07:29:10.073Z]    • [1mBANCO_COBRANCA_DADOS_ALT[22m (PROCEDURE)
+[2025-11-13T07:29:10.076Z]    • [1mBANCO_COBRANCA_DADOS_DEL[22m (PROCEDURE)
+[2025-11-13T07:29:10.082Z]    • [1mBANCO_COBRANCA_DADOS_INC[22m (PROCEDURE)
+[2025-11-13T07:29:10.087Z]    • [1mBANCO_COBRANCA_DADOS_NAVEGA[22m (PROCEDURE)
+[2025-11-13T07:29:10.093Z]    • [1mBANCO_COBRANCA_INC[22m (PROCEDURE)
+[2025-11-13T07:29:10.099Z]    • [1mBANCO_COBRANCA_NAVEGA[22m (PROCEDURE)
+[2025-11-13T07:29:10.103Z]    • [1mBBRASIL[22m (PACKAGE)
+[2025-11-13T07:29:10.109Z]    • [1mBBRASILNOVO[22m (PACKAGE)
+[2025-11-13T07:29:10.114Z]    • [1mBRADESCO[22m (PACKAGE)
+[2025-11-13T07:29:10.120Z]    • [1mBRADESCONOVO[22m (PACKAGE)
+[2025-11-13T07:29:10.126Z]    • [1mBREAL[22m (PACKAGE)
+[2025-11-13T07:29:10.131Z]    • [1mCAIXA[22m (PACKAGE)
+[2025-11-13T07:29:10.136Z]    • [1mCAIXADIARIO_FRMPGTO[22m (PROCEDURE)
+[2025-11-13T07:29:10.143Z]    • [1mCAIXADIARIO_TITULOS[22m (PROCEDURE)
+[2025-11-13T07:29:10.148Z]    • [1mCAIXA_DIARIO_REC[22m (PROCEDURE)
+[2025-11-13T07:29:10.163Z]    • [1mCARREGA_TITULOS[22m (PROCEDURE)
+[2025-11-13T07:29:10.171Z]    • [1mCLIENTE[22m (PACKAGE)
+[2025-11-13T07:29:10.177Z]    • [1mCLIENTE_FILTRO_CONSULTA[22m (PROCEDURE)
+[2025-11-13T07:29:10.186Z]    • [1mCLIENTE_TITULO[22m (PROCEDURE)
+[2025-11-13T07:29:10.191Z]    • [1mCOBRANCA_NF_SERVICO[22m (PACKAGE)
+[2025-11-13T07:29:10.196Z]    • [1mCONFERENCIA[22m (PACKAGE)
+[2025-11-13T07:29:10.202Z]    • [1mCONFERENCIA_CONFIRMA[22m (PROCEDURE)
+[2025-11-13T07:29:10.207Z]    • [1mCONSULTA_CLIENTE_CODIGO[22m (PROCEDURE)
+[2025-11-13T07:29:10.212Z]    • [1mCONSULTA_REL_DIARIO_SONY[22m (PROCEDURE)
+[2025-11-13T07:29:10.217Z]    • [1mCONSULTA_TITULOS_ABERTOS[22m (PROCEDURE)
+[2025-11-13T07:29:10.223Z]    • [1mCONSULTA_TITULOS_ABERTOS2[22m (PROCEDURE)
+[2025-11-13T07:29:10.228Z]    • [1mCONS_FATURASEMTITULO[22m (PROCEDURE)
+[2025-11-13T07:29:10.234Z]    • [1mCONS_VENDNOTASEMTITULO[22m (PROCEDURE)
+[2025-11-13T07:29:10.239Z]    • [1mCONTASR_BAIXA[22m (PROCEDURE)
+[2025-11-13T07:29:10.245Z]    • [1mCONTASR_INC[22m (PROCEDURE)
+[2025-11-13T07:29:10.251Z]    • [1mCONTASR_INC_GP[22m (PROCEDURE)
+[2025-11-13T07:29:10.256Z]    • [1mCONTASR_INC_GP_BANCOBRASIL[22m (PROCEDURE)
+[2025-11-13T07:29:10.262Z]    • [1mCONTROLE_CONTASR[22m (PACKAGE)
+[2025-11-13T07:29:10.268Z]    • [1mCRECEB_CONSULTA_DETALHE[22m (PROCEDURE)
+[2025-11-13T07:29:10.275Z]    • [1mFATURAMENTOS[22m (PACKAGE)
+[2025-11-13T07:29:10.280Z]    • [1mFATURAMENTOS_NF_ELETRONICA[22m (PACKAGE)
+[2025-11-13T07:29:10.286Z]    • [1mFATURAMENTOS_NF_ELETRONICA_2[22m (PACKAGE)
+[2025-11-13T07:29:10.293Z]    • [1mFATURAMENTO_IMPRESSAO[22m (PACKAGE)
+[2025-11-13T07:29:10.298Z]    • [1mFATURASEMTITULO[22m (PROCEDURE)
+[2025-11-13T07:29:10.304Z]    • [1mFATURA_SEM_TITULO_REL[22m (PROCEDURE)
+[2025-11-13T07:29:10.310Z]    • [1mFILIALPV[22m (PACKAGE)
+[2025-11-13T07:29:10.316Z]    • [1mFLUXOCX[22m (PACKAGE)
+[2025-11-13T07:29:10.322Z]    • [1mFLUXOCXX[22m (PACKAGE)
+[2025-11-13T07:29:10.328Z]    • [1mFLUXOCXX3[22m (PACKAGE)
+[2025-11-13T07:29:10.334Z]    • [1mITAU[22m (PACKAGE)
+[2025-11-13T07:29:10.340Z]    • [1mJOBS[22m (PACKAGE)
+[2025-11-13T07:29:10.346Z]    • [1mLIBERA_TITULOS[22m (PROCEDURE)
+[2025-11-13T07:29:10.352Z]    • [1mNAVEGA_CONTASR[22m (PROCEDURE)
+[2025-11-13T07:29:10.358Z]    • [1mNAVEGA_CONTASR_FILIAL[22m (PROCEDURE)
+[2025-11-13T07:29:10.363Z]    • [1mNOTASSEMCOBRANCA[22m (PROCEDURE)
+[2025-11-13T07:29:10.369Z]    • [1mPKG_PERFIL_USUARIO[22m (PACKAGE)
+[2025-11-13T07:29:10.376Z]    • [1mPRECONTASR[22m (PACKAGE)
+[2025-11-13T07:29:10.382Z]    • [1mPRETCOBRANCA[22m (PACKAGE)
+[2025-11-13T07:29:10.389Z]    • [1mPROCESSO_VENDA_TO_BALCAO[22m (PROCEDURE)
+[2025-11-13T07:29:10.396Z]    • [1mPRODUTO[22m (PACKAGE)
+[2025-11-13T07:29:10.402Z]    • [1mRECEB_TOTAL_TITULO[22m (PROCEDURE)
+[2025-11-13T07:29:10.409Z]    • [1mREMESSABANCO[22m (PACKAGE)
+[2025-11-13T07:29:10.422Z]    • [1mREMESSA_BOLETO[22m (PACKAGE)
+[2025-11-13T07:29:10.428Z]    • [1mREM_CLIENTE_SERASA[22m (PROCEDURE)
+[2025-11-13T07:29:10.434Z]    • [1mRENEGOCIACAO[22m (PACKAGE)
+[2025-11-13T07:29:10.440Z]    • [1mRETORNO[22m (PACKAGE)
+[2025-11-13T07:29:10.446Z]    • [1mRURAL[22m (PACKAGE)
+[2025-11-13T07:29:10.451Z]    • [1mSAFRA[22m (PACKAGE)
+[2025-11-13T07:29:10.456Z]    • [1mSAV_CARGA_DIARIA[22m (PROCEDURE)
+[2025-11-13T07:29:10.462Z]    • [1mSAV_ENVIA_RELATORIOS[22m (PROCEDURE)
+[2025-11-13T07:29:10.467Z]    • [1mSAV_UPDATE_COB_ACOES_ACOM[22m (PROCEDURE)
+[2025-11-13T07:29:10.474Z]    • [1mSAV_UPDATE_COB_ACOES_CAN[22m (PROCEDURE)
+[2025-11-13T07:29:10.479Z]    • [1mSAV_UPDATE_TITULOS[22m (PROCEDURE)
+[2025-11-13T07:29:10.485Z]    • [1mSERASA[22m (PACKAGE)
+[2025-11-13T07:29:10.491Z]    • [1mSYS_CARGA_DIARIA[22m (PROCEDURE)
+[2025-11-13T07:29:10.497Z]    • [1mSYS_EXECUTA_REGRAS_COBRANCA[22m (FUNCTION)
+[2025-11-13T07:29:10.503Z]    • [1mTCOBRANCA[22m (PACKAGE)
+[2025-11-13T07:29:10.509Z]    • [1mTEMP[22m (PACKAGE)
+[2025-11-13T07:29:10.514Z]    • [1mTESTE1[22m (PROCEDURE)
+[2025-11-13T07:29:10.521Z]    • [1mTESTE_PROCESSO_USINA[22m (PROCEDURE)
+[2025-11-13T07:29:10.527Z]    • [1mTITULOS_SERASA[22m (PACKAGE)
+[2025-11-13T07:29:10.533Z]    • [1mTITULO_REM_NORMAL_AVISTA[22m (PROCEDURE)
+[2025-11-13T07:29:10.539Z]    • [1mTOTVS[22m (PACKAGE)
+[2025-11-13T07:29:10.546Z]    • [1mUSUARIO[22m (PACKAGE)
+[2025-11-13T07:29:10.552Z]    • [1mVALE[22m (PACKAGE)
+[2025-11-13T07:29:10.559Z]    • [1mVALIDAR_COBRANCA[22m (PROCEDURE)
+[2025-11-13T07:29:10.565Z]    • [1mVALIDA_COBRANCA[22m (FUNCTION)
+[2025-11-13T07:29:10.571Z]    • [1mVENDAS_OPERACOES[22m (PACKAGE)
+[2025-11-13T07:29:10.578Z]    • [1mVENDAS_SUGESTAO[22m (PACKAGE)
+[2025-11-13T07:29:10.584Z] [32m[39m
+[32m[39m
+[32m✅ Investigação concluída![39m
+[2025-11-13T07:29:10.590Z] [34m📄 Log salvo em: investigacao-remessa-log.txt[39m
+[2025-11-13T07:29:10.636Z] [32m[39m
+[32m✅ Conexão fechada.[39m
+[2025-11-13T07:30:00.912Z] 
+🔍 Conectando ao Oracle...
+[2025-11-13T07:30:01.188Z] ✅ Conectado com sucesso ao Oracle!
+
+[2025-11-13T07:30:01.193Z] ================================================================================
+[2025-11-13T07:30:01.198Z] 1. PROCEDURES COM 'REMESSA' NO NOME
+[2025-11-13T07:30:01.203Z] ================================================================================
+[2025-11-13T07:30:01.433Z] 
+📦 COMPRAS_REMESSA_BOSCH (PACKAGE)
+[2025-11-13T07:30:01.440Z]    Status: VALID
+[2025-11-13T07:30:01.446Z]    Criado em: 06/11/2025 16:34:30
+[2025-11-13T07:30:01.453Z]    Última modificação: 06/11/2025 16:34:39
+[2025-11-13T07:30:01.458Z] 
+📦 REMESSABANCO (PACKAGE)
+[2025-11-13T07:30:01.466Z]    Status: VALID
+[2025-11-13T07:30:01.472Z]    Criado em: 06/11/2025 16:34:30
+[2025-11-13T07:30:01.478Z]    Última modificação: 06/11/2025 16:34:44
+[2025-11-13T07:30:01.484Z] 
+📦 REMESSA_ANALISE_LOC (PROCEDURE)
+[2025-11-13T07:30:01.489Z]    Status: VALID
+[2025-11-13T07:30:01.495Z]    Criado em: 06/11/2025 16:34:36
+[2025-11-13T07:30:01.500Z]    Última modificação: 06/11/2025 16:39:02
+[2025-11-13T07:30:01.506Z] 
+📦 REMESSA_BOLETO (PACKAGE)
+[2025-11-13T07:30:01.511Z]    Status: VALID
+[2025-11-13T07:30:01.516Z]    Criado em: 06/11/2025 16:34:30
+[2025-11-13T07:30:01.522Z]    Última modificação: 06/11/2025 16:34:44
+[2025-11-13T07:30:01.528Z] 
+📦 REMESSA_INC (PROCEDURE)
+[2025-11-13T07:30:01.533Z]    Status: VALID
+[2025-11-13T07:30:01.539Z]    Criado em: 06/11/2025 16:34:36
+[2025-11-13T07:30:01.545Z]    Última modificação: 06/11/2025 16:39:02
+[2025-11-13T07:30:01.550Z] 
+📦 SELECIONA_REMESSA_EQUIFAX (PROCEDURE)
+[2025-11-13T07:30:01.556Z]    Status: VALID
+[2025-11-13T07:30:01.562Z]    Criado em: 06/11/2025 16:34:36
+[2025-11-13T07:30:01.567Z]    Última modificação: 06/11/2025 16:39:15
+[2025-11-13T07:30:01.573Z] 
+================================================================================
+[2025-11-13T07:30:01.579Z] 2. PROCEDURES COM 'REMESSA' NO CÓDIGO
+[2025-11-13T07:30:01.585Z] ================================================================================
+[2025-11-13T07:30:01.857Z] 
+📝 Encontradas 25 procedures/funções:
+
+[2025-11-13T07:30:01.862Z]    • BBRASIL (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.868Z]    • BBRASILNOVO (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.874Z]    • BRADESCO (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.879Z]    • BRADESCONOVO (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.884Z]    • BREAL (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.889Z]    • CALCULO_IMPOSTO (PACKAGE BODY) - 24 ocorrências
+[2025-11-13T07:30:01.895Z]    • COMPRAS_REMESSA_BOSCH (PACKAGE) - 2 ocorrências
+[2025-11-13T07:30:01.900Z]    • COMPRAS_REMESSA_BOSCH (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:01.907Z]    • FATURAMENTOS_NF_ELETRONICA (PACKAGE) - 1 ocorrências
+[2025-11-13T07:30:01.913Z]    • FATURAMENTOS_NF_ELETRONICA (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:01.918Z]    • FATURAMENTOS_NF_ELETRONICA_2 (PACKAGE) - 2 ocorrências
+[2025-11-13T07:30:01.925Z]    • FATURAMENTOS_NF_ELETRONICA_2 (PACKAGE BODY) - 9 ocorrências
+[2025-11-13T07:30:01.930Z]    • FAT_NFE (PACKAGE) - 1 ocorrências
+[2025-11-13T07:30:01.936Z]    • FAT_NFE (PACKAGE BODY) - 27 ocorrências
+[2025-11-13T07:30:01.942Z]    • ITAU (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.949Z]    • REMESSABANCO (PACKAGE) - 4 ocorrências
+[2025-11-13T07:30:01.956Z]    • REMESSABANCO (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:01.962Z]    • REMESSA_ANALISE_LOC (PROCEDURE) - 5 ocorrências
+[2025-11-13T07:30:01.968Z]    • REMESSA_BOLETO (PACKAGE) - 6 ocorrências
+[2025-11-13T07:30:01.974Z]    • REMESSA_BOLETO (PACKAGE BODY) - 11 ocorrências
+[2025-11-13T07:30:01.980Z]    • REMESSA_INC (PROCEDURE) - 9 ocorrências
+[2025-11-13T07:30:01.986Z]    • RURAL (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.993Z]    • SAFRA (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:01.999Z]    • SELECIONA_REMESSA_EQUIFAX (PROCEDURE) - 2 ocorrências
+[2025-11-13T07:30:02.006Z]    • XXCONSULTA_NOTAS (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.013Z] 
+================================================================================
+[2025-11-13T07:30:02.019Z] 3. PROCEDURES COM 'CNAB' OU 'BOLETO' NO CÓDIGO
+[2025-11-13T07:30:02.025Z] ================================================================================
+[2025-11-13T07:30:02.375Z] 
+💰 Encontradas 55 procedures/funções:
+
+[2025-11-13T07:30:02.382Z]    • ALT_BANCO_CLIENTE (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.388Z]    • ALT_FATURA (PACKAGE) - 2 ocorrências
+[2025-11-13T07:30:02.393Z]    • ALT_FATURA (PACKAGE BODY) - 8 ocorrências
+[2025-11-13T07:30:02.399Z]    • ANALISE_DETALHADA_FATURAMENTO (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.406Z]    • ANALISE_DETALHADA_FATURA_DIAS (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.412Z]    • ANALISE_DETALHADA_FATURA_MES (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.418Z]    • ANALISE_DET_BANCO (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.424Z]    • ANALISE_DET_DADOS_GERAIS (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.430Z]    • ANALISE_DET_DADOS_GERAIS_DIA (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.437Z]    • ANALISE_DET_DADOS_GERAIS_MES (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.444Z]    • BBRASIL (PACKAGE BODY) - 3 ocorrências
+[2025-11-13T07:30:02.449Z]    • BBRASILNOVO (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:02.455Z]    • BOLETO (PACKAGE) - 3 ocorrências
+[2025-11-13T07:30:02.462Z]    • BOLETO (PACKAGE BODY) - 6 ocorrências
+[2025-11-13T07:30:02.470Z]    • BOLETOS_IMPRESSAO_CADASTRADOS (PROCEDURE) - 4 ocorrências
+[2025-11-13T07:30:02.476Z]    • BOLETOS_IMPRESSAO_CADASTRADOS2 (PROCEDURE) - 4 ocorrências
+[2025-11-13T07:30:02.482Z]    • BOLETOS_IMPRESSAO_CADASTROS_T (PROCEDURE) - 4 ocorrências
+[2025-11-13T07:30:02.488Z]    • BOLETOS_IMPRESSAO_TESTE (PROCEDURE) - 4 ocorrências
+[2025-11-13T07:30:02.494Z]    • BOLETOS_NOTA (PROCEDURE) - 2 ocorrências
+[2025-11-13T07:30:02.499Z]    • BOLETO_IMPRESSAO (PROCEDURE) - 4 ocorrências
+[2025-11-13T07:30:02.504Z]    • BOLETO_IMPRESSAO_2 (PROCEDURE) - 4 ocorrências
+[2025-11-13T07:30:02.510Z]    • BOLETO_OBTER_GPS_CODRECEB (PROCEDURE) - 2 ocorrências
+[2025-11-13T07:30:02.516Z]    • BRADESCO (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.523Z]    • BRADESCONOVO (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.529Z]    • BREAL (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.536Z]    • CAIXA (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:02.543Z]    • CANCELAMENTO_FATURA (PACKAGE) - 2 ocorrências
+[2025-11-13T07:30:02.548Z]    • CANCELAMENTO_FATURA (PACKAGE BODY) - 4 ocorrências
+[2025-11-13T07:30:02.554Z]    • CLIENTE_ALT_BANCO (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.559Z]    • CONTASR (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:02.565Z]    • CRECEB_CONSULTA_DETALHE (PROCEDURE) - 1 ocorrências
+[2025-11-13T07:30:02.570Z]    • FATURAMENTOS (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:02.575Z]    • FATURAMENTOS_NF_ELETRONICA_2 (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:02.581Z]    • FATURAMENTO_IMPRESSAO (PACKAGE) - 3 ocorrências
+[2025-11-13T07:30:02.587Z]    • FATURAMENTO_IMPRESSAO (PACKAGE BODY) - 4 ocorrências
+[2025-11-13T07:30:02.592Z]    • FAT_NFE (PACKAGE) - 2 ocorrências
+[2025-11-13T07:30:02.597Z]    • FAT_NFE (PACKAGE BODY) - 8 ocorrências
+[2025-11-13T07:30:02.602Z]    • FLUXOCX (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:02.608Z]    • ITAU (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.613Z]    • PRETCOBRANCA (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:02.620Z]    • REGRAS_VENDAS (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:02.625Z]    • RELATO (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.631Z]    • REMESSABANCO (PACKAGE) - 1 ocorrências
+[2025-11-13T07:30:02.637Z]    • REMESSABANCO (PACKAGE BODY) - 3 ocorrências
+[2025-11-13T07:30:02.644Z]    • REMESSA_BOLETO (PACKAGE) - 2 ocorrências
+[2025-11-13T07:30:02.650Z]    • REMESSA_BOLETO (PACKAGE BODY) - 6 ocorrências
+[2025-11-13T07:30:02.656Z]    • RURAL (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.661Z]    • SAFRA (PACKAGE BODY) - 5 ocorrências
+[2025-11-13T07:30:02.667Z]    • SERASA (PACKAGE BODY) - 4 ocorrências
+[2025-11-13T07:30:02.674Z]    • TCOBRANCA (PACKAGE BODY) - 1 ocorrências
+[2025-11-13T07:30:02.680Z]    • TEMP (PACKAGE) - 1 ocorrências
+[2025-11-13T07:30:02.685Z]    • TEMP (PACKAGE BODY) - 3 ocorrências
+[2025-11-13T07:30:02.691Z]    • TESTE_MAIKEL (PACKAGE) - 1 ocorrências
+[2025-11-13T07:30:02.698Z]    • TESTE_MAIKEL (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:02.703Z]    • VENDAWEB (PACKAGE BODY) - 2 ocorrências
+[2025-11-13T07:30:02.709Z] 
+================================================================================
+[2025-11-13T07:30:02.715Z] 4. TABELAS COM 'REMESSA' NO NOME
+[2025-11-13T07:30:02.720Z] ================================================================================
+[2025-11-13T07:30:02.825Z] 
+🗄️  DBREMESSA_ARQUIVO
+[2025-11-13T07:30:02.831Z]    Linhas: 3312
+[2025-11-13T07:30:02.837Z] 
+🗄️  DBREMESSA_DETALHE
+[2025-11-13T07:30:02.844Z]    Linhas: 548678
+[2025-11-13T07:30:02.851Z] 
+🗄️  REMESSA
+[2025-11-13T07:30:02.857Z]    Linhas: 4339
+[2025-11-13T07:30:02.864Z] 
+================================================================================
+[2025-11-13T07:30:02.870Z] 5. TABELAS DE BOLETO/TÍTULO/COBRANÇA
+[2025-11-13T07:30:02.875Z] ================================================================================
+[2025-11-13T07:30:03.040Z]    • DADOSBOLETOBB - 2 linhas
+[2025-11-13T07:30:03.046Z]    • DBBANCO - 80 linhas
+[2025-11-13T07:30:03.051Z]    • DBBANCOCENTRAL - 39 linhas
+[2025-11-13T07:30:03.055Z]    • DBBANCOVENDEDOR - 2980106 linhas
+[2025-11-13T07:30:03.060Z]    • DBBANCO_COBRANCA - 9 linhas
+[2025-11-13T07:30:03.064Z]    • DBBANCO_NUMERO - 8 linhas
+[2025-11-13T07:30:03.069Z]    • DBCOBRANCA_PDF - 29186 linhas
+[2025-11-13T07:30:03.074Z]    • DBDADOS_BANCO - 4 linhas
+[2025-11-13T07:30:03.079Z]    • DBDOCBODERO_BAIXA_BANCO - 105 linhas
+[2025-11-13T07:30:03.084Z]    • DBEMPRESTIMO_BANCO - 12 linhas
+[2025-11-13T07:30:03.089Z]    • DBPRETCOBRANCA - 6524751 linhas
+[2025-11-13T07:30:03.095Z]    • DBTCOBRANCA - 1555394 linhas
+[2025-11-13T07:30:03.099Z]    • DBUSUARIO_BAIXA_BANCO - 13 linhas
+[2025-11-13T07:30:03.105Z]    • SAV_TITULOS - 4118682 linhas
+[2025-11-13T07:30:03.110Z]    • TMP_FLUXO_TITULOS - 40410 linhas
+[2025-11-13T07:30:03.114Z]    • TMP_FLUXO_TITULOS2 - 221093 linhas
+[2025-11-13T07:30:03.120Z]    • TMP_TITULOS_AVENCER - 49 linhas
+[2025-11-13T07:30:03.125Z]    • VOLAP_TITULOS - 1419818 linhas
+[2025-11-13T07:30:03.130Z] 
+================================================================================
+[2025-11-13T07:30:03.135Z] 6. CÓDIGO FONTE DAS PROCEDURES DE REMESSA
+[2025-11-13T07:30:03.140Z] ================================================================================
+[2025-11-13T07:30:03.145Z] 
+================================================================================
+[2025-11-13T07:30:03.149Z] 📄 CÓDIGO DE: BBRASIL
+[2025-11-13T07:30:03.154Z] ================================================================================
+[2025-11-13T07:30:03.283Z] package BBRASIL is
+package body BBRASIL is
+
+ ------------------------------------------------------------
+ ------------------------------------------------------------------------
+ -- para preparac?o do arquivo de remessa --
+ -- Author  : PATRIANE                                                 --
+ ------------------------------------------------------------
+ -- Created : 17/04/2003 14:18:16                                      --
+ 
+ -- Purpose : Procedures e Functions para layout de Cobranca Brandesco --
+ --carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+ ------------------------------------------------------------------------
+ PROCEDURE BBrasil_Titulo_Cadastro(
+  
+                                    vDt1 in Date,
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+                                    vDt2 in Date,
+ PROCEDURE BBrasil_Titulo_Cadastro(
+                                    vTipo in varchar2,
+                                    vDt1 in Date,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vDt2 in Date,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    vTipo in varchar2,
+ BEGIN
+                                    vCodConta in dbConta.Cod_Conta%type,
+  if vTipo='17' then 
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+     Open cur_titulos for
+
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+ PROCEDURE BBrasil_Titulo_AltVencto(
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                                     vDt1 in Date,                                     
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                                     vDt2 in Date,
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                                     vTipo in varchar2,
+                   R.NRO_DOCBANCO AS NRO_BANCO
+                                     vCodConta in dbConta.Cod_Conta%type,
+        From DbReceb r, DbConta ct, Dbclien c, DbBairro b
+                                     cur_titulos out cursorgenerico.tipocursorgenerico);
+        Where 
+ 
+             --(r.dt_emissao<='16/09/2004') 
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+              r.dt_venc<=vdt2 and               
+ PROCEDURE BBrasil_Titulo_AltValor(
+              r.cancel='N' and r.valor_rec = 0 and r.rec='N' and 
+                                    vDt1 in Date,
+              r.forma_fat = '2' and 
+                                    vDt2 in Date,
+              r.bradesco = 'N' and r.banco='1' and             
+                                    vTipo in varchar2,
+              r.dt_venc = r.venc_ant and 
+                                    vCodConta in dbConta.Cod_Conta%type,
+              r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and 
+                                    vCodCli in dbReceb.Codcli%type,
+              r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+                                    vTpFiltro in varchar2,
+        Order by R.DT_VENC, R.CODCLI;
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+  else 
+                                    
+  if vTipo='31' then 
+ -- carrega titulos para envio para pedido de protesto
+     Open cur_titulos for
+ PROCEDURE BBrasil_Titulo_Protesto(
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+                                    vDt1 in Date,
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+                                    vDt2 in Date,
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                                    vCodCli in dbClien.CodCli%type,
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+
+                   R.NRO_DOCBANCO AS NRO_BANCO
+ -- carrega todos os clientes
+        From DbReceb r, DbConta ct, Dbclien c, DbBairro b
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico);
+        Where r.dt_emissao >= '17/09/2004' and  r.dt_emissao <= vdt2 and 
+
+              r.cancel='N' and r.valor_rec = 0 and r.rec='N' and 
+ -- pesquisa se o docto ja foi incluido no bodero
+              r.forma_fat = '2' and 
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+              r.bradesco = 'N' and r.banco='1' and             
+              r.dt_venc = r.venc_ant and 
+                               vNro out integer);
+
+              r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and 
+ -- devolve o valor de abatimento a ser concedido                               
+              r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+        Order by R.DT_VENC, R.CODCLI;
+                            vValor out dbReceb.Valor_Pgto%type);
+   end if; end if;   
+                               
+ END BBrasil_Titulo_Cadastro;
+ -- inclui cabecalho do bodero
+
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+                       vDtInicial in dbBodero.Dtinicial%type,
+ PROCEDURE BBrasil_Titulo_AltVencto(
+                       vDtFinal in dbBodero.Dtfinal%type,
+                                     vDt1 in Date,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                                     vDt2 in Date,
+                       vCodBodero out dbBodero.Cod_bodero%type);
+                                     vTipo in varchar2,
+ 
+                                     vCodConta in dbConta.Cod_Conta%type,
+ -- inclui doctos do bodero
+                                     cur_titulos out cursorgenerico.tipocursorgenerico) is
+ PROCEDURE Inc_DocBoderobb (vCodBodero in dbDocBodero.Cod_bodero%type,
+ BEGIN
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+  if vTipo='17' then  
+                         vDigito in dbDocBodero.Digito%type,
+       Open cur_titulos for
+                         vOperacao in dbDocBodero.Operacao%type);
+          Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+
+                     R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_DocBanco%type,
+                     C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                                          curReceb out cursorgenerico.tipocursorgenerico);
+                     C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                       
+                     B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                     R.NRO_DOCBANCO AS NRO_BANCO
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+          From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+                                           curBodero out cursorgenerico.tipocursorgenerico);
+          Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+
+                --r.dt_emissao<='16/09/2004' and 
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                r.cancel = 'N' and r.dt_venc <> r.venc_ant and
+                                                 curBodero out cursorgenerico.tipocursorgenerico);
+                r.cod_conta = vcodconta and r.forma_fat = '2' and 
+                                           
+                r.bradesco = 'N' and r.banco='1' and 
+ end BBRASIL;
+                r.cod_conta = ct.cod_conta and
+
+                r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+ 
+          Order by R.DT_VENC, R.CODCLI;          
+ 
+  else 
+ 
+  if vTipo='31' then 
+ 
+     Open cur_titulos for
+           Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+                     R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+                     C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                     C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                     B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                     R.NRO_DOCBANCO AS NRO_BANCO
+          From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+          Where r.dt_emissao>='17/09/2004' and r.dt_emissao <= vdt2 and                
+                r.cancel = 'N' and r.dt_venc <> r.venc_ant and
+                r.cod_conta = vcodconta and r.forma_fat = '2' and 
+                r.bradesco = 'N' and r.banco='1' and 
+                r.cod_conta = ct.cod_conta and
+                r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+          Order by R.DT_VENC, R.CODCLI;          
+   end if; end if;             
+ END BBrasil_Titulo_AltVencto;
+ 
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+ PROCEDURE BBrasil_Titulo_AltValor(
+                                    vDt1 in Date,
+                                    vDt2 in Date,
+                                    vTipo in varchar2,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vCodCli in dbReceb.Codcli%type,
+                                    vTpFiltro in varchar2,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+  if vTipo = '17' then
+   if vTpFiltro = 'P' then -- filtro todos do periodo
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                   R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and 
+              --r.dt_emissao <= '16/09/2004' and
+              r.rec = 'N' and 
+              r.cod_conta=vcodconta and 
+              r.cancel = 'N' and
+              r.forma_fat = '2' and 
+              r.banco = '1' and                   
+              r.bradesco <> 'B' and
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and fr.brandesco = 'N' and 
+              fr.brandesco= 'N'  and 
+              r.codcli = c.codcli and c.codbairrocobr=b.codbairro
+        Order by R.DT_VENC, R.CODCLI;       
+   end if;
+   if vTpFiltro = 'C' then -- filtro pelo cliente
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+               R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.codcli = vCodCli and              
+              r.dt_emissao <= '16/09/2004' and
+              r.cod_conta=vcodconta and 
+              r.forma_fat = '2' and 
+              r.cancel = 'N' and
+              r.banco='1' and 
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and 
+              fr.brandesco = 'N' and 
+              fr.brandesco = 'N'  and 
+              r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+        Order by R.DT_VENC, R.CODCLI;     
+   end if; 
+  end if;
+  if vTipo = '31' then
+   if vTpFiltro = 'P' then -- filtro todos do periodo
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+               R.VALOR_PGTO, R.NRO_DOCBANCO AS NRO_BANCO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and 
+              r.dt_emissao >='17/09/2004' and        
+              r.rec = 'N' and 
+              r.cod_conta=vcodconta and 
+              r.cancel = 'N' and
+              r.forma_fat = '2' and 
+              r.banco = '1' and                   
+              r.bradesco <> 'B' and
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and fr.brandesco = 'N' and 
+              fr.brandesco= 'N'  and 
+              r.codcli = c.codcli and c.codbairrocobr=b.codbairro
+        Order by R.DT_VENC, R.CODCLI;       
+   end if;
+   if vTpFiltro = 'C' then -- filtro pelo cliente
+      Open cur_titulos for
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+                   R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+                   C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+                   C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+                   B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+                   R.NRO_DOCBANCO AS NRO_BANCO
+        From DbReceb r, Dbclien c, dbFReceb fr, dbBairro b
+        Where r.codcli = vCodCli and              
+              r.dt_emissao >='17/09/2004' and        
+              r.cod_conta=vcodconta and 
+                  r.forma_fat = '2' and 
+                  r.cancel = 'N' and
+                  r.banco='1' and 
+                  r.cod_receb = fr.cod_receb and 
+                  fr.tipo = '05' and 
+                  fr.brandesco = 'N' and 
+                  fr.brandesco = 'N'  and 
+                  r.codcli = c.codcli and c.codbairrocobr = b.codbairro
+        Order by R.DT_VENC, R.CODCLI;     
+   end if; 
+ end if;
+ END BBrasil_Titulo_AltValor;
+
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE BBrasil_Titulo_Protesto(
+                                    vDt1 in Date,
+                                    vDt2 in Date,
+                                    vCodCli in dbClien.CodCli%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open cur_titulos for
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+               R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_DOCBANCO AS NRO_BANCO
+    From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+          r.forma_fat = '2' and r.bradesco = 'S' and 
+          r.banco = '1' and r.bradesco = 'S' and 
+          r.cancel = 'N' and r.rec = 'N' and 
+          r.codcli = vCodCli and r.codcli = c.codcli and           
+          r.cod_conta = ct.cod_conta and c.codbairrocobr = b.codbairro
+    Order by R.DT_VENC, R.CODCLI;
+ END BBrasil_Titulo_Protesto;
+
+ -- carrega todos os clientes
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open curCliente for
+     Select CodCli, Nome From dbClien Order by Nome;
+ END Clientes;
+ 
+ -- pesquisa se o docto ja foi incluido no bodero
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                               vNro out integer) is           
+ BEGIN
+   Select count(*) into vNro 
+   from dbDocBoderoBB
+   where Cod_Receb = vCod_Receb;
+   if vNro is null then vNro := 0;
+   end if;
+ END Pesquisa_DocBodero;
+
+ -- devolve o valor de abatimento a ser concedido
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+                            vValor out dbReceb.Valor_Pgto%type) is
+ BEGIN
+   Select Sum(fr.Valor) Into vValor
+    From dbFReceb fr
+    Where Cod_Receb = vCod_Receb and fr.tipo = '05' and SF = 'S';
+   if vValor is null then vValor := 0; 
+   end if;
+ END Valor_Abatimento;                                       
+
+ -- inclui cabecalho do bodero
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+                       vDtInicial in dbBodero.Dtinicial%type,
+                       vDtFinal in dbBodero.Dtfinal%type,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                       vCodBodero out dbBodero.Cod_bodero%type) is 
+      nro integer;                       
+ BEGIN
+      Select count(*) into nro from dbBoderoBB;
+      if nro > 0 then 
+         Select Max(To_Number(Cod_Bodero)) Into vCodBodero From dbBoderobb;
+      else 
+         vCodBodero := '0';  
+      end if;
+      nro := To_Number(vCodBodero) + 1;
+      vCodBodero := Geral.Strzero(nro,9);
+      Insert Into dbBoderobb(Cod_bodero,Cod_Conta,Dtinicial,Dtfinal,Dtemissao,Cancel)
+                               Values(vCodBodero,vCodConta,vDtInicial,vDtFinal,vDtEmissao,'N');
+ END Inc_Boderobb;
+ 
+ -- inclui doctos do bodero
+ PROCEDURE Inc_DocBoderobb(
+                         vCodBodero in dbDocBodero.Cod_bodero%type,
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+                         vDigito in dbDocBodero.Digito%type,
+                         vOperacao in dbDocBodero.Operacao%type) is                                    
+      vValor dbReceb.Valor_Pgto%type;
+      vData  dbReceb.Dt_Venc%type;                         
+ BEGIN
+   If (vOperacao = 'I') or (vOperacao = 'D') then
+       Select Valor_Pgto, Dt_Venc Into vValor, vData 
+         From dbReceb Where Cod_Receb = vCodReceb;
+       Update dbReceb Set Bradesco = 'S' where Cod_Receb = vCodReceb;
+       Insert into dbDocBoderoBB(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                     Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+   end if;
+   if vOperacao = 'V' then
+       Select Dt_Venc Into vData 
+        From dbReceb Where Cod_Receb = vCodReceb;
+       Select Sum(Valor) Into vValor From dbFReceb
+        Where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+
+       Update dbFReceb Set Brandesco = 'S' 
+       where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+  
+       Insert into dbDocBoderobb(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                     Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+   end if;
+ END Inc_DocBoderobb;
+ 
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_DocBanco%type,
+                                          curReceb out cursorgenerico.tipocursorgenerico) is           
+ BEGIN
+   Open curReceb for
+    Select r.COD_RECEB, r.CODCLI, r.NRO_DOC, r.DT_VENC , c.NOME
+    from dbReceb r, dbClien c
+    where r.nro_docbanco = vNro_Banco and r.CodCli=c.CodCli and Substr(r.nro_docbanco,1,1)<>'1';--Eu...;
+ END Dados_Receb;
+
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+                                           curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for 
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel
+     from dbBoderoBB b where DtEmissao=vDt_Emissao and Cod_Conta=vCod_Conta;
+ END Navega_Bodero;
+
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                                                 curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for     
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel,
+                r.cod_receb, r.nro_doc, r.valor_pgto as valor_doc, r.dt_venc, r.dt_emissao,
+                r.nro_docbanco as nro_banco, r.venc_ant,
+                c.cpfcgc, c.codcli, c.nome as nomecli, c.tipo, 
+                c.ender, c.cepcobr as cep, bai.cidade, bai.uf,                
+                bai.descr as bairro,
+                db.digito, db.operacao, db.valor as valor_operacao, db.digito
+     from dbDocBoderoBB db, dbBoderoBB b, dbReceb r, dbClien c, dbBairro bai
+     where  b.cod_bodero = vCod_Bodero and 
+                 b.cod_bodero = db.cod_bodero and
+                 db.cod_receb = r.cod_receb and 
+                 r.codcli = c.codcli and c.codbairrocobr=bai.codbairro
+     order by db.operacao;
+ END Navega_DocBodero;
+
+end BBRASIL;
+
+[2025-11-13T07:30:03.294Z] 
+✅ Código salvo em: procedure_BBRASIL.sql
+[2025-11-13T07:30:03.299Z] 
+================================================================================
+[2025-11-13T07:30:03.305Z] 📄 CÓDIGO DE: BBRASILNOVO
+[2025-11-13T07:30:03.312Z] ================================================================================
+[2025-11-13T07:30:03.427Z] package BBRASILNOVO is
+package body BBRASILNOVO is
+
+ ------------------------------------------------------------
+ ------------------------------------------------------------------------
+ -- para preparac?o do arquivo de remessa --
+ -- Author  : PATRIANE                                                 --
+ ------------------------------------------------------------
+ -- Created : 17/04/2003 14:18:16                                      --
+ 
+ -- Purpose : Procedures e Functions para layout de Cobranca Brandesco --
+ --carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+ ------------------------------------------------------------------------
+ PROCEDURE BBrasilNovo_Titulo_Cadastro(
+  
+                                    vDt1 in Date,
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+                                    vDt2 in Date,
+ PROCEDURE BBrasilNovo_Titulo_Cadastro(
+                                    vTipo in varchar2,
+                                    vDt1 in Date,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vDt2 in Date,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    vTipo in varchar2,
+ Sel LONG;
+                                    vCodConta in dbConta.Cod_Conta%type,
+ tabela LONG;
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+ onde LONG;
+
+ ordem LONG;
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+ BEGIN
+ PROCEDURE BBrasilNovo_Titulo_AltVencto(
+  Sel := 'SELECT R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, ' ||
+                                     vDt1 in Date,                                     
+         'R.VALOR_PGTO, R.NRO_BANCO AS NRO_BANCO, ' ||
+                                     vDt2 in Date,
+         'C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO, ' ||
+                                     vTipo in varchar2,
+         'C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP, ' ||
+                                     vCodConta in dbConta.Cod_Conta%type,
+         'B.DESCR AS BAIRRO, B.CIDADE, B.UF ';
+                                     cur_titulos out cursorgenerico.tipocursorgenerico);
+  Tabela := 'FROM DbReceb r, DbConta ct, Dbclien c, DbBairro b ';
+ 
+  Onde := 'WHERE r.cancel=''N'' and r.valor_rec = 0 and r.rec = ''N'' and ' ||
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+          'r.forma_fat = ''2'' and r.bradesco = ''N'' and r.banco = ''1'' and ' ||
+ PROCEDURE BBrasilNovo_Titulo_AltValor(
+          'r.dt_venc = r.venc_ant and r.cod_conta = ''' || vcodconta || ''' and '||
+                                    vDt1 in Date,
+          'r.cod_conta = ct.cod_conta and r.codcli = c.codcli and ' ||
+                                    vDt2 in Date,
+          'c.codbairrocobr = b.codbairro and R.NRO_BANCO is not null and ';
+                                    vTipo in varchar2,
+  Ordem := 'ORDER BY R.DT_VENC, R.CODCLI';
+                                    vCodConta in dbConta.Cod_Conta%type,
+ 
+                                    vCodCli in dbReceb.Codcli%type,
+  if vTipo = 'V'
+                                    vTpFiltro in varchar2,
+   then Onde := Onde || 'r.dt_venc <= ''' || vdt2 || ''' ';
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+  else if vTipo = 'E'
+                                    
+   then Onde := Onde || 'r.dt_emissao <= ''' || vdt2 || ''' ';
+ -- carrega titulos para envio para pedido de protesto
+  end if; end if;
+ PROCEDURE BBrasilNovo_Titulo_Protesto(
+  
+                                    vDt1 in Date,
+  OPEN cur_titulos FOR
+                                    vDt2 in Date,
+    sel || tabela || onde || ordem;
+                                    vCodCli in dbClien.CodCli%type,
+   
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+ END BBrasilNovo_Titulo_Cadastro;
+
+
+ -- carrega todos os clientes
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico);
+ PROCEDURE BBrasilNovo_Titulo_AltVencto(
+
+                                     vDt1 in Date,
+ -- pesquisa se o docto ja foi incluido no bodero
+                                     vDt2 in Date,
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                                     vTipo in varchar2,
+                               vNro out integer);
+                                     vCodConta in dbConta.Cod_Conta%type,
+
+                                     cur_titulos out cursorgenerico.tipocursorgenerico) is
+ -- devolve o valor de abatimento a ser concedido                               
+ Sel LONG;
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+ tabela LONG;
+                            vValor out dbReceb.Valor_Pgto%type);
+ onde LONG;
+                               
+ ordem LONG;
+ -- inclui cabecalho do bodero
+ BEGIN
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+  Sel := 'SELECT R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, ' ||
+                       vDtInicial in dbBodero.Dtinicial%type,
+         'R.VENC_ANT, R.VALOR_PGTO, R.NRO_BANCO AS NRO_BANCO, ' ||
+                       vDtFinal in dbBodero.Dtfinal%type,
+         'C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO, ' ||
+                       vDtEmissao in dbBodero.Dtemissao%type,
+         'C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP, ' ||
+                       vCodBodero out dbBodero.Cod_bodero%type);
+         'B.DESCR AS BAIRRO, B.CIDADE, B.UF ';
+ 
+  Tabela := 'FROM DbReceb r, DbConta ct, Dbclien c, DbBairro b ';
+ -- inclui doctos do bodero
+  Onde := 'WHERE r.cancel = ''N'' and r.cod_conta = ''' || vcodconta || ''' and ' ||
+ PROCEDURE Inc_DocBoderobb (vCodBodero in dbDocBodero.Cod_bodero%type,
+          'r.dt_venc <> r.venc_ant and ' ||
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+          'r.forma_fat = ''2'' and r.bradesco = ''N'' and r.banco = ''1'' and ' ||
+                         vDigito in dbDocBodero.Digito%type,
+          'r.cod_conta = ct.cod_conta and r.codcli = c.codcli and ' ||
+                         vOperacao in dbDocBodero.Operacao%type);
+          'c.codbairrocobr = b.codbairro and R.NRO_BANCO is not null and ';
+
+  Ordem := 'ORDER BY R.DT_VENC, R.CODCLI';
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_Banco%type,
+ 
+                                          curReceb out cursorgenerico.tipocursorgenerico);
+  if vTipo = 'V'
+                       
+   then Onde := Onde || 'r.dt_venc >= ''' || vdt1 ||''' and r.dt_venc <= ''' || vdt2 || ''' ';
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+  else if vTipo = 'E'
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+   then Onde := Onde || 'r.dt_emissao >= ''' || vdt1 ||''' and r.dt_emissao <= ''' || vdt2 || ''' ';
+                                           curBodero out cursorgenerico.tipocursorgenerico);
+  end if; end if;
+
+  
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+  OPEN cur_titulos FOR
+                                                 curBodero out cursorgenerico.tipocursorgenerico);
+    sel || tabela || onde || ordem; 
+                                           
+
+ end BBRASILNOVO;
+ END BBrasilNovo_Titulo_AltVencto;
+
+ 
+ 
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+ 
+ PROCEDURE BBrasilNovo_Titulo_AltValor(
+ 
+                                    vDt1 in Date,
+ 
+                                    vDt2 in Date,
+                                     vTipo in varchar2,
+                                    vCodConta in dbConta.Cod_Conta%type,
+                                    vCodCli in dbReceb.Codcli%type,
+                                    vTpFiltro in varchar2,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+Sel LONG;
+ tabela LONG;
+ onde LONG;
+ ordem LONG;
+ BEGIN
+  Sel := 'SELECT R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, ' ||
+         'R.VALOR_PGTO, R.NRO_BANCO AS NRO_BANCO, ' ||
+         'C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO, ' ||
+         'C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP, ' ||
+         'B.DESCR AS BAIRRO, B.CIDADE, B.UF ';
+  Tabela := 'FROM DbReceb r, Dbclien c, dbFReceb fr, DbBairro b ';
+  Onde := 'WHERE r.cod_conta = ''' || vcodconta || ''' and ' ||
+          'r.forma_fat = ''2'' and r.cancel = ''N'' and ' ||
+          'r.banco = ''1'' and r.cod_receb = fr.cod_receb and ' ||
+          'fr.tipo = ''05'' and fr.brandesco = ''N'' and ' ||
+          'fr.brandesco = ''N''  and r.codcli = c.codcli and ' ||
+          'c.codbairrocobr = b.codbairro and R.NRO_BANCO is not null and ';
+  Ordem := 'ORDER BY R.DT_VENC, R.CODCLI';
+
+  if vTpFiltro = 'C'
+   then Onde := Onde || 'r.codcli = ''' || vCodCli ||''' ';
+  else if vTpFiltro = 'P'
+   then if vTipo = 'V'
+   then Onde := Onde || 'r.dt_venc >= ''' || vdt1 ||''' and r.dt_venc <= ''' || vdt2 || ''' and r.bradesco <> ''B'' and r.rec = ''N'' ';
+  else if vTipo = 'E'
+   then Onde := Onde || 'r.dt_emissao >= ''' || vdt1 ||''' and r.dt_emissao <= ''' || vdt2 || ''' and r.bradesco <> ''B'' and r.rec = ''N'' ';
+  end if; end if; end if; end if;
+  
+  OPEN cur_titulos FOR
+    sel || tabela || onde || ordem; 
+
+ END BBrasilNovo_Titulo_AltValor;
+
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE BBrasilNovo_Titulo_Protesto(
+                                    vDt1 in Date,
+                                    vDt2 in Date,
+                                    vCodCli in dbClien.CodCli%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open cur_titulos for
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+               R.VENC_ANT, R.VALOR_PGTO, R.NRO_BANCO AS DIG_BOLETO,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+               C.ENDERCOBR AS ENDER, C.CEPCOBR AS CEP,
+               B.DESCR AS BAIRRO, B.CIDADE, B.UF,
+               R.NRO_BANCO AS NRO_BANCO
+    From DbReceb r, DbConta ct, Dbclien c, dbBairro b
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+          r.forma_fat = '2' and r.bradesco = 'S' and 
+          r.banco = '1' and r.bradesco = 'S' and 
+          r.cancel = 'N' and r.rec = 'N' and 
+          r.codcli = vCodCli and r.codcli = c.codcli and           
+          r.cod_conta = ct.cod_conta and c.codbairrocobr = b.codbairro and
+                R.NRO_BANCO is not null
+    Order by R.DT_VENC, R.CODCLI;
+ END BBrasilNovo_Titulo_Protesto;
+
+ -- carrega todos os clientes
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open curCliente for
+     Select CodCli, Nome From dbClien Order by Nome;
+ END Clientes;
+ 
+ -- pesquisa se o docto ja foi incluido no bodero
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                               vNro out integer) is           
+ BEGIN
+   Select count(*) into vNro 
+   from dbDocBoderoBB
+   where Cod_Receb = vCod_Receb;
+   if vNro is null then vNro := 0;
+   end if;
+ END Pesquisa_DocBodero;
+
+ -- devolve o valor de abatimento a ser concedido
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+                            vValor out dbReceb.Valor_Pgto%type) is
+ BEGIN
+   Select Sum(fr.Valor) Into vValor
+    From dbFReceb fr
+    Where Cod_Receb = vCod_Receb and fr.tipo = '05' and SF = 'S';
+   if vValor is null then vValor := 0; 
+   end if;
+ END Valor_Abatimento;                                       
+
+ -- inclui cabecalho do bodero
+ PROCEDURE Inc_Boderobb (vCodConta in dbBodero.Cod_Conta%type,
+                       vDtInicial in dbBodero.Dtinicial%type,
+                       vDtFinal in dbBodero.Dtfinal%type,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                       vCodBodero out dbBodero.Cod_bodero%type) is 
+      nro integer;                       
+ BEGIN
+      Select count(*) into nro from dbBoderoBB;
+      if nro > 0 then 
+         Select Max(To_Number(Cod_Bodero)) Into vCodBodero From dbBoderobb;
+      else 
+         vCodBodero := '0';  
+      end if;
+      nro := To_Number(vCodBodero) + 1;
+      vCodBodero := Geral.Strzero(nro,9);
+      Insert Into dbBoderobb(Cod_bodero,Cod_Conta,Dtinicial,Dtfinal,Dtemissao,Cancel)
+                               Values(vCodBodero,vCodConta,vDtInicial,vDtFinal,vDtEmissao,'N');
+ END Inc_Boderobb;
+ 
+ -- inclui doctos do bodero
+ PROCEDURE Inc_DocBoderobb(
+                         vCodBodero in dbDocBodero.Cod_bodero%type,
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+                         vDigito in dbDocBodero.Digito%type,
+                         vOperacao in dbDocBodero.Operacao%type) is                                    
+      vValor dbReceb.Valor_Pgto%type;
+      vData  dbReceb.Dt_Venc%type;                         
+      xCount number;
+ BEGIN
+   select count(*)into xCount from dbDocBoderobb where cod_bodero = vCodBodero and cod_receb = vCodReceb;
+   if (xCount = 0)
+     then
+       If (vOperacao = 'I') or (vOperacao = 'D') then
+           Select Valor_Pgto, Dt_Venc Into vValor, vData 
+             From dbReceb Where Cod_Receb = vCodReceb;
+           Update dbReceb Set Bradesco = 'S' where Cod_Receb = vCodReceb;
+           Insert into dbDocBoderoBB(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                         Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+       if vOperacao = 'V' then
+           Select Dt_Venc Into vData 
+            From dbReceb Where Cod_Receb = vCodReceb;
+           Select Sum(Valor) Into vValor From dbFReceb
+            Where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+
+           Update dbFReceb Set Brandesco = 'S' 
+           where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+      
+           Insert into dbDocBoderobb(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                                         Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+   end if;
+ END Inc_DocBoderobb;
+ 
+ PROCEDURE Dados_Receb(vNro_Banco in dbReceb.Nro_Banco%type,
+                                          curReceb out cursorgenerico.tipocursorgenerico) is           
+ BEGIN
+   Open curReceb for
+    Select r.COD_RECEB, r.CODCLI, r.NRO_DOC, r.DT_VENC , c.NOME, r.dt_emissao
+    from dbReceb r, dbClien c
+    where r.nro_banco = vNro_Banco and r.CodCli=c.CodCli
+    order by dt_emissao;
+ END Dados_Receb;
+
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+                                           curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for 
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel
+     from dbBoderoBB b where DtEmissao=vDt_Emissao and Cod_Conta=vCod_Conta;
+ END Navega_Bodero;
+
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                                                 curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for     
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel,
+                r.cod_receb, r.nro_doc, r.valor_pgto as valor_doc, r.dt_venc, r.dt_emissao,
+                r.nro_banco as nro_banco, r.venc_ant,
+                c.cpfcgc, c.codcli, c.nome as nomecli, c.tipo, 
+                c.ender, c.cepcobr as cep, bai.cidade, bai.uf,                
+                bai.descr as bairro,
+                db.digito, db.operacao, db.valor as valor_operacao, db.digito
+     from dbDocBoderoBB db, dbBoderoBB b, dbReceb r, dbClien c, dbBairro bai
+     where  b.cod_bodero = vCod_Bodero and 
+                 b.cod_bodero = db.cod_bodero and
+                 db.cod_receb = r.cod_receb and 
+                 r.codcli = c.codcli and c.codbairrocobr=bai.codbairro
+     order by db.operacao;
+ END Navega_DocBodero;
+
+end BBRASILNOVO;
+
+[2025-11-13T07:30:03.438Z] 
+✅ Código salvo em: procedure_BBRASILNOVO.sql
+[2025-11-13T07:30:03.443Z] 
+================================================================================
+[2025-11-13T07:30:03.449Z] 📄 CÓDIGO DE: BRADESCO
+[2025-11-13T07:30:03.457Z] ================================================================================
+[2025-11-13T07:30:03.580Z] package BRADESCO is
+package body BRADESCO is
+
+ ------------------------------------------------------------
+ ------------------------------------------------------------------------
+ -- para preparac?o do arquivo de remessa --
+ -- Author  : PATRIANE                                                 --
+ ------------------------------------------------------------
+ -- Created : 17/04/2003 14:18:16                                      --
+ 
+ -- Purpose : Procedures e Functions para layout de Cobranca Brandesco --
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+ ------------------------------------------------------------------------
+ PROCEDURE Bradesco_Titulo_Cadastro(vDt1 in Date,
+  
+                                    vDt2 in Date,
+ -- carrega titulos para envio que n?o tenha sido alterada a data de vencto.
+                                    vCodConta in dbConta.Cod_Conta%type,
+ PROCEDURE Bradesco_Titulo_Cadastro(vDt1 in Date,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    vDt2 in Date,
+ BEGIN
+                                    vCodConta in dbConta.Cod_Conta%type,
+   Open cur_titulos for
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, 
+
+           R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO, R.NRO_BANCO,
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+           C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+ PROCEDURE Bradesco_Titulo_AltVencto(vDt1 in Date,
+           C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP           
+                                     vDt2 in Date,
+    From DbReceb r, DbConta ct, Dbclien c
+                                     vCodConta in dbConta.Cod_Conta%type,
+    Where --r.dt_venc >= vdt1 and           
+                                     cur_titulos out cursorgenerico.tipocursorgenerico);
+          r.dt_venc <= vdt2 and 
+ 
+          r.forma_fat = '2' and r.bradesco = 'N' and
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+          r.cancel='N' and r.valor_rec = 0 and r.rec='N' and 
+ PROCEDURE Bradesco_Titulo_AltValor(vDt1 in Date,
+          r.dt_venc = r.venc_ant and 
+                                    vDt2 in Date,
+          r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and 
+                                    vCodConta in dbConta.Cod_Conta%type,
+          r.codcli = c.codcli and r.nro_banco is not null
+                                    vCodCli in dbReceb.Codcli%type,
+    Order by R.DT_VENC, R.CODCLI;
+                                    vTpFiltro in varchar2,
+ END Bradesco_Titulo_Cadastro;
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);
+
+                                    
+ -- carrega titulos para envio que tenha sido alterada a data de vencto. 
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE Bradesco_Titulo_AltVencto(vDt1 in Date,
+ PROCEDURE Bradesco_Titulo_Protesto(vDt1 in Date,
+                                     vDt2 in Date,
+                                    vDt2 in Date,
+                                     vCodConta in dbConta.Cod_Conta%type,
+                                    vCodCli in dbClien.CodCli%type,
+                                     cur_titulos out cursorgenerico.tipocursorgenerico) is
+                                    cur_titulos out cursorgenerico.tipocursorgenerico);                                   
+ BEGIN
+
+   Open cur_titulos for
+ -- carrega todos os clientes
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico);
+           R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,R.NRO_BANCO,
+
+           C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,
+ -- pesquisa se o docto ja foi incluido no bodero
+           C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+    From DbReceb r, DbConta ct, Dbclien c
+                               vNro out integer);
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+
+          r.forma_fat = '2' and r.bradesco = 'N' and
+ -- devolve o valor de abatimento a ser concedido                               
+          r.cancel = 'N' and r.dt_venc <> r.venc_ant and
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+          r.cod_conta = vcodconta and r.cod_conta = ct.cod_conta and
+                            vValor out dbReceb.Valor_Pgto%type);
+          r.codcli = c.codcli and r.nro_banco is not null
+                               
+    Order by R.DT_VENC, R.CODCLI;          
+ -- inclui cabecalho do bodero
+ END Bradesco_Titulo_AltVencto;
+ PROCEDURE Inc_Bodero (vCodConta in dbBodero.Cod_Conta%type,
+ 
+                       vDtInicial in dbBodero.Dtinicial%type,
+ -- carrega titulos para envio que tenha sido alterado o valor do docto. 
+                       vDtFinal in dbBodero.Dtfinal%type,
+ PROCEDURE Bradesco_Titulo_AltValor(vDt1 in Date,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                                    vDt2 in Date,
+                       vCodBodero in dbBodero.Cod_bodero%type);
+                                    vCodConta in dbConta.Cod_Conta%type,
+ 
+                                    vCodCli in dbReceb.Codcli%type,
+ -- inclui doctos do bodero
+                                    vTpFiltro in varchar2,
+ PROCEDURE Inc_DocBodero(vCodBodero in dbDocBodero.Cod_bodero%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+ BEGIN
+                         vDigito in dbDocBodero.Digito%type,
+   if vTpFiltro = 'P' then -- filtro todos do periodo
+                         vOperacao in dbDocBodero.Operacao%type);
+      Open cur_titulos for
+
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+ PROCEDURE Dados_Receb(vCod_Receb in dbReceb.Nro_Banco%type,
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,R.NRO_BANCO,
+                       curReceb out cursorgenerico.tipocursorgenerico);
+               C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+                       
+        From DbReceb r, Dbclien c, dbFReceb fr
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+        Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and 
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+              r.forma_fat = '2' and r.cancel = 'N' and 
+                                           curBodero out cursorgenerico.tipocursorgenerico);
+              r.rec = 'N' and 
+
+              r.cod_conta=vcodconta and 
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+              r.cod_receb = fr.cod_receb and r.bradesco <> 'B' and
+                                                 curBodero out cursorgenerico.tipocursorgenerico);
+              fr.tipo = '05' and fr.brandesco = 'N' and              
+                                           
+              r.codcli = c.codcli and r.nro_banco is not null
+ end BRADESCO;
+        Order by R.DT_VENC, R.CODCLI;       
+
+   end if;
+ 
+   if vTpFiltro = 'C' then -- filtro pelo cliente
+ 
+      Open cur_titulos for
+ 
+        Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+ 
+               C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,R.NRO_BANCO,
+                C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+        From DbReceb r, Dbclien c, dbFReceb fr
+        Where r.codcli = vCodCli and              
+              r.cod_conta=vcodconta and 
+              r.forma_fat = '2' and r.cancel = 'N' and               
+              r.cod_receb = fr.cod_receb and 
+              fr.tipo = '05' and fr.brandesco = 'N' and              
+              r.codcli = c.codcli and r.nro_banco is not null
+        Order by R.DT_VENC, R.CODCLI;     
+   end if; 
+ END Bradesco_Titulo_AltValor;
+
+ -- carrega titulos para envio para pedido de protesto
+ PROCEDURE Bradesco_Titulo_Protesto(vDt1 in Date,
+                                    vDt2 in Date,
+                                    vCodCli in dbClien.CodCli%type,
+                                    cur_titulos out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open cur_titulos for
+    Select R.COD_RECEB, R.NRO_DOC, R.DT_VENC, R.DT_EMISSAO,
+           R.VENC_ANT, R.VALOR_PGTO, R.NRO_DOCBANCO AS DIG_BOLETO,
+           C.CODCLI, C.NOME, C.CPFCGC AS CNPJ, C. TIPO,R.NRO_BANCO,
+           C.ENDER, C.BAIRRO, C.CIDADE, C.UF, C.CEP
+    From DbReceb r, DbConta ct, Dbclien c
+    Where r.dt_venc >= vdt1 and r.dt_venc <= vdt2 and
+          r.forma_fat = '2' and r.bradesco = 'S' and
+          r.cancel = 'N' and r.rec = 'N' and 
+          r.codcli = vCodCli and r.codcli = c.codcli and 
+          r.cod_conta = ct.cod_conta 
+    Order by R.DT_VENC, R.CODCLI;
+ END Bradesco_Titulo_Protesto;
+
+ -- carrega todos os clientes
+ PROCEDURE Clientes(curCliente out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+   Open curCliente for
+     Select CodCli, Nome From dbClien Order by Nome;
+ END Clientes;
+ 
+ -- pesquisa se o docto ja foi incluido no bodero
+ PROCEDURE Pesquisa_DocBodero(vCod_Receb in dbReceb.Cod_Receb%type,                       
+                               vNro out integer) is           
+ BEGIN
+   Select count(*) into vNro 
+   from dbDocBodero 
+   where Cod_Receb = vCod_Receb;
+   if vNro is null then vNro := 0;
+   end if;
+ END Pesquisa_DocBodero;
+
+ -- devolve o valor de abatimento a ser concedido
+ PROCEDURE Valor_Abatimento(vCod_Receb in dbReceb.Cod_Receb%type,
+                            vValor out dbReceb.Valor_Pgto%type) is
+ BEGIN
+   Select Sum(fr.Valor) Into vValor
+    From dbFReceb fr
+    Where Cod_Receb = vCod_Receb and fr.tipo = '05' and SF = 'S';
+   if vValor is null then vValor := 0; 
+   end if;
+ END Valor_Abatimento;                                       
+
+ -- inclui cabecalho do bodero
+ PROCEDURE Inc_Bodero (vCodConta in dbBodero.Cod_Conta%type,
+                       vDtInicial in dbBodero.Dtinicial%type,
+                       vDtFinal in dbBodero.Dtfinal%type,
+                       vDtEmissao in dbBodero.Dtemissao%type,
+                       vCodBodero in dbBodero.Cod_bodero%type) is 
+-- nro integer;                       
+ BEGIN
+  /* Select count(*) into nro from dbBodero;
+   if nro > 0 then 
+     Select Max(To_Number(Cod_Bodero)) Into vCodBodero From dbBodero;
+   else 
+     vCodBodero := '0';  
+   end if;
+   nro := To_Number(vCodBodero) + 1;
+   vCodBodero := Geral.Strzero(nro,9);
+  */ 
+   Insert Into dbBodero(Cod_bodero,Cod_Conta,Dtinicial,Dtfinal,Dtemissao,Cancel)
+                 Values(vCodBodero,vCodConta,vDtInicial,vDtFinal,vDtEmissao,'N');
+ END Inc_Bodero;
+ 
+ -- inclui doctos do bodero
+ PROCEDURE Inc_DocBodero(vCodBodero in dbDocBodero.Cod_bodero%type,
+                         vCodReceb in dbDocBodero.Cod_Receb%type,
+                         vDigito in dbDocBodero.Digito%type,
+                         vOperacao in dbDocBodero.Operacao%type) is                                    
+ vValor dbReceb.Valor_Pgto%type;
+ vData  dbReceb.Dt_Venc%type;                         
+ xCount number;
+ BEGIN
+   select count(*)into xCount from dbDocBoderobb where cod_bodero = vCodBodero and cod_receb = vCodReceb;
+   if (xCount = 0)
+     then
+       If (vOperacao = 'I') or (vOperacao = 'D') then
+         Select Valor_Pgto, Dt_Venc Into vValor, vData 
+          From dbReceb Where Cod_Receb = vCodReceb;
+         Update dbReceb Set Bradesco = 'S' where Cod_Receb = vCodReceb;
+         Insert into dbDocBodero(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                          Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+       if vOperacao = 'V' then
+         Select Dt_Venc Into vData 
+          From dbReceb Where Cod_Receb = vCodReceb;
+         Select Sum(Valor) Into vValor From dbFReceb
+          Where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+         Update dbFReceb Set Brandesco = 'S'
+          where Cod_Receb = vCodReceb and Tipo = '05' and SF = 'S';
+         Insert into dbDocBodero(Cod_bodero, Cod_Receb, Operacao, Valor, Dt_Venc, Digito)
+                          Values(vCodbodero, vCodReceb, vOperacao, vValor, vData, vDigito);
+       end if;
+    end if;
+ END Inc_DocBodero;
+ 
+ PROCEDURE Dados_Receb(vCod_Receb in dbReceb.Nro_Banco%type,
+                       curReceb out cursorgenerico.tipocursorgenerico) is           
+ xsel long;
+ xcont number;
+ BEGIN
+   select count(r.COD_RECEB) into xcont
+   from dbReceb r
+   where r.Nro_Banco = vCod_Receb;
+  
+   xsel := 'Select r.COD_RECEB, r.CODCLI, r.NRO_DOC, r.DT_VENC , c.NOME,R.NRO_BANCO ' ||
+           'from dbReceb r, dbClien c ' ||
+           'where r.CodCli=c.CodCli and ';
+   if xcont > 0
+     then xsel := xsel || 'r.Nro_Banco = ''' || vCod_Receb || ''' ';
+     else xsel := xsel || 'r.Cod_Receb = ''' || substr(vCod_Receb,3,9) || ''' ';
+   end if;
+   Open curReceb for
+     xsel;
+ END Dados_Receb;
+
+ PROCEDURE Navega_Bodero(vDt_Emissao in dbBodero.Dtemissao%type,
+                                           vCod_Conta in dbBodero.Cod_Conta%type,
+                                           curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for 
+     Select b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel
+     from dbBodero b where DtEmissao=vDt_Emissao and Cod_Conta=vCod_Conta;
+ END Navega_Bodero;
+
+ PROCEDURE Navega_DocBodero(vCod_Bodero in dbBodero.Cod_Bodero%type,
+                                                 curBodero out cursorgenerico.tipocursorgenerico) is
+ BEGIN
+    Open curBodero for     
+     Select --b.cod_bodero, b.cod_conta, b.dtinicial, b.dtfinal, b.dtemissao, b.cancel,                            
+                r.cod_receb, r.nro_doc, r.valor_pgto, r.dt_venc, r.dt_emissao,R.NRO_BANCO,
+                c.cpfcgc, c.codcli, c.nome, c.tipo, c.ender, c.cepcobr as cep,
+                db.digito, db.operacao, db.valor as valor_operacao
+       from dbDocBodero db, dbReceb r, dbClien c, dbBairro b
+     where db.cod_bodero = vCod_Bodero and db.cod_receb = r.cod_receb and 
+                r.codcli = c.codcli and c.codbairrocobr=b.codbairro;
+ END Navega_DocBodero;
+
+end BRADESCO;
+
+[2025-11-13T07:30:03.590Z] 
+✅ Código salvo em: procedure_BRADESCO.sql
+[2025-11-13T07:30:03.596Z] 
+================================================================================
+[2025-11-13T07:30:03.602Z] 7. PROCEDURES DE TÍTULO/COBRANÇA
+[2025-11-13T07:30:03.606Z] ================================================================================
+[2025-11-13T07:30:03.783Z] 
+📋 Encontradas 88 procedures:
+
+[2025-11-13T07:30:03.789Z]    • ASSISTENCIA_TECNICA (PACKAGE)
+[2025-11-13T07:30:03.795Z]    • ATUALIZA_DEBITO (PROCEDURE)
+[2025-11-13T07:30:03.801Z]    • BAIXA_CHEQUE_PRE (PROCEDURE)
+[2025-11-13T07:30:03.807Z]    • BANCO_COBRANCA_ALT (PROCEDURE)
+[2025-11-13T07:30:03.813Z]    • BANCO_COBRANCA_DADOS_ALT (PROCEDURE)
+[2025-11-13T07:30:03.819Z]    • BANCO_COBRANCA_DADOS_DEL (PROCEDURE)
+[2025-11-13T07:30:03.826Z]    • BANCO_COBRANCA_DADOS_INC (PROCEDURE)
+[2025-11-13T07:30:03.831Z]    • BANCO_COBRANCA_DADOS_NAVEGA (PROCEDURE)
+[2025-11-13T07:30:03.837Z]    • BANCO_COBRANCA_INC (PROCEDURE)
+[2025-11-13T07:30:03.843Z]    • BANCO_COBRANCA_NAVEGA (PROCEDURE)
+[2025-11-13T07:30:03.849Z]    • BBRASIL (PACKAGE)
+[2025-11-13T07:30:03.855Z]    • BBRASILNOVO (PACKAGE)
+[2025-11-13T07:30:03.860Z]    • BRADESCO (PACKAGE)
+[2025-11-13T07:30:03.866Z]    • BRADESCONOVO (PACKAGE)
+[2025-11-13T07:30:03.873Z]    • BREAL (PACKAGE)
+[2025-11-13T07:30:03.879Z]    • CAIXA (PACKAGE)
+[2025-11-13T07:30:03.884Z]    • CAIXADIARIO_FRMPGTO (PROCEDURE)
+[2025-11-13T07:30:03.890Z]    • CAIXADIARIO_TITULOS (PROCEDURE)
+[2025-11-13T07:30:03.896Z]    • CAIXA_DIARIO_REC (PROCEDURE)
+[2025-11-13T07:30:03.901Z]    • CARREGA_TITULOS (PROCEDURE)
+[2025-11-13T07:30:03.907Z]    • CLIENTE (PACKAGE)
+[2025-11-13T07:30:03.912Z]    • CLIENTE_FILTRO_CONSULTA (PROCEDURE)
+[2025-11-13T07:30:03.918Z]    • CLIENTE_TITULO (PROCEDURE)
+[2025-11-13T07:30:03.924Z]    • COBRANCA_NF_SERVICO (PACKAGE)
+[2025-11-13T07:30:03.931Z]    • CONFERENCIA (PACKAGE)
+[2025-11-13T07:30:03.938Z]    • CONFERENCIA_CONFIRMA (PROCEDURE)
+[2025-11-13T07:30:03.944Z]    • CONSULTA_CLIENTE_CODIGO (PROCEDURE)
+[2025-11-13T07:30:03.951Z]    • CONSULTA_REL_DIARIO_SONY (PROCEDURE)
+[2025-11-13T07:30:03.957Z]    • CONSULTA_TITULOS_ABERTOS (PROCEDURE)
+[2025-11-13T07:30:03.962Z]    • CONSULTA_TITULOS_ABERTOS2 (PROCEDURE)
+[2025-11-13T07:30:03.967Z]    • CONS_FATURASEMTITULO (PROCEDURE)
+[2025-11-13T07:30:03.972Z]    • CONS_VENDNOTASEMTITULO (PROCEDURE)
+[2025-11-13T07:30:03.978Z]    • CONTASR_BAIXA (PROCEDURE)
+[2025-11-13T07:30:03.983Z]    • CONTASR_INC (PROCEDURE)
+[2025-11-13T07:30:03.989Z]    • CONTASR_INC_GP (PROCEDURE)
+[2025-11-13T07:30:03.994Z]    • CONTASR_INC_GP_BANCOBRASIL (PROCEDURE)
+[2025-11-13T07:30:03.999Z]    • CONTROLE_CONTASR (PACKAGE)
+[2025-11-13T07:30:04.005Z]    • CRECEB_CONSULTA_DETALHE (PROCEDURE)
+[2025-11-13T07:30:04.011Z]    • FATURAMENTOS (PACKAGE)
+[2025-11-13T07:30:04.016Z]    • FATURAMENTOS_NF_ELETRONICA (PACKAGE)
+[2025-11-13T07:30:04.021Z]    • FATURAMENTOS_NF_ELETRONICA_2 (PACKAGE)
+[2025-11-13T07:30:04.027Z]    • FATURAMENTO_IMPRESSAO (PACKAGE)
+[2025-11-13T07:30:04.032Z]    • FATURASEMTITULO (PROCEDURE)
+[2025-11-13T07:30:04.037Z]    • FATURA_SEM_TITULO_REL (PROCEDURE)
+[2025-11-13T07:30:04.042Z]    • FILIALPV (PACKAGE)
+[2025-11-13T07:30:04.047Z]    • FLUXOCX (PACKAGE)
+[2025-11-13T07:30:04.053Z]    • FLUXOCXX (PACKAGE)
+[2025-11-13T07:30:04.058Z]    • FLUXOCXX3 (PACKAGE)
+[2025-11-13T07:30:04.064Z]    • ITAU (PACKAGE)
+[2025-11-13T07:30:04.071Z]    • JOBS (PACKAGE)
+[2025-11-13T07:30:04.078Z]    • LIBERA_TITULOS (PROCEDURE)
+[2025-11-13T07:30:04.083Z]    • NAVEGA_CONTASR (PROCEDURE)
+[2025-11-13T07:30:04.089Z]    • NAVEGA_CONTASR_FILIAL (PROCEDURE)
+[2025-11-13T07:30:04.094Z]    • NOTASSEMCOBRANCA (PROCEDURE)
+[2025-11-13T07:30:04.099Z]    • PKG_PERFIL_USUARIO (PACKAGE)
+[2025-11-13T07:30:04.104Z]    • PRECONTASR (PACKAGE)
+[2025-11-13T07:30:04.110Z]    • PRETCOBRANCA (PACKAGE)
+[2025-11-13T07:30:04.116Z]    • PROCESSO_VENDA_TO_BALCAO (PROCEDURE)
+[2025-11-13T07:30:04.122Z]    • PRODUTO (PACKAGE)
+[2025-11-13T07:30:04.129Z]    • RECEB_TOTAL_TITULO (PROCEDURE)
+[2025-11-13T07:30:04.134Z]    • REMESSABANCO (PACKAGE)
+[2025-11-13T07:30:04.139Z]    • REMESSA_BOLETO (PACKAGE)
+[2025-11-13T07:30:04.145Z]    • REM_CLIENTE_SERASA (PROCEDURE)
+[2025-11-13T07:30:04.152Z]    • RENEGOCIACAO (PACKAGE)
+[2025-11-13T07:30:04.158Z]    • RETORNO (PACKAGE)
+[2025-11-13T07:30:04.164Z]    • RURAL (PACKAGE)
+[2025-11-13T07:30:04.171Z]    • SAFRA (PACKAGE)
+[2025-11-13T07:30:04.177Z]    • SAV_CARGA_DIARIA (PROCEDURE)
+[2025-11-13T07:30:04.182Z]    • SAV_ENVIA_RELATORIOS (PROCEDURE)
+[2025-11-13T07:30:04.188Z]    • SAV_UPDATE_COB_ACOES_ACOM (PROCEDURE)
+[2025-11-13T07:30:04.193Z]    • SAV_UPDATE_COB_ACOES_CAN (PROCEDURE)
+[2025-11-13T07:30:04.198Z]    • SAV_UPDATE_TITULOS (PROCEDURE)
+[2025-11-13T07:30:04.203Z]    • SERASA (PACKAGE)
+[2025-11-13T07:30:04.208Z]    • SYS_CARGA_DIARIA (PROCEDURE)
+[2025-11-13T07:30:04.213Z]    • SYS_EXECUTA_REGRAS_COBRANCA (FUNCTION)
+[2025-11-13T07:30:04.219Z]    • TCOBRANCA (PACKAGE)
+[2025-11-13T07:30:04.224Z]    • TEMP (PACKAGE)
+[2025-11-13T07:30:04.230Z]    • TESTE1 (PROCEDURE)
+[2025-11-13T07:30:04.236Z]    • TESTE_PROCESSO_USINA (PROCEDURE)
+[2025-11-13T07:30:04.242Z]    • TITULOS_SERASA (PACKAGE)
+[2025-11-13T07:30:04.247Z]    • TITULO_REM_NORMAL_AVISTA (PROCEDURE)
+[2025-11-13T07:30:04.251Z]    • TOTVS (PACKAGE)
+[2025-11-13T07:30:04.257Z]    • USUARIO (PACKAGE)
+[2025-11-13T07:30:04.262Z]    • VALE (PACKAGE)
+[2025-11-13T07:30:04.267Z]    • VALIDAR_COBRANCA (PROCEDURE)
+[2025-11-13T07:30:04.272Z]    • VALIDA_COBRANCA (FUNCTION)
+[2025-11-13T07:30:04.278Z]    • VENDAS_OPERACOES (PACKAGE)
+[2025-11-13T07:30:04.282Z]    • VENDAS_SUGESTAO (PACKAGE)
+[2025-11-13T07:30:04.287Z] 
+
+✅ Investigação concluída!
+[2025-11-13T07:30:04.292Z] 📄 Log salvo em: investigacao-remessa-log.txt
+[2025-11-13T07:30:04.338Z] 
+✅ Conexão fechada.

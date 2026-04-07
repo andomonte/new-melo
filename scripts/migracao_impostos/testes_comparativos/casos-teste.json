@@ -1,0 +1,116 @@
+[
+  {
+    "nome": "Caso 1 - Venda Interestadual com ST",
+    "descricao": "Venda de ar condicionado de AM para SP com substituição tributária",
+    "produto": {
+      "termo_busca": "AR CONDICIONADO",
+      "id_produto": 123,
+      "codigo": "AC001",
+      "descricao": "AR CONDICIONADO AUTOMOTIVO 12V",
+      "ncm": "84213920",
+      "ipi": 15.00,
+      "pis": 1.65,
+      "cofins": 7.60,
+      "uf_origem": "AM"
+    },
+    "cliente": {
+      "termo_busca": "DISTRIBUIDORA",
+      "id_cliente": 456,
+      "codigo": "CLI001",
+      "nome": "DISTRIBUIDORA XYZ LTDA",
+      "uf": "SP",
+      "inscricao_estadual": "123456789"
+    },
+    "valores": {
+      "valor_unitario": 1000.00,
+      "quantidade": 1
+    },
+    "resultado_esperado": {
+      "cfop": "6102",
+      "tem_st": true,
+      "tem_ipi": true,
+      "observacoes": [
+        "Operação interestadual AM → SP",
+        "Deve aplicar MVA ajustado",
+        "IPI destacado",
+        "PIS/COFINS regime cumulativo"
+      ]
+    }
+  },
+  {
+    "nome": "Caso 2 - Venda Interna sem ST",
+    "descricao": "Venda de produto sem substituição tributária dentro de AM",
+    "produto": {
+      "termo_busca": "OLEO",
+      "id_produto": 789,
+      "codigo": "OL001",
+      "descricao": "OLEO LUBRIFICANTE MINERAL 1L",
+      "ncm": "27101900",
+      "ipi": 0.00,
+      "pis": 1.65,
+      "cofins": 7.60,
+      "uf_origem": "AM"
+    },
+    "cliente": {
+      "termo_busca": "OFICINA",
+      "id_cliente": 101,
+      "codigo": "CLI002",
+      "nome": "OFICINA MECANICA ABC",
+      "uf": "AM",
+      "inscricao_estadual": "987654321"
+    },
+    "valores": {
+      "valor_unitario": 50.00,
+      "quantidade": 10
+    },
+    "resultado_esperado": {
+      "cfop": "5102",
+      "tem_st": false,
+      "tem_ipi": false,
+      "observacoes": [
+        "Operação interna AM → AM",
+        "Alíquota ICMS 12%",
+        "Sem IPI",
+        "Produto não sujeito a ST"
+      ]
+    }
+  },
+  {
+    "nome": "Caso 3 - Venda para Contribuinte ZFM",
+    "descricao": "Venda de produto industrializado pela Zona Franca de Manaus",
+    "produto": {
+      "termo_busca": "TELEVISOR",
+      "id_produto": 321,
+      "codigo": "TV001",
+      "descricao": "TELEVISOR LED 43 POLEGADAS",
+      "ncm": "85287290",
+      "ipi": 10.00,
+      "pis": 1.65,
+      "cofins": 7.60,
+      "uf_origem": "AM"
+    },
+    "cliente": {
+      "termo_busca": "MAGAZINE",
+      "id_cliente": 202,
+      "codigo": "CLI003",
+      "nome": "MAGAZINE ELETRONICA LTDA",
+      "uf": "RJ",
+      "inscricao_estadual": "111222333"
+    },
+    "valores": {
+      "valor_unitario": 1500.00,
+      "quantidade": 5
+    },
+    "resultado_esperado": {
+      "cfop": "6102",
+      "tem_st": true,
+      "tem_ipi": true,
+      "observacoes": [
+        "Produto industrializado ZFM",
+        "Benefício fiscal IPI",
+        "Aplicar MVA conforme protocolo",
+        "Alíquota interestadual 7%"
+      ]
+    }
+  }
+]

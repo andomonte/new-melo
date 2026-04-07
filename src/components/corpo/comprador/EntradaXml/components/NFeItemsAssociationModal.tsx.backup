@@ -1,0 +1,1231 @@
+import React, { useState, useEffect } from 'react';
+import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NFeDTO } from '../types';
+import { formatCurrency } from '../utils/formatters';
+import { GerarEntradaModal } from './GerarEntradaModal';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
+import MessageModal from '@/components/common/MessageModal';
+
+interface NFeItemsAssociationModalProps {
+  isOpen: boolean;
+  nfe: NFeDTO;
+  onClose: () => void;
+  onComplete: (associatedItems: AssociatedItem[]) => void;
+  loading?: boolean;
+}
+
+interface NFeItem {
+  id: string;
+  referencia: string;
+  descricao: string;
+  codigoBarras?: string;
+  ncm: string;
+  cfop: string;
+  unidade: string;
+  quantidade: number;
+  valorUnitario: number;
+  valorTotal: number;
+  status: 'pending' | 'associated' | 'error';
+  produtoAssociado?: Produto;
+  associacoes: ItemAssociation[];
+}
+
+interface Produto {
+  id: string;
+  referencia: string;
+  descricao: string;
+  codigoBarras?: string;
+  marca: string;
+  estoque: number;
+  tipo: string;
+}
+
+interface OrdemCompra {
+  id: string;
+  codigoRequisicao: string;
+  filial: string;
+  codCredor: string;
+  fornecedor: string;
+  quantidadeDisponivel: number;
+  quantidadeAssociar: number;
+  valorUnitario: number;
+  dataPrevisao: string;
+  multiplo: number;
+  descricaoMarca: string;
+  precoCompra: number;
+  dolar: number;
+}
+
+interface ItemAssociation {
+  pedidoId: string;
+  quantidade: number;
+  valorUnitario: number;
+}
+
+interface AssociatedItem {
+  nfeItemId: string;
+  produtoId: string;
+  associacoes: ItemAssociation[];
+  meianota: boolean;
+  precoReal?: number;
+}
+
+export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> = ({
+  isOpen,
+  nfe,
+  onClose,
+  onComplete,
+  loading = false
+}) => {
+  const [items, setItems] = useState<NFeItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<NFeItem | null>(null);
+  const [showProductSearch, setShowProductSearch] = useState(false);
+  const [showProductDetails, setShowProductDetails] = useState(false);
+  const [showPedidosModal, setShowPedidosModal] = useState(false);
+  const [showGerarEntrada, setShowGerarEntrada] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showMessage, setShowMessage] = useState(false);
+  const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Produto | null>(null);
+
+  // Carregar dados reais do XML via API
+  useEffect(() => {
+    if (isOpen && items.length === 0) {
+      carregarDadosXML();
+    }
+  }, [isOpen]);
+
+  const carregarDadosXML = async () => {
+    try {
+      console.log('Carregando dados do XML para NFe:', nfe.id);
+
+      const response = await fetch('/api/entrada-xml/extrair-dados-xml', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nfe_id: nfe.id
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const xmlData = result.data;
+
+        // Converter dados do XML para formato do modal
+        const itensXML: NFeItem[] = xmlData.itens.map((item: any) => ({
+          id: item.id,
+          referencia: item.codigo_produto,
+          descricao: item.descricao,
+          codigoBarras: item.codigo_barras,
+          ncm: item.ncm,
+          cfop: item.cfop,
+          unidade: item.unidade,
+          quantidade: item.quantidade,
+          valorUnitario: item.valor_unitario,
+          valorTotal: item.valor_total,
+          status: item.produto_sugerido ? 'associated' : 'pending',
+          produtoAssociado: item.produto_sugerido ? {
+            id: item.produto_sugerido.id,
+            referencia: item.produto_sugerido.referencia,
+            descricao: item.produto_sugerido.descricao,
+            codigoBarras: item.codigo_barras,
+            marca: 'TOYOTA', // Será atualizado depois
+            estoque: 0,
+            tipo: 'P'
+          } : undefined,
+          associacoes: []
+        }));
+
+        setItems(itensXML);
+
+        console.log(`✅ Carregados ${itensXML.length} itens do XML:`, {
+          total: itensXML.length,
+          autoAssociados: itensXML.filter(i => i.status === 'associated').length,
+          pendentes: itensXML.filter(i => i.status === 'pending').length
+        });
+      } else {
+        throw new Error(result.message || 'Erro ao carregar dados do XML');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados do XML:', error);
+      // Fallback para dados mockados em caso de erro
+      carregarDadosMock();
+    }
+  };
+
+  // Fallback com dados mock para testes
+  const carregarDadosMock = () => {
+    console.log('⚠️ Usando dados mock como fallback');
+    const mockItems: NFeItem[] = [
+      {
+        id: '1',
+        referencia: '',
+        descricao: 'ALTO-FALANTE P4X 69 TOYOTA',
+        codigoBarras: '85182100', // Código de barras real do produto
+        ncm: '85182100', // NCM do produto
+        cfop: '6949',
+        unidade: 'P',
+        quantidade: 2,
+        valorUnitario: 84.90,
+        valorTotal: 169.80,
+        status: 'pending',
+        associacoes: []
+      }
+    ];
+    setItems(mockItems);
+  };
+
+  const getStatusColor = (status: NFeItem['status']) => {
+    switch (status) {
+      case 'associated':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'error':
+        return 'bg-red-100 text-red-800 border-red-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getStatusIcon = (status: NFeItem['status']) => {
+    switch (status) {
+      case 'associated':
+        return <CheckCircle size={16} className="text-blue-600" />;
+      case 'error':
+        return <AlertCircle size={16} className="text-red-600" />;
+      default:
+        return <Package2 size={16} className="text-gray-600" />;
+    }
+  };
+
+  const handleAssociarProduto = async (item: NFeItem) => {
+    console.log('Associar produto para item:', item.id, item.descricao);
+    console.log('Item atual:', item);
+    
+    setSelectedItem(item);
+    
+    // Primeiro tentar busca automática por código de barras
+    if (item.codigoBarras) {
+      console.log('Tentando busca automática por código de barras:', item.codigoBarras);
+      
+      try {
+        const response = await fetch(`/api/entrada-xml/produtos/search?search=${encodeURIComponent(item.codigoBarras)}`);
+        const apiData = await response.json();
+        
+        if (apiData.success && apiData.data && apiData.data.length > 0) {
+          // Se encontrou produto automaticamente por código de barras
+          const produtoEncontrado = apiData.data[0];
+          console.log('Produto encontrado automaticamente:', produtoEncontrado);
+          
+          const produtoMapeado: Produto = {
+            id: produtoEncontrado.id,
+            referencia: produtoEncontrado.referencia,
+            descricao: produtoEncontrado.descricao,
+            codigoBarras: produtoEncontrado.codigoBarras,
+            marca: produtoEncontrado.marca,
+            estoque: produtoEncontrado.estoque,
+            tipo: produtoEncontrado.tipo
+          };
+          
+          setSelectedProduct(produtoMapeado);
+          setShowProductDetails(true);
+          return; // Pula a busca manual
+        }
+      } catch (error) {
+        console.log('Erro na busca automática, continuando para busca manual:', error);
+      }
+    }
+    
+    // Se não encontrou automaticamente, abrir modal de busca manual
+    console.log('Abrindo modal de busca manual');
+    setShowProductSearch(true);
+  };
+
+  const handleSelecionarProduto = (produto: Produto) => {
+    setSelectedProduct(produto);
+    setShowProductSearch(false);
+    setShowProductDetails(true);
+  };
+
+  const handleConfirmarProduto = () => {
+    console.log('Confirmar produto:', selectedProduct?.id, 'para item:', selectedItem?.id);
+    if (selectedProduct && selectedItem) {
+      const updatedItems = items.map(item => 
+        item.id === selectedItem.id 
+          ? { 
+              ...item, 
+              produtoAssociado: selectedProduct,
+              // Manter status como pending até associar com pedidos
+              status: 'pending' as const
+            }
+          : item
+      );
+      console.log('Items após associar produto:', updatedItems);
+      setItems(updatedItems);
+      setShowProductDetails(false);
+      setSelectedProduct(null);
+      // Após associar produto, buscar pedidos disponíveis
+      setShowPedidosModal(true);
+    }
+  };
+
+  const handleConfirmarAssociacoes = () => {
+    // Validação final: todos os itens devem estar associados
+    const itensNaoAssociados = items.filter(item => item.status !== 'associated');
+    
+    if (itensNaoAssociados.length > 0) {
+      setMessageData({
+        title: 'Campos obrigatórios não preenchidos',
+        message: `Há ${itensNaoAssociados.length} item(s) não associado(s) a pedidos de compra. Você deve associá-los integralmente antes de continuar.`,
+        type: 'warning'
+      });
+      setShowMessage(true);
+      return;
+    }
+
+    // Validação adicional: verificar se todas as quantidades batem
+    const itensComQuantidadeIncorreta = items.filter(item => {
+      const totalAssociado = item.associacoes?.reduce((sum, a) => sum + a.quantidade, 0) || 0;
+      return totalAssociado !== item.quantidade;
+    });
+
+    if (itensComQuantidadeIncorreta.length > 0) {
+      setMessageData({
+        title: 'Quantidade deve ser associada integralmente',
+        message: 'HÁ QUANTIDADE SOBRANDO DESTE ITEM. VOCÊ DEVE ASSOCIÁ-LA INTEGRALMENTE A PEDIDOS DE COMPRA.',
+        type: 'warning'
+      });
+      setShowMessage(true);
+      return;
+    }
+
+    // Se passou em todas as validações, abre o modal de gerar entrada
+    setShowGerarEntrada(true);
+  };
+
+  const handleGerarEntrada = () => {
+    const associatedItems: AssociatedItem[] = items
+      .filter(item => item.status === 'associated')
+      .map(item => ({
+        nfeItemId: item.id,
+        produtoId: item.produtoAssociado?.id || '',
+        associacoes: item.associacoes,
+        meianota: false // TODO: implementar lógica de meia nota
+      }));
+
+    onComplete(associatedItems);
+    setShowGerarEntrada(false);
+  };
+
+  const allItemsAssociated = items.every(item => item.status === 'associated');
+  const associatedCount = items.filter(i => i.status === 'associated').length;
+  
+  // Debug log para verificar estado
+  console.log('Items status:', items.map(i => ({ id: i.id, status: i.status, hasAssociations: i.associacoes?.length > 0 })));
+  console.log('All items associated:', allItemsAssociated, `(${associatedCount}/${items.length})`);
+  
+  // Log adicional quando items mudam
+  useEffect(() => {
+    console.log('Items state changed:', items.length, 'associated:', associatedCount);
+  }, [items, associatedCount]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-7xl w-full mx-4 max-h-[95vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
+          <div className="flex items-center space-x-3">
+            <Package2 className="h-6 w-6 text-green-500" />
+            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">
+              Itens da Nota
+            </h2>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              Associações ({items.filter(i => i.status === 'associated').length} de {items.length})
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Lista de Itens */}
+          <div className="w-2/3 p-6 overflow-y-auto">
+            <div className="space-y-4">
+              {items.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`border rounded-lg p-4 transition-all duration-200 ${getStatusColor(item.status)}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-2">
+                      {getStatusIcon(item.status)}
+                      <span className="font-medium">Item {index + 1}</span>
+                      <span className="text-sm">
+                        ({item.status === 'associated' 
+                          ? 'Associado' 
+                          : item.status === 'error'
+                          ? 'Erro na associação'
+                          : 'Pendente'})
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={item.status === 'associated' ? 'default' : 'outline'}
+                      onClick={() => handleAssociarProduto(item)}
+                      disabled={loading}
+                      className={
+                        item.status === 'associated' 
+                          ? 'bg-green-600 hover:bg-green-700 text-white' 
+                          : item.status === 'error'
+                          ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200'
+                          : ''
+                      }
+                    >
+                      <Search size={16} className="mr-1" />
+                      {item.status === 'associated' 
+                        ? 'Reeditar' 
+                        : item.status === 'error'
+                        ? 'Corrigir'
+                        : 'Associar'}
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <Label className="font-medium">Referência</Label>
+                      <div>{item.referencia}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Descrição</Label>
+                      <div className="truncate" title={item.descricao}>
+                        {item.descricao}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Código Barras</Label>
+                      <div>{item.codigoBarras || '-'}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">NCM</Label>
+                      <div>{item.ncm}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">CFOP</Label>
+                      <div>{item.cfop}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Unid.</Label>
+                      <div>{item.unidade}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Qtde Trib.</Label>
+                      <div>{item.quantidade}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Qtde NF</Label>
+                      <div>{item.quantidade}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Qtde Ass.</Label>
+                      <div className={`font-bold ${
+                        item.status === 'associated' 
+                          ? 'text-green-600' 
+                          : item.status === 'error'
+                          ? 'text-red-600'
+                          : 'text-gray-400'
+                      }`}>
+                        {item.associacoes?.reduce((sum, a) => sum + a.quantidade, 0) || 0}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Valor Prod.</Label>
+                      <div>{formatCurrency(item.valorTotal)}</div>
+                    </div>
+                    <div>
+                      <Label className="font-medium">Desc</Label>
+                      <div>-</div>
+                    </div>
+                  </div>
+
+                  {/* Produto Associado */}
+                  {item.produtoAssociado && (
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200">
+                      <Label className="font-medium text-blue-700">Produto Associado:</Label>
+                      <div className="text-sm text-blue-800">
+                        {item.produtoAssociado.referencia} - {item.produtoAssociado.descricao}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Painel Lateral - Informações */}
+          <div className="w-1/3 border-l border-gray-200 dark:border-zinc-700 p-6 bg-gray-50 dark:bg-zinc-800">
+            <h3 className="text-lg font-medium mb-4 text-gray-800 dark:text-gray-100">Status da Associação</h3>
+            
+            <div className="space-y-3 mb-6 text-gray-700 dark:text-gray-300">
+              <div className="flex justify-between">
+                <span>Total de Itens:</span>
+                <span className="font-medium">{items.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Associados:</span>
+                <span className="font-medium text-blue-600">
+                  {items.filter(i => i.status === 'associated').length}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Pendentes:</span>
+                <span className="font-medium text-orange-600">
+                  {items.filter(i => i.status === 'pending').length}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                <span>Associado com sucesso</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-red-500 rounded"></div>
+                <span>Associado parcialmente</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-gray-400 rounded"></div>
+                <span>Não associado</span>
+              </div>
+            </div>
+
+            {/* Instruções */}
+            <div className="mt-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 rounded">
+              <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                Instruções:
+              </h4>
+              <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+                <li>• Todos os itens devem estar associados</li>
+                <li>• Quantidade associada = Quantidade da nota</li>
+                <li>• Use o código de barras quando possível</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-between items-center p-6 border-t border-gray-200 dark:border-gray-600">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={loading}
+          >
+            <X size={16} className="mr-2" />
+            Cancelar
+          </Button>
+          
+          <div className="flex space-x-3">
+            <Button
+              variant="outline"
+              onClick={() => {/* Salvar progresso */}}
+              disabled={loading}
+            >
+              Salvar Progresso
+            </Button>
+            <Button
+              onClick={handleConfirmarAssociacoes}
+              disabled={loading || !allItemsAssociated}
+              className={`${allItemsAssociated 
+                ? 'bg-green-600 hover:bg-green-700 text-white' 
+                : 'bg-gray-400 cursor-not-allowed text-white'}`}
+            >
+              <CheckCircle size={16} className="mr-2" />
+              {allItemsAssociated 
+                ? `Concluir Associações (${associatedCount}/${items.length})` 
+                : `Pendente (${associatedCount}/${items.length} associados)`}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Busca de Produtos */}
+      {showProductSearch && (
+        <ProductSearchModal
+          isOpen={showProductSearch}
+          onClose={() => {
+            setShowProductSearch(false);
+            setSelectedItem(null); // Limpar item selecionado se cancelou busca
+          }}
+          onSelect={handleSelecionarProduto}
+          searchTerm={selectedItem?.codigoBarras || selectedItem?.descricao || ''}
+        />
+      )}
+
+      {/* Modal de Detalhes do Produto */}
+      {showProductDetails && selectedProduct && (
+        <ProductDetailsModal
+          isOpen={showProductDetails}
+          produto={selectedProduct}
+          onClose={() => {
+            setShowProductDetails(false);
+            setSelectedProduct(null); // Limpar produto se cancelou
+            setSelectedItem(null); // Limpar item se cancelou
+          }}
+          onConfirm={handleConfirmarProduto}
+        />
+      )}
+
+      {/* Modal de Ordens de Compra Disponíveis */}
+      {showPedidosModal && selectedItem && (
+        <PedidosDisponiveisModal
+          isOpen={showPedidosModal}
+          onClose={() => {
+            // Limpar produto associado se não completou a associação com pedidos
+            if (selectedItem) {
+              const updatedItems = items.map(item => 
+                item.id === selectedItem.id 
+                  ? { 
+                      ...item, 
+                      produtoAssociado: undefined, // Remover produto se não completou
+                      associacoes: [], // Limpar associações também
+                      status: 'pending' as const 
+                    }
+                  : item
+              );
+              setItems(updatedItems);
+              setSelectedItem(null);
+            }
+            setShowPedidosModal(false);
+          }}
+          item={selectedItem}
+          onConfirm={(associacoes) => {
+            console.log('Confirmar associações para item:', selectedItem?.id);
+            console.log('Associações:', associacoes);
+            if (selectedItem) {
+              const totalAssociado = associacoes.reduce((sum, a) => sum + a.quantidade, 0);
+              const isCompleteAssociation = totalAssociado === selectedItem.quantidade;
+              console.log('Total associado:', totalAssociado, 'Quantidade item:', selectedItem.quantidade, 'Completo:', isCompleteAssociation);
+              
+              const updatedItems = items.map(item => 
+                item.id === selectedItem.id 
+                  ? { 
+                      ...item, 
+                      associacoes, 
+                      status: isCompleteAssociation ? 'associated' as const : 'error' as const
+                    }
+                  : item
+              );
+              console.log('Items após confirmar pedidos:', updatedItems);
+              setItems(updatedItems);
+              setSelectedItem(null);
+            }
+            setShowPedidosModal(false);
+          }}
+        />
+      )}
+
+      {/* Modal de Gerar Entrada */}
+      {showGerarEntrada && (
+        <GerarEntradaModal
+          isOpen={showGerarEntrada}
+          nfeId={nfe?.id || ''}
+          associatedItems={items
+            .filter(item => item.status === 'associated')
+            .map(item => ({
+              nfeItemId: item.id,
+              produtoId: item.produtoAssociado?.id || '',
+              associacoes: item.associacoes,
+              meianota: false
+            }))
+          }
+          onClose={() => setShowGerarEntrada(false)}
+          onConfirm={handleGerarEntrada}
+          loading={loading}
+        />
+      )}
+
+      {/* Modais de validação */}
+      <MessageModal
+        isOpen={showMessage}
+        onClose={() => setShowMessage(false)}
+        title={messageData.title}
+        message={messageData.message}
+        type={messageData.type}
+      />
+    </div>
+  );
+};
+
+// Componente para busca de produtos
+interface ProductSearchModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelect: (produto: Produto) => void;
+  searchTerm: string;
+}
+
+const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
+  isOpen,
+  onClose,
+  onSelect,
+  searchTerm
+}) => {
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+
+  // Função para buscar produtos
+  useEffect(() => {
+    if (isOpen) {
+      setSearch(searchTerm); // Pré-preencher com termo de busca
+      // Buscar produtos automaticamente com base no searchTerm
+      if (searchTerm) {
+        buscarProdutos(searchTerm);
+      }
+    }
+  }, [isOpen, searchTerm]);
+
+  const buscarProdutos = async (termo: string) => {
+    if (!termo.trim()) {
+      setProdutos([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Buscando produtos com termo:', termo);
+      
+      // Usar API real do sistema
+      const response = await fetch(`/api/entrada-xml/produtos/search?search=${encodeURIComponent(termo)}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const apiData = await response.json();
+      console.log('Resposta da API de produtos:', apiData);
+      
+      if (apiData.success && apiData.data) {
+        // Mapear dados da API para o formato esperado
+        const produtosMapeados: Produto[] = apiData.data.map((produto: any) => ({
+          id: produto.id,
+          referencia: produto.referencia,
+          descricao: produto.descricao,
+          codigoBarras: produto.codigoBarras,
+          marca: produto.marca,
+          estoque: produto.estoque,
+          tipo: produto.tipo
+        }));
+        
+        console.log('Produtos mapeados:', produtosMapeados);
+        setProdutos(produtosMapeados);
+      } else {
+        console.log('Nenhum produto encontrado ou erro na API');
+        setProdutos([]);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar produtos:', error);
+      // Fallback para alguns produtos mock em caso de erro
+      setProdutos([
+        {
+          id: '999',
+          referencia: 'ERRO',
+          descricao: 'Erro ao conectar com banco - Produto de teste',
+          codigoBarras: termo,
+          marca: 'TESTE',
+          estoque: 1,
+          tipo: 'PRODUTO TESTE'
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    buscarProdutos(value);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Buscar Produto</h3>
+          <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="p-6">
+          <div className="mb-4">
+            <Label className="text-gray-700 dark:text-gray-300">Termo de busca</Label>
+            <Input
+              type="text"
+              placeholder="Digite descrição ou referência do produto..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="mt-1"
+              autoFocus
+            />
+          </div>
+
+          {loading && (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Buscando produtos...</p>
+            </div>
+          )}
+
+          {!loading && produtos.length === 0 && search.trim() && (
+            <div className="text-center py-8">
+              <p className="text-gray-500 dark:text-gray-400">Nenhum produto encontrado para &quot;{search}&quot;</p>
+            </div>
+          )}
+
+          {!loading && produtos.length === 0 && !search.trim() && (
+            <div className="text-center py-8">
+              <p className="text-gray-500 dark:text-gray-400">Digite um termo para buscar produtos</p>
+            </div>
+          )}
+
+          {produtos.length > 0 && (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {produtos.map(produto => (
+                <div
+                  key={produto.id}
+                  className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => onSelect(produto)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="font-medium">{produto.referencia}</div>
+                      <div className="text-sm text-gray-600 mt-1">{produto.descricao}</div>
+                      <div className="flex gap-4 text-xs text-gray-500 mt-2">
+                        <span>Marca: {produto.marca}</span>
+                        <span>Estoque: {produto.estoque}</span>
+                        <span>Tipo: {produto.tipo}</span>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline">
+                      Selecionar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente para associar com pedidos
+interface PedidosDisponiveisModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  item: NFeItem;
+  onConfirm: (associacoes: ItemAssociation[]) => void;
+}
+
+const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalProps> = ({
+  isOpen,
+  onClose,
+  item,
+  onConfirm
+}) => {
+  const [pedidos, setPedidos] = useState<OrdemCompra[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Carregar pedidos disponíveis quando o modal abrir
+  useEffect(() => {
+    console.log('Modal de pedidos aberto:', isOpen);
+    console.log('Item selecionado:', item);
+    console.log('Produto associado:', item?.produtoAssociado);
+    
+    if (isOpen) {
+      const carregarPedidos = async () => {
+        setLoading(true);
+        try {
+          console.log('Carregando pedidos para produto associado:', item?.produtoAssociado?.id);
+          
+          if (item?.produtoAssociado?.id) {
+            // Usar API real para buscar pedidos disponíveis
+            const response = await fetch(`/api/entrada-xml/pedidos-disponiveis/${item.produtoAssociado.id}`);
+            
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const apiData = await response.json();
+            console.log('Resposta da API de pedidos:', apiData);
+            
+            if (apiData.success && apiData.data) {
+              // Mapear dados da API para o formato esperado (OrdemCompra)
+              const ordensMapeadas: OrdemCompra[] = apiData.data.map((ordem: any) => ({
+                id: ordem.id,
+                codigoRequisicao: ordem.codigoRequisicao,
+                filial: ordem.filial,
+                codCredor: ordem.codCredor,
+                fornecedor: ordem.fornecedor,
+                quantidadeDisponivel: ordem.quantidadeDisponivel,
+                quantidadeAssociar: 0,
+                valorUnitario: ordem.valorUnitario,
+                dataPrevisao: ordem.dataPrevisao,
+                multiplo: ordem.multiplo,
+                descricaoMarca: ordem.descricaoMarca,
+                precoCompra: ordem.precoCompra,
+                dolar: ordem.dolar
+              }));
+              
+              console.log('Ordens mapeadas:', ordensMapeadas);
+              setPedidos(ordensMapeadas);
+            } else {
+              console.log('Nenhuma ordem encontrada');
+              setPedidos([]);
+            }
+          } else {
+            // Fallback se não tiver produto associado
+            console.log('Sem produto associado, criando pedidos mock');
+            const mockPedidos: OrdemCompra[] = [
+              {
+                id: '91309-1',
+                codigoRequisicao: '91309-1',
+                filial: 'MATRIZ',
+                codCredor: '01234',
+                fornecedor: 'FORNECEDOR EXEMPLO LTDA',
+                quantidadeDisponivel: 5,
+                quantidadeAssociar: 0,
+                valorUnitario: item.valorUnitario,
+                dataPrevisao: '2024-01-15',
+                multiplo: 1,
+                descricaoMarca: 'TOYOTA',
+                precoCompra: item.valorUnitario,
+                dolar: 5.20
+              },
+              {
+                id: '91310-1',
+                codigoRequisicao: '91310-1',
+                filial: 'MATRIZ',
+                codCredor: '01234',
+                fornecedor: 'FORNECEDOR EXEMPLO LTDA',
+                quantidadeDisponivel: 3,
+                quantidadeAssociar: 0,
+                valorUnitario: item.valorUnitario,
+                dataPrevisao: '2024-01-16',
+                multiplo: 2,
+                descricaoMarca: 'TOYOTA',
+                precoCompra: item.valorUnitario,
+                dolar: 5.20
+              }
+            ];
+            setPedidos(mockPedidos);
+          }
+        } catch (error) {
+          console.error('Erro ao carregar pedidos:', error);
+          // Fallback em caso de erro
+          setPedidos([
+            {
+              id: 'erro-1',
+              codigoRequisicao: 'ERRO-001',
+              filial: 'TESTE',
+              fornecedor: 'ERRO - FALLBACK',
+              quantidadeDisponivel: item.quantidade,
+              quantidadeAssociar: 0,
+              valorUnitario: item.valorUnitario,
+              dataPrevisao: '2024-09-15'
+            }
+          ]);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      carregarPedidos();
+    }
+  }, [isOpen, item]);
+
+  const [associacoes, setAssociacoes] = useState<ItemAssociation[]>([]);
+
+  const handleQuantidadeChange = (pedidoId: string, quantidade: number) => {
+    const updatedAssociacoes = associacoes.filter(a => a.pedidoId !== pedidoId);
+    if (quantidade > 0) {
+      const pedido = pedidos.find(p => p.id === pedidoId);
+      if (pedido) {
+        updatedAssociacoes.push({
+          pedidoId,
+          quantidade,
+          valorUnitario: pedido.valorUnitario
+        });
+      }
+    }
+    setAssociacoes(updatedAssociacoes);
+  };
+
+  const totalAssociado = associacoes.reduce((sum, a) => sum + a.quantidade, 0);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Ordens de Compra Disponíveis</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Quantidade da nota: {item.quantidade} | 
+              Associado: {totalAssociado} | 
+              Restante: {item.quantidade - totalAssociado}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="p-6 overflow-y-auto max-h-96">
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Carregando pedidos...</p>
+            </div>
+          ) : pedidos.length > 0 ? (
+            <div className="space-y-3">
+              <div className="bg-gray-50 dark:bg-zinc-800 p-3 rounded mb-3">
+                <h4 className="font-medium text-blue-700 dark:text-blue-400 mb-2">🔍 Ordens de Compra Disponíveis</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Selecione as ordens de compra para associar com este item da NFe
+                </p>
+              </div>
+
+              {/* Tabela estilo VM legada */}
+              <div className="border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                <div className="bg-blue-600 text-white text-xs font-semibold grid grid-cols-9 gap-2 p-2">
+                  <div>Ordem Compra</div>
+                  <div>Filial</div>
+                  <div>Cód Forn.</div>
+                  <div>Fornecedor</div>
+                  <div>Marca</div>
+                  <div>Pr Unit</div>
+                  <div>Qtde Est.</div>
+                  <div>Múltiplo</div>
+                  <div>Qtde Assoc.</div>
+                </div>
+
+                {pedidos.map((ordem, index) => (
+                  <div key={ordem.id} className={`grid grid-cols-9 gap-2 p-2 text-xs border-b border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 ${index % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-gray-50 dark:bg-zinc-800'} hover:bg-gray-100 dark:hover:bg-zinc-700`}>
+                    <div className="font-medium text-blue-600">{ordem.id}</div>
+                    <div>{ordem.filial}</div>
+                    <div>{ordem.codCredor}</div>
+                    <div className="truncate" title={ordem.fornecedor}>{ordem.fornecedor}</div>
+                    <div>{ordem.descricaoMarca}</div>
+                    <div className="font-medium">{formatCurrency(ordem.valorUnitario)}</div>
+                    <div className="font-medium text-green-600">{ordem.quantidadeDisponivel}</div>
+                    <div className="text-orange-600">{ordem.multiplo}x</div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const currentQty = associacoes.find(a => a.pedidoId === ordem.id)?.quantidade || 0;
+                          handleQuantidadeChange(ordem.id, Math.max(0, currentQty - 1));
+                        }}
+                        className="h-6 w-6 p-0"
+                      >
+                        <Minus size={10} />
+                      </Button>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={Math.min(ordem.quantidadeDisponivel, item.quantidade)}
+                        value={associacoes.find(a => a.pedidoId === ordem.id)?.quantidade || 0}
+                        onChange={(e) => handleQuantidadeChange(ordem.id, parseInt(e.target.value) || 0)}
+                        className="w-12 h-6 text-xs text-center"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const currentQty = associacoes.find(a => a.pedidoId === ordem.id)?.quantidade || 0;
+                          const maxQty = Math.min(ordem.quantidadeDisponivel, item.quantidade - totalAssociado + currentQty);
+                          handleQuantidadeChange(ordem.id, Math.min(maxQty, currentQty + 1));
+                        }}
+                        className="h-6 w-6 p-0"
+                      >
+                        <Plus size={10} />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Informações adicionais */}
+              <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm text-gray-900 dark:text-gray-100">
+                <div className="flex justify-between items-center">
+                  <span><strong>Quantidade da NFe:</strong> {item.quantidade}</span>
+                  <span><strong>Já associado:</strong> {totalAssociado}</span>
+                  <span className={`font-bold ${totalAssociado === item.quantidade ? 'text-green-600' : 'text-red-600'}`}>
+                    <strong>Restante:</strong> {item.quantidade - totalAssociado}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500 dark:text-gray-400">Nenhum pedido disponível encontrado</p>
+            </div>
+          )}
+          
+          {!loading && totalAssociado > 0 && (
+            <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded">
+              <p className="text-sm text-orange-700">
+                <strong>Faltam {item.quantidade - totalAssociado} unidades para associar</strong>
+              </p>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex justify-between items-center p-6 border-t">
+          <div className="text-sm text-gray-600">
+            {totalAssociado === item.quantidade ? (
+              <span className="text-green-600 font-medium">✓ Quantidade correta associada</span>
+            ) : (
+              <span className="text-orange-600">
+                Faltam {item.quantidade - totalAssociado} unidades para associar
+              </span>
+            )}
+          </div>
+          
+          <div className="flex space-x-3">
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => onConfirm(associacoes)}
+              disabled={totalAssociado !== item.quantidade}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Confirmar Associação
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente para mostrar detalhes do produto selecionado
+interface ProductDetailsModalProps {
+  isOpen: boolean;
+  produto: Produto;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
+  isOpen,
+  produto,
+  onClose,
+  onConfirm
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70]">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Localizar Referência</h3>
+          <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium text-gray-600 dark:text-gray-300">Marca:</Label>
+              <div className="text-sm bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-300 dark:border-zinc-600">
+                {produto.marca || 'BOSCH'}
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-gray-600 dark:text-gray-300">Estoque:</Label>
+              <div className="text-sm bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-300 dark:border-zinc-600">
+                {produto.estoque}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-300">Descrição:</Label>
+            <div className="text-sm bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-300 dark:border-zinc-600">
+              {produto.descricao}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-300">Localização:</Label>
+            <div className="text-sm bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-300 dark:border-zinc-600">
+              {(produto as any).localizacao || 'MERCADORIA'}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium text-gray-600 dark:text-gray-300">Tipo:</Label>
+            <div className="text-sm bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 p-2 rounded border border-gray-300 dark:border-zinc-600">
+              {produto.tipo}
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Rateio:</Label>
+              <Input className="text-sm" placeholder="---" />
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-gray-600">Centro de Custo:</Label>
+              <div className="flex gap-2">
+                <Input className="text-sm" placeholder="---" />
+                <Button size="sm" variant="outline">...</Button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Checkbox id="meiaNote" />
+            <Label htmlFor="meiaNote" className="text-sm">
+              Meia Nota
+            </Label>
+          </div>
+        </div>
+        
+        <div className="flex justify-end gap-2 p-6 border-t">
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={onConfirm} className="bg-blue-600 hover:bg-blue-700">
+            Avançar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};

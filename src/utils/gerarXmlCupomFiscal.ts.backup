@@ -1,0 +1,380 @@
+import { formatarDataHora } from './formatarDataHora';
+
+/**
+ * Gera XML para Cupom Fiscal Eletrônico (NFC-e) - Modelo 65
+ * Diferente da NF-e (modelo 55), o cupom fiscal é usado para vendas ao consumidor final
+ * Abordagem manual sem bibliotecas, baseada em concatenação de strings
+ */
+
+// Função para calcular o dígito verificador (Módulo 11)
+function calcularDV(chave: string): number {
+  let soma = 0;
+  let peso = 2;
+  for (let i = chave.length - 1; i >= 0; i--) {
+    soma += parseInt(chave[i], 10) * peso;
+    peso++;
+    if (peso > 9) {
+      peso = 2;
+    }
+  }
+  const resto = soma % 11;
+  const dv = 11 - resto;
+  return (dv === 0 || dv === 10 || dv === 11) ? 0 : dv;
+}
+
+// Função para formatar a data/hora no padrão exigido pela Sefaz (com fuso horário)
+function formatarDataSefaz(data: Date): string {
+  console.log('🕒 Data original:', data);
+  const dataFormatada = formatarDataHora(data);
+  console.log('🕒 Data formatada para XML:', dataFormatada);
+  return dataFormatada;
+}
+
+export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
+  console.log('📝 Gerando XML do Cupom Fiscal (NFC-e - Modelo 65) - Abordagem Manual...');
+
+  const {
+    emitente,
+    cliente,
+    produtos,
+    data,
+    pedido,
+    serie,
+    totalProdutos,
+    totalICMS,
+    totalIPI,
+    totalPIS,
+    totalCOFINS,
+    totalNF,
+    desconto,
+    acrescimo,
+    frete,
+    seguro,
+    observacoes,
+  } = dados;
+
+  const cUF = '13'; // Amazonas
+  const dhEmi = new Date(data || new Date());
+  const AAMM = dhEmi.getFullYear().toString().substring(2) + ('0' + (dhEmi.getMonth() + 1)).slice(-2);
+  const CNPJ = emitente?.cnpj?.replace(/\D/g, '') ?? emitente?.cgc?.replace(/\D/g, '') ?? '';
+  const mod = '65'; // 🎫 MODELO 65 = NFC-e (Cupom Fiscal)
+
+  // ⚠️ VALIDAÇÃO CRÍTICA: IE e UF do emitente
+  console.log('🔍 Validando IE:', {
+    ie_original: emitente?.ie,
+    inscricaoestadual: emitente?.inscricaoestadual,
+    ie_depois_replace: emitente?.inscricaoestadual?.replace(/\D/g, '')
+  });
+
+  // CORREÇÃO: Usar inscricaoestadual ao invés de ie
+  const ieEmitente = emitente?.inscricaoestadual?.replace(/\D/g, '') ?? '';
+  const ufEmitente = 'AM'; // Fixo AM pois é SEFAZ-AM
+
+  if (!ieEmitente) {
+    throw new Error('Inscrição Estadual (IE) do emitente está vazia. Verifique o cadastro da empresa.');
+  }
+
+  // Validação específica para IE do Amazonas (9 dígitos)
+  if (!/^\d{9}$/.test(ieEmitente)) {
+    throw new Error(`IE inválida: ${ieEmitente}. Para o Amazonas, deve ter 9 dígitos numéricos.`);
+  }
+
+  console.log('✅ IE validada:', ieEmitente);
+
+  // CORREÇÃO: A série SEMPRE vem de dbfatura.serie (pode ser alfanumérica: AA, AB, 1, etc)
+  const serieNF = serie || '1';
+
+  console.log(`🔍 [gerarXmlCupomFiscal] Série recebida:`, serieNF, `(tipo: ${typeof serieNF})`);
+
+  // CORREÇÃO: Garantir 9 dígitos para nNF (requisito SEFAZ-AM)
+  const numeroNF = String(parseInt(pedido || '1', 10)).padStart(9, '0');
+
+  console.log(`🔄 Número NFC-e (nNF): ${numeroNF} (convertido para inteiro - remove zeros à esquerda)`);
+  console.log(`📋 Valor original do pedido: ${pedido}`);
+
+  // 🚨 LOG CRÍTICO: Série e IE para diagnóstico
+  // console.log('');
+  // console.log('🔍 ========== VERIFICAÇÃO CRÍTICA SEFAZ ==========');
+  // console.log(`📌 CNPJ: ${CNPJ}`);
+  // console.log(`📌 Série sendo enviada: "${serieNF}"`);
+  // console.log(`📌 IE (Inscrição Estadual): ${ieEmitente || '⚠️  VAZIA/INVÁLIDA!'}`);
+  // console.log(`📌 IE original (antes de limpar): ${emitente?.ie || 'undefined'}`);
+  // console.log(`📌 UF: ${emitente?.enderEmit?.UF ?? 'NÃO INFORMADA'}`);
+  // console.log('⚠️  ATENÇÃO: SEFAZ vincula CNPJ + SÉRIE + IE');
+  // console.log('⚠️  Se a IE estiver vazia ou diferente, haverá rejeição!');
+  // console.log('🔍 ================================================');
+  // console.log('');
+
+  // Preparar série para chave de acesso
+  let serieChave: string;
+  if (/^\d+$/.test(serieNF)) {
+    serieChave = ('000' + serieNF).slice(-3);
+  } else {
+    let codigoSerie = 0;
+    for (let i = 0; i < serieNF.length; i++) {
+      codigoSerie += serieNF.charCodeAt(i);
+    }
+    serieChave = String(codigoSerie % 1000).padStart(3, '0');
+    console.log(`🔄 Série alfanumérica "${serieNF}" convertida para código numérico: ${serieChave}`);
+  }
+
+  const nNFChave = ('000000000' + numeroNF).slice(-9);
+  const tpEmis = '1'; // Tipo de emissão: 1 = Normal
+
+  // CORREÇÃO: cNF (Código Numérico) - SEMPRE 8 dígitos
+  // Gerar cNF único combinando número do pedido + aleatório
+  const numeroNFInt = parseInt(numeroNF, 10);
+  const parte1 = String(numeroNFInt).padStart(4, '0').slice(-4);
+  const parte2 = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  const cNF = parte1 + parte2;
+
+  // Validação: garantir que cNF tem exatamente 8 dígitos numéricos
+  if (cNF.length !== 8 || !/^\d{8}$/.test(cNF)) {
+    throw new Error(`cNF deve ter 8 dígitos numéricos. Valor gerado: ${cNF} (${cNF.length} dígitos)`);
+  }
+
+  // console.log(`🔑 Componentes da chave de acesso:`, {
+  //   cUF,
+  //   AAMM,
+  //   CNPJ: CNPJ.substring(0, 8) + '...',
+  //   mod,
+  //   serie: serieChave,
+  //   numeroNFe: nNFChave,
+  //   tpEmis,
+  //   cNF,
+  //   cNF_length: cNF.length,
+  //   cNF_parte1: parte1,
+  //   cNF_parte2: parte2,
+  //   nota: 'cNF único para evitar duplicidade em retry'
+  // });
+
+  // Montar chave de acesso (44 dígitos)
+  // Garantir que o CNPJ tem 14 dígitos
+  const CNPJChave = CNPJ.padStart(14, '0');
+  if (CNPJChave.length !== 14) {
+    throw new Error(`CNPJ inválido: ${CNPJChave} (${CNPJChave.length} dígitos - deve ter 14)`);
+  }
+
+  const chaveAcesso = cUF + AAMM + CNPJChave + mod + serieChave + nNFChave + tpEmis + cNF;
+  const cDV = calcularDV(chaveAcesso);
+  const chaveCompleta = chaveAcesso + cDV;
+
+  // console.log('🔍 Componentes da chave:');
+  // console.log('  cUF:', cUF, `(${cUF.length} dígitos - deve ter 2)`);
+  // console.log('  AAMM:', AAMM, `(${AAMM.length} dígitos - deve ter 4)`);
+  // console.log('  CNPJ:', CNPJChave, `(${CNPJChave.length} dígitos - deve ter 14)`);
+  // console.log('  mod:', mod, `(${mod.length} dígitos - deve ter 2)`);
+  // console.log('  serieChave:', serieChave, `(${serieChave.length} dígitos - deve ter 3)`);
+  // console.log('  nNFChave:', nNFChave, `(${nNFChave.length} dígitos - deve ter 9)`);
+  // console.log('  tpEmis:', tpEmis, `(${tpEmis.length} dígito - deve ter 1)`);
+  // console.log('  cNF:', cNF, `(${cNF.length} dígitos - deve ter 8)`);
+  // console.log('  cDV:', cDV, `(${String(cDV).length} dígito - deve ter 1)`);
+  // console.log('🔑 Chave de acesso (44 dígitos):', chaveCompleta, `(${chaveCompleta.length} caracteres)`);
+
+  if (chaveCompleta.length !== 44) {
+    console.error('❌ ERRO: Chave de acesso com tamanho incorreto!');
+    console.error('   Esperado: 44 dígitos');
+    console.error('   Recebido:', chaveCompleta.length, 'dígitos');
+    console.error('   Chave:', chaveCompleta);
+    throw new Error(`Chave de acesso inválida: ${chaveCompleta.length} dígitos (deve ter 44)`);
+  }
+
+  // CPF do cliente (OPCIONAL em NFC-e)
+  const cpfCliente = cliente?.cpfcgc?.replace(/\D/g, '') || '';
+  const temCPF = cpfCliente.length === 11;
+
+  console.log('👤 Informações do Consumidor:');
+  console.log('   CPF:', temCPF ? cpfCliente : 'Não informado');
+  console.log('   Nome:', cliente?.nome || 'Não informado');
+  console.log('   Tipo:', 'Consumidor Final (NFC-e)');
+
+  // Criar XML da NFC-e (SEM nfeProc - isso é adicionado depois da autorização)
+  // Abordagem MANUAL - concatenação de strings como no script original
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>';
+  xml += '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">';
+
+  // infNFe
+  xml += `<infNFe versao="4.00" Id="NFe${chaveCompleta}">`;
+
+  // ide - Identificação
+  xml += '<ide>';
+  xml += `<cUF>${cUF}</cUF>`;
+  xml += `<cNF>${cNF}</cNF>`;
+  xml += '<natOp>VENDA CONSUMIDOR</natOp>';
+  xml += `<mod>${mod}</mod>`;
+  xml += `<serie>${serieNF}</serie>`;
+  xml += `<nNF>${numeroNF}</nNF>`;
+  xml += `<dhEmi>${formatarDataSefaz(dhEmi)}</dhEmi>`;
+  xml += '<tpNF>1</tpNF>';
+  xml += '<idDest>1</idDest>';
+  xml += '<cMunFG>1302603</cMunFG>';
+  xml += '<tpImp>4</tpImp>';
+  xml += `<tpEmis>${tpEmis}</tpEmis>`;
+  xml += `<cDV>${cDV}</cDV>`;
+  xml += '<tpAmb>2</tpAmb>';
+  xml += '<finNFe>1</finNFe>';
+  xml += '<indFinal>1</indFinal>';
+  xml += '<indPres>1</indPres>';
+  xml += '<procEmi>1</procEmi>';
+  xml += '<verProc>4.00</verProc>';
+  xml += '</ide>';
+
+  // emit - Emitente
+  xml += '<emit>';
+  xml += `<CNPJ>${CNPJ}</CNPJ>`;
+  xml += `<xNome>${emitente?.nomecontribuinte || ''}</xNome>`;
+  if (emitente?.nomecontribuinte) {
+    xml += `<xFant>${emitente.nomecontribuinte}</xFant>`;
+  }
+  xml += '<enderEmit>';
+  xml += `<xLgr>${emitente?.logradouro || ''}</xLgr>`;
+  xml += `<nro>${emitente?.numero || ''}</nro>`;
+  xml += `<xBairro>${emitente?.bairro || ''}</xBairro>`;
+  xml += '<cMun>1302603</cMun>';
+  xml += '<xMun>Manaus</xMun>';
+  xml += '<UF>AM</UF>';
+  xml += `<CEP>${emitente?.cep?.replace(/\D/g, '') || ''}</CEP>`;
+  xml += '</enderEmit>';
+  xml += `<IE>${ieEmitente}</IE>`;
+  xml += '<CRT>1</CRT>';
+  xml += '</emit>';
+
+  // dest - Destinatário (opcional em NFC-e)
+  if (temCPF) {
+    xml += '<dest>';
+    xml += `<CPF>${cpfCliente}</CPF>`;
+    if (cliente?.nome) {
+      xml += `<xNome>${cliente.nome}</xNome>`;
+    }
+    xml += '<indIEDest>9</indIEDest>';
+    xml += '</dest>';
+  } else {
+    xml += '<dest>';
+    xml += '<indIEDest>9</indIEDest>';
+    xml += '</dest>';
+  }
+
+  // det - Detalhamento dos produtos
+  let itemNum = 1;
+  for (const prod of produtos) {
+    xml += `<det nItem="${itemNum}">`;
+    xml += '<prod>';
+    xml += `<cProd>${prod.codigo || ''}</cProd>`;
+    xml += '<cEAN></cEAN>';
+    xml += '<xProd>PRODUTO TESTE HOMOLOGACAO</xProd>';
+    xml += '<NCM>84714900</NCM>';
+    xml += `<CFOP>${prod.cfop || '5102'}</CFOP>`;
+    xml += `<uCom>${prod.unidade || 'PC'}</uCom>`;
+    const qCom = Number(prod.quantidade || 1).toFixed(4);
+    const vUnCom = Number(prod.valorUnitario || 0).toFixed(4);
+    xml += `<qCom>${qCom}</qCom>`;
+    xml += `<vUnCom>${vUnCom}</vUnCom>`;
+    xml += `<vProd>${Number(prod.valorTotal || 0).toFixed(2)}</vProd>`;
+    xml += '<cEANTrib></cEANTrib>';
+    xml += `<uTrib>${prod.unidade || 'PC'}</uTrib>`;
+    xml += `<qTrib>${Number(prod.quantidade || 1).toFixed(4)}</qTrib>`;
+    xml += `<vUnTrib>${Number(prod.valorUnitario || 0).toFixed(4)}</vUnTrib>`;
+    xml += '<indTot>1</indTot>';
+    xml += '</prod>';
+
+    // imposto
+    xml += '<imposto>';
+    xml += '<ICMS>';
+    xml += '<ICMSSN102>';
+    xml += '<orig>0</orig>';
+    xml += '<CSOSN>102</CSOSN>';
+    xml += '</ICMSSN102>';
+    xml += '</ICMS>';
+    xml += '<PIS>';
+    xml += '<PISNT>';
+    xml += '<CST>07</CST>';
+    xml += '</PISNT>';
+    xml += '</PIS>';
+    xml += '<COFINS>';
+    xml += '<COFINSNT>';
+    xml += '<CST>07</CST>';
+    xml += '</COFINSNT>';
+    xml += '</COFINS>';
+    xml += '</imposto>';
+
+    xml += '</det>';
+    itemNum++;
+  }
+
+  // total
+  xml += '<total>';
+  xml += '<ICMSTot>';
+  xml += '<vBC>0.00</vBC>';
+  xml += '<vICMS>0.00</vICMS>';
+  xml += '<vICMSDeson>0.00</vICMSDeson>';
+  xml += '<vFCP>0.00</vFCP>';
+  xml += '<vBCST>0.00</vBCST>';
+  xml += '<vST>0.00</vST>';
+  xml += '<vFCPST>0.00</vFCPST>';
+  xml += '<vFCPSTRet>0.00</vFCPSTRet>';
+  xml += `<vProd>${Number(totalProdutos || 0).toFixed(2)}</vProd>`;
+  xml += `<vFrete>${Number(frete || 0).toFixed(2)}</vFrete>`;
+  xml += `<vSeg>${Number(seguro || 0).toFixed(2)}</vSeg>`;
+  xml += `<vDesc>${Number(desconto || 0).toFixed(2)}</vDesc>`;
+  xml += '<vII>0.00</vII>';
+  xml += '<vPIS>0.00</vPIS>';
+  xml += '<vCOFINS>0.00</vCOFINS>';
+  xml += `<vOutro>${Number(acrescimo || 0).toFixed(2)}</vOutro>`;
+  xml += `<vNF>${Number(totalNF || 0).toFixed(2)}</vNF>`;
+  xml += '</ICMSTot>';
+  xml += '</total>';
+
+  // transp
+  xml += '<transp>';
+  xml += '<modFrete>0</modFrete>';
+  xml += '</transp>';
+
+  // pag
+  xml += '<pag>';
+  xml += '<detPag>';
+  xml += '<tPag>17</tPag>';
+  xml += `<vPag>${Number(totalNF || 0).toFixed(2)}</vPag>`;
+  xml += '</detPag>';
+  xml += '<vTroco>0.00</vTroco>';
+  xml += '</pag>';
+
+  // infAdic (se houver observações)
+  if (observacoes?.trim() && observacoes !== '.' && observacoes !== '') {
+    xml += '<infAdic>';
+    xml += '<infAdFisco>DOCUMENTOS REFERENCIADOS NO PORTAL DA NOTA FISCAL ELETRONICA</infAdFisco>';
+    xml += `<infCpl>${observacoes.trim()}</infCpl>`;
+    xml += '</infAdic>';
+  }
+
+  // Fecha infNFe
+  xml += '</infNFe>';
+
+  // ⚠️ IMPORTANTE: QR Code e URL (infNFeSupl) serão adicionados após a assinatura
+  // Veja adicionarQRCodeNFCe.ts
+
+  // Fecha NFe
+  xml += '</NFe>';
+
+  // Validações finais antes de retornar o XML
+  const validacoes = {
+    ie: ieEmitente && ieEmitente.length >= 9,
+    uf: ufEmitente === 'AM',
+    chave: chaveCompleta.length === 44,
+    modelo: mod === '65',
+    // QR Code e infNFeSupl serão adicionados depois da assinatura
+  };
+
+  console.log('🔍 Validações finais do XML:');
+  Object.entries(validacoes).forEach(([key, value]) => {
+    console.log(`  ${value ? '✅' : '❌'} ${key}`);
+  });
+
+  if (!Object.values(validacoes).every(v => v)) {
+    throw new Error('XML inválido: falhou nas validações finais');
+  }
+
+  console.log('✅ XML do Cupom Fiscal (NFC-e) gerado com sucesso - Abordagem Manual');
+  console.log('📄 Tamanho do XML:', xml.length, 'caracteres');
+
+  return xml;
+}

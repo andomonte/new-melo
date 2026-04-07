@@ -1,0 +1,82 @@
+{
+  "dbclien": {
+    "nome": "CLIENTE TESTE",
+    "documento": "12345678901",
+    "endereco": "RUA TESTE, 123",
+    "bairro": "CENTRO",
+    "cidade": "MANAUS",
+    "estado": "AM",
+    "cep": "69000000"
+  },
+  "dbvenda": {
+    "id": 999999,
+    "desconto": 0,
+    "acrescimo": 0
+  },
+  "dbitvenda": [
+    {
+      "id": 1,
+      "codprod": "P001",
+      "nome": "PRODUTO TESTE 1",
+      "qtde": 1,
+      "preco": 10,
+      "ncm": "12345678",
+      "unidade": "UN",
+      "icms": {
+        "pICMS": 18,
+        "vICMS": 1.8,
+        "cstICMS": "00",
+        "baseICMS": 10
+      },
+      "ipi": {
+        "pIPI": 5,
+        "vIPI": 0.5
+      },
+      "pis": {
+        "pPIS": 1.65,
+        "vPIS": 0.17,
+        "cstPIS": "01"
+      },
+      "cofins": {
+        "pCOFINS": 7.6,
+        "vCOFINS": 0.76,
+        "cstCOFINS": "01"
+      },
+      "fcp": {
+        "vFCP": 0
+      }
+    },
+    {
+      "id": 2,
+      "codprod": "P002",
+      "nome": "PRODUTO TESTE 2",
+      "qtde": 2,
+      "preco": 5,
+      "ncm": "87654321",
+      "unidade": "UN",
+      "icms": {
+        "pICMS": 18,
+        "vICMS": 1.8,
+        "cstICMS": "00",
+        "baseICMS": 10
+      },
+      "ipi": {
+        "pIPI": 5,
+        "vIPI": 0.5
+      },
+      "pis": {
+        "pPIS": 1.65,
+        "vPIS": 0.16,
+        "cstPIS": "01"
+      },
+      "cofins": {
+        "pCOFINS": 7.6,
+        "vCOFINS": 0.76,
+        "cstCOFINS": "01"
+      },
+      "fcp": {
+        "vFCP": 0
+      }
+    }
+  ]
+}

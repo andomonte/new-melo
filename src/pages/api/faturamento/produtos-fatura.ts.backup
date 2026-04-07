@@ -1,0 +1,97 @@
+// pages/api/faturamento/produtos-fatura.ts
+import { NextApiRequest, NextApiResponse } from 'next';
+import { Pool } from 'pg';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Método não permitido' });
+  }
+
+  const { codfat } = req.query;
+
+  if (!codfat || typeof codfat !== 'string') {
+    return res.status(400).json({ error: 'Código da fatura é obrigatório.' });
+  }
+
+  try {
+    const client = await pool.connect();
+
+    const query = `
+      SELECT DISTINCT
+        f.codfat,
+        TO_CHAR(f.data, 'DD/MM/YYYY') as data,
+        f.codvend,
+        f.codcli,
+        f.totalnf,
+        f.totalfat,
+        i.codprod,
+        p.descr AS descricao,
+        i.ref,
+        i.qtd::numeric,
+        i.prunit::numeric,
+        COALESCE(i.desconto, 0)::numeric,
+        (i.qtd * i.prunit)::numeric AS total_item,
+        i.demanda,
+        i.origemcom,
+        i.codoperador,
+        p.prmedio::numeric as preco_medio
+      FROM dbfatura f
+      JOIN fatura_venda fv ON fv.codfat = f.codfat
+      JOIN dbvenda v ON v.codvenda = fv.codvenda
+      JOIN dbitvenda i ON i.codvenda = v.codvenda
+      LEFT JOIN dbprod p ON p.codprod = i.codprod
+      WHERE f.codfat = $1
+      ORDER BY i.ref, p.descr;
+    `;
+
+    const result = await client.query(query, [codfat]);
+    client.release();
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Nenhum produto encontrado para esta fatura' });
+    }
+
+    console.log(`📊 Produtos encontrados para fatura ${codfat}: ${result.rows.length} registros brutos`);
+
+    const dadosOrganizados = {
+      fatura: {
+        codfat: result.rows[0].codfat,
+        data: result.rows[0].data,
+        codvend: result.rows[0].codvend,
+        codcli: result.rows[0].codcli,
+        totalnf: result.rows[0].totalnf,
+        totalfat: result.rows[0].totalfat,
+      },
+      produtos: result.rows
+        .filter((row, index, self) => 
+          // Remover duplicatas baseadas em ref + codprod
+          index === self.findIndex(r => r.ref === row.ref && r.codprod === row.codprod)
+        )
+        .map((row) => ({
+          ref: row.ref,
+          codprod: row.codprod,
+          descricao: row.descricao,
+          qtd: Number(row.qtd),
+          prunit: Number(row.prunit),
+          desconto: Number(row.desconto),
+          total_item: Number(row.total_item),
+          demanda: row.demanda,
+          origemcom: row.origemcom,
+          codoperador: row.codoperador,
+          preco_medio: Number(row.preco_medio ?? 0),
+        })),
+    };
+
+    console.log(`✅ Produtos após remoção de duplicatas: ${dadosOrganizados.produtos.length} produtos únicos`);
+
+    return res.status(200).json(dadosOrganizados);
+  } catch (error) {
+    console.error('Erro ao buscar produtos:', error);
+    return res.status(500).json({ error: 'Erro ao buscar produtos.' });
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npx eslint:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)",
+      "Bash(node:*)",
+      "WebSearch",
+      "Bash(psql:*)",
+      "Bash(dir:*)",
+      "Bash(npm run build:*)",
+      "Bash(PGPASSWORD=Melo@2025 psql:*)",
+      "Bash(npx tsx:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(npm:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(taskkill:*)",
+      "Bash(pkill:*)",
+      "Bash(rm:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(sqlplus:*)",
+      "Bash(if exist \".next\" rd /s /q \".next\")",
+      "Bash(timeout:*)",
+      "Bash(cat:*)",
+      "Bash(if [ -f \"E:\\\\src\\\\next\\\\sistemas\\\\melo_deploy\\\\.env\" ])",
+      "Bash(then echo \".env exists\")",
+      "Bash(else echo \".env NOT found\")",
+      "Bash(fi)",
+      "Bash(npx next dev)",
+      "Bash(cp:*)",
+      "Bash(git init:*)"
+    ]
+  }
+}

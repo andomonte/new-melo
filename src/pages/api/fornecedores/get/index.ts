@@ -1,0 +1,78 @@
+// pages/api/fornecedores/index.ts
+import { NextApiRequest, NextApiResponse } from 'next';
+import { parseCookies } from 'nookies';
+import { getPgPool } from '@/lib/pgClient';
+import { PoolClient } from 'pg';
+import { serializeBigInt } from '@/utils/serializeBigInt';
+
+export default async function handle(
+  req: NextApiRequest,
+  res: NextApiResponse,
+): Promise<void> {
+  const { page = 1, perPage = 10, search = '' } = req.query;
+  const cookies = parseCookies({ req });
+  const filial = cookies.filial_melo;
+
+  if (!filial) {
+    return res.status(400).json({ error: 'Filial não informada no cookie' });
+  }
+
+  let client: PoolClient | undefined;
+
+  try {
+    const pool = getPgPool(filial);
+    client = await pool.connect();
+
+    const pageNumber = Number(page);
+    const perPageNumber = Number(perPage);
+    const offset = (pageNumber - 1) * perPageNumber;
+
+    // Construir a cláusula WHERE
+    const whereClause = search
+      ? 'WHERE cod_credor ILIKE $1 OR nome ILIKE $1 OR nome_fant ILIKE $1'
+      : '';
+    const queryParams = search ? [`%${search}%`] : [];
+
+    // Adicionar parâmetros de paginação
+    const limitOffset = search ? 'OFFSET $2 LIMIT $3' : 'OFFSET $1 LIMIT $2';
+
+    if (search) {
+      queryParams.push(offset.toString(), perPageNumber.toString());
+    } else {
+      queryParams.push(offset.toString(), perPageNumber.toString());
+    }
+
+    // Buscar os fornecedores
+    const fornecedoresResult = await client.query(
+      `SELECT * FROM dbcredor ${whereClause} ORDER BY nome ${limitOffset}`,
+      queryParams,
+    );
+
+    // Contar o total
+    const countParams = search ? [`%${search}%`] : [];
+    const countResult = await client.query(
+      `SELECT COUNT(*) as total FROM dbcredor ${whereClause}`,
+      countParams,
+    );
+
+    const fornecedores = fornecedoresResult.rows;
+    const count = parseInt(countResult.rows[0].total, 10);
+
+    res.status(200).json({
+      data: fornecedores.map((fornecedor) => serializeBigInt(fornecedor)),
+      meta: {
+        total: count,
+        lastPage: count > 0 ? Math.ceil(count / perPageNumber) : 1,
+        currentPage: count > 0 ? pageNumber : 1,
+        perPage: perPageNumber,
+      },
+    });
+  } catch (error) {
+    console.error('Erro ao buscar fornecedores:', (error as Error).message);
+    res.status(500).json({ error: 'Erro ao buscar fornecedores' });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+}

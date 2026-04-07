@@ -1,0 +1,35 @@
+{
+  "nfeId": "999TEST01",
+  "banco": "BANCO DO BRASIL",
+  "tipoDocumento": "BOLETO",
+  "parcelas": [
+    {
+      "numero_parcela": 0,
+      "numero_duplicata": "ANTECIPADO",
+      "valor_parcela": 10000,
+      "data_vencimento": "2025-11-08",
+      "tipo_documento": "ANTECIPADO"
+    },
+    {
+      "numero_parcela": 1,
+      "numero_duplicata": "001/3",
+      "valor_parcela": 5441.45,
+      "data_vencimento": "2025-12-15",
+      "tipo_documento": "BOLETO"
+    },
+    {
+      "numero_parcela": 2,
+      "numero_duplicata": "002/3",
+      "valor_parcela": 5441.45,
+      "data_vencimento": "2026-01-15",
+      "tipo_documento": "BOLETO"
+    },
+    {
+      "numero_parcela": 3,
+      "numero_duplicata": "003/3",
+      "valor_parcela": 5441.41,
+      "data_vencimento": "2026-02-15",
+      "tipo_documento": "BOLETO"
+    }
+  ]
+}

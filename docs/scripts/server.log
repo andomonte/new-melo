@@ -1,0 +1,673 @@
+
+> site-melo@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+ ⚠ Port 3001 is in use, trying 3002 instead.
+  ▲ Next.js 14.2.14
+  - Local:        http://localhost:3002
+  - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 1435ms
+ ○ Compiling /api/requisicoesCompra/[id]/items ...
+ ✓ Compiled /api/requisicoesCompra/[id]/items in 517ms (143 modules)
+DEBUG - Verificando estrutura da tabela cmp_requisicao_item
+DEBUG - Colunas disponíveis: [
+  { column_name: 'id', data_type: 'integer' },
+  { column_name: 'req_id', data_type: 'bigint' },
+  { column_name: 'req_versao', data_type: 'bigint' },
+  { column_name: 'item_seq', data_type: 'integer' },
+  { column_name: 'codprod', data_type: 'character varying' },
+  { column_name: 'quantidade', data_type: 'numeric' },
+  { column_name: 'preco_unitario', data_type: 'numeric' },
+  { column_name: 'preco_total', data_type: 'numeric' },
+  { column_name: 'observacao', data_type: 'text' },
+  { column_name: 'status', data_type: 'character varying' },
+  {
+    column_name: 'created_at',
+    data_type: 'timestamp without time zone'
+  },
+  {
+    column_name: 'updated_at',
+    data_type: 'timestamp without time zone'
+  }
+]
+DEBUG - Verificando alguns itens da tabela
+DEBUG - Amostras de itens na tabela: [
+  {
+    id: 1,
+    req_id: '12002010026',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '50.0000',
+    preco_total: '50.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T07:02:10.380Z,
+    updated_at: 2025-07-03T07:02:10.380Z
+  },
+  {
+    id: 2,
+    req_id: '1',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '123456',
+    quantidade: '2.000',
+    preco_unitario: '10.5000',
+    preco_total: '21.0000',
+    observacao: 'Teste de item',
+    status: 'pending',
+    created_at: 2025-07-03T07:38:42.740Z,
+    updated_at: 2025-07-03T07:38:42.740Z
+  },
+  {
+    id: 3,
+    req_id: '12002010027',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '19.9900',
+    preco_total: '19.9900',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T13:20:27.081Z,
+    updated_at: 2025-07-03T13:20:27.081Z
+  },
+  {
+    id: 4,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '060522',
+    quantidade: '10.000',
+    preco_unitario: '52.0000',
+    preco_total: '520.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:10.367Z,
+    updated_at: 2025-07-03T15:24:10.367Z
+  },
+  {
+    id: 5,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: '223808',
+    quantidade: '100.000',
+    preco_unitario: '190.1900',
+    preco_total: '19019.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:53.648Z,
+    updated_at: 2025-07-03T15:24:53.648Z
+  }
+]
+DEBUG - Procurando IDs similares na tabela de itens
+Error fetching requisition items: error: não existe a coluna "rei_req_id"
+    at /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async handler (webpack-internal:///(api)/./src/pages/api/requisicoesCompra/[id]/items.ts:42:35)
+    at async K (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:2871)
+    at async U.render (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:3955)
+    at async DevServer.runApi (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:598:9)
+    at async NextNodeServer.handleCatchallRenderRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:269:37)
+    at async DevServer.handleRequestImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/base-server.js:810:17)
+    at async /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:173:21)
+    at async handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:350:24)
+    at async requestHandlerImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:374:13)
+    at async Server.requestListener (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/start-server.js:141:13) {
+  length: 108,
+  severity: 'ERRO',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '17',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3722',
+  routine: 'errorMissingColumn'
+}
+Error details: {
+  message: 'não existe a coluna "rei_req_id"',
+  stack: 'error: não existe a coluna "rei_req_id"\n' +
+    '    at /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/pg/lib/client.js:545:17\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n' +
+    '    at async handler (webpack-internal:///(api)/./src/pages/api/requisicoesCompra/[id]/items.ts:42:35)\n' +
+    '    at async K (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:2871)\n' +
+    '    at async U.render (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:3955)\n' +
+    '    at async DevServer.runApi (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:598:9)\n' +
+    '    at async NextNodeServer.handleCatchallRenderRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:269:37)\n' +
+    '    at async DevServer.handleRequestImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/base-server.js:810:17)\n' +
+    '    at async /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:339:20\n' +
+    '    at async Span.traceAsyncFn (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/trace/trace.js:154:20)\n' +
+    '    at async DevServer.handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:336:24)\n' +
+    '    at async invokeRender (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:173:21)\n' +
+    '    at async handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:350:24)\n' +
+    '    at async requestHandlerImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:374:13)\n' +
+    '    at async Server.requestListener (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/start-server.js:141:13)',
+  code: '42703'
+}
+ GET /api/requisicoesCompra/47/items 500 in 888ms
+ ✓ Compiled in 101ms (143 modules)
+ ✓ Compiled in 64ms (143 modules)
+DEBUG - Verificando estrutura da tabela cmp_requisicao_item
+DEBUG - Colunas disponíveis: [
+  { column_name: 'id', data_type: 'integer' },
+  { column_name: 'req_id', data_type: 'bigint' },
+  { column_name: 'req_versao', data_type: 'bigint' },
+  { column_name: 'item_seq', data_type: 'integer' },
+  { column_name: 'codprod', data_type: 'character varying' },
+  { column_name: 'quantidade', data_type: 'numeric' },
+  { column_name: 'preco_unitario', data_type: 'numeric' },
+  { column_name: 'preco_total', data_type: 'numeric' },
+  { column_name: 'observacao', data_type: 'text' },
+  { column_name: 'status', data_type: 'character varying' },
+  {
+    column_name: 'created_at',
+    data_type: 'timestamp without time zone'
+  },
+  {
+    column_name: 'updated_at',
+    data_type: 'timestamp without time zone'
+  }
+]
+DEBUG - Verificando alguns itens da tabela
+DEBUG - Amostras de itens na tabela: [
+  {
+    id: 1,
+    req_id: '12002010026',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '50.0000',
+    preco_total: '50.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T07:02:10.380Z,
+    updated_at: 2025-07-03T07:02:10.380Z
+  },
+  {
+    id: 2,
+    req_id: '1',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '123456',
+    quantidade: '2.000',
+    preco_unitario: '10.5000',
+    preco_total: '21.0000',
+    observacao: 'Teste de item',
+    status: 'pending',
+    created_at: 2025-07-03T07:38:42.740Z,
+    updated_at: 2025-07-03T07:38:42.740Z
+  },
+  {
+    id: 3,
+    req_id: '12002010027',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '19.9900',
+    preco_total: '19.9900',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T13:20:27.081Z,
+    updated_at: 2025-07-03T13:20:27.081Z
+  },
+  {
+    id: 4,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '060522',
+    quantidade: '10.000',
+    preco_unitario: '52.0000',
+    preco_total: '520.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:10.367Z,
+    updated_at: 2025-07-03T15:24:10.367Z
+  },
+  {
+    id: 5,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: '223808',
+    quantidade: '100.000',
+    preco_unitario: '190.1900',
+    preco_total: '19019.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:53.648Z,
+    updated_at: 2025-07-03T15:24:53.648Z
+  }
+]
+DEBUG - Procurando itens para requisição específica usando req_id
+DEBUG - Itens encontrados para requisição: []
+DEBUG - Buscando itens para requisição 47, encontrados: 0
+DEBUG - Nenhum item encontrado, retornando array vazio
+ GET /api/requisicoesCompra/47/items 200 in 67ms
+ ✓ Compiled /api/requisicoesCompra/[id] in 130ms (145 modules)
+ GET /api/requisicoesCompra/47 405 in 138ms
+ ✓ Compiled /api/requisicoesCompra/list in 83ms (147 modules)
+DEBUG - Query sendo executada: 
+      SELECT 
+        r.req_id as id,
+        r.req_versao as versao,
+        r.req_id_composto as requisicao,
+        r.req_data as "dataRequisicao",
+        r.req_status as "statusRequisicao",
+    ...
+DEBUG - Resultados encontrados: 25
+DEBUG - Amostra de dados (primeiro item): {
+  id: '12002010047',
+  requisicao: '47',
+  statusRequisicao: 'P',
+  ordemCompra: '0'
+}
+ GET /api/requisicoesCompra/list 200 in 159ms
+ POST /api/requisicoesCompra/create 405 in 4ms
+Error updating requisition items: error: não existe a coluna "req_item_seq" da relação "cmp_requisicao_item"
+    at /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async handler (webpack-internal:///(api)/./src/pages/api/requisicoesCompra/[id]/items.ts:127:25)
+    at async K (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:2871)
+    at async U.render (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:3955)
+    at async DevServer.runApi (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:598:9)
+    at async NextNodeServer.handleCatchallRenderRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:269:37)
+    at async DevServer.handleRequestImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/base-server.js:810:17)
+    at async /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:173:21)
+    at async handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:350:24)
+    at async requestHandlerImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:374:13)
+    at async Server.requestListener (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/start-server.js:141:13) {
+  length: 143,
+  severity: 'ERRO',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '80',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_target.c',
+  line: '1066',
+  routine: 'checkInsertTargets'
+}
+ PUT /api/requisicoesCompra/47/items 500 in 69ms
+ ✓ Compiled in 80ms (147 modules)
+ ✓ Compiled in 66ms (147 modules)
+Error updating requisition items: error: valor é muito longo para tipo character varying(6)
+    at /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/pg/lib/client.js:545:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async handler (webpack-internal:///(api)/./src/pages/api/requisicoesCompra/[id]/items.ts:126:25)
+    at async K (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:2871)
+    at async U.render (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/compiled/next-server/pages-api.runtime.dev.js:21:3955)
+    at async DevServer.runApi (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:598:9)
+    at async NextNodeServer.handleCatchallRenderRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/next-server.js:269:37)
+    at async DevServer.handleRequestImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/base-server.js:810:17)
+    at async /home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:339:20
+    at async Span.traceAsyncFn (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/trace/trace.js:154:20)
+    at async DevServer.handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/dev/next-dev-server.js:336:24)
+    at async invokeRender (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:173:21)
+    at async handleRequest (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:350:24)
+    at async requestHandlerImpl (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/router-server.js:374:13)
+    at async Server.requestListener (/home/alissu/Desktop/melo-sistema/main-lms-analysis/node_modules/next/dist/server/lib/start-server.js:141:13) {
+  length: 103,
+  severity: 'ERRO',
+  code: '22001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'varchar.c',
+  line: '638',
+  routine: 'varchar'
+}
+ PUT /api/requisicoesCompra/47/items 500 in 52ms
+ PUT /api/requisicoesCompra/47/items 200 in 71ms
+DEBUG - Verificando estrutura da tabela cmp_requisicao_item
+DEBUG - Colunas disponíveis: [
+  { column_name: 'id', data_type: 'integer' },
+  { column_name: 'req_id', data_type: 'bigint' },
+  { column_name: 'req_versao', data_type: 'bigint' },
+  { column_name: 'item_seq', data_type: 'integer' },
+  { column_name: 'codprod', data_type: 'character varying' },
+  { column_name: 'quantidade', data_type: 'numeric' },
+  { column_name: 'preco_unitario', data_type: 'numeric' },
+  { column_name: 'preco_total', data_type: 'numeric' },
+  { column_name: 'observacao', data_type: 'text' },
+  { column_name: 'status', data_type: 'character varying' },
+  {
+    column_name: 'created_at',
+    data_type: 'timestamp without time zone'
+  },
+  {
+    column_name: 'updated_at',
+    data_type: 'timestamp without time zone'
+  }
+]
+DEBUG - Verificando alguns itens da tabela
+DEBUG - Amostras de itens na tabela: [
+  {
+    id: 1,
+    req_id: '12002010026',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '50.0000',
+    preco_total: '50.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T07:02:10.380Z,
+    updated_at: 2025-07-03T07:02:10.380Z
+  },
+  {
+    id: 2,
+    req_id: '1',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '123456',
+    quantidade: '2.000',
+    preco_unitario: '10.5000',
+    preco_total: '21.0000',
+    observacao: 'Teste de item',
+    status: 'pending',
+    created_at: 2025-07-03T07:38:42.740Z,
+    updated_at: 2025-07-03T07:38:42.740Z
+  },
+  {
+    id: 3,
+    req_id: '12002010027',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '19.9900',
+    preco_total: '19.9900',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T13:20:27.081Z,
+    updated_at: 2025-07-03T13:20:27.081Z
+  },
+  {
+    id: 4,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '060522',
+    quantidade: '10.000',
+    preco_unitario: '52.0000',
+    preco_total: '520.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:10.367Z,
+    updated_at: 2025-07-03T15:24:10.367Z
+  },
+  {
+    id: 5,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: '223808',
+    quantidade: '100.000',
+    preco_unitario: '190.1900',
+    preco_total: '19019.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:53.648Z,
+    updated_at: 2025-07-03T15:24:53.648Z
+  }
+]
+DEBUG - Procurando itens para requisição específica usando req_id
+DEBUG - Itens encontrados para requisição: [
+  {
+    id: 15,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: 'TST01',
+    quantidade: '5.000',
+    preco_unitario: '25.5000',
+    preco_total: '127.5000',
+    observacao: 'Item de teste para adriano',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  },
+  {
+    id: 16,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: 'TST02',
+    quantidade: '2.000',
+    preco_unitario: '15.0000',
+    preco_total: '30.0000',
+    observacao: 'Segundo item de teste',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  }
+]
+DEBUG - SUCESSO: Encontrados itens para a requisição: [
+  {
+    id: 15,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: 'TST01',
+    quantidade: '5.000',
+    preco_unitario: '25.5000',
+    preco_total: '127.5000',
+    observacao: 'Item de teste para adriano',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  },
+  {
+    id: 16,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: 'TST02',
+    quantidade: '2.000',
+    preco_unitario: '15.0000',
+    preco_total: '30.0000',
+    observacao: 'Segundo item de teste',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  }
+]
+ GET /api/requisicoesCompra/47/items 200 in 38ms
+DEBUG - Verificando estrutura da tabela cmp_requisicao_item
+DEBUG - Colunas disponíveis: [
+  { column_name: 'id', data_type: 'integer' },
+  { column_name: 'req_id', data_type: 'bigint' },
+  { column_name: 'req_versao', data_type: 'bigint' },
+  { column_name: 'item_seq', data_type: 'integer' },
+  { column_name: 'codprod', data_type: 'character varying' },
+  { column_name: 'quantidade', data_type: 'numeric' },
+  { column_name: 'preco_unitario', data_type: 'numeric' },
+  { column_name: 'preco_total', data_type: 'numeric' },
+  { column_name: 'observacao', data_type: 'text' },
+  { column_name: 'status', data_type: 'character varying' },
+  {
+    column_name: 'created_at',
+    data_type: 'timestamp without time zone'
+  },
+  {
+    column_name: 'updated_at',
+    data_type: 'timestamp without time zone'
+  }
+]
+DEBUG - Verificando alguns itens da tabela
+DEBUG - Amostras de itens na tabela: [
+  {
+    id: 1,
+    req_id: '12002010026',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '50.0000',
+    preco_total: '50.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T07:02:10.380Z,
+    updated_at: 2025-07-03T07:02:10.380Z
+  },
+  {
+    id: 2,
+    req_id: '1',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '123456',
+    quantidade: '2.000',
+    preco_unitario: '10.5000',
+    preco_total: '21.0000',
+    observacao: 'Teste de item',
+    status: 'pending',
+    created_at: 2025-07-03T07:38:42.740Z,
+    updated_at: 2025-07-03T07:38:42.740Z
+  },
+  {
+    id: 3,
+    req_id: '12002010027',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '144103',
+    quantidade: '1.000',
+    preco_unitario: '19.9900',
+    preco_total: '19.9900',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T13:20:27.081Z,
+    updated_at: 2025-07-03T13:20:27.081Z
+  },
+  {
+    id: 4,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: '060522',
+    quantidade: '10.000',
+    preco_unitario: '52.0000',
+    preco_total: '520.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:10.367Z,
+    updated_at: 2025-07-03T15:24:10.367Z
+  },
+  {
+    id: 5,
+    req_id: '12002010028',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: '223808',
+    quantidade: '100.000',
+    preco_unitario: '190.1900',
+    preco_total: '19019.0000',
+    observacao: '',
+    status: 'pending',
+    created_at: 2025-07-03T15:24:53.648Z,
+    updated_at: 2025-07-03T15:24:53.648Z
+  }
+]
+DEBUG - Procurando itens para requisição específica usando req_id
+DEBUG - Itens encontrados para requisição: [
+  {
+    id: 15,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: 'TST01',
+    quantidade: '5.000',
+    preco_unitario: '25.5000',
+    preco_total: '127.5000',
+    observacao: 'Item de teste para adriano',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  },
+  {
+    id: 16,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: 'TST02',
+    quantidade: '2.000',
+    preco_unitario: '15.0000',
+    preco_total: '30.0000',
+    observacao: 'Segundo item de teste',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  }
+]
+DEBUG - SUCESSO: Encontrados itens para a requisição: [
+  {
+    id: 15,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 1,
+    codprod: 'TST01',
+    quantidade: '5.000',
+    preco_unitario: '25.5000',
+    preco_total: '127.5000',
+    observacao: 'Item de teste para adriano',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  },
+  {
+    id: 16,
+    req_id: '47',
+    req_versao: '1',
+    item_seq: 2,
+    codprod: 'TST02',
+    quantidade: '2.000',
+    preco_unitario: '15.0000',
+    preco_total: '30.0000',
+    observacao: 'Segundo item de teste',
+    status: 'pending',
+    created_at: 2025-07-24T12:06:03.291Z,
+    updated_at: 2025-07-24T12:06:03.291Z
+  }
+]
+ GET /api/requisicoesCompra/47/items 200 in 77ms
+ ✓ Compiled in 50ms (143 modules)
+ ✓ Compiled in 239ms (126 modules)
+[?25h

@@ -1,0 +1,43 @@
+import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
+import { AlertCircle, FileText, Upload, Download, Check, X, Eye, Settings, CircleChevronDown } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { AuthContext } from '@/contexts/authContexts';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import DataTableFiltroV3 from '@/components/common/DataTableFiltroV3';
+import { createPortal } from 'react-dom';
+
+interface NFeRecebida {
+  id: string;
+  xml: string;
+  docFiscal: string;
+  serie: string;
+  dtEmissao: string;
+  uf: string;
+  emitCpfCnpj: string;
+  emitIe: string;
+  emitNome: string;
+  emitMunicipio: string;
+  emitUf: string;
+  destCpfCnpj: string;
+  status: 'RECEBIDA' | 'PROCESSADA' | 'ERRO';
+  dataRecebimento: string;
+  valorTotal: number;
+  qtdItens: number;
+  processadoPor?: string;
+}
+
+interface MetaData {
+  total: number;
+  pagina: number;
+  ultimaPagina: number;
+  porPagina: number;
+}
+
+export const EntradaXmlMain: React.FC = () => {
+  // ... (rest of the legacy implementation - truncated for brevity)
+  return <div>Legacy Implementation</div>;
+};
+
+export default EntradaXmlMain;

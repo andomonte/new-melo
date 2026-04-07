@@ -1,0 +1,26 @@
+# .dockerignore - arquivos a serem ignorados no build Docker
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.local
+.env*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+*.pem
+.vercel
+.vscode
+.idea
+coverage
+__tests__
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+README.md
+docs
+.github

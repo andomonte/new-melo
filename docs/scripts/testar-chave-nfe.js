@@ -1,0 +1,21 @@
+const cUF = '13';
+const AAMM = '2509';
+const CNPJ = '01053139000169';
+const mod = '55';
+const serieChave = '001';
+const nNFChave = '000000001';
+const tpEmis = '1';
+const cNF = '12345678';
+
+const chaveSemDV = `${cUF}${AAMM}${CNPJ}${mod}${serieChave}${nNFChave}${tpEmis}${cNF}`;
+console.log('Chave sem DV:', chaveSemDV);
+console.log('Comprimento:', chaveSemDV.length);
+console.log('Partes:');
+console.log('cUF (2):', cUF, cUF.length);
+console.log('AAMM (4):', AAMM, AAMM.length);
+console.log('CNPJ (14):', CNPJ, CNPJ.length);
+console.log('mod (2):', mod, mod.length);
+console.log('serie (3):', serieChave, serieChave.length);
+console.log('nNF (9):', nNFChave, nNFChave.length);
+console.log('tpEmis (1):', tpEmis, tpEmis.length);
+console.log('cNF (8):', cNF, cNF.length);

@@ -1,0 +1,17 @@
+{
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    // Other rules
+    "@next/next/no-img-element": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-require-imports": "off",
+    "@typescript-eslint/no-unused-vars": [
+      "warn", // Ou "error" se preferir que seja um erro em outros casos
+      {
+        "argsIgnorePattern": "^_", // Ignora argumentos que começam com _
+        "varsIgnorePattern": "^_", // Ignora variáveis que começam com _
+        "caughtErrorsIgnorePattern": "^_" // Ignora erros pegos que começam com _
+      }
+    ]
+  }
+}

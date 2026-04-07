@@ -1,0 +1,251 @@
+import axios from 'axios';
+import https from 'https';
+
+interface EnvioSefazParams {
+  xmlAssinado: string;
+  certificadoKey: string;
+  certificadoCrt: string;
+  cadeiaCrt?: string;
+}
+
+// Função para validar data/hora no formato QR Code
+function validarDataHoraQRCode(dhEmi: string): boolean {
+  // Formato esperado: AAAAMMDDTHHMMSS±HHMM
+  // Exemplo: 20251027T055149-0400 (com sinal no timezone)
+  const regex = /^\d{8}T\d{6}[+-]\d{4}$/;
+  return regex.test(dhEmi);
+}
+
+// Função para corrigir data/hora no QR Code (DESATIVADA - formato já está correto)
+function corrigirDataHoraQRCode(xml: string): string {
+  // A data já vem no formato correto: AAAAMMDDTHHMMSS±HHMM
+  // Não precisa mais de correção
+  return xml;
+}
+
+// Função para limpar namespace duplicado na tag NFe
+function limparNamespaceNFe(xml: string): string {
+  // A tag NFe deve ter xmlns APENAS UMA VEZ
+  // Remover declaração XML se existir
+  let limpo = xml.replace(/<\?xml[^>]*\?>/, '').trim();
+  
+  // Garantir que NFe tenha namespace apenas uma vez
+  limpo = limpo.replace(
+    /<NFe[^>]*>/,
+    '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">'
+  );
+  
+  return limpo;
+}
+
+// Função para formatar XML removendo espaços
+function compactarXML(xml: string): string {
+  return xml
+    .replace(/>\s+</g, '><')
+    .replace(/\r?\n/g, '')
+    .trim();
+}
+
+// Função principal para preparar XML para SEFAZ
+function prepararXMLParaSefaz(xmlAssinado: string): string {
+  console.log('🔧 Preparando XML para SEFAZ...');
+  
+  let xml = xmlAssinado;
+  
+  // 1. Corrigir data/hora no QR Code
+  xml = corrigirDataHoraQRCode(xml);
+  
+  // 2. Limpar namespace duplicado
+  xml = limparNamespaceNFe(xml);
+  
+  // 3. Compactar (remover espaços)
+  xml = compactarXML(xml);
+  
+  console.log('✅ XML preparado');
+  return xml;
+}
+
+// Função para criar envelope SOAP exatamente como SEFAZ espera
+function criarEnvelopeSOAP(xmlEnviNFe: string): string {
+  // SOAP 1.2 - alguns SEFAZ preferem SOAP 1.2
+  const envelope =
+    '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope" xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">' +
+    '<soap12:Body>' +
+    '<nfeAutorizacaoLote>' +
+    '<nfeDadosMsg>' +
+    xmlEnviNFe +
+    '</nfeDadosMsg>' +
+    '</nfeAutorizacaoLote>' +
+    '</soap12:Body>' +
+    '</soap12:Envelope>';
+
+  return envelope;
+}// Função para logar detalhes do XML para debug
+function logarDetalhesXML(xml: string): void {
+  console.log('\n📋 ANÁLISE DO XML:');
+  console.log('================================================================================');
+  
+  const checks = {
+    'Tem namespace NFe': xml.includes('xmlns="http://www.portalfiscal.inf.br/nfe"'),
+    'Tem Signature': xml.includes('<Signature'),
+    'Tem namespace Signature': xml.includes('xmlns="http://www.w3.org/2000/09/xmldsig#"'),
+    'Tem QR Code': xml.includes('<qrCode>'),
+    'Tem CDATA': xml.includes('<![CDATA['),
+    'Tem infNFeSupl': xml.includes('<infNFeSupl>'),
+    'Modelo 65': xml.includes('<mod>65</mod>'),
+    'Versão 4.00': xml.includes('versao="4.00"')
+  };
+  
+  Object.entries(checks).forEach(([nome, valor]) => {
+    console.log(`${valor ? '✅' : '❌'} ${nome}`);
+  });
+  
+  // Verificar formato da data no QR Code
+  const dhEmiMatch = xml.match(/dhEmi=(\d{8}T\d{6}[+-]\d{4})/);
+  if (dhEmiMatch) {
+    const dhEmi = dhEmiMatch[1];
+    const formatoCorreto = /^\d{8}T\d{6}[+-]\d{4}$/.test(dhEmi);
+    console.log(`${formatoCorreto ? '✅' : '❌'} Formato dhEmi QR Code: ${dhEmi}`);
+  }
+  
+  console.log('================================================================================\n');
+}
+
+export async function enviarCupomParaSefaz(
+  xmlAssinado: string,
+  certificadoKey: string,
+  certificadoCrt: string,
+  cadeiaCrt?: string
+): Promise<string> {
+  console.log('📤 Iniciando envio para SEFAZ-AM...');
+  console.log('📄 Tamanho do XML original:', xmlAssinado.length, 'caracteres');
+  
+  // Validações básicas
+  if (!xmlAssinado.includes('<Signature')) {
+    throw new Error('❌ XML não está assinado digitalmente');
+  }
+  
+  if (!xmlAssinado.includes('<mod>65</mod>')) {
+    throw new Error('❌ XML não é modelo 65 (NFC-e)');
+  }
+  
+  if (!xmlAssinado.includes('<infNFeSupl>')) {
+    throw new Error('❌ XML não contém infNFeSupl (QR Code)');
+  }
+  
+  // Preparar XML
+  const xmlPreparado = prepararXMLParaSefaz(xmlAssinado);
+  
+  // Logar análise
+  logarDetalhesXML(xmlPreparado);
+  
+  // Criar estrutura enviNFe
+  const idLote = Date.now().toString().substring(0, 15);
+  
+  // IMPORTANTE: enviNFe NÃO deve ter namespace duplicado
+  // O namespace já está na tag NFe interna
+  const xmlEnviNFe = 
+    '<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00" idLote="' + idLote + '">' +
+    '<indSinc>1</indSinc>' +
+    xmlPreparado +
+    '</enviNFe>';
+  
+  // Criar envelope SOAP
+  const envelope = criarEnvelopeSOAP(xmlEnviNFe);
+  
+  console.log('🔢 ID do Lote:', idLote);
+  console.log('📏 Tamanho do envelope SOAP:', envelope.length, 'caracteres');
+  
+  // Salvar envelope para debug (completo)
+  console.log('\n📋 ENVELOPE SOAP (completo):');
+  console.log(envelope);
+  console.log('\n');
+  
+  // Preparar certificado
+  const agent = new https.Agent({
+    key: Buffer.from(certificadoKey),
+    cert: Buffer.from(certificadoCrt),
+    ca: cadeiaCrt ? Buffer.from(cadeiaCrt) : undefined,
+    rejectUnauthorized: false, // Voltar para false para aceitar certificados auto-assinados
+    // Configurações SSL mais permissivas
+    minVersion: 'TLSv1.2',
+    maxVersion: 'TLSv1.3',
+    // Adicionar timeout de handshake
+    timeout: 30000,
+    // Forçar renegociação
+    secureOptions: require('constants').SSL_OP_NO_TLSv1 | require('constants').SSL_OP_NO_TLSv1_1
+  });
+  
+  // URL SEFAZ-AM Homologação
+  // URL OFICIAL da SEFAZ-AM para NFC-e versão 4.00
+  // Fonte: https://www.sefaz.am.gov.br/areas-de-interesse/desenvolvimento/nota-fiscal-eletronica/enderecos-webservices/
+  // Atualizado: 27/10/2025 - URL correta para homologação
+  const urlSefaz = 'https://homologacao.sefaz.am.gov.br/nfce-services/services/NfeAutorizacao4';
+  
+  try {
+    console.log('🌐 Enviando para SEFAZ-AM...');
+    console.log('🔗 URL:', urlSefaz);
+    console.log('📦 Content-Type: application/soap+xml; charset=utf-8');
+    console.log('🔒 SSL/TLS: Habilitado com certificado digital');
+    
+    const response = await axios.post(urlSefaz, envelope, {
+      httpsAgent: agent,
+      headers: {
+        'Content-Type': 'application/soap+xml; charset=utf-8',
+        'SOAPAction': '', // Remover SOAPAction para NFC-e
+        'Content-Length': Buffer.byteLength(envelope, 'utf8'),
+        'User-Agent': 'Sistema-Melo/1.0',
+        'Accept': 'text/xml, application/xml, application/soap+xml, */*',
+        'Accept-Encoding': 'gzip, deflate, identity',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache'
+      },
+      timeout: 60000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+    
+    console.log('✅ Resposta recebida com sucesso!');
+    console.log('📊 Status HTTP:', response.status);
+    console.log('📋 Resposta SEFAZ (preview):', response.data.substring(0, 500));
+    
+    return response.data;
+    
+  } catch (error: any) {
+    console.error('\n❌ ERRO AO ENVIAR PARA SEFAZ');
+    console.error('================================================================================');
+    
+    if (error.response) {
+      console.error('📊 Status HTTP:', error.response.status);
+      console.error('📋 Resposta SEFAZ:', error.response.data);
+      
+      // Tentar extrair mensagem de erro da resposta
+      const msgErro = error.response.data?.match(/<xMotivo>(.*?)<\/xMotivo>/)?.[1];
+      if (msgErro) {
+        console.error('💬 Mensagem SEFAZ:', msgErro);
+      }
+      
+      // Para erro 400, mostrar resposta completa para debug
+      if (error.response.status === 400) {
+        console.error('🔍 Resposta completa do erro 400:');
+        console.error('Tipo:', typeof error.response.data);
+        console.error('Conteúdo:', error.response.data);
+        if (typeof error.response.data === 'string') {
+          console.error('Tamanho:', error.response.data.length, 'caracteres');
+        }
+      }
+      
+      throw new Error(`Erro SEFAZ ${error.response.status}: ${msgErro || error.response.statusText}`);
+    }
+    
+    if (error.request) {
+      console.error('📡 Nenhuma resposta recebida da SEFAZ');
+      console.error('⏱️ Possível timeout ou problema de rede');
+    }
+    
+    console.error('🔧 Detalhes:', error.message);
+    console.error('================================================================================\n');
+    
+    throw error;
+  }
+}

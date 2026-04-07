@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparador de Impostos - Oracle vs PostgreSQL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen p-8">
+        <div class="max-w-6xl mx-auto">
+            <h1 class="text-3xl font-bold mb-8">Comparador de Impostos: Oracle vs PostgreSQL</h1>
+
+            <!-- Formulário -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-4">Dados para Comparação</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Código Produto</label>
+                        <input type="text" id="codProd" class="w-full border rounded px-3 py-2" value="414068">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Código Cliente</label>
+                        <input type="text" id="codCli" class="w-full border rounded px-3 py-2" value="18786">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Quantidade</label>
+                        <input type="number" id="quantidade" step="0.01" class="w-full border rounded px-3 py-2" value="1">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Valor Unitário</label>
+                        <input type="number" id="valorUnitario" step="0.01" class="w-full border rounded px-3 py-2" value="7.64">
+                    </div>
+                </div>
+                <button onclick="comparar()" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                    Comparar
+                </button>
+            </div>
+
+            <!-- Loading -->
+            <div id="loading" class="hidden bg-blue-50 border border-blue-200 text-blue-700 rounded-lg p-4 mb-8">
+                Comparando cálculos... Aguarde.
+            </div>
+
+            <!-- Erro -->
+            <div id="erro" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-8"></div>
+
+            <!-- Resultado -->
+            <div id="resultado" class="hidden space-y-6"></div>
+        </div>
+    </div>
+
+    <script>
+        const formatMoeda = (valor) => {
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL',
+            }).format(valor);
+        };
+
+        const formatPercent = (valor) => `${valor.toFixed(2)}%`;
+
+        async function comparar() {
+            const codProd = document.getElementById('codProd').value;
+            const codCli = document.getElementById('codCli').value;
+            const quantidade = parseFloat(document.getElementById('quantidade').value);
+            const valorUnitario = parseFloat(document.getElementById('valorUnitario').value);
+
+            const loading = document.getElementById('loading');
+            const erro = document.getElementById('erro');
+            const resultado = document.getElementById('resultado');
+
+            loading.classList.remove('hidden');
+            erro.classList.add('hidden');
+            resultado.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/impostos/comparar-oracle-pg', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codProd, codCli, quantidade, valorUnitario }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erro ao comparar');
+                }
+
+                mostrarResultado(data);
+            } catch (e) {
+                erro.textContent = `Erro: ${e.message}`;
+                erro.classList.remove('hidden');
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        function mostrarResultado(data) {
+            const resultado = document.getElementById('resultado');
+
+            resultado.innerHTML = `
+                <!-- Status -->
+                <div class="${data.igualOuAceitavel ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'} border rounded-lg p-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">${data.igualOuAceitavel ? '✅' : '⚠️'}</span>
+                        <strong class="${data.igualOuAceitavel ? 'text-green-800' : 'text-yellow-800'}">
+                            ${data.igualOuAceitavel ? 'Cálculos IGUAIS ou diferença aceitável (≤ R$ 0,05)' : 'Diferenças encontradas acima da tolerância'}
+                        </strong>
+                    </div>
+                </div>
+
+                <!-- Resumo -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Resumo da Operação</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div><span class="text-gray-600">Produto:</span><div class="font-semibold">${data.produto}</div></div>
+                        <div><span class="text-gray-600">Cliente:</span><div class="font-semibold">${data.cliente}</div></div>
+                        <div><span class="text-gray-600">Quantidade:</span><div class="font-semibold">${data.quantidade}</div></div>
+                        <div><span class="text-gray-600">Total:</span><div class="font-semibold">${formatMoeda(data.total)}</div></div>
+                    </div>
+                </div>
+
+                <!-- Tabela -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold">Imposto</th>
+                                <th class="px-4 py-3 text-right font-semibold">Oracle (Delphi)</th>
+                                <th class="px-4 py-3 text-right font-semibold">PostgreSQL (Next.js)</th>
+                                <th class="px-4 py-3 text-right font-semibold">Diferença</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            ${criarLinhaTabela('ICMS', data.oracle.icms, data.postgresql.icms, data.diferencas.icms)}
+                            ${criarLinhaTabela('ST', data.oracle.st, data.postgresql.st, data.diferencas.st)}
+                            ${criarLinhaTabela('IPI', data.oracle.ipi, data.postgresql.ipi, data.diferencas.ipi)}
+                            ${criarLinhaTabela('PIS', data.oracle.pis, data.postgresql.pis, data.diferencas.pis)}
+                            ${criarLinhaTabela('COFINS', data.oracle.cofins, data.postgresql.cofins, data.diferencas.cofins)}
+                            <tr class="bg-gray-50 font-bold">
+                                <td class="px-4 py-3">TOTAL IMPOSTOS</td>
+                                <td class="px-4 py-3 text-right">${formatMoeda(data.oracle.totalImpostos)}</td>
+                                <td class="px-4 py-3 text-right">${formatMoeda(data.postgresql.totalImpostos)}</td>
+                                <td class="px-4 py-3 text-right ${data.diferencas.totalImpostos > 0.05 ? 'text-red-600' : 'text-green-600'}">
+                                    ${formatMoeda(data.diferencas.totalImpostos)}
+                                </td>
+                            </tr>
+                            <tr class="bg-blue-50">
+                                <td class="px-4 py-3 font-medium" colspan="2">IBS (Informativo 2026)</td>
+                                <td class="px-4 py-3 text-right">${formatMoeda(data.postgresql.ibs)}</td>
+                                <td class="px-4 py-3 text-right text-gray-500">Novo tributo</td>
+                            </tr>
+                            <tr class="bg-blue-50">
+                                <td class="px-4 py-3 font-medium" colspan="2">CBS (Informativo 2026)</td>
+                                <td class="px-4 py-3 text-right">${formatMoeda(data.postgresql.cbs)}</td>
+                                <td class="px-4 py-3 text-right text-gray-500">Novo tributo</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Dados adicionais -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Dados Adicionais</h3>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-medium mb-2">Oracle</h4>
+                            <div class="space-y-1 text-sm">
+                                <div><span class="text-gray-600">MVA:</span> ${formatPercent(data.oracle.mva)}</div>
+                                <div><span class="text-gray-600">CFOP:</span> ${data.oracle.cfop}</div>
+                                ${data.oracle.erro ? `<div class="text-red-600">Erro: ${data.oracle.erro}</div>` : ''}
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-medium mb-2">PostgreSQL</h4>
+                            <div class="space-y-1 text-sm">
+                                <div><span class="text-gray-600">MVA:</span> ${formatPercent(data.postgresql.mva)}</div>
+                                <div><span class="text-gray-600">CFOP:</span> ${data.postgresql.cfop}</div>
+                                ${data.postgresql.erro ? `<div class="text-red-600">Erro: ${data.postgresql.erro}</div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            resultado.classList.remove('hidden');
+        }
+
+        function criarLinhaTabela(nome, oracle, pg, diferenca) {
+            const cor = diferenca > 0.05 ? 'text-red-600 font-bold' : 'text-green-600';
+            return `
+                <tr>
+                    <td class="px-4 py-3 font-medium">${nome}</td>
+                    <td class="px-4 py-3 text-right">${formatMoeda(oracle)}</td>
+                    <td class="px-4 py-3 text-right">${formatMoeda(pg)}</td>
+                    <td class="px-4 py-3 text-right ${cor}">${formatMoeda(diferenca)}</td>
+                </tr>
+            `;
+        }
+    </script>
+</body>
+</html>

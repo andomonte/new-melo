@@ -1,0 +1,748 @@
+import React, {
+  ChangeEvent,
+  KeyboardEvent,
+  useState,
+  useRef,
+  useEffect,
+} from 'react';
+import { Meta } from '@/data/common/meta';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Filter,
+  FilterX,
+  ChevronUp,
+  ChevronDown,
+  Check,
+} from 'lucide-react';
+import { RiFileExcel2Line } from 'react-icons/ri';
+import ModalExportarExcel from '@/components/common/modalExportarExcel';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import Carregamento from '@/utils/carregamento';
+import SelectInput from './SelectInput2';
+import SearchInput from './SearchInput2';
+import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
+const tiposDeFiltro = [
+  { label: 'Começa com', value: 'começa' },
+  { label: 'Contém', value: 'contém' },
+  { label: 'Diferente', value: 'diferente' },
+  { label: 'É nulo', value: 'nulo' },
+  { label: 'Igual', value: 'igual' },
+  { label: 'Maior ou igual', value: 'maior_igual' },
+  { label: 'Maior que', value: 'maior' },
+  { label: 'Menor ou igual', value: 'menor_igual' },
+  { label: 'Menor que', value: 'menor' },
+  { label: 'Não é nulo', value: 'nao_nulo' },
+  { label: 'Termina com', value: 'termina' },
+];
+
+interface DataTableProps {
+  headers: string[];
+  rows: any[];
+  meta: Meta;
+  onPageChange: (page: number) => void;
+  onPerPageChange?: (perPage: number) => void;
+  onSearch: (e: ChangeEvent<HTMLInputElement>) => void;
+  onSearchKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onSearchBlur?: () => void;
+  semColunaDeAcaoPadrao?: boolean;
+  onRowClick?: (row: any) => void;
+  renderCell?: (row: any, header: string) => React.ReactNode;
+  searchInputPlaceholder?: string;
+  onFiltroChange?: (
+    filtros: { campo: string; tipo: string; valor: string }[],
+  ) => void;
+
+  colunasFiltro?: string[];
+  carregando: boolean;
+  onColunaSubstituida?: (
+    colunaA: string,
+    colunaB: string,
+    tipo?: 'swap' | 'replace',
+  ) => void;
+  limiteColunas: number;
+  onLimiteColunasChange: (novoLimite: number) => void;
+  customHeaderActions?: React.ReactNode;
+}
+
+export default function DataTable({
+  carregando,
+  headers: originalHeaders,
+  rows,
+  meta,
+  limiteColunas,
+  onLimiteColunasChange,
+  onPageChange,
+  onPerPageChange,
+  onSearch,
+  onSearchKeyDown,
+  onSearchBlur,
+  semColunaDeAcaoPadrao = false,
+  onRowClick,
+  renderCell,
+  searchInputPlaceholder,
+  onFiltroChange,
+  colunasFiltro = [],
+  onColunaSubstituida,
+  customHeaderActions,
+}: DataTableProps) {
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [filtrosColuna, setFiltrosColuna] = useState<
+    Record<string, { tipo: string; valor: string }>
+  >({});
+  const [colunaEmEdicao, setColunaEmEdicao] = useState<string | null>(null);
+  const [termoBuscaGlobal, setTermoBuscaGlobal] = useState('');
+  const [termoBuscaDropdown, setTermoBuscaDropdown] = useState('');
+  const [mostrarModalExportar, setMostrarModalExportar] = useState(false);
+  const [mostrarModalFiltro, setMostrarModalFiltro] = useState(false);
+  const [posicaoCliqueX, setPosicaoCliqueX] = useState<number | null>(null);
+  const [exportando, setExportando] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const açõesColumnWidth = 80;
+  const [larguraTabela, setLarguraTabela] = useState(0);
+  const [filtrosAvancados, setFiltrosAvancados] = useState<
+    { campo: string; tipo: string; valor: string }[]
+  >([]);
+  // ✅ CORREÇÃO: Organizando headers com "ações" sempre na primeira posição (extrema esquerda)
+  // Removendo qualquer referência à coluna "editar" redundante
+  const headers = semColunaDeAcaoPadrao
+    ? originalHeaders
+    : (() => {
+        // Filtrar headers para remover "editar" e "ações" duplicadas
+        const headersSemAcoes = originalHeaders.filter(
+          (h) =>
+            h !== 'ações' && h !== 'editar' && h !== 'Ações' && h !== 'AÇÕES',
+        );
+        // Colocar "ações" sempre como primeira coluna
+        return ['ações', ...headersSemAcoes];
+      })();
+
+  const colunasDisponiveis = colunasFiltro
+    .filter(
+      (col) => col !== 'ações' && col !== 'Ações' && col !== colunaEmEdicao,
+    )
+    .sort();
+
+  const perPageOptions = [
+    { value: '10', label: '10' },
+    { value: '25', label: '25' },
+    { value: '50', label: '50' },
+    { value: '100', label: '100' },
+  ];
+
+  useEffect(() => {
+    const calcularLargura = () => {
+      const larguraContainer =
+        containerRef.current?.offsetWidth ?? window.innerWidth;
+      const larguraDisponivel = larguraContainer - 250;
+      setLarguraTabela(larguraDisponivel);
+    };
+    calcularLargura();
+    window.addEventListener('resize', calcularLargura);
+    return () => window.removeEventListener('resize', calcularLargura);
+  }, []);
+
+  const handleFirstPage = () => {
+    if (meta.currentPage > 1) onPageChange(1);
+  };
+
+  const handlePreviousPage = () => {
+    if (meta.currentPage > 1) onPageChange(meta.currentPage - 1);
+  };
+
+  const handleNextPage = () => {
+    if (meta.currentPage < meta.lastPage) onPageChange(meta.currentPage + 1);
+  };
+
+  const handleLastPage = () => {
+    if (meta.currentPage < meta.lastPage) onPageChange(meta.lastPage);
+  };
+
+  const handlePerPageChange = (value: string) => {
+    if (onPerPageChange) onPerPageChange(Number(value));
+  };
+
+  const handleInputChange = (key: string, value: string) => {
+    setFiltrosColuna((prev) => ({
+      ...prev,
+      [key]: { tipo: prev[key]?.tipo || 'contém', valor: value },
+    }));
+    if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
+  };
+
+  const handleFiltroChange = (
+    filtros: { campo: string; tipo: string; valor: string }[],
+  ) => {
+    console.log('Filtros recebidos:', filtros);
+    setFiltrosAvancados(filtros);
+    onFiltroChange?.(filtros);
+    setMostrarModalFiltro(false);
+  };
+
+  const aplicarFiltro = () => {
+    const filtrosAtualizados: { campo: string; tipo: string; valor: string }[] =
+      [];
+
+    for (const campo of Object.keys(filtrosColuna)) {
+      const filtro = filtrosColuna[campo];
+      if (
+        filtro &&
+        typeof filtro === 'object' &&
+        'valor' in filtro &&
+        'tipo' in filtro
+      ) {
+        filtrosAtualizados.push({
+          campo,
+          tipo: filtro.tipo ?? 'contém',
+          valor: filtro.valor ?? '',
+        });
+      }
+    }
+
+    // Limpar a pesquisa global quando usar filtros avançados
+    if (termoBuscaGlobal !== '') {
+      setTermoBuscaGlobal('');
+    }
+
+    setFiltrosAvancados(filtrosAtualizados); // 👈 ESSENCIAL para manter o estado interno
+    onFiltroChange?.(filtrosAtualizados); // 👈 Aciona o backend via props
+  };
+
+  return (
+    <div className="border border-gray-300 dark:border-gray-300 bg-white dark:bg-zinc-900 rounded-lg flex flex-col w-full min-h-0 overflow-hidden">
+      {/* Cabeçalho de busca e filtros */}
+      <div className="border-b border-gray-200 dark:border-zinc-700 p-2">
+        <div className="flex justify-between items-center gap-2">
+          <SearchInput
+            placeholder={searchInputPlaceholder ?? 'Pesquisar...'}
+            value={termoBuscaGlobal}
+            onChange={(e) => {
+              setTermoBuscaGlobal(e.target.value);
+              setFiltrosColuna({}); // limpando filtros avançados
+              onSearch?.(e); // mantém a lógica externa
+            }}
+            onKeyDown={onSearchKeyDown}
+            onBlur={onSearchBlur}
+          />
+
+          <div className="flex items-center gap-2">
+            <Dialog
+              open={mostrarModalFiltro}
+              onOpenChange={setMostrarModalFiltro}
+            >
+              <DialogContent className="max-w-[90vw] w-[90vw] max-h-full p-6 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white">
+                <DialogHeader className="p-4 border-b border-zinc-300 dark:border-zinc-700">
+                  <DialogTitle className="text-lg text-gray-800 dark:text-white uppercase">
+                    Filtros avançados por coluna
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
+                    Selecione os campos e aplique os filtros desejados.
+                  </DialogDescription>
+                </DialogHeader>
+                <FiltroDinamicoDeClientes
+                  colunas={colunasFiltro}
+                  onChange={handleFiltroChange}
+                />
+              </DialogContent>
+            </Dialog>
+
+            {/* Botão Exportar */}
+            <Dialog
+              open={mostrarModalExportar}
+              onOpenChange={setMostrarModalExportar}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="inline-flex items-center gap-1 px-2 py-1 border rounded-md bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 dark:hover:bg-zinc-700 text-sm text-gray-700 dark:text-white">
+                    <span className="text-base">⚙️</span> <span>Opções</span>
+                  </button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent className="w-48 bg-white dark:bg-zinc-900 shadow-md border border-gray-300 dark:border-zinc-600 text-sm text-gray-700 dark:text-white">
+                  {/* Toggle Filtros rápidos */}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setMostrarFiltros((prev) => {
+                        const novoEstado = !prev;
+                        if (!novoEstado) {
+                          setFiltrosColuna({});
+                          setFiltrosColuna({});
+                          onFiltroChange?.([]);
+                        }
+                        return novoEstado;
+                      });
+                    }}
+                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
+                  >
+                    {mostrarFiltros ? (
+                      <FilterX
+                        size={16}
+                        className="mr-2 size-4 text-amber-500 dark:text-amber-300"
+                      />
+                    ) : (
+                      <Filter className="mr-2 size-4 text-amber-500 dark:text-amber-300" />
+                    )}
+                    {mostrarFiltros
+                      ? 'Ocultar filtros rápidos'
+                      : 'Mostrar filtros rápidos'}
+                  </DropdownMenuItem>
+
+                  {/* Modal de Filtros avançados */}
+                  <DropdownMenuItem
+                    onClick={() => setMostrarModalFiltro(true)}
+                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
+                  >
+                    <Filter className="mr-2 size-4 text-blue-500 dark:text-blue-300" />
+                    Filtros avançados
+                  </DropdownMenuItem>
+
+                  {/* Exportar */}
+                  <DropdownMenuItem
+                    onClick={() => setMostrarModalExportar(true)}
+                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
+                  >
+                    <div className="flex">
+                      <div className="flex items-center">
+                        <RiFileExcel2Line className="size-4 text-green-500 dark:text-green-300" />
+                      </div>{' '}
+                      <div className="px-2 "> Exportar</div>
+                    </div>
+                  </DropdownMenuItem>
+
+                  {/* Custom actions from parent component */}
+                  {customHeaderActions}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DialogContent className="max-w-[90vw] w-[90vw] max-h-full p-6 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white">
+                <DialogHeader className="p-4 border-b border-zinc-300 dark:border-zinc-700">
+                  <DialogTitle className="text-lg text-gray-800 dark:text-white uppercase">
+                    Escolha as colunas a serem exportadas
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
+                    Selecione os campos a serem incluídos na exportação.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <ModalExportarExcel
+                  exportando={exportando}
+                  colunas={colunasFiltro ?? []}
+                  colunasVisiveis={headers.filter(
+                    (h) => h !== 'ações' && h !== 'Ações',
+                  )}
+                  onExportar={async (selecionadas) => {
+                    setExportando(true);
+                    try {
+                      const res = await fetch(
+                        '/api/clientes/exportarClientes',
+                        {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            colunas: selecionadas,
+                            filtros: filtrosAvancados,
+                            busca: termoBuscaGlobal,
+                          }),
+                        },
+                      );
+
+                      const blob = await res.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'clientes.xlsx';
+                      a.click();
+                      window.URL.revokeObjectURL(url);
+
+                      setMostrarModalExportar(false);
+                    } catch (error) {
+                      console.error('Erro na exportação:', error);
+                    } finally {
+                      setExportando(false);
+                    }
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela */}
+      <div className="flex-1 min-h-0 overflow-auto">
+        <div className="min-h-0 max-h-[calc(90vh-16rem)] overflow-auto pb-8">
+          <div
+            className="min-w-full max-w-max mx-auto"
+            style={{ width: larguraTabela }}
+          >
+            <table className="table-auto w-full border-collapse text-sm text-center">
+              <thead className="sticky top-0 z-10  dark:bg-gray-100 border-b border-gray-300 dark:border-zinc-700">
+                <tr>
+                  {headers.map((header, index) => (
+                    <th
+                      key={index}
+                      className={`relative px-2 py-2  bg-gray-200 dark:bg-zinc-800 whitespace-nowrap text-center ${
+                        header === 'ações' ||
+                        header === 'acoes' ||
+                        header === 'Ações'
+                          ? 'w-[80px]'
+                          : 'min-w-[140px]'
+                      }`}
+                      style={
+                        header === 'ações' ||
+                        header === 'acoes' ||
+                        header === 'Ações'
+                          ? { width: `${açõesColumnWidth}px` }
+                          : { minWidth: 140 }
+                      }
+                    >
+                      {header !== 'ações' &&
+                      header !== 'acoes' &&
+                      header !== 'Ações' &&
+                      header !== 'selecionar' &&
+                      header !== 'SELECIONAR' &&
+                      header !== 'AÇÕES' ? (
+                        <div
+                          onClick={(e) => {
+                            const cliqueX = e.clientX;
+                            setPosicaoCliqueX(cliqueX);
+                            setColunaEmEdicao(
+                              colunaEmEdicao === header ? null : header,
+                            );
+                          }}
+                          className="flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          {header.toUpperCase()}
+                          {colunaEmEdicao === header ? (
+                            <ChevronUp size={14} />
+                          ) : (
+                            <ChevronDown size={14} />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex justify-center">
+                          {header.toUpperCase()}
+                        </div>
+                      )}
+
+                      {/* Dropdown de troca de coluna */}
+                      {colunaEmEdicao === header &&
+                        header !== 'ações' &&
+                        header !== 'acoes' &&
+                        header !== 'Ações' &&
+                        header !== 'selecionar' &&
+                        header !== 'SELECIONAR' &&
+                        header !== 'AÇÕES' && (
+                          <div
+                            ref={dropdownRef}
+                            className={`font-normal absolute z-20 mt-1 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded shadow max-h-48 overflow-y-auto w-auto text-center ${
+                              posicaoCliqueX !== null &&
+                              posicaoCliqueX > window.innerWidth - 250
+                                ? 'right-0'
+                                : 'left-0'
+                            } max-w-[calc(100vw-2rem)]`}
+                          >
+                            <input
+                              ref={inputRef}
+                              type="text"
+                              value={termoBuscaDropdown}
+                              onChange={(e) =>
+                                setTermoBuscaDropdown(e.target.value)
+                              }
+                              placeholder="Buscar coluna..."
+                              className="w-full px-2 py-1 border-b border-gray-300 dark:border-zinc-600 text-sm "
+                            />
+                            {colunasDisponiveis
+                              .filter((col) =>
+                                col
+                                  .toLowerCase()
+                                  .includes(termoBuscaDropdown.toLowerCase()),
+                              )
+                              .map((col) => (
+                                <div
+                                  key={col}
+                                  onClick={() => {
+                                    const colJaVisivel = headers.includes(col);
+
+                                    if (colJaVisivel) {
+                                      // Solicita troca de lugar
+                                      onColunaSubstituida?.(
+                                        header,
+                                        col,
+                                        'swap',
+                                      );
+                                    } else {
+                                      // Substitui diretamente
+                                      onColunaSubstituida?.(
+                                        header,
+                                        col,
+                                        'replace',
+                                      );
+                                    }
+
+                                    setColunaEmEdicao(null);
+                                    setTermoBuscaDropdown('');
+                                  }}
+                                  className="px-2 py-1 uppercase hover:bg-gray-100 dark:hover:bg-zinc-700 cursor-pointer text-sm"
+                                >
+                                  {col}
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                    </th>
+                  ))}
+                </tr>
+                {mostrarFiltros && (
+                  <tr className="  bg-gray-200 dark:dark:bg-zinc-800">
+                    {headers.map((header, index) =>
+                      header !== 'ações' && header !== 'Ações' ? (
+                        <th key={index} className="px-2 py-1 font-normal">
+                          <div className="relative flex items-center">
+                            <input
+                              type="text"
+                              placeholder={`FILTRAR POR ${header.toUpperCase()}`}
+                              value={filtrosColuna[header]?.valor || ''}
+                              onChange={(e) =>
+                                handleInputChange(header, e.target.value)
+                              }
+                              onKeyDown={(e) =>
+                                e.key === 'Enter' && aplicarFiltro()
+                              }
+                              onBlur={(e) => {
+                                // Só dispara aplicarFiltro se o novo foco NÃO for no botão!
+                                if (
+                                  !e.relatedTarget ||
+                                  !dropdownRef.current?.contains(
+                                    e.relatedTarget as Node,
+                                  )
+                                ) {
+                                  aplicarFiltro();
+                                }
+                              }}
+                              className="w-full font-normal px-2 py-1 border rounded-md text-[12px] pr-8"
+                            />
+
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  tabIndex={-1}
+                                  className="absolute right-1 p-1 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                                >
+                                  <Filter size={16} />
+                                </button>
+                              </DropdownMenuTrigger>
+
+                              <DropdownMenuContent
+                                className="bg-white dark:bg-zinc-800 text-gray-700 dark:text-white rounded-md shadow-lg w-40 max-h-48 overflow-y-auto"
+                                ref={dropdownRef}
+                              >
+                                {tiposDeFiltro.map((tipo) => (
+                                  <DropdownMenuItem
+                                    key={tipo.value}
+                                    onClick={() => {
+                                      const novosFiltros = {
+                                        ...filtrosColuna,
+                                        [header]: {
+                                          tipo: tipo.value,
+                                          valor:
+                                            filtrosColuna[header]?.valor ?? '',
+                                        },
+                                      };
+                                      const filtrosArray = Object.entries(
+                                        novosFiltros,
+                                      ).map(([campo, { tipo, valor }]) => ({
+                                        campo,
+                                        tipo,
+                                        valor,
+                                      }));
+                                      setFiltrosColuna(novosFiltros);
+                                      onFiltroChange?.(filtrosArray);
+                                    }}
+                                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700 text-sm p-2 flex justify-between items-center"
+                                  >
+                                    <span>{tipo.label}</span>
+                                    {(filtrosColuna[header]?.tipo ??
+                                      'igual') === tipo.value && (
+                                      <Check
+                                        size={16}
+                                        className="text-green-600 dark:text-green-400"
+                                      />
+                                    )}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </th>
+                      ) : (
+                        <th key={index} />
+                      ),
+                    )}
+                  </tr>
+                )}
+              </thead>
+
+              <tbody>
+                {carregando ? (
+                  <tr>
+                    <td colSpan={headers.length}>
+                      <div className="flex justify-center items-center hitems-center h-[calc(100vh-22rem)]">
+                        <Carregamento texto="BUSCANDO DADOS" />
+                      </div>
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={headers.length} className="py-4 text-center">
+                      <div className="flex justify-center items-center h-[calc(100vh-22rem)]">
+                        Sem dados até o momento.
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, rowIndex) => (
+                    <tr
+                      key={rowIndex}
+                      onClick={() => onRowClick?.(row)}
+                      className="bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all duration-200"
+                    >
+                      {headers.map((key, i) => (
+                        <td
+                          key={i}
+                          className={`border-t px-4 py-2 whitespace-nowrap ${
+                            key === 'ações' || key === 'Ações'
+                              ? 'w-[80px] text-center'
+                              : 'min-w-[140px] text-center'
+                          }`}
+                          onClick={(e) => {
+                            // ✅ CORREÇÃO: Removida referência à coluna "editar" redundante
+                            // Agora apenas "ações" precisa parar a propagação do evento
+                            if (key === 'ações' || key === 'Ações') {
+                              e.stopPropagation();
+                            }
+                          }}
+                          style={
+                            key === 'ações' || key === 'Ações'
+                              ? {
+                                  width: `${açõesColumnWidth}px`,
+                                  textAlign: 'center',
+                                }
+                              : { minWidth: 140, textAlign: 'center' }
+                          }
+                        >
+                          {renderCell ? (
+                            renderCell(row, key)
+                          ) : (
+                            <div className="truncate">{row[key]}</div>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Rodapé */}
+      <div className="flex-shrink-0 border border-gray-300 dark:border-zinc-500 bg-gray-200 dark:bg-zinc-800 px-2 py-2 min-h-[3rem]">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4 text-gray-600 dark:text-gray-300">
+            {/* Select de Qtd. Itens */}
+            <div className="flex items-center gap-1">
+              <span className="text-sm">Qtd. Itens:</span>
+              <SelectInput
+                name="itemsPagina"
+                label=""
+                value={meta?.perPage?.toString() ?? ''}
+                options={perPageOptions}
+                onValueChange={handlePerPageChange}
+              />
+            </div>
+
+            {/* Select de Qtd. Colunas */}
+            <div className="flex items-center  gap-1">
+              <span className="text-sm">Qtd. Colunas:</span>
+              <SelectInput
+                name="colunasPagina"
+                label=""
+                value={limiteColunas?.toString()}
+                options={colunasFiltro.map((_, i) => ({
+                  label: `${i + 1}`,
+                  value: `${i + 1}`,
+                }))}
+                onValueChange={(val) => onLimiteColunasChange(parseInt(val))}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 items-center text-sm">
+            {/* << primeira */}
+            <button
+              onClick={handleFirstPage}
+              disabled={meta?.currentPage === 1}
+              className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 disabled:opacity-40"
+              title="Primeira página"
+            >
+              <ChevronsLeft size={18} />
+            </button>
+
+            {/* < anterior */}
+            <button
+              onClick={handlePreviousPage}
+              disabled={meta?.currentPage === 1}
+              className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 disabled:opacity-40"
+              title="Página anterior"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <span className="whitespace-nowrap">
+              Página {meta?.currentPage} de {meta?.lastPage}
+            </span>
+
+            {/* > próxima */}
+            <button
+              onClick={handleNextPage}
+              disabled={meta?.currentPage === meta?.lastPage}
+              className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 disabled:opacity-40"
+              title="Próxima página"
+            >
+              <ChevronRight size={18} />
+            </button>
+
+            {/* >> última */}
+            <button
+              onClick={handleLastPage}
+              disabled={meta?.currentPage === meta?.lastPage}
+              className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 disabled:opacity-40"
+              title="Última página"
+            >
+              <ChevronsRight size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

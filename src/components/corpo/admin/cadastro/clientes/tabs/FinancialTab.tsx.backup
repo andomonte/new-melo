@@ -1,0 +1,190 @@
+import React, { useEffect, useState } from 'react';
+import { useFormContext, Controller } from 'react-hook-form';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertCircle, DollarSign, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface RiskData {
+  totalVencido: number;
+  maiorCompra: number;
+  mediaAtraso: number;
+  primeiraCompra: string | null;
+  ultimaCompra: string | null;
+}
+
+export function FinancialTab() {
+  const { register, control, watch, getValues } = useFormContext();
+  const enderecoCobrancaIgual = watch('enderecoCobrancaIgual');
+  
+  const [riskData, setRiskData] = useState<RiskData>({
+    totalVencido: 0,
+    maiorCompra: 0,
+    mediaAtraso: 0,
+    primeiraCompra: null,
+    ultimaCompra: null
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchRisk() {
+      const codcli = getValues('codcli'); // Assuming codcli is in the form context
+      
+      // If no codcli (new client), we don't need to fetch, default zeros are fine.
+      if (!codcli) {
+          setLoading(false);
+          return;
+      }
+
+      try {
+        const res = await fetch(`/api/clientes/${codcli}/risco`);
+        if (!res.ok) throw new Error('Falha ao carregar análise de risco');
+        const data = await res.json();
+        setRiskData(data);
+      } catch (error) {
+        console.error(error);
+        toast.error('Erro ao carregar dados de risco financeiro.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchRisk();
+  }, [getValues]);
+
+  return (
+    <div className="space-y-6">
+      {/* Risk Scorecard - Dashboard Style */}
+      <div className="bg-slate-900 text-white rounded-lg p-6 shadow-md mb-6">
+        <div className="flex items-center gap-2 mb-4 opacity-80">
+          <AlertCircle size={18} />
+          <h3 className="text-sm font-semibold uppercase tracking-wider">Análise de Risco Financeiro</h3>
+          {loading && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="p-3 bg-slate-800 rounded-md border border-slate-700">
+            <p className="text-xs text-slate-400 mb-1">Total Vencido</p>
+            <p className={`text-xl font-bold ${riskData.totalVencido > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+              {loading ? '...' : `R$ ${riskData.totalVencido.toFixed(2)}`}
+            </p>
+          </div>
+           <div className="p-3 bg-slate-800 rounded-md border border-slate-700">
+            <p className="text-xs text-slate-400 mb-1">Maior Compra (12m)</p>
+            <p className="text-xl font-bold text-white">
+              {loading ? '...' : `R$ ${riskData.maiorCompra.toFixed(2)}`}
+            </p>
+          </div>
+           <div className="p-3 bg-slate-800 rounded-md border border-slate-700">
+            <p className="text-xs text-slate-400 mb-1">Média Atraso</p>
+            <p className="text-xl font-bold text-amber-400">
+              {loading ? '...' : `${riskData.mediaAtraso} dias`}
+            </p>
+          </div>
+           <div className="p-3 bg-slate-800 rounded-md border border-slate-700">
+            <p className="text-xs text-slate-400 mb-1">Histórico</p>
+            <div className="flex flex-col text-sm">
+              <span className="text-slate-300">1ª: {riskData.primeiraCompra || '-'}</span>
+              <span className="text-slate-300">Ult: {riskData.ultimaCompra || '-'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b pb-2">Configurações de Crédito</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <Label>Limite de Crédito (R$)</Label>
+            <div className="relative">
+              <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input {...register('limiteCredito')} className="pl-9" placeholder="0,00" />
+            </div>
+          </div>
+          
+          <div>
+            <Label>Classe de Pagamento</Label>
+            <Controller
+              control={control}
+              name="classePagamento"
+              render={({ field }) => (
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="A">A - Cliente em Dia</SelectItem>
+                    <SelectItem value="B">B - Atraso Recorrente</SelectItem>
+                    <SelectItem value="C">C - Difícil Recebimento</SelectItem>
+                    <SelectItem value="X">X - Bloqueado</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+      </div>
+
+      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-6 mb-4 border-b pb-2">Endereço de Cobrança</h3>
+      
+      <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Controller
+              control={control}
+              name="enderecoCobrancaIgual"
+              render={({ field }) => (
+                <Checkbox 
+                  checked={field.value} 
+                  onCheckedChange={field.onChange}
+                  id="chk-addr-equal"
+                />
+              )}
+            />
+            <Label htmlFor="chk-addr-equal" className="font-normal">Utilizar o mesmo endereço de correspondência?</Label>
+          </div>
+
+          {!enderecoCobrancaIgual && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
+               <Label>Logradouro de Cobrança</Label>
+               <Input {...register('endercobr')} /> 
+               <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-1">
+                    <Label>Bairro</Label>
+                    <Input {...register('bairrocobr')} />
+                  </div>
+                  <div className="col-span-1">
+                    <Label>Cidade</Label>
+                    <Input {...register('cidadecobr')} />
+                  </div>
+                  <div className="col-span-1">
+                    <Label>UF</Label>
+                    <Controller
+                      control={control}
+                      name="ufcobr"
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="UF" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'].map((uf) => (
+                              <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+               </div>
+               <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-1">
+                    <Label>CEP</Label>
+                    <Input {...register('cepcobr')} />
+                  </div>
+               </div>
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}

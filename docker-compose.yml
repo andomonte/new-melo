@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  site-melo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: site-melo
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Manaus
+    volumes:
+      - /tmp:/tmp  # Para arquivos temporários (UPLOAD_DIR)
+    networks:
+      - melo-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(() => process.exit(0)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  melo-network:
+    driver: bridge
