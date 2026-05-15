@@ -62,7 +62,6 @@ function App() {
       theme === 'dark' ? '/images/logo1Branco.webp' : '/images/logo1.webp';
     setUrlLogo(urlLogoT);
   }, [theme]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     const newToken = getCookie('token_melo');
     const token = newToken?.slice(0, newToken.indexOf('-'));
@@ -75,7 +74,8 @@ function App() {
     else {
       sessionStorage.setItem('newPerfilMelo', JSON.stringify(null));
     }
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   /* const onSubmit: SubmitHandler<FormFields> = async (data) => {
     try {
       setloading(true);

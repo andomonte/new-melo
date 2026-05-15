@@ -102,7 +102,8 @@ const Page = () => {
         'Erro ao carregar permissões. Por favor, entre em contato com o suporte.',
       );
     }
-  }, [router.isReady, isRotaPublica, user, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady, isRotaPublica, user]);
   // ============================
 
   // Renderizar páginas públicas diretamente

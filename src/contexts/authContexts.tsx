@@ -344,7 +344,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(newUser);
       sessionStorage.setItem('perfilUserMelo', JSON.stringify(newUser));
-      router.push(ultimaPagina || '/'); // Redireciona para a última página ou home
     } catch (error) {
       console.error('Erro no signIn:', error);
       deleteCookie('token_melo');

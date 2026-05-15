@@ -22,7 +22,6 @@ export default async function handle(
   try {
     // 2. Busque o usuário pelo login usando a biblioteca pg
     client = await pool.connect(); // Obtém um cliente do pool de conexões
-    client = await pool.connect(); // Obtém um cliente do pool de conexões
     const result = await client.query(
       'SELECT * FROM tb_login_user WHERE login_user_login = $1',
       [userLogin],
