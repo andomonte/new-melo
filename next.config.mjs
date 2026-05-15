@@ -7,10 +7,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Aumentar limite de resposta das API Routes para 10MB (padrão é 4MB)
-  api: {
-    responseLimit: '10mb',
-  },
   experimental: {
     serverComponentsExternalPackages: ["oracledb"],
   },

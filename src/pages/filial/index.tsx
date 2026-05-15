@@ -60,16 +60,14 @@ function App({ filiais }: InferGetServerSidePropsType<typeof getServerSideProps>
       setFilialList(filtradas);
       if (filtradas.length === 1) {
         const filialUnica = filtradas[0].nome_filial;
-        setPerfil({ filial: filialUnica });
         setCookie(null, 'filial_melo', filialUnica, {
           path: '/',
           maxAge: 60 * 60 * 24 * 7,
         });
-        // ✅ Chama filialSet imediatamente para única filial
         setCarregando(true);
         filialSet({ filial: filialUnica })
           .then(() => {
-            setProsseguir(true);
+            setPerfil({ filial: filialUnica });
           })
           .catch((error) => {
             console.error('Erro ao configurar filial única:', error);
