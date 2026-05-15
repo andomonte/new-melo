@@ -76,9 +76,31 @@ Repositorio GitHub: `andomonte/new-melo` (branch: `main`)
 
 ### Proximas Melhorias
 
+### #2 - Logout com Limpeza Completa de Sessao (15/05/2026)
+
+**Status:** Concluido
+**Commit:** `b568fc2b`
+**Solicitacao:** Reuniao cliente 14/05/2026 - Item 1
+
+**Problema:** Ao fazer logout e tentar acessar a raiz do sistema sem login, o sistema permitia o acesso pois os dados do usuario anterior permaneciam gravados no navegador (sessionStorage). Nao existia uma pagina de logout funcional.
+
+**Solucao:**
+- Criada pagina `/logout` que limpa completamente os cookies de autenticacao (`token_melo`, `filial_melo`) e todos os dados de sessao do navegador (`perfilUserMelo`, `paginaAtualMelo`, `telaAtualMelo`, `newPerfilMelo`)
+- O sistema agora verifica se o cookie de autenticacao existe antes de restaurar os dados da sessao. Se o cookie nao existe (logout realizado ou expirado), os dados orfaos sao limpos automaticamente
+- Apos a limpeza, o usuario e redirecionado para a tela de login
+- Qualquer tentativa de acessar o sistema sem autenticacao redireciona automaticamente para `/login`
+
+**Arquivos Alterados:**
+- `src/pages/logout.tsx` (novo)
+- `src/contexts/authContexts.tsx` (modificado)
+
+---
+
+### Proximas Melhorias
+
 | # | Data | Descricao | Arquivos Alterados | Commit | Status |
 |---|------|-----------|-------------------|--------|--------|
-| 2 | | | | | Pendente |
+| 3 | | | | | Pendente |
 
 ---
 
