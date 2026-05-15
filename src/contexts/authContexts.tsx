@@ -1,7 +1,7 @@
 // src/contexts/AuthContext.tsx
 
 import React, { createContext, useEffect, useState } from 'react';
-import { setCookie, deleteCookie } from 'cookies-next';
+import { setCookie, deleteCookie, getCookie } from 'cookies-next';
 import { useRouter } from 'next/router';
 
 // ---
@@ -188,13 +188,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       armazens: [],
     };
 
-    if (session) {
+    // Só restaura sessão se o cookie de autenticação existir
+    const token = getCookie('token_melo');
+    if (session && token) {
       const parsedUser = JSON.parse(session);
       // Mesclar dados existentes com valores padrão para evitar undefined
       userData = {
         ...userData, // Garante que campos como permissoes, funcoes, armazens sejam [] por padrão
         ...parsedUser,
       };
+    } else if (session && !token) {
+      // Cookie expirou ou foi removido (logout) — limpa dados órfãos
+      sessionStorage.removeItem('perfilUserMelo');
+      sessionStorage.removeItem('paginaAtualMelo');
+      sessionStorage.removeItem('telaAtualMelo');
+      sessionStorage.removeItem('newPerfilMelo');
     }
 
     if (pagina) {
@@ -252,7 +260,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       !isLoading &&
       !user.usuario &&
       !isRotaPublica &&
-      router.pathname !== '/login'
+      router.pathname !== '/login' &&
+      router.pathname !== '/logout'
     ) {
       deleteCookie('token_melo');
       router.push('/login');
