@@ -316,7 +316,9 @@ export default async function handler(
       };
 
       // --- draft_id pode vir do front (body.draft_id ou header.draft_id) ---
-      const incomingDraftId = body.draft_id || h.draft_id || null;
+      // "atualizar" é uma flag do front para recálculo de preços, não um ID real
+      const rawDraftId = body.draft_id || h.draft_id || null;
+      const incomingDraftId = rawDraftId === 'atualizar' ? null : rawDraftId;
 
       // Abrimos a transação aqui; se for upsert com ID fornecido, mantemos seu fluxo
       await client.query('BEGIN');

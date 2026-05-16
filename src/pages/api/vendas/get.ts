@@ -4,6 +4,7 @@ import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import { serializeBigInt } from '@/utils/serializeBigInt';
+import { sqlSafeNumeric, sqlSafeNumericNull } from '@/utils/monetario';
 
 type FrontStatus =
   | 'salva'
@@ -36,6 +37,10 @@ function mkMeta(total: number, page: number, perPage: number) {
   const currentPage = Math.min(Math.max(1, page), totalPages);
   return { total, totalPages, currentPage, perPage };
 }
+
+// Aliases curtos para os helpers SQL de conversão monetária
+const safeNum = sqlSafeNumeric;
+const safeNumNull = sqlSafeNumericNull;
 
 /* WHERE dbvenda (faturada/finalizada/cancelada/bloqueada) */
 const buildWhereClauseVenda = (filters: {
@@ -490,19 +495,19 @@ async function queryOnlyDrafts(
       (
         SELECT COALESCE(SUM(
           GREATEST(
-            COALESCE(NULLIF(i->>'totalItem','')::numeric, 0),
-            COALESCE(NULLIF(i->>'totitem','')::numeric, 0),
-            COALESCE(NULLIF(i->>'vlrtotal','')::numeric, 0),
-            COALESCE(NULLIF(i->>'total_item','')::numeric, 0),
+            ${safeNum("i->>'totalItem'")},
+            ${safeNum("i->>'totitem'")},
+            ${safeNum("i->>'vlrtotal'")},
+            ${safeNum("i->>'total_item'")},
             COALESCE(
-              NULLIF(i->>'vltotalItem','')::numeric,
-              COALESCE(NULLIF(i->>'quantidade','')::numeric, 0) *
+              ${safeNumNull("i->>'vltotalItem'")},
+              ${safeNum("i->>'quantidade'")} *
               COALESCE(
-                NULLIF(i->>'precoItemEditado','')::numeric,
-                NULLIF(i->>'preço','')::numeric,
-                NULLIF(i->>'preco','')::numeric,
+                ${safeNumNull("i->>'precoItemEditado'")},
+                ${safeNumNull("i->>'preço'")},
+                ${safeNumNull("i->>'preco'")},
                 0
-              ) * (1 - COALESCE(NULLIF(i->>'desconto','')::numeric,0)/100.0)
+              ) * (1 - ${safeNum("i->>'desconto'")}/100.0)
             )
           )
         ),0)
@@ -535,19 +540,19 @@ async function queryDraftsRaw(
       (
         SELECT COALESCE(SUM(
           GREATEST(
-            COALESCE(NULLIF(i->>'totalItem','')::numeric, 0),
-            COALESCE(NULLIF(i->>'totitem','')::numeric, 0),
-            COALESCE(NULLIF(i->>'vlrtotal','')::numeric, 0),
-            COALESCE(NULLIF(i->>'total_item','')::numeric, 0),
+            ${safeNum("i->>'totalItem'")},
+            ${safeNum("i->>'totitem'")},
+            ${safeNum("i->>'vlrtotal'")},
+            ${safeNum("i->>'total_item'")},
             COALESCE(
-              NULLIF(i->>'vltotalItem','')::numeric,
-              COALESCE(NULLIF(i->>'quantidade','')::numeric, 0) *
+              ${safeNumNull("i->>'vltotalItem'")},
+              ${safeNum("i->>'quantidade'")} *
               COALESCE(
-                NULLIF(i->>'precoItemEditado','')::numeric,
-                NULLIF(i->>'preço','')::numeric,
-                NULLIF(i->>'preco','')::numeric,
+                ${safeNumNull("i->>'precoItemEditado'")},
+                ${safeNumNull("i->>'preço'")},
+                ${safeNumNull("i->>'preco'")},
                 0
-              ) * (1 - COALESCE(NULLIF(i->>'desconto','')::numeric,0)/100.0)
+              ) * (1 - ${safeNum("i->>'desconto'")}/100.0)
             )
           )
         ),0)
