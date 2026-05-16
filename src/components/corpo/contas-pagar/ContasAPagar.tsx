@@ -1,4 +1,5 @@
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, useContext, ChangeEvent } from 'react';
+import { AuthContext } from '@/contexts/authContexts';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +26,8 @@ import BotoesAcaoHeader from './BotoesAcaoHeader';
 import { formatarMoeda, formatarData, formatarDataHora, calcularDiasAtraso, obterCorStatus, obterTextoStatus } from './utils';
 
 export function ContasAPagar() {
-  
+  const { user } = useContext(AuthContext);
+
   const { contasPagar: contasPagarOriginal, paginacao, carregando, erro, consultarContasPagar: consultarOriginal, marcarComoPago, editarConta, cancelarConta } = useContasPagar();
   
   // Estado local para armazenar contas consolidadas (pendentes + pagos parcialmente)
@@ -2518,6 +2520,8 @@ export function ContasAPagar() {
         {/* Container da tabela com altura calculada */}
         <div className="flex-1 min-h-20 flex flex-col">
           <DataTableContasPagar
+            screenKey="contas-a-pagar"
+            userName={user?.usuario}
             headers={headers}
             rows={prepararDadosTabela()}
             meta={meta}

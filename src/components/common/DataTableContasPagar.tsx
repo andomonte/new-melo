@@ -1,6 +1,6 @@
 import React, { ChangeEvent, KeyboardEvent, useState, useRef, useEffect } from 'react';
 import { Meta } from '@/data/common/meta';
-import { ChevronLeft, ChevronRight, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical } from 'lucide-react';
 import { RiFileExcel2Line, RiFilePdf2Line } from 'react-icons/ri';
 import {
   DropdownMenu,
@@ -49,7 +49,14 @@ interface DataTableContasPagarProps {
   colunasFiltro?: string[];
   onExportarExcel?: () => void;
   onDashboardGeral?: () => void;
-  columnWidths?: string[]; // Nova prop para larguras customizadas
+  columnWidths?: string[];
+  onSort?: (column: string, direction: 'asc' | 'desc') => void;
+  sortableColumns?: string[];
+  nonsortableColumns?: string[];
+  /** Identificador da tela para salvar preferências do usuário no banco */
+  screenKey?: string;
+  /** Login do usuário logado (ex: user.usuario) */
+  userName?: string;
 }
 
 export default function DataTableContasPagar({
@@ -67,8 +74,15 @@ export default function DataTableContasPagar({
   colunasFiltro = [],
   onExportarExcel,
   onDashboardGeral,
-  columnWidths, // Adicionar nova prop
+  columnWidths,
+  onSort,
+  sortableColumns,
+  nonsortableColumns = ['Ações', '☑️'],
+  screenKey,
+  userName,
 }: DataTableContasPagarProps) {
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>({});
@@ -80,9 +94,71 @@ export default function DataTableContasPagar({
   const [mostrarSeletorColunas, setMostrarSeletorColunas] = useState(false);
   const [ordemColunas, setOrdemColunas] = useState<string[]>(headers);
   const [arrastando, setArrastando] = useState<number | null>(null);
+  const [prefsCarregadas, setPrefsCarregadas] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Inicializar colunas visíveis e ordem quando headers mudar
+  // Carregar preferências do banco ao montar
   useEffect(() => {
+    if (!screenKey || !userName) {
+      setPrefsCarregadas(true);
+      return;
+    }
+
+    fetch(`/api/userPreferences?user=${encodeURIComponent(userName)}&screen=${encodeURIComponent(screenKey)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.preferences) {
+          const p = data.preferences;
+          if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
+            setColunasVisiveis(p.colunasVisiveis);
+          }
+          if (Array.isArray(p.ordemColunas) && p.ordemColunas.length > 0) {
+            setOrdemColunas(p.ordemColunas);
+          }
+          if (p.sortColumn) setSortColumn(p.sortColumn);
+          if (p.sortDirection) setSortDirection(p.sortDirection);
+          if (p.perPage && onPerPageChange) onPerPageChange(Number(p.perPage));
+          if (typeof p.mostrarFiltros === 'boolean') setMostrarFiltros(p.mostrarFiltros);
+        }
+      })
+      .catch((err) => console.error('Erro ao carregar preferências:', err))
+      .finally(() => setPrefsCarregadas(true));
+  }, [screenKey, userName]);
+
+  // Salvar preferências no banco (com debounce de 1s)
+  const salvarPreferencias = (overrides?: Record<string, any>) => {
+    if (!screenKey || !userName) return;
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      const prefs = {
+        colunasVisiveis,
+        ordemColunas,
+        sortColumn,
+        sortDirection,
+        perPage: meta?.perPage,
+        mostrarFiltros,
+        ...overrides,
+      };
+
+      fetch('/api/userPreferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: userName, screen: screenKey, preferences: prefs }),
+      }).catch((err) => console.error('Erro ao salvar preferências:', err));
+    }, 1000);
+  };
+
+  // Salvar quando mudar colunas visíveis, ordem ou ordenação
+  useEffect(() => {
+    if (prefsCarregadas) {
+      salvarPreferencias();
+    }
+  }, [colunasVisiveis, ordemColunas, sortColumn, sortDirection, mostrarFiltros]);
+
+  // Inicializar colunas visíveis e ordem quando headers mudar (só se não veio do banco)
+  useEffect(() => {
+    if (!prefsCarregadas) return;
     if (colunasVisiveis.length === 0) {
       setColunasVisiveis(headers);
     }
@@ -90,6 +166,25 @@ export default function DataTableContasPagar({
       setOrdemColunas(headers);
     }
   }, [headers]);
+
+  // Ordenação por coluna
+  const isColumnSortable = (header: string) => {
+    if (nonsortableColumns?.includes(header)) return false;
+    if (sortableColumns && sortableColumns.length > 0) return sortableColumns.includes(header);
+    return true;
+  };
+
+  const handleSort = (header: string) => {
+    if (!isColumnSortable(header)) return;
+
+    let newDir: 'asc' | 'desc' = 'asc';
+    if (sortColumn === header) {
+      newDir = sortDirection === 'asc' ? 'desc' : 'asc';
+    }
+    setSortColumn(header);
+    setSortDirection(newDir);
+    onSort?.(header, newDir);
+  };
 
   // Funções para arrastar e reordenar
   const handleDragStart = (index: number) => {
@@ -162,6 +257,7 @@ export default function DataTableContasPagar({
     if (onPerPageChange) {
       onPerPageChange(Number(value));
     }
+    salvarPreferencias({ perPage: Number(value) });
   };
 
   const perPageOptions: { value: string; label: string }[] = [
@@ -187,7 +283,9 @@ export default function DataTableContasPagar({
   }, []);
 
   return (
-    <div className="border border-gray-300 dark:border-gray-300 bg-white dark:bg-zinc-900 rounded-lg flex flex-col w-full min-h-0 overflow-hidden">
+    <div className="flex flex-col w-full gap-2" style={{ height: 'calc(100vh - 120px)' }}>
+    {/* ===== CARD: Busca + Tabela ===== */}
+    <div className="border border-gray-300 dark:border-gray-300 bg-white dark:bg-zinc-900 rounded-lg flex flex-col flex-1 min-h-0 overflow-hidden shadow-sm">
       {/* Cabeçalho de busca */}
       <div className="border-b border-gray-200 dark:border-zinc-700 p-2">
         <div className="flex justify-between items-center gap-2">
@@ -307,11 +405,7 @@ export default function DataTableContasPagar({
 
       {/* Tabela com scroll */}
       <div className="flex-1 min-h-0 overflow-auto" ref={containerRef}>
-        <div className="min-h-0 max-h-[calc(80vh-10rem)] overflow-auto pb-8">
-          <div
-            className="min-w-full max-w-max mx-auto"
-            style={{ width: larguraTabela }}
-          >
+          <div className="min-w-max">
             <table className="table-auto w-full border-collapse text-sm text-center">
             <colgroup>
               {columnWidths && columnWidths.length > 0 ? (
@@ -346,16 +440,37 @@ export default function DataTableContasPagar({
             {/* Cabeçalho da tabela - fixo */}
             <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700">
               <tr>
-                {ordemColunas.map((header, index) => (
-                  colunasVisiveis.includes(header) && (
+                {ordemColunas.map((header, index) => {
+                  if (!colunasVisiveis.includes(header)) return null;
+                  const sortable = isColumnSortable(header);
+                  const isActive = sortColumn === header;
+                  return (
                     <th
                       key={index}
-                      className="px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider"
+                      className={`px-4 py-3 text-center text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
+                        sortable ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors' : ''
+                      }`}
+                      onClick={() => sortable && handleSort(header)}
                     >
-                      {obterNomeAmigavel(header)}
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{obterNomeAmigavel(header)}</span>
+                        {sortable && (
+                          <span className="inline-flex flex-col">
+                            {isActive ? (
+                              sortDirection === 'asc' ? (
+                                <ChevronUp size={14} className="text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <ChevronDown size={14} className="text-blue-600 dark:text-blue-400" />
+                              )
+                            ) : (
+                              <ArrowUpDown size={12} className="text-gray-400" />
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </th>
-                  )
-                ))}
+                  );
+                })}
               </tr>
 
               {/* Linha de Filtros Rápidos */}
@@ -441,7 +556,58 @@ export default function DataTableContasPagar({
                   </td>
                 </tr>
               ) : (
-                rows?.map((row, rowIndex) => (
+                (() => {
+                  // Ordenação local pelas colunas
+                  let sortedRows = rows;
+                  if (sortColumn) {
+                    const colIndex = headers.indexOf(sortColumn);
+                    if (colIndex !== -1) {
+                      sortedRows = [...rows].sort((a, b) => {
+                        let valA = a[colIndex];
+                        let valB = b[colIndex];
+
+                        // Extrai texto de elementos React
+                        const extractText = (v: any): string => {
+                          if (v == null) return '';
+                          if (typeof v === 'string') return v;
+                          if (typeof v === 'number') return String(v);
+                          if (typeof v === 'object' && v?.props) {
+                            // React element — tenta children
+                            const c = v.props?.children;
+                            if (typeof c === 'string') return c;
+                            if (typeof c === 'number') return String(c);
+                            if (Array.isArray(c)) return c.map(extractText).join('');
+                            if (c?.props) return extractText(c);
+                          }
+                          return String(v);
+                        };
+
+                        const textA = extractText(valA).trim();
+                        const textB = extractText(valB).trim();
+
+                        // Tenta comparar como número (remove R$, pontos, troca vírgula)
+                        const parseNum = (s: string) => {
+                          const limpo = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+                          const n = Number(limpo);
+                          return Number.isFinite(n) ? n : null;
+                        };
+
+                        const numA = parseNum(textA);
+                        const numB = parseNum(textB);
+
+                        let cmp: number;
+                        if (numA !== null && numB !== null) {
+                          cmp = numA - numB;
+                        } else {
+                          cmp = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base' });
+                        }
+
+                        return sortDirection === 'asc' ? cmp : -cmp;
+                      });
+                    }
+                  }
+                  return sortedRows;
+                })().map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
                     className="hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
@@ -470,145 +636,146 @@ export default function DataTableContasPagar({
             </tbody>
           </table>
           </div>
-        </div>
       </div>
+    </div>
 
-      {/* Rodapé fixo com paginação */}
-      <div className="border-t border-gray-300 dark:border-zinc-700 bg-gray-100 dark:bg-zinc-800">
-        <div className="px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
-            <span className="text-sm">Qtd. Itens:</span>
-            <SelectInput
-              name="itemsPagina"
-              label=""
-              value={meta?.perPage?.toString() ?? ''}
-              options={perPageOptions}
-              onValueChange={handlePerPageChangeInternal}
-            />
-            
-            {/* Botão de Seleção de Colunas */}
-            <div className="relative">
-              <button
-                onClick={() => setMostrarSeletorColunas(!mostrarSeletorColunas)}
-                className="flex items-center gap-1 px-3 py-1.5 border rounded-md bg-white dark:bg-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-600 text-sm text-gray-700 dark:text-white border-gray-300 dark:border-zinc-600"
-              >
-                <Columns3 size={16} />
-                <span>Colunas ({colunasVisiveis.length}/{ordemColunas.length})</span>
-              </button>
-              
-              {/* Dropdown de Seleção de Colunas */}
-              {mostrarSeletorColunas && (
-                <div className="absolute bottom-full left-0 mb-2 w-64 max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg shadow-lg z-50">
-                  <div className="sticky top-0 bg-white dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700 p-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-semibold text-sm text-gray-900 dark:text-white">Gerenciar Colunas</span>
-                      <button
-                        onClick={() => setMostrarSeletorColunas(false)}
-                        className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setColunasVisiveis(ordemColunas)}
-                        className="flex-1 px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded"
-                      >
-                        Mostrar Todas
-                      </button>
-                      <button
-                        onClick={() => setOrdemColunas(headers)}
-                        className="flex-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded"
-                      >
-                        Resetar Ordem
-                      </button>
-                    </div>
+    {/* ===== RODAPÉ: Paginação + Gerenciador de Colunas ===== */}
+    <div className="flex-shrink-0 border border-gray-300 dark:border-zinc-600 bg-gray-50 dark:bg-zinc-800 rounded-lg px-4 py-2 shadow-sm">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3 text-gray-600 dark:text-gray-300">
+          <span className="text-sm">Qtd. Itens:</span>
+          <SelectInput
+            name="itemsPagina"
+            label=""
+            value={meta?.perPage?.toString() ?? ''}
+            options={perPageOptions}
+            onValueChange={handlePerPageChangeInternal}
+          />
+
+          {/* Botão de Seleção de Colunas */}
+          <div className="relative">
+            <button
+              onClick={() => setMostrarSeletorColunas(!mostrarSeletorColunas)}
+              className="flex items-center gap-2 px-3 py-1.5 border rounded-md bg-white dark:bg-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-600 text-sm text-gray-700 dark:text-white border-gray-300 dark:border-zinc-600 transition-colors"
+            >
+              <Columns3 size={16} />
+              <span>Colunas ({colunasVisiveis.length}/{ordemColunas.length})</span>
+            </button>
+
+            {/* Dropdown de Seleção de Colunas */}
+            {mostrarSeletorColunas && (
+              <div className="absolute bottom-full left-0 mb-2 w-72 max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 rounded-lg shadow-xl z-50">
+                <div className="sticky top-0 bg-white dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700 p-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-semibold text-sm text-gray-900 dark:text-white">Gerenciar Colunas</span>
+                    <button
+                      onClick={() => setMostrarSeletorColunas(false)}
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    >
+                      ✕
+                    </button>
                   </div>
-                  <div className="p-2">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 px-2">Arraste para reordenar</p>
-                    {ordemColunas.map((header, index) => (
-                      <div
-                        key={header}
-                        draggable
-                        onDragStart={() => handleDragStart(index)}
-                        onDragOver={(e) => handleDragOver(e, index)}
-                        onDragEnd={handleDragEnd}
-                        className={`flex items-center gap-2 px-2 py-2 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded cursor-move group ${
-                          arrastando === index ? 'opacity-50 bg-blue-50 dark:bg-blue-900/20' : ''
-                        }`}
-                      >
-                        <GripVertical size={16} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300" />
-                        <input
-                          type="checkbox"
-                          checked={colunasVisiveis.includes(header)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setColunasVisiveis([...colunasVisiveis, header]);
-                            } else {
-                              setColunasVisiveis(colunasVisiveis.filter((col) => col !== header));
-                            }
-                          }}
-                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <span className="text-sm text-gray-700 dark:text-gray-200 group-hover:text-gray-900 dark:group-hover:text-white flex-1">
-                          {obterNomeAmigavel(header)}
-                        </span>
-                        {colunasVisiveis.includes(header) ? (
-                          <Eye size={14} className="text-blue-500" />
-                        ) : (
-                          <EyeOff size={14} className="text-gray-400" />
-                        )}
-                      </div>
-                    ))}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setColunasVisiveis(ordemColunas)}
+                      className="flex-1 px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                    >
+                      Mostrar Todas
+                    </button>
+                    <button
+                      onClick={() => setOrdemColunas(headers)}
+                      className="flex-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
+                    >
+                      Resetar Ordem
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
+                <div className="p-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 px-2">Arraste para reordenar</p>
+                  {ordemColunas.map((header, index) => (
+                    <div
+                      key={header}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`flex items-center gap-2 px-2 py-2 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded cursor-move group ${
+                        arrastando === index ? 'opacity-50 bg-blue-50 dark:bg-blue-900/20' : ''
+                      }`}
+                    >
+                      <GripVertical size={16} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300" />
+                      <input
+                        type="checkbox"
+                        checked={colunasVisiveis.includes(header)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setColunasVisiveis([...colunasVisiveis, header]);
+                          } else {
+                            setColunasVisiveis(colunasVisiveis.filter((col) => col !== header));
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-200 group-hover:text-gray-900 dark:group-hover:text-white flex-1">
+                        {obterNomeAmigavel(header)}
+                      </span>
+                      {colunasVisiveis.includes(header) ? (
+                        <Eye size={14} className="text-blue-500" />
+                      ) : (
+                        <EyeOff size={14} className="text-gray-400" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex gap-4 items-center text-sm text-gray-700 dark:text-gray-300">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Ir para página:</span>
-              <input
-                type="number"
-                min="1"
-                max={meta?.lastPage}
-                defaultValue={meta?.currentPage}
-                placeholder={`1-${meta?.lastPage || 1}`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const page = parseInt(e.currentTarget.value);
-                    if (page >= 1 && page <= (meta?.lastPage || 1)) {
-                      onPageChange(page);
-                    }
+        </div>
+
+        <div className="flex gap-4 items-center text-sm text-gray-700 dark:text-gray-300">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">Ir para página:</span>
+            <input
+              type="number"
+              min="1"
+              max={meta?.lastPage}
+              defaultValue={meta?.currentPage}
+              placeholder={`1-${meta?.lastPage || 1}`}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const page = parseInt(e.currentTarget.value);
+                  if (page >= 1 && page <= (meta?.lastPage || 1)) {
+                    onPageChange(page);
                   }
-                }}
-                className="w-20 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-white"
-              />
-              <span className="text-xs text-gray-500 dark:text-gray-400">de {meta?.lastPage || 1}</span>
-            </div>
-            <div className="flex gap-2 items-center">
-              <button
-                onClick={handlePreviousPage}
-                disabled={meta?.currentPage === 1}
-                className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <span className="whitespace-nowrap">
-                Página {meta?.currentPage} de {meta?.lastPage}
-              </span>
-              <button
-                onClick={handleNextPage}
-                disabled={meta?.currentPage === meta?.lastPage}
-                className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
+                }
+              }}
+              className="w-20 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-white"
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">de {meta?.lastPage || 1}</span>
+          </div>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={handlePreviousPage}
+              disabled={meta?.currentPage === 1}
+              className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <span className="whitespace-nowrap">
+              Página {meta?.currentPage} de {meta?.lastPage}
+            </span>
+            <button
+              onClick={handleNextPage}
+              disabled={meta?.currentPage === meta?.lastPage}
+              className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
