@@ -16,6 +16,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import SelectInput from './SelectInput2';
+import { Select as RadixSelect, SelectTrigger as RadixSelectTrigger, SelectValue as RadixSelectValue, SelectContent as RadixSelectContent, SelectItem as RadixSelectItem } from '@/components/ui/select';
 import SearchInput from './SearchInput';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
@@ -409,31 +410,14 @@ export default function DataTableContasPagar({
             <table className="table-auto w-full border-collapse text-xs text-center">
             <colgroup>
               {columnWidths && columnWidths.length > 0 ? (
-                // Se columnWidths for fornecido, usar esses valores
                 columnWidths.map((width, index) => (
                   <col key={index} style={{ width }} />
                 ))
               ) : (
-                // Caso contrário, usar minWidth em vez de width para responsividade
-                <>
-                  <col style={{ minWidth: '60px' }} /> {/* ID */}
-                  <col style={{ minWidth: '70px' }} /> {/* Tipo */}
-                  <col style={{ minWidth: '120px' }} /> {/* Credor */}
-                  <col style={{ minWidth: '90px' }} /> {/* Emissão */}
-                  <col style={{ minWidth: '90px' }} /> {/* Vencimento */}
-                  <col style={{ minWidth: '90px' }} /> {/* Pagamento */}
-                  <col style={{ minWidth: '100px' }} /> {/* Valor Total */}
-                  <col style={{ minWidth: '100px' }} /> {/* Valor Pago */}
-                  <col style={{ minWidth: '70px' }} /> {/* Juros */}
-                  <col style={{ minWidth: '80px' }} /> {/* Status */}
-                  <col style={{ minWidth: '70px' }} /> {/* Nº NF */}
-                  <col style={{ minWidth: '80px' }} /> {/* Nº Duplicata */}
-                  <col style={{ minWidth: '90px' }} /> {/* Banco */}
-                  <col style={{ minWidth: '90px' }} /> {/* Centro Custo */}
-                  <col style={{ minWidth: '70px' }} /> {/* Conta */}
-                  <col style={{ minWidth: '90px' }} /> {/* Comprador */}
-                  <col style={{ minWidth: '80px' }} /> {/* Ações */}
-                </>
+                ordemColunas.filter(h => colunasVisiveis.includes(h)).map((header, i) => {
+                  const narrow = header === '☑️' ? '70px' : header === 'Ações' ? '50px' : undefined;
+                  return <col key={i} style={narrow ? { width: narrow, maxWidth: narrow } : { minWidth: '70px' }} />;
+                })
               )}
             </colgroup>
             
@@ -450,6 +434,7 @@ export default function DataTableContasPagar({
                       className={`px-2 py-1.5 text-center text-[11px] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
                         sortable ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors' : ''
                       }`}
+                      style={header === '☑️' ? { width: '40px', maxWidth: '40px' } : header === 'Ações' ? { width: '50px', maxWidth: '50px' } : undefined}
                       onClick={() => sortable && handleSort(header)}
                     >
                       <div className="flex items-center justify-center gap-1">
@@ -481,33 +466,64 @@ export default function DataTableContasPagar({
                       <th
                         key={`filter-${index}`}
                         className="px-2 py-1 bg-gray-50 dark:bg-zinc-900"
+                        style={header === '☑️' ? { width: '40px', maxWidth: '40px' } : header === 'Ações' ? { width: '50px', maxWidth: '50px' } : undefined}
                       >
                       {header === 'Status' ? (
-                        <select
-                          value={filtrosColuna['status']?.valor || ''}
-                          onChange={(e) => {
-                            const novoValor = e.target.value;
-                            console.log('🔍 Filtro rápido alterado - Campo: status, Valor:', novoValor);
+                        <RadixSelect
+                          value={filtrosColuna['status']?.valor || 'todos'}
+                          onValueChange={(novoValor) => {
+                            const valor = novoValor === 'todos' ? '' : novoValor;
+                            const novosFiltros = { ...filtrosColuna };
+                            if (valor) {
+                              novosFiltros.status = { tipo: 'igual', valor };
+                            } else {
+                              delete novosFiltros.status;
+                            }
+                            setFiltrosColuna(novosFiltros);
+                            onFiltroChange?.(
+                              Object.entries(novosFiltros)
+                                .filter(([, { valor: v }]) => v !== '')
+                                .map(([campo, { tipo, valor: v }]) => ({ campo, tipo, valor: v }))
+                            );
+                          }}
+                        >
+                          <RadixSelectTrigger className="h-6 text-[10px] px-1.5">
+                            <RadixSelectValue />
+                          </RadixSelectTrigger>
+                          <RadixSelectContent>
+                            <RadixSelectItem value="todos">Todos</RadixSelectItem>
+                            <RadixSelectItem value="pendente_parcial">Pendente/Parcial</RadixSelectItem>
+                            <RadixSelectItem value="pago">Pago</RadixSelectItem>
+                            <RadixSelectItem value="cancelado">Cancelado</RadixSelectItem>
+                          </RadixSelectContent>
+                        </RadixSelect>
+                      ) : header === '☑️' ? (
+                        <RadixSelect
+                          value={filtrosColuna['check']?.valor || 'todos'}
+                          onValueChange={(novoValor) => {
+                            const valor = novoValor === 'todos' ? '' : novoValor;
                             setFiltrosColuna(prev => ({
                               ...prev,
-                              status: { tipo: 'igual', valor: novoValor }
+                              check: { tipo: 'igual', valor }
                             }));
-                            // Aplicar filtro imediatamente com o novo valor
                             onFiltroChange?.([
                               ...Object.entries(filtrosColuna)
-                                .filter(([key]) => key !== 'status')
-                                .map(([campo, { tipo, valor }]) => ({ campo, tipo, valor })),
-                              { campo: 'status', tipo: 'igual', valor: novoValor }
+                                .filter(([key]) => key !== 'check')
+                                .map(([campo, { tipo, valor: v }]) => ({ campo, tipo, valor: v })),
+                              { campo: 'check', tipo: 'igual', valor }
                             ]);
                           }}
-                          className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
                         >
-                          <option value="">Todos</option>
-                          <option value="pendente_parcial">Pendente/Pago Parcial</option>
-                          <option value="pago">Pago</option>
-                          <option value="cancelado">Cancelado</option>
-                        </select>
-                      ) : header !== 'Ações' && header !== `${<CheckCheckIcon/>}` ? (
+                          <RadixSelectTrigger className="h-6 text-[10px] px-1">
+                            <RadixSelectValue />
+                          </RadixSelectTrigger>
+                          <RadixSelectContent>
+                            <RadixSelectItem value="todos">Todos</RadixSelectItem>
+                            <RadixSelectItem value="true">Sim</RadixSelectItem>
+                            <RadixSelectItem value="false">Não</RadixSelectItem>
+                          </RadixSelectContent>
+                        </RadixSelect>
+                      ) : header !== 'Ações' ? (
                         <input
                           type="text"
                           placeholder={`Filtrar ${obterNomeAmigavel(header)}...`}
@@ -557,8 +573,23 @@ export default function DataTableContasPagar({
                 </tr>
               ) : (
                 (() => {
+                  // Filtro local do ☑️
+                  let filteredRows = rows;
+                  const checkFilter = filtrosColuna['check']?.valor;
+                  if (checkFilter && checkFilter !== '') {
+                    const checkColIndex = headers.indexOf('☑️');
+                    if (checkColIndex !== -1) {
+                      filteredRows = filteredRows.filter((row) => {
+                        const cell = row[checkColIndex];
+                        // Verifica se é um input checkbox e se está checked
+                        const isChecked = cell?.props?.checked || cell?.props?.defaultChecked || false;
+                        return checkFilter === 'true' ? isChecked : !isChecked;
+                      });
+                    }
+                  }
+
                   // Ordenação local pelas colunas
-                  let sortedRows = rows;
+                  let sortedRows = filteredRows;
                   if (sortColumn) {
                     const colIndex = headers.indexOf(sortColumn);
                     if (colIndex !== -1) {

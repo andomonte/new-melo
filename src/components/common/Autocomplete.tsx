@@ -16,7 +16,9 @@ interface AutocompleteProps {
   disabled?: boolean;
   className?: string;
   mapResponse: (data: any) => AutocompleteOption[];
-  resetKey?: string | number; // Nova prop para forçar reset
+  resetKey?: string | number;
+  /** Label inicial para exibir quando o value já vem preenchido (evita busca na API) */
+  initialLabel?: string;
 }
 
 export function Autocomplete({
@@ -27,7 +29,8 @@ export function Autocomplete({
   disabled = false,
   className = '',
   mapResponse,
-  resetKey
+  resetKey,
+  initialLabel
 }: AutocompleteProps) {
   const [busca, setBusca] = useState('');
   const [opcoes, setOpcoes] = useState<AutocompleteOption[]>([]);
@@ -38,18 +41,20 @@ export function Autocomplete({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Reset completo do componente quando resetKey muda
+  const prevResetKeyRef = useRef(resetKey);
   useEffect(() => {
-    console.log('🔄 Autocomplete reset triggered, resetKey:', resetKey, 'current value:', value);
+    // Só reseta se resetKey mudou de um valor definido para outro
+    if (resetKey === undefined || resetKey === prevResetKeyRef.current) return;
+    prevResetKeyRef.current = resetKey;
+
     setIsResetting(true);
     setBusca('');
     setOpcoes([]);
     setAberto(false);
     setCarregando(false);
     setOpcaoSelecionada(null);
-    // Pequeno delay para garantir que o reset seja processado
     setTimeout(() => {
       setIsResetting(false);
-      console.log('✅ Autocomplete reset complete, isResetting:', false);
     }, 0);
   }, [resetKey]);
 
@@ -80,25 +85,21 @@ export function Autocomplete({
 
   // Atualizar campo quando value muda externamente
   useEffect(() => {
-    // Não processar mudanças de value durante reset
-    if (isResetting) {
-      console.log('🚫 Ignorando mudança de value durante reset, value:', value);
-      return;
-    }
-    
-    console.log('📥 Value changed externally:', value, 'current selected:', opcaoSelecionada?.value);
-    // Se o value mudou externamente (não por seleção nossa)
+    if (isResetting) return;
+
     if (value && opcaoSelecionada?.value !== value) {
-      console.log('🔍 Buscando opção para value:', value);
-      // Buscar a opção com o valor atual
-      buscarOpcoes(value);
+      // Se tem initialLabel, usar direto sem buscar na API
+      if (initialLabel) {
+        setOpcaoSelecionada({ value, label: initialLabel });
+        setBusca(initialLabel);
+      } else {
+        buscarOpcoes(value);
+      }
     } else if (!value && opcaoSelecionada) {
-      // Se o value foi limpo externamente, limpar nossa seleção
-      console.log('🧹 Limpando seleção porque value foi limpo');
       setOpcaoSelecionada(null);
       setBusca('');
     }
-  }, [value, isResetting]);
+  }, [value, isResetting, initialLabel]);
 
   const buscarOpcoes = async (termoBusca: string) => {
     try {
@@ -130,17 +131,31 @@ export function Autocomplete({
   };
 
   const handleSelect = (opcao: AutocompleteOption) => {
-    console.log('handleSelect chamado:', opcao);
-    if (isResetting) {
-      console.log('🚫 Ignorando handleSelect durante reset');
-      return;
-    }
-    console.log('Vai chamar onChange com:', opcao.value);
+    if (isResetting) return;
     setOpcaoSelecionada(opcao);
     setBusca(opcao.label);
     setAberto(false);
     onChange(opcao.value, opcao);
-    console.log('onChange foi chamado');
+
+    // Foca no próximo campo após seleção
+    setTimeout(() => {
+      const input = wrapperRef.current?.querySelector('input');
+      if (input) {
+        const form = input.closest('.form-compact, form, [role="dialog"]');
+        if (!form) return;
+        const focusable = Array.from(
+          form.querySelectorAll<HTMLElement>(
+            'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="combobox"]:not([disabled])'
+          )
+        );
+        const idx = focusable.indexOf(input);
+        const next = focusable[idx + 1];
+        if (next) {
+          next.focus();
+          if (next instanceof HTMLInputElement) next.select();
+        }
+      }
+    }, 50);
   };
 
   const handleClear = (e: React.MouseEvent) => {
@@ -177,7 +192,7 @@ export function Autocomplete({
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
         <Input
           type="text"
           placeholder={placeholder}
@@ -185,15 +200,15 @@ export function Autocomplete({
           onChange={handleInputChange}
           onFocus={() => setAberto(true)}
           disabled={disabled}
-          className="pl-10 pr-10"
+          className="pl-7 pr-7 text-xs h-[30px]"
         />
         {opcaoSelecionada && !disabled && (
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3" />
           </button>
         )}
       </div>

@@ -148,15 +148,7 @@ export default function DropdownContasPagar({
           className="group flex items-center gap-2 px-2 py-2 hover:bg-yellow-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
         >
           <Edit className="size-4 text-yellow-600 group-hover:text-white transition group-disabled:text-gray-400" />
-          Editar Titulo
-        </DropdownMenuItem>
-         <DropdownMenuItem
-          onClick={onEditarClick}
-          disabled={!podeEditarOuCancelar}
-          className="group flex items-center gap-2 px-2 py-2 hover:bg-yellow-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
-        >
-          <Edit className="size-4 text-yellow-600 group-hover:text-white transition group-disabled:text-gray-400" />
-          Editar Valor do Pagamento
+          Editar
         </DropdownMenuItem>
 
         <DropdownMenuItem

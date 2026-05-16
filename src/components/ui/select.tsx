@@ -9,7 +9,39 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 
 import { cn } from '@/lib/utils';
 
-const Select = SelectPrimitive.Root;
+const Select = ({ onValueChange, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) => {
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+  const handleValueChange = (value: string) => {
+    onValueChange?.(value);
+
+    setTimeout(() => {
+      const trigger = wrapperRef.current?.querySelector('button[role="combobox"]') as HTMLElement;
+      if (!trigger) return;
+      const form = trigger.closest('.form-compact, form, [role="dialog"]');
+      if (!form) return;
+      const focusable = Array.from(
+        form.querySelectorAll<HTMLElement>(
+          'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="combobox"]:not([disabled]), button[role="combobox"]:not([disabled])'
+        )
+      );
+      const idx = focusable.indexOf(trigger);
+      const next = focusable[idx + 1];
+      if (next) {
+        next.focus();
+        if (next instanceof HTMLInputElement) next.select();
+      }
+    }, 50);
+  };
+
+  return (
+    <div ref={wrapperRef}>
+      <SelectPrimitive.Root onValueChange={handleValueChange} {...props}>
+        {children}
+      </SelectPrimitive.Root>
+    </div>
+  );
+};
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
@@ -20,7 +52,7 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-400 dark:focus:ring-blue-400/40 dark:focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
       className,
     )}
     {...props}

@@ -996,7 +996,6 @@ export default function ContasAReceber() {
           isOpen={modalRecebidoAberto}
           onClose={() => { setModalRecebidoAberto(false); setContaSelecionada(null); }}
           title="Dar Baixa - Recebimento"
-          width="w-11/12 md:w-3/4 lg:w-2/3 xl:w-1/2"
         >
           <div className="space-y-4">
             {/* Resumo do Título */}
@@ -1816,7 +1815,6 @@ export default function ContasAReceber() {
           setNumParcelasInput('');
         }}
         title="Novo Título a Receber"
-        width="w-8/9 md:w-5/6 lg:w-2/3 xl:w-1/2"
       >
         <div className="space-y-6">
           {/* Seção: Informações do Cliente */}
@@ -2108,7 +2106,6 @@ export default function ContasAReceber() {
           setFilialSelecionada('TODAS');
         }}
         title="Importação e Conciliação de Cartão"
-        width="w-11/12 md:w-5/6 lg:w-3/4 xl:w-2/3"
       >
         <div className="space-y-6 max-h-[75vh] overflow-y-auto">
           {/* Upload de Arquivo */}

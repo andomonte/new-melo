@@ -29,6 +29,55 @@ body {
   }
 }
 
+/* Padrão de focus para inputs e selects em forms */
+input:focus,
+select:focus,
+textarea:focus,
+[role="combobox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4);
+  border-color: #60a5fa !important;
+}
+
+/* Inputs compactos em forms de modal */
+.form-compact input,
+.form-compact select,
+.form-compact textarea,
+.form-compact [role="combobox"] {
+  font-size: 12px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  height: 30px;
+}
+
+.form-compact textarea {
+  height: auto;
+  min-height: 60px;
+}
+
+.form-compact label {
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 2px;
+  display: block;
+  color: #6b7280;
+}
+
+.dark .form-compact label {
+  color: #9ca3af;
+}
+
+/* Remove leading zeros em inputs numéricos */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Estilos personalizados para garantir visibilidade dos toasts */
 .custom-toast-viewport {
   z-index: 9999 !important;

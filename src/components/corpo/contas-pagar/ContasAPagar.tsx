@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext, ChangeEvent } from 'react';
 import { AuthContext } from '@/contexts/authContexts';
 import Carregamento from '@/utils/carregamento';
+import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
@@ -63,8 +64,8 @@ export function ContasAPagar() {
           setTodasContasConsolidadas([]);
         }
       } else {
-        // Se não tem status específico, buscar pendentes, pago_parcial e pendente_parcial
-        const statusParaBuscar = ['pendente', 'pago_parcial', 'pendente_parcial'];
+        // Se não tem status específico, buscar todos os status
+        const statusParaBuscar = ['pendente', 'pago_parcial', 'pendente_parcial', 'pago', 'cancelado'];
 
         const promises = statusParaBuscar.map(status => {
           const filtrosComStatus = { ...filtrosBase, status };
@@ -274,6 +275,7 @@ export function ContasAPagar() {
   const [obsPagamentoLote, setObsPagamentoLote] = useState('');
   const [taxaConversaoInput, setTaxaConversaoInput] = useState('');
   const [valorPgtoInput, setValorPgtoInput] = useState('');
+  const [valorMoedaInput, setValorMoedaInput] = useState('');
   const [modalKey, setModalKey] = useState(0);
 
   // Estados para nova conta
@@ -345,6 +347,7 @@ export function ContasAPagar() {
     setNovaContaDados(novosDados);
     setTaxaConversaoInput('');
     setValorPgtoInput('');
+    setValorMoedaInput('');
     setParcelas([]);
     setPrazoSelecionado('');
     // Forçar re-renderização dos componentes Autocomplete
@@ -966,11 +969,15 @@ export function ContasAPagar() {
     console.log('🔍 Filtros convertidos para API:', novosFiltros);
     console.log('📋 Filtros existentes antes de mesclar:', filtros);
     
-    // Mesclar novos filtros com os existentes
+    // Mesclar novos filtros com os existentes (mantém período, semana, etc.)
     const filtrosMesclados = { ...filtros };
-    
-    // Para campos atualizados, se o valor está vazio, remover do objeto
-    // Se não está vazio, adicionar/atualizar
+
+    // Limpar status se não veio nos filtros (usuário selecionou "Todos")
+    if (!novosFiltros.status) {
+      delete filtrosMesclados.status;
+    }
+
+    // Aplicar novos filtros sobre os existentes
     Object.keys(novosFiltros).forEach(key => {
       const valor = novosFiltros[key as keyof FiltrosContasPagar];
       if (valor === '' || valor === undefined || valor === null) {
@@ -1399,11 +1406,20 @@ export function ContasAPagar() {
   };
 
   const abrirModalEditar = (conta: ContaPagar) => {
+    console.log('📋 [Editar] Dados da conta:', {
+      cod_credor: conta.cod_credor,
+      nome_credor: conta.nome_credor,
+      nome_exibicao: conta.nome_exibicao,
+      cod_conta: conta.cod_conta,
+      descricao_conta: conta.descricao_conta,
+      cod_ccusto: conta.cod_ccusto,
+      descricao_ccusto: conta.descricao_ccusto,
+    });
     modais.setContaSelecionada(conta);
     setDadosEdicao({
       dt_venc: conta.dt_venc || '',
       dt_emissao: conta.dt_emissao || '',
-      valor_pgto: conta.valor_pgto.toString(),
+      valor_pgto: mascaraInputBRL(String(Math.round(Number(conta.valor_pgto) * 100))),
       obs: conta.obs || '',
       nro_nf: conta.nro_nf || '',
       nro_dup: conta.nro_dup || '',
@@ -1802,7 +1818,7 @@ export function ContasAPagar() {
       return;
     }
     
-    const valorPagoNumero = valorFormatadoParaNumero(valorPago);
+    const valorPagoNumero = desmascarar(valorPago);
     if (!valorPago || valorPagoNumero <= 0) {
       toast.error('Valor pago deve ser maior que zero', { position: 'top-right' });
       return;
@@ -1822,8 +1838,8 @@ export function ContasAPagar() {
     const valorOriginal = parseFloat(modais.contaSelecionada.valor_pgto.toString());
     const totalJaPago = parseFloat(modais.contaSelecionada.total_pago_historico?.toString() || '0');
     const saldoRestante = valorOriginal - totalJaPago; // Saldo restante atual
-    const valorDigitado = valorFormatadoParaNumero(valorPago);
-    const valorJurosNum = valorFormatadoParaNumero(valorJuros) || 0;
+    const valorDigitado = desmascarar(valorPago);
+    const valorJurosNum = desmascarar(valorJuros) || 0;
 
     // Cálculo correto: quanto faltará após este pagamento
     const totalPagoAposPagamento = totalJaPago + valorDigitado + valorJurosNum;
@@ -1873,14 +1889,14 @@ export function ContasAPagar() {
 
       await marcarComoPago(modais.contaSelecionada.id, {
         dt_pgto: dataPagamento,
-        valor_pago: valorFormatadoParaNumero(valorPago),
+        valor_pago: desmascarar(valorPago),
         obs: obsPagamento || modais.contaSelecionada.obs,
         banco: bancoSelecionado || null,
         forma_pgto: formaPgto, // cod_fpgto para registrar em DBFPGTO
         tp_pgto: tipoPgtoMap[formaPgto] || 'D', // Tipo de pagamento
         nro_cheque: formaPgto === '002' ? nroCheque : null, // Apenas se for cheque
         cod_ccusto: centroCustoSelecionado || modais.contaSelecionada.cod_ccusto?.toString() || null,
-        valor_juros: valorFormatadoParaNumero(valorJuros) || 0,
+        valor_juros: desmascarar(valorJuros) || 0,
         cod_conta: contaSelecionadaPgto || contaBancariaSelecionada || modais.contaSelecionada.cod_conta?.toString() || null,
         username: username // Nome do usuário logado
       });
@@ -1920,7 +1936,7 @@ export function ContasAPagar() {
       await editarConta(modais.contaSelecionada.id, {
         dt_venc: dadosEdicao.dt_venc || undefined,
         dt_emissao: dadosEdicao.dt_emissao || undefined,
-        valor_pgto: parseFloat(dadosEdicao.valor_pgto) || undefined,
+        valor_pgto: desmascarar(dadosEdicao.valor_pgto) || undefined,
         obs: dadosEdicao.obs || undefined,
         nro_nf: dadosEdicao.nro_nf || undefined,
         nro_dup: dadosEdicao.nro_dup || undefined,
@@ -2565,7 +2581,6 @@ export function ContasAPagar() {
           setObsPagamentoLote('');
         }}
         title="Pagamento em Lote"
-        width="w-11/12 md:w-3/4 lg:w-2/3 xl:w-1/2"
       >
         <div className="space-y-4">
           {/* Resumo dos Títulos Selecionados */}
@@ -2701,7 +2716,6 @@ export function ContasAPagar() {
           setResultadoPagamento({ pagos: [], erros: [] });
         }}
         title="Resultado do Pagamento em Lote"
-        width="w-11/12 md:w-3/4 lg:w-2/3"
       >
         <div className="space-y-6">
           {/* Títulos Pagos com Sucesso */}
@@ -2802,38 +2816,34 @@ export function ContasAPagar() {
         isOpen={modais.modalPagoAberto}
         onClose={() => modais.setModalPagoAberto(false)}
         title="Marcar Conta como Paga"
-        width="w-11/12 md:w-3/4 lg:w-2/3 xl:w-1/2"
       >
-        <div className="space-y-4">
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
-            <p className="text-sm text-blue-800 dark:text-blue-200 font-medium">
+        <div className="form-compact space-y-3">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2">
+            <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
               Pagamento para: <strong>{modais.contaSelecionada?.nome_credor}</strong>
-            </p>
-            {modais.contaSelecionada?.parcela_atual && (
-              <p className="text-xs text-blue-600 dark:text-blue-300 mt-1 flex items-center gap-1">
-                <FileText className="w-3 h-3" />
-                Parcela {modais.contaSelecionada.parcela_atual} - Nº Duplicata: {modais.contaSelecionada.nro_dup}
-              </p>
-            )}
-            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-              <div className="text-blue-600 dark:text-blue-300 flex items-center gap-1">
-                <FileText className="w-3 h-3" />
-                <strong>Valor Original:</strong> {formatarMoeda(modais.contaSelecionada?.valor_pgto || 0)}
-              </div>
-              {modais.contaSelecionada && (modais.contaSelecionada.total_pago_historico || 0) > 0 && (
-                <div className="text-green-600 dark:text-green-300 flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" />
-                  <strong>Já Pago:</strong> {formatarMoeda(modais.contaSelecionada.total_pago_historico || 0)}
-                </div>
+              {modais.contaSelecionada?.parcela_atual && (
+                <span className="ml-2 text-blue-600 dark:text-blue-300">
+                  | Parcela {modais.contaSelecionada.parcela_atual} - Dup: {modais.contaSelecionada.nro_dup}
+                </span>
               )}
-              <div className="text-purple-600 dark:text-purple-300 font-bold flex items-center gap-1">
-                <DollarSign className="w-3 h-3" />
+            </p>
+            <div className="flex gap-4 mt-1 text-[11px]">
+              <span className="text-blue-600 dark:text-blue-300">
+                <strong>Original:</strong> {formatarMoeda(modais.contaSelecionada?.valor_pgto || 0)}
+              </span>
+              {modais.contaSelecionada && (modais.contaSelecionada.total_pago_historico || 0) > 0 && (
+                <span className="text-green-600 dark:text-green-300">
+                  <strong>Já Pago:</strong> {formatarMoeda(modais.contaSelecionada.total_pago_historico || 0)}
+                </span>
+              )}
+              <span className="text-purple-600 dark:text-purple-300 font-bold">
                 <strong>Restante:</strong> {formatarMoeda((modais.contaSelecionada?.valor_pgto || 0) - (modais.contaSelecionada?.total_pago_historico || 0))}
-              </div>
+              </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Linha 1: Data + Valor + Juros + Forma */}
+          <div className="grid grid-cols-4 gap-3">
             <div>
               <Label htmlFor="dt_pgto">Data do Pagamento *</Label>
               <Input
@@ -2841,7 +2851,6 @@ export function ContasAPagar() {
                 type="date"
                 value={dataPagamento}
                 onChange={(e) => setDataPagamento(e.target.value)}
-                className="mt-1"
                 required
               />
             </div>
@@ -2849,7 +2858,7 @@ export function ContasAPagar() {
             <div>
               <Label htmlFor="valor_pago">Valor a Pagar *</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
                   R$
                 </span>
                 <Input
@@ -2857,138 +2866,106 @@ export function ContasAPagar() {
                   type="text"
                   value={valorPago}
                   onChange={(e) => {
-                    const valor = e.target.value;
-                    // Remove tudo exceto números e vírgula
-                    const apenasNumerosVirgula = valor.replace(/[^\d,]/g, '');
-                    setValorPago(apenasNumerosVirgula);
+                    const mascarado = mascaraInputBRL(e.target.value);
+                    setValorPago(mascarado);
                   }}
-                  onBlur={(e) => {
-                    const num = valorFormatadoParaNumero(e.target.value);
-                    if (num > 0) {
-                      setValorPago(formatarValorParaInput(num));
-                    }
-                  }}
-                  className="mt-1 pl-10"
+                  className="pl-8"
                   placeholder="0,00"
                   required
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Saldo restante já preenchido automaticamente
-              </p>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="valor_juros">Juros/Multa</Label>
-              <Input
-                id="valor_juros"
-                type="text"
-                value={valorJuros}
-                onChange={(e) => {
-                  const valor = e.target.value;
-                  // Permite números, vírgulas e pontos durante a digitação
-                  if (valor === '' || /^[\d.,]+$/.test(valor)) {
-                    setValorJuros(valor);
-                  }
-                }}
-                onBlur={(e) => {
-                  // Ao sair do campo, converte vírgula para ponto
-                  let valor = e.target.value.replace(',', '.');
-                  const numero = parseFloat(valor);
-                  if (!isNaN(numero) && numero > 0) {
-                    setValorJuros(numero.toString());
-                  } else if (valor === '' || numero === 0) {
-                    setValorJuros('0');
-                  }
-                }}
-                placeholder="Ex: 5.8 ou 10.50"
-                className="mt-1"
-              />
-              {modais.contaSelecionada?.dt_venc && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Venc: {new Date(modais.contaSelecionada.dt_venc).toLocaleDateString('pt-BR')}
-                </p>
-              )}
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
+                  R$
+                </span>
+                <Input
+                  id="valor_juros"
+                  type="text"
+                  value={valorJuros}
+                  onChange={(e) => {
+                    const mascarado = mascaraInputBRL(e.target.value);
+                    setValorJuros(mascarado);
+                  }}
+                  className="pl-8"
+                  placeholder="0,00"
+                />
+              </div>
             </div>
 
             <div>
               <Label htmlFor="forma_pgto">Forma de Pagamento *</Label>
               <Select value={formaPgto} onValueChange={setFormaPgto}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="001">001 - Dinheiro</SelectItem>
                   <SelectItem value="002">002 - Cheque</SelectItem>
                   <SelectItem value="003">003 - PIX</SelectItem>
-                  <SelectItem value="004">004 - Transferência Bancária</SelectItem>
-                  <SelectItem value="005">005 - Cartão de Crédito</SelectItem>
-                  <SelectItem value="006">006 - Cartão de Débito</SelectItem>
+                  <SelectItem value="004">004 - Transferência</SelectItem>
+                  <SelectItem value="005">005 - Cartão Crédito</SelectItem>
+                  <SelectItem value="006">006 - Cartão Débito</SelectItem>
                   <SelectItem value="007">007 - Boleto</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500 mt-1">
-                Será registrado na tabela DBFPGTO
-              </p>
             </div>
           </div>
 
-          {formaPgto === '002' && (
+          {/* Linha 2: Conta + Cheque (condicional) + Obs */}
+          <div className="grid grid-cols-4 gap-3">
             <div>
-              <Label htmlFor="nro_cheque">Número do Cheque</Label>
+              <Label htmlFor="conta_pgto">Conta *</Label>
+              <Select value={contaSelecionadaPgto} onValueChange={setContaSelecionadaPgto}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a conta..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {contasDbconta.length > 0 ? (
+                    contasDbconta.map((conta) => (
+                      <SelectItem key={conta.value} value={conta.value}>
+                        {conta.label}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="carregando" disabled>
+                      Carregando contas...
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formaPgto === '002' && (
+              <div>
+                <Label htmlFor="nro_cheque">Nº Cheque</Label>
+                <Input
+                  id="nro_cheque"
+                  type="text"
+                  value={nroCheque}
+                  onChange={(e) => setNroCheque(e.target.value)}
+                  placeholder="Ex: 000123"
+                  maxLength={15}
+                />
+              </div>
+            )}
+
+            <div className={formaPgto === '002' ? 'col-span-2' : 'col-span-3'}>
+              <Label htmlFor="obs_pgto">Observações</Label>
               <Input
-                id="nro_cheque"
+                id="obs_pgto"
                 type="text"
-                value={nroCheque}
-                onChange={(e) => setNroCheque(e.target.value)}
-                className="mt-1"
-                placeholder="Ex: 000123"
-                maxLength={15}
+                value={obsPagamento}
+                onChange={(e) => setObsPagamento(e.target.value)}
+                placeholder="Observações sobre o pagamento"
               />
             </div>
-          )}
-
-          <div>
-            <Label htmlFor="conta_pgto">Conta *</Label>
-            <Select value={contaSelecionadaPgto} onValueChange={setContaSelecionadaPgto}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Selecione a conta..." />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                {contasDbconta.length > 0 ? (
-                  contasDbconta.map((conta) => (
-                    <SelectItem key={conta.value} value={conta.value}>
-                      {conta.label}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="carregando" disabled>
-                    Carregando contas...
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500 mt-1">
-              Conta usada no pagamento (dbconta)
-            </p>
           </div>
 
-          <div>
-            <Label htmlFor="obs_pgto">Observações</Label>
-            <Textarea
-              id="obs_pgto"
-              name="obs_pgto"
-              value={obsPagamento}
-              onChange={(e) => setObsPagamento(e.target.value)}
-              className="mt-1"
-              rows={3}
-              placeholder="Observações sobre o pagamento"
-            />
-          </div>
-
-          <div className="flex gap-2 justify-end pt-4 border-t">
+          <div className="flex gap-2 justify-end pt-3 border-t">
             <AuxButton
               variant="cancel"
               onClick={() => modais.setModalPagoAberto(false)}
@@ -3011,7 +2988,6 @@ export function ContasAPagar() {
           setDadosValidacaoValor(null);
         }}
         title="⚠️ Pagamento Parcial"
-        width="w-11/12 md:w-4/5 lg:w-3/4 xl:w-1/2"
       >
         <div className="space-y-6">
           {/* Alerta Principal */}
@@ -3170,13 +3146,13 @@ export function ContasAPagar() {
         onClose={() => modais.setModalEditarAberto(false)}
         title="Editar Conta a Pagar"
       >
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Edite os dados da conta de <strong>{modais.contaSelecionada?.nome_credor}</strong>
+        <div className="form-compact space-y-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            Editando conta de <strong>{modais.contaSelecionada?.nome_credor}</strong>
           </p>
 
-          {/* Datas */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Linha 1: Datas + Fornecedor + Valor */}
+          <div className="grid grid-cols-4 gap-3">
             <div>
               <Label htmlFor="dt_emissao_edit">Data de Emissão</Label>
               <Input
@@ -3184,7 +3160,6 @@ export function ContasAPagar() {
                 type="date"
                 value={dadosEdicao.dt_emissao}
                 onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_emissao: e.target.value }))}
-                className="mt-1"
               />
             </div>
 
@@ -3195,41 +3170,56 @@ export function ContasAPagar() {
                 type="date"
                 value={dadosEdicao.dt_venc}
                 onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_venc: e.target.value }))}
-                className="mt-1"
                 required
               />
             </div>
+
+            <div>
+              <Label>Fornecedor/Credor</Label>
+              <Autocomplete
+                placeholder="Buscar fornecedor..."
+                apiUrl="/api/contas-pagar/fornecedores"
+                value={dadosEdicao.cod_credor}
+                initialLabel={modais.contaSelecionada?.nome_exibicao || modais.contaSelecionada?.nome_credor || (modais.contaSelecionada?.cod_credor ? `Cód: ${modais.contaSelecionada.cod_credor}` : undefined)}
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_credor: value }))}
+                mapResponse={(data) => data.fornecedores || []}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="valor_pgto_edit">Valor *</Label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
+                  R$
+                </span>
+                <Input
+                  id="valor_pgto_edit"
+                  type="text"
+                  value={dadosEdicao.valor_pgto}
+                  onChange={(e) => {
+                    const mascarado = mascaraInputBRL(e.target.value);
+                    setDadosEdicao(prev => ({ ...prev, valor_pgto: mascarado }));
+                  }}
+                  className="pl-8"
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Fornecedor/Credor */}
-          <div>
-            <Label>Fornecedor/Credor</Label>
-            <Autocomplete
-              placeholder="Buscar fornecedor..."
-              apiUrl="/api/contas-pagar/fornecedores"
-              value={dadosEdicao.cod_credor}
-              onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_credor: value }))}
-              mapResponse={(data) => data.fornecedores || []}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Atual: {modais.contaSelecionada?.nome_credor} (Cód: {modais.contaSelecionada?.cod_credor})
-            </p>
-          </div>
-
-          {/* Conta Bancária e Centro de Custo */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Linha 2: Conta Bancária + Centro Custo + NF + Duplicata */}
+          <div className="grid grid-cols-4 gap-3">
             <div>
               <Label>Conta Bancária</Label>
               <Autocomplete
                 placeholder="Buscar conta..."
                 apiUrl="/api/contas-pagar/contas"
                 value={dadosEdicao.cod_conta}
+                initialLabel={modais.contaSelecionada?.descricao_conta || (modais.contaSelecionada?.cod_conta ? `Cód: ${modais.contaSelecionada.cod_conta}` : undefined)}
                 onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
                 mapResponse={(data) => data.contas || []}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Atual: {modais.contaSelecionada?.descricao_conta}
-              </p>
             </div>
 
             <div>
@@ -3238,38 +3228,18 @@ export function ContasAPagar() {
                 placeholder="Buscar centro de custo..."
                 apiUrl="/api/contas-pagar/centros-custo"
                 value={dadosEdicao.cod_ccusto}
+                initialLabel={modais.contaSelecionada?.descricao_ccusto || (modais.contaSelecionada?.cod_ccusto ? `Cód: ${modais.contaSelecionada.cod_ccusto}` : undefined)}
                 onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_ccusto: value }))}
                 mapResponse={(data) => data.centrosCusto || []}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Atual: {modais.contaSelecionada?.descricao_ccusto}
-              </p>
             </div>
-          </div>
 
-          {/* Valor */}
-          <div>
-            <Label htmlFor="valor_pgto_edit">Valor *</Label>
-            <Input
-              id="valor_pgto_edit"
-              type="number"
-              step="0.01"
-              value={dadosEdicao.valor_pgto}
-              onChange={(e) => setDadosEdicao(prev => ({ ...prev, valor_pgto: e.target.value }))}
-              className="mt-1"
-              required
-            />
-          </div>
-
-          {/* Números da NF e Duplicata */}
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="nro_nf_edit">Nº NF</Label>
               <Input
                 id="nro_nf_edit"
                 value={dadosEdicao.nro_nf}
                 onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_nf: e.target.value }))}
-                className="mt-1"
                 placeholder="Ex: 12345"
               />
             </div>
@@ -3280,13 +3250,12 @@ export function ContasAPagar() {
                 id="nro_dup_edit"
                 value={dadosEdicao.nro_dup}
                 onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_dup: e.target.value }))}
-                className="mt-1"
                 placeholder="Ex: bc223/01"
               />
             </div>
           </div>
 
-          {/* Observações */}
+          {/* Linha 3: Observações */}
           <div>
             <Label htmlFor="obs_edit">Observações</Label>
             <Textarea
@@ -3294,13 +3263,12 @@ export function ContasAPagar() {
               name="obs_edit"
               value={dadosEdicao.obs}
               onChange={(e) => setDadosEdicao(prev => ({ ...prev, obs: e.target.value }))}
-              className="mt-1"
-              rows={3}
+              rows={2}
               placeholder="Observações sobre a conta"
             />
           </div>
 
-          <div className="flex gap-2 justify-end pt-4 border-t">
+          <div className="flex gap-2 justify-end pt-3 border-t">
             <AuxButton
               variant="secondary"
               onClick={() => modais.setModalEditarAberto(false)}
@@ -3363,7 +3331,6 @@ export function ContasAPagar() {
           setPagamentoParaCancelar(null);
         }}
         title="Cancelar Pagamento"
-        width="w-11/12 md:w-2/3 lg:w-1/2"
       >
         <div className="space-y-4">
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
@@ -3429,7 +3396,6 @@ export function ContasAPagar() {
         isOpen={modais.modalDetalhesAberto}
         onClose={() => modais.setModalDetalhesAberto(false)}
         title={`Detalhes da Conta #${modais.contaSelecionada?.id}`}
-        width="w-11/12 md:w-2/3 lg:w-1/2"
       >
         {modais.contaSelecionada && (
           <div className="space-y-4">
@@ -3582,7 +3548,6 @@ export function ContasAPagar() {
           setHistoricoPagamentos(null);
         }}
         title={`Histórico de Pagamentos${modais.contaSelecionada?.parcela_atual ? ` - Parcela ${modais.contaSelecionada.parcela_atual}` : ''} - ${modais.contaSelecionada?.nome_credor || ''}`}
-        width="w-11/12 md:w-4/5 lg:w-3/4"
       >
         <div className="space-y-4">
           {/* Card com informações da parcela */}
@@ -3781,7 +3746,6 @@ export function ContasAPagar() {
           setDetalhesParcela(null);
         }}
         title={`Detalhes da Parcela - ${modais.contaSelecionada?.nome_credor || ''}`}
-        width="w-11/12 md:w-2/3"
       >
         <div className="space-y-4">
           {carregandoDetalhes ? (
@@ -3966,33 +3930,28 @@ export function ContasAPagar() {
           modais.setModalNovaContaAberto(false);
         }}
         title="Nova Conta a Pagar"
-        width="w-8/9 md:w-5/6 lg:w-2/3 xl:w-1/2"
       >
-        <div className="space-y-6">
-          {/* Seção: Tipo de Conta */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Informações Básicas</h3>
-            <div>
-              <Label>Tipo de Conta *</Label>
-              <Select
-                value={novaContaDados.tipo}
-                onValueChange={(value: 'F' | 'T') => setNovaContaDados({ ...novaContaDados, tipo: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="F">Fornecedor</SelectItem>
-                  <SelectItem value="T">Transportadora</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        <div className="form-compact space-y-3">
+          {/* Seção: Informações Básicas + Credor */}
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Informações Básicas</h3>
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <Label>Tipo de Conta *</Label>
+                <Select
+                  value={novaContaDados.tipo}
+                  onValueChange={(value: 'F' | 'T') => setNovaContaDados({ ...novaContaDados, tipo: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="F">Fornecedor</SelectItem>
+                    <SelectItem value="T">Transportadora</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {/* Seção: Credor e Conta */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Credor e Conta Financeira</h3>
-            <div className="grid grid-cols-2 gap-4">
               {novaContaDados.tipo === 'F' ? (
                 <div>
                   <Label>Código do Fornecedor *</Label>
@@ -4037,28 +3996,17 @@ export function ContasAPagar() {
                   apiUrl="/api/contas-pagar/contas"
                   value={novaContaDados.pag_cof_id}
                   onChange={(value, selectedItem: any) => {
-                    // Verificar se conta financeira é internacional
                     const ehInternacional = selectedItem?.eh_internacional || false;
                     setNovaContaDados({
                       ...novaContaDados,
                       pag_cof_id: value,
-                      // Marca/desmarca internacional baseado na conta financeira
                       eh_internacional: ehInternacional
                     });
                   }}
                   mapResponse={(data) => data.contas || []}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Conta com centro de custo vinculado
-                </p>
               </div>
-            </div>
-          </div>
 
-          {/* Seção: Código da Conta e Comprador */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Código da Conta e Comprador</h3>
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Código da Conta</Label>
                 <Autocomplete
@@ -4072,24 +4020,24 @@ export function ContasAPagar() {
                 
               </div>
 
+            </div>
+          </div>
+
+          {/* Seção: Valores, Datas e Documentos */}
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Valores, Datas e Documentos</h3>
+            <div className="grid grid-cols-4 gap-3">
               <div>
-                <Label>Código do Comprador</Label>
+                <Label>Comprador</Label>
                 <Autocomplete
                   resetKey={modalKey}
-                  placeholder="Buscar comprador..."
+                  placeholder="Buscar..."
                   apiUrl="/api/contas-pagar/compradores"
                   value={novaContaDados.cod_comprador}
                   onChange={(value) => setNovaContaDados({ ...novaContaDados, cod_comprador: value })}
                   mapResponse={(data) => data.compradores || []}
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Seção: Valores e Datas */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Valores e Datas</h3>
-            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Data de Emissão *</Label>
                 <Input
@@ -4127,28 +4075,17 @@ export function ContasAPagar() {
                     onChange={(e) => {
                       if (novaContaDados.eh_internacional) return;
 
-                      const valor = e.target.value;
-                      // Remove tudo exceto números e vírgula
-                      const apenasNumerosVirgula = valor.replace(/[^\d,]/g, '');
-                      setValorPgtoInput(apenasNumerosVirgula);
+                      const mascarado = mascaraInputBRL(e.target.value);
+                      setValorPgtoInput(mascarado);
 
-                      // Converter para número e atualizar estado
-                      const valorNumero = valorFormatadoParaNumero(apenasNumerosVirgula);
+                      const valorNumero = desmascarar(mascarado);
                       if (valorNumero <= 999999999.99) {
                         setNovaContaDados({ ...novaContaDados, valor_pgto: valorNumero });
                       }
                     }}
-                    onBlur={(e) => {
-                      if (novaContaDados.eh_internacional) return;
-
-                      const num = valorFormatadoParaNumero(e.target.value);
-                      if (num > 0) {
-                        setValorPgtoInput(formatarValorParaInput(num));
-                      }
-                    }}
                     disabled={novaContaDados.eh_internacional}
                     className={`pl-10 ${novaContaDados.eh_internacional ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed' : ''}`}
-                    placeholder={novaContaDados.eh_internacional ? 'Calculado automaticamente' : 'Ex: 1.500,00'}
+                    placeholder={novaContaDados.eh_internacional ? 'Calculado automaticamente' : '0,00'}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -4161,9 +4098,9 @@ export function ContasAPagar() {
           </div>
 
           {/* Seção: Documentos Fiscais */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Documentos Fiscais</h3>
-            <div className="grid grid-cols-2 gap-4">
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Documentos Fiscais</h3>
+            <div className="grid grid-cols-4 gap-3">
               <div>
                 <Label>{novaContaDados.eh_internacional ? 'Número da Invoice' : 'Número da NF'}</Label>
                 <Input
@@ -4214,9 +4151,9 @@ export function ContasAPagar() {
           </div>
 
           {/* Seção: Opções Adicionais */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Opções Adicionais</h3>
-            <div className="grid grid-cols-3 gap-4">
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Opções Adicionais</h3>
+            <div className="grid grid-cols-3 gap-3">
               <div className="flex items-center space-x-2 opacity-50">
                 <input
                   type="checkbox"
@@ -4273,12 +4210,12 @@ export function ContasAPagar() {
 
           {/* Campos de Conversão de Moeda (Condicional - apenas se internacional) */}
           {novaContaDados.eh_internacional && (
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
-              <h4 className="text-sm font-semibold mb-3">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
+              <h4 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">
                 Conversão de Moeda Estrangeira
               </h4>
-              
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <Label>Moeda *</Label>
                   <Select
@@ -4311,45 +4248,17 @@ export function ContasAPagar() {
                       type="text"
                       value={taxaConversaoInput}
                       onChange={(e) => {
-                        const valorDigitado = e.target.value;
-                        // Apenas aceita números
-                        const apenasNumeros = valorDigitado.replace(/[^0-9]/g, '');
-                        
-                        if (apenasNumeros === '') {
-                          setTaxaConversaoInput('');
-                          setNovaContaDados({ 
-                            ...novaContaDados, 
-                            taxa_conversao: 0,
-                            valor_pgto: 0
-                          });
-                          return;
-                        }
-                        
-                        // Atualiza input com apenas números
-                        setTaxaConversaoInput(apenasNumeros);
-                        
-                        // Calcula taxa: 626 -> 6.26
-                        const taxa = parseInt(apenasNumeros) / 100;
-                        setNovaContaDados({ 
-                          ...novaContaDados, 
+                        const mascarado = mascaraInputBRL(e.target.value);
+                        setTaxaConversaoInput(mascarado);
+
+                        const taxa = desmascarar(mascarado);
+                        setNovaContaDados({
+                          ...novaContaDados,
                           taxa_conversao: taxa,
                           valor_pgto: novaContaDados.valor_moeda * taxa
                         });
                       }}
-                      onBlur={() => {
-                        // Ao perder foco, formatar com vírgula
-                        if (novaContaDados.taxa_conversao > 0) {
-                          setTaxaConversaoInput(novaContaDados.taxa_conversao.toFixed(4).replace('.', ','));
-                        }
-                      }}
-                      onFocus={() => {
-                        // Ao focar, mostrar apenas números
-                        if (novaContaDados.taxa_conversao > 0) {
-                          const numerosSemFormato = Math.round(novaContaDados.taxa_conversao * 100).toString();
-                          setTaxaConversaoInput(numerosSemFormato);
-                        }
-                      }}
-                      placeholder="Ex: 626 = 6,2600"
+                      placeholder="0,00"
                       className="pl-10"
                     />
                   </div>
@@ -4361,7 +4270,7 @@ export function ContasAPagar() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-3">
+              <div className="grid grid-cols-4 gap-3 mt-2">
                 <div>
                   <Label>Valor na Moeda Estrangeira *</Label>
                   <div className="relative">
@@ -4369,19 +4278,20 @@ export function ContasAPagar() {
                       {novaContaDados.moeda ? obterIconeMoeda(novaContaDados.moeda) : '💵'}
                     </span>
                     <Input
-                      type="number"
-                      step="0.01"
-                      value={novaContaDados.valor_moeda || ''}
+                      type="text"
+                      value={valorMoedaInput}
                       onChange={(e) => {
-                        const valorMoeda = parseFloat(e.target.value) || 0;
-                        setNovaContaDados({ 
-                          ...novaContaDados, 
+                        const mascarado = mascaraInputBRL(e.target.value);
+                        setValorMoedaInput(mascarado);
+
+                        const valorMoeda = desmascarar(mascarado);
+                        setNovaContaDados({
+                          ...novaContaDados,
                           valor_moeda: valorMoeda,
-                          // Recalcular valor em reais automaticamente
                           valor_pgto: valorMoeda * novaContaDados.taxa_conversao
                         });
                       }}
-                      placeholder="Ex: 30000.00"
+                      placeholder="0,00"
                       className="pl-10"
                     />
                   </div>
@@ -4657,7 +4567,6 @@ export function ContasAPagar() {
           modais.setContaSelecionada(null);
         }}
         title="Observações"
-        width="w-11/12 md:w-2/3 lg:w-1/2"
       >
         <div className="space-y-4">
           {modais.contaSelecionada ? (
