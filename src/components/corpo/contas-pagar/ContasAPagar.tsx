@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext, ChangeEvent } from 'react';
 import { AuthContext } from '@/contexts/authContexts';
+import Carregamento from '@/utils/carregamento';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,10 @@ export function ContasAPagar() {
   const { user } = useContext(AuthContext);
 
   const { contasPagar: contasPagarOriginal, paginacao, carregando, erro, consultarContasPagar: consultarOriginal, marcarComoPago, editarConta, cancelarConta } = useContasPagar();
-  
+
+  // Controle de primeiro carregamento
+  const [primeiroCarregamento, setPrimeiroCarregamento] = useState(true);
+
   // Estado local para armazenar contas consolidadas (pendentes + pagos parcialmente)
   const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
   const [todasContasConsolidadas, setTodasContasConsolidadas] = useState<ContaPagar[]>([]);
@@ -101,6 +105,7 @@ export function ContasAPagar() {
       setPaginacaoLocal(null);
     } finally {
       setCarregandoConsolidado(false);
+      if (primeiroCarregamento) setPrimeiroCarregamento(false);
     }
   };
 
@@ -1095,26 +1100,26 @@ export function ContasAPagar() {
           <span className="text-gray-300 dark:text-gray-600">-</span>
         ),
         // ID
-        <span className="font-mono text-sm">{conta.id}</span>,
+        <span className="font-mono text-xs">{conta.id}</span>,
         // Tipo
         (
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-[10px] px-1 py-0">
             {getTipoTexto(conta.tipo || '')}
           </Badge>
         ),
         // Credor
         (
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900 dark:text-white">
-                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-900 dark:text-white">
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">
                   {conta.tipo === 'T' ? conta.cod_transp : conta.cod_credor}
                 </span>
                 {" - "}
                 {conta.nome_exibicao || conta.nome_credor}
               </span>
               {conta.parcela_atual && (
-                <Badge variant="secondary" className="text-xs font-normal">
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 font-normal">
                   Parcela {conta.parcela_atual}
                 </Badge>
               )}
@@ -1123,49 +1128,49 @@ export function ContasAPagar() {
         ),
         // Emissão
         (
-          <span className="text-sm">
+          <span className="text-xs">
             {formatarData(conta.dt_emissao)}
           </span>
         ),
         // Vencimento
         (
-          <span className={vencido ? 'text-red-600 font-semibold' : 'text-sm'}>
+          <span className={vencido ? 'text-xs text-red-600 font-semibold' : 'text-xs'}>
             {formatarData(conta.dt_venc)}
-            {vencido && <div className="text-xs text-red-500">Vencido</div>}
+            {vencido && <div className="text-[10px] text-red-500">Vencido</div>}
           </span>
         ),
         // Pagamento
         (
-          <span className="text-sm">
+          <span className="text-xs">
             {conta.dt_pgto ? formatarData(conta.dt_pgto) : '-'}
           </span>
         ),
         // Valor Total
-        <span className="font-mono font-medium">{formatarMoeda(conta.valor_pgto)}</span>,
+        <span className="font-mono text-xs font-medium">{formatarMoeda(conta.valor_pgto)}</span>,
         // Valor Pago
         (
-          <span className="font-mono text-sm text-green-600">
+          <span className="font-mono text-xs text-green-600">
             {conta.total_pago_historico ? formatarMoeda(conta.total_pago_historico) : '-'}
           </span>
         ),
         // Juros
         (
-          <span className="font-mono text-sm text-orange-600">
+          <span className="font-mono text-xs text-orange-600">
             {conta.valor_juros ? formatarMoeda(conta.valor_juros) : '-'}
           </span>
         ),
         // Nº NF
-        <span className="text-sm">{conta.nro_nf || '-'}</span>,
+        <span className="text-xs">{conta.nro_nf || '-'}</span>,
         // Nº Duplicata
         (
-          <span className="text-sm font-mono">{conta.nro_dup || '-'}</span>
+          <span className="text-xs font-mono">{conta.nro_dup || '-'}</span>
         ),
         // Banco
         (
-          <span className="text-sm">
+          <span className="text-xs">
             {conta.banco ? (
               <>
-                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{conta.banco}</span>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.banco}</span>
                 {conta.nome_banco && (
                   <>
                     {" - "}
@@ -1178,16 +1183,16 @@ export function ContasAPagar() {
         ),
         // Ordem Compra
         (
-          <span className="text-sm font-mono text-blue-600">
+          <span className="text-xs font-mono text-blue-600">
             {conta.ordem_compra ? `#${conta.ordem_compra}` : '-'}
           </span>
         ),
         // Centro Custo
         (
-          <span className="text-sm">
+          <span className="text-xs">
             {conta.cod_ccusto ? (
               <>
-                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{conta.cod_ccusto}</span>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.cod_ccusto}</span>
                 {conta.descricao_ccusto && (
                   <>
                     {" - "}
@@ -1199,13 +1204,13 @@ export function ContasAPagar() {
           </span>
         ),
         // Conta
-        <span className="text-sm">{conta.descricao_conta}</span>,
+        <span className="text-xs">{conta.descricao_conta}</span>,
         // Comprador
         (
-          <span className="text-sm">
+          <span className="text-xs">
             {conta.codcomprador ? (
               <>
-                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{conta.codcomprador}</span>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.codcomprador}</span>
                 {conta.nome_comprador && (
                   <>
                     {" - "}
@@ -1218,28 +1223,28 @@ export function ContasAPagar() {
         ),
         // Internacional
         (
-          <Badge variant={conta.eh_internacional === 'S' ? 'default' : 'secondary'} className="text-xs">
+          <Badge variant={conta.eh_internacional === 'S' ? 'default' : 'secondary'} className="text-[10px] px-1 py-0">
             {conta.eh_internacional === 'S' ? 'Sim' : 'Não'}
           </Badge>
         ),
         // Moeda
-        <span className="text-sm font-mono">{conta.moeda || '-'}</span>,
+        <span className="text-xs font-mono">{conta.moeda || '-'}</span>,
         // Taxa Conversão
         (
-          <span className="text-sm font-mono">
+          <span className="text-xs font-mono">
             {conta.taxa_conversao ? conta.taxa_conversao.toFixed(4) : '-'}
           </span>
         ),
         // Valor Moeda
         (
-          <span className="text-sm font-mono">
+          <span className="text-xs font-mono">
             {conta.valor_moeda ? formatarMoeda(conta.valor_moeda) : '-'}
           </span>
         ),
         // Nº Invoice
-        <span className="text-sm font-mono">{conta.nro_invoice || '-'}</span>,
+        <span className="text-xs font-mono">{conta.nro_invoice || '-'}</span>,
         // Nº Contrato
-        <span className="text-sm font-mono">{conta.nro_contrato || '-'}</span>,
+        <span className="text-xs font-mono">{conta.nro_contrato || '-'}</span>,
         // Obs
         (
           <div className="max-w-[200px]" title={conta.obs || undefined}>
@@ -2410,6 +2415,14 @@ export function ContasAPagar() {
       setExportando(false);
     }
   };
+
+  if (primeiroCarregamento) {
+    return (
+      <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
+        <Carregamento texto="Carregando Contas a Pagar..." />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">

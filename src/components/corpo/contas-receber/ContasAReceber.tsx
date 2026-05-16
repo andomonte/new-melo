@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, ChangeEvent } from 'react';
+import { useState, useEffect, useContext, ChangeEvent } from 'react';
 import { useContasReceber, ContaReceber, FiltrosContasReceber } from '@/hooks/useContasReceber';
-import DataTableContasReceber from '@/components/common/DataTableContasReceber';
+import DataTableContasPagar from '@/components/common/DataTableContasPagar';
+import { AuthContext } from '@/contexts/authContexts';
 import DropdownContasReceber from '@/components/common/DropdownContasReceber';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { Meta } from '@/data/common/meta';
@@ -16,8 +17,10 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload } from 'lucide-react';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
+import Carregamento from '@/utils/carregamento';
 
 export default function ContasAReceber() {
+  const { user } = useContext(AuthContext);
   const {
     contasReceber,
     paginacao,
@@ -29,6 +32,9 @@ export default function ContasAReceber() {
     editarConta,
     cancelarConta,
   } = useContasReceber();
+
+  // Controle de primeiro carregamento
+  const [primeiroCarregamento, setPrimeiroCarregamento] = useState(true);
 
   // Estados para paginação e filtros
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -139,6 +145,15 @@ export default function ContasAReceber() {
   useEffect(() => {
     consultarContasReceber(paginaAtual, itensPorPagina, filtros);
   }, [paginaAtual, itensPorPagina, filtros]);
+
+  // Marca quando o primeiro carregamento terminou (dados da tabela prontos)
+  useEffect(() => {
+    if (primeiroCarregamento && !carregando && Array.isArray(contasReceber)) {
+      // Pequeno delay para garantir que o estado estabilizou
+      const t = setTimeout(() => setPrimeiroCarregamento(false), 100);
+      return () => clearTimeout(t);
+    }
+  }, [carregando, contasReceber, primeiroCarregamento]);
 
   // Carregar contas dbconta
   useEffect(() => {
@@ -286,14 +301,14 @@ export default function ContasAReceber() {
         <div key={`status-${conta.cod_receb}`} className="flex items-center">{getStatusBadge(conta.status)}</div>,
 
         // Número Título
-        <span key={`titulo-${conta.cod_receb}`} className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
+        <span key={`titulo-${conta.cod_receb}`} className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">
           {conta.cod_receb}
         </span>,
 
         // Cliente
-        <div key={`cliente-${conta.cod_receb}`} className="min-w-[220px]">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-900 dark:text-white">
+        <div key={`cliente-${conta.cod_receb}`} className="min-w-[180px]">
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-gray-900 dark:text-white">
               {conta.nome_cliente}
             </span>
             {conta.parcela_atual && (
@@ -308,38 +323,38 @@ export default function ContasAReceber() {
         </div>,
 
         // Emissão
-        <span key={`emissao-${conta.cod_receb}`} className="text-sm text-gray-900 dark:text-white">{formatarData(conta.dt_emissao)}</span>,
+        <span key={`emissao-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{formatarData(conta.dt_emissao)}</span>,
 
         // Vencimento
-        <span key={`venc-${conta.cod_receb}`} className={vencido ? 'text-red-600 font-semibold' : 'text-sm text-gray-900 dark:text-white'}>
+        <span key={`venc-${conta.cod_receb}`} className={vencido ? 'text-xs text-red-600 font-semibold' : 'text-xs text-gray-900 dark:text-white'}>
           {formatarData(conta.dt_venc)}
-          {vencido && <div className="text-xs text-red-500">Vencido</div>}
+          {vencido && <div className="text-[10px] text-red-500">Vencido</div>}
         </span>,
 
         // Pagamento
-        <span key={`pgto-${conta.cod_receb}`} className="text-sm text-gray-900 dark:text-white">{conta.dt_pgto ? formatarData(conta.dt_pgto) : '-'}</span>,
+        <span key={`pgto-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{conta.dt_pgto ? formatarData(conta.dt_pgto) : '-'}</span>,
 
         // Valor Original
-        <span key={`valor-original-${conta.cod_receb}`} className="font-mono font-medium text-gray-900 dark:text-white">{formatarMoeda(conta.valor_original)}</span>,
+        <span key={`valor-original-${conta.cod_receb}`} className="font-mono text-xs font-medium text-gray-900 dark:text-white">{formatarMoeda(conta.valor_original)}</span>,
 
         // Valor Recebido
-        <span key={`valor-recebido-${conta.cod_receb}`} className={`font-mono font-medium ${conta.valor_recebido > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>{conta.valor_recebido > 0 ? formatarMoeda(conta.valor_recebido) : '-'}</span>,
+        <span key={`valor-recebido-${conta.cod_receb}`} className={`font-mono text-xs font-medium ${conta.valor_recebido > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>{conta.valor_recebido > 0 ? formatarMoeda(conta.valor_recebido) : '-'}</span>,
 
         // Juros (se houver)
-        <span key={`juros-${conta.cod_receb}`} className="text-sm text-gray-900 dark:text-white">{(conta as any).valor_juros ? formatarMoeda((conta as any).valor_juros) : '-'}</span>,
+        <span key={`juros-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{(conta as any).valor_juros ? formatarMoeda((conta as any).valor_juros) : '-'}</span>,
 
         // Nº Documento
-        <span key={`doc-${conta.cod_receb}`} className="text-sm font-mono text-gray-900 dark:text-white">{conta.nro_doc || '-'}</span>,
+        <span key={`doc-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.nro_doc || '-'}</span>,
 
         // Fatura
-        <span key={`fat-${conta.cod_receb}`} className="text-sm font-mono text-gray-900 dark:text-white">{conta.cod_fat || '-'}</span>,
+        <span key={`fat-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.cod_fat || '-'}</span>,
 
         // Conta Financeira
-        <span key={`conta-fin-${conta.cod_receb}`} className="text-sm text-gray-900 dark:text-white">{conta.descricao_conta || '-'}</span>,
+        <span key={`conta-fin-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{conta.descricao_conta || '-'}</span>,
 
         // Banco
         (
-          <span className="text-sm">
+          <span className="text-xs">
             {contaComNomeBanco.banco ? (
               <>
                 <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{contaComNomeBanco.banco}</span>
@@ -355,7 +370,7 @@ export default function ContasAReceber() {
         ),
 
         // Observações
-        <div key={`obs-${conta.cod_receb}`} className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[220px]">{conta.obs || '-'}</div>,
+        <div key={`obs-${conta.cod_receb}`} className="text-xs text-gray-700 dark:text-gray-300 truncate max-w-[180px]">{conta.obs || '-'}</div>,
       ];
     });
   };
@@ -895,16 +910,25 @@ export default function ContasAReceber() {
     total: paginacao?.total || 0,
   };
 
+  // Loading único até o primeiro carregamento completar
+  if (primeiroCarregamento) {
+    return (
+      <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
+        <Carregamento texto="Carregando Contas a Receber..." />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
       <main className="flex-1 flex flex-col p-4 overflow-hidden">
         {/* Header com título e ações */}
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <div>
-            <h1 className="text-2xl font-semibold text-black dark:text-white">
+            <h1 className="text-base font-semibold text-black dark:text-white">
                Contas a Receber
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
               Gerencie seus títulos, duplicatas e recebimentos
             </p>
           </div>
@@ -934,9 +958,11 @@ export default function ContasAReceber() {
           </div>
         )}
 
-        {/* Tabela com scroll automático */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <DataTableContasReceber
+        {/* Container da tabela com altura calculada */}
+        <div className="flex-1 min-h-20 flex flex-col">
+          <DataTableContasPagar
+            screenKey="contas-a-receber"
+            userName={user?.usuario}
             headers={headers}
             rows={prepararDadosTabela()}
             meta={meta}
@@ -949,6 +975,7 @@ export default function ContasAReceber() {
             noDataMessage="Nenhum título a receber encontrado."
             onFiltroChange={handleFiltroAvancado}
             onExportarExcel={handleExportarDireto}
+            nonsortableColumns={['Ações']}
             colunasFiltro={[
               'cod_receb',
               'nome_cliente',

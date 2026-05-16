@@ -18,7 +18,7 @@ const SearchInput = ({
     <Input
       type="text"
       placeholder={placeholder || 'Pesquisar...'}
-      className="uppercase w-full px-2 py-1  border-b border-gray-300 dark:border-zinc-600 text-sm"
+      className="uppercase w-full px-2 py-1 h-7 border-b border-gray-300 dark:border-zinc-600 text-xs"
       onChange={onChange}
       onKeyDown={onKeyDown}
       onBlur={onBlur}
