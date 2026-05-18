@@ -137,8 +137,8 @@ export function ContasAPagar() {
   const semanaAtual = calcularSemanaAtual();
   const [filtros, setFiltros] = useState<FiltrosContasPagar>({
     data_inicio: semanaAtual.dataInicio,
-    data_fim: semanaAtual.dataFim
-    // Não definir status inicial para mostrar pendentes e pagos parcialmente
+    data_fim: semanaAtual.dataFim,
+    status: 'pendente_parcial'
   });
 
   // Colunas disponíveis para filtro dinâmico
@@ -2551,6 +2551,7 @@ export function ContasAPagar() {
           <DataTableContasPagar
             screenKey="contas-a-pagar"
             userName={user?.usuario}
+            initialFilters={{ status: { tipo: 'igual', valor: 'pendente_parcial' } }}
             headers={headers}
             rows={prepararDadosTabela()}
             meta={meta}
@@ -4135,7 +4136,7 @@ export function ContasAPagar() {
                     const valor = e.target.value;
                     const temValor = valor.trim().length > 0;
                     if (novaContaDados.eh_internacional) {
-                      setNovaContaDados({ ...novaContaDados, nro_contrato: valor });
+                      setNovaContaDados({ ...novaContaDados, nro_contrato: valor, tem_cobr: temValor });
                     } else {
                       setNovaContaDados({ 
                         ...novaContaDados, 
@@ -4150,63 +4151,11 @@ export function ContasAPagar() {
             </div>
           </div>
 
-          {/* Seção: Opções Adicionais */}
-          <div className="border-b pb-3">
-            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Opções Adicionais</h3>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="flex items-center space-x-2 opacity-50">
-                <input
-                  type="checkbox"
-                  id="eh_internacional"
-                  checked={novaContaDados.eh_internacional}
-                  disabled
-                  onChange={(e) => {
-                    setNovaContaDados({ ...novaContaDados, eh_internacional: e.target.checked });
-                    // Se desmarcar, limpar campos internacionais
-                    if (!e.target.checked) {
-                      setNovaContaDados(prev => ({
-                        ...prev,
-                        eh_internacional: false,
-                        moeda: '',
-                        taxa_conversao: 0,
-                        valor_moeda: 0,
-                        nro_invoice: '',
-                        nro_contrato: '',
-                      }));
-                    }
-                  }}
-                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 cursor-not-allowed"
-                />
-                <Label htmlFor="eh_internacional" className="cursor-not-allowed">
-                  Pagamento Internacional
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="tem_nota"
-                  checked={novaContaDados.tem_nota}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, tem_nota: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-600"
-                />
-                <Label htmlFor="tem_nota" className="font-normal cursor-pointer">
-                  Possui Nota Fiscal
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="tem_cobr"
-                  checked={novaContaDados.tem_cobr}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, tem_cobr: e.target.checked })}
-                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-600"
-                />
-                <Label htmlFor="tem_cobr" className="font-normal cursor-pointer">
-                  Possui Cobrança
-                </Label>
-              </div>
-            </div>
-          </div>
+          {/* Opções Adicionais — ocultos do usuário, lógica automática mantida:
+              - eh_internacional: definido pelo fornecedor/conta selecionada
+              - tem_nota: marcado automaticamente ao digitar NF/Invoice
+              - tem_cobr: marcado automaticamente ao digitar Duplicata/Contrato
+          */}
 
           {/* Campos de Conversão de Moeda (Condicional - apenas se internacional) */}
           {novaContaDados.eh_internacional && (
