@@ -37,6 +37,8 @@ export function Autocomplete({
   const [aberto, setAberto] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [opcaoSelecionada, setOpcaoSelecionada] = useState<AutocompleteOption | null>(null);
+  const [modified, setModified] = useState(false);
+  const initialValueRef = useRef<string | null | undefined>(undefined);
   const [isResetting, setIsResetting] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -132,6 +134,8 @@ export function Autocomplete({
 
   const handleSelect = (opcao: AutocompleteOption) => {
     if (isResetting) return;
+    if (initialValueRef.current === undefined) initialValueRef.current = value;
+    if (opcao.value !== initialValueRef.current) setModified(true);
     setOpcaoSelecionada(opcao);
     setBusca(opcao.label);
     setAberto(false);
@@ -200,7 +204,7 @@ export function Autocomplete({
           onChange={handleInputChange}
           onFocus={() => setAberto(true)}
           disabled={disabled}
-          className="pl-7 pr-7 text-xs h-[30px]"
+          className={`pl-7 pr-7 text-xs h-[30px] ${modified ? '!border-emerald-400 dark:!border-emerald-500/60 !bg-emerald-50/30 dark:!bg-emerald-900/10' : ''}`}
         />
         {opcaoSelecionada && !disabled && (
           <button

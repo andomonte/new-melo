@@ -23,6 +23,27 @@ body {
   font-size: 13px;
 }
 
+/* Caixa alta padrão em todo o sistema */
+input,
+select,
+textarea,
+[role="combobox"],
+[role="combobox"] span,
+[role="option"],
+.uppercase-all {
+  text-transform: uppercase;
+}
+
+/* Exceções: campos que não devem ser uppercase */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="email"],
+input[type="password"],
+input[type="number"] {
+  text-transform: none;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

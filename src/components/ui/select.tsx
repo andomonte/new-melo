@@ -11,8 +11,23 @@ import { cn } from '@/lib/utils';
 
 const Select = ({ onValueChange, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) => {
   const wrapperRef = React.useRef<HTMLDivElement>(null);
+  const [modified, setModified] = React.useState(false);
+  const initialValueRef = React.useRef<string | undefined>(undefined);
+
+  // Captura valor inicial na primeira abertura
+  React.useEffect(() => {
+    if (initialValueRef.current === undefined && props.value) {
+      initialValueRef.current = props.value as string;
+    }
+  }, [props.value]);
 
   const handleValueChange = (value: string) => {
+    if (initialValueRef.current === undefined) {
+      initialValueRef.current = '';
+    }
+    if (value !== initialValueRef.current) {
+      setModified(true);
+    }
     onValueChange?.(value);
 
     setTimeout(() => {
@@ -35,7 +50,7 @@ const Select = ({ onValueChange, children, ...props }: React.ComponentProps<type
   };
 
   return (
-    <div ref={wrapperRef}>
+    <div ref={wrapperRef} data-modified={modified || undefined}>
       <SelectPrimitive.Root onValueChange={handleValueChange} {...props}>
         {children}
       </SelectPrimitive.Root>
@@ -48,11 +63,30 @@ const SelectValue = SelectPrimitive.Value;
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => {
+  const [isModified, setIsModified] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+
+  React.useEffect(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const wrapper = el.closest('[data-modified]');
+    setIsModified(!!wrapper);
+  });
+
+  return (
   <SelectPrimitive.Trigger
-    ref={ref}
+    ref={(node) => {
+      triggerRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    }}
     className={cn(
-      'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-400 dark:focus:ring-blue-400/40 dark:focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border',
+      isModified
+        ? 'border-emerald-400 dark:border-emerald-500/60 bg-emerald-50/30 dark:bg-emerald-900/10'
+        : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800',
+      'text-gray-900 dark:text-white px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-400 dark:focus:ring-blue-400/40 dark:focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
       className,
     )}
     {...props}
@@ -62,7 +96,8 @@ const SelectTrigger = React.forwardRef<
       <CaretSortIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
-));
+  );
+});
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
 const SelectScrollUpButton = React.forwardRef<

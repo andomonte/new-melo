@@ -25,6 +25,9 @@ function focusNextField(el: HTMLElement) {
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type = 'text', onKeyDown, onChange, ...props }, ref) => {
+    const [modified, setModified] = React.useState(false);
+    const initialValueRef = React.useRef<string | undefined>(undefined);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && type !== 'textarea') {
         e.preventDefault();
@@ -33,9 +36,17 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       onKeyDown?.(e);
     };
 
+    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      if (initialValueRef.current === undefined) {
+        initialValueRef.current = e.target.value;
+      }
+    };
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       onChange?.(e);
-      // Para input date: ao selecionar data pelo calendário, foca no próximo
+      if (initialValueRef.current !== undefined && e.target.value !== initialValueRef.current) {
+        setModified(true);
+      }
       if (type === 'date' && e.target.value) {
         setTimeout(() => focusNextField(e.target), 100);
       }
@@ -46,8 +57,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         type={type}
         autoComplete="off"
         className={cn(
-          'flex h-10 w-full rounded-md border border-gray-300 dark:border-zinc-600',
-          'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white',
+          'flex h-10 w-full rounded-md border',
+          modified
+            ? 'border-emerald-400 dark:border-emerald-500/60 bg-emerald-50/30 dark:bg-emerald-900/10'
+            : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800',
+          'text-gray-900 dark:text-white',
           'px-3 py-1 text-sm transition-colors',
           'file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground',
           'placeholder:text-gray-400 dark:placeholder:text-zinc-500',
@@ -57,6 +71,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         )}
         ref={ref}
         onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
         onChange={handleChange}
         {...props}
       />
