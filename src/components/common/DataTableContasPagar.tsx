@@ -58,6 +58,10 @@ interface DataTableContasPagarProps {
   screenKey?: string;
   /** Login do usuário logado (ex: user.usuario) */
   userName?: string;
+  /** Filtros iniciais do filtro rápido (ex: { status: { tipo: 'igual', valor: 'pendente_parcial' } }) */
+  initialFilters?: Record<string, { tipo: string; valor: string }>;
+  /** Opções do filtro rápido de Status (padrão: Todos, Pendente/Parcial, Pago, Cancelado) */
+  statusFilterOptions?: { value: string; label: string }[];
 }
 
 export default function DataTableContasPagar({
@@ -81,12 +85,14 @@ export default function DataTableContasPagar({
   nonsortableColumns = ['Ações', '☑️'],
   screenKey,
   userName,
+  initialFilters,
+  statusFilterOptions,
 }: DataTableContasPagarProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
-  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>({});
+  const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});
   const [termoBuscaGlobal, setTermoBuscaGlobal] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [larguraTabela, setLarguraTabela] = useState(0);
@@ -492,9 +498,13 @@ export default function DataTableContasPagar({
                           </RadixSelectTrigger>
                           <RadixSelectContent>
                             <RadixSelectItem value="todos">Todos</RadixSelectItem>
-                            <RadixSelectItem value="pendente_parcial">Pendente/Parcial</RadixSelectItem>
-                            <RadixSelectItem value="pago">Pago</RadixSelectItem>
-                            <RadixSelectItem value="cancelado">Cancelado</RadixSelectItem>
+                            {(statusFilterOptions || [
+                              { value: 'pendente_parcial', label: 'Pendente/Parcial' },
+                              { value: 'pago', label: 'Pago' },
+                              { value: 'cancelado', label: 'Cancelado' },
+                            ]).map((opt) => (
+                              <RadixSelectItem key={opt.value} value={opt.value}>{opt.label}</RadixSelectItem>
+                            ))}
                           </RadixSelectContent>
                         </RadixSelect>
                       ) : header === '☑️' ? (

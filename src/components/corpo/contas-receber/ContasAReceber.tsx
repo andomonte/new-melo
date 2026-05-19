@@ -823,6 +823,9 @@ export default function ContasAReceber() {
       if (filtro.campo === 'codcli' || filtro.campo === 'nome_cliente') {
         novosFiltros.cliente = filtro.valor;
       }
+      if (filtro.campo === 'status') {
+        if (filtro.valor) novosFiltros.status = filtro.valor as any;
+      }
       if (filtro.campo === 'rec') {
         if (filtro.valor === 'S') novosFiltros.status = 'recebido';
         else if (filtro.valor === 'N') novosFiltros.status = 'pendente';
@@ -832,9 +835,26 @@ export default function ContasAReceber() {
       }
     });
 
-    setFiltros(novosFiltros);
+    // Mesclar com filtros existentes (manter período/data)
+    const filtrosMesclados = { ...filtros };
+
+    // Limpar status se não veio nos filtros
+    if (!novosFiltros.status) {
+      delete filtrosMesclados.status;
+    }
+
+    // Aplicar novos filtros sobre os existentes
+    Object.keys(novosFiltros).forEach(key => {
+      const valor = novosFiltros[key as keyof FiltrosContasReceber];
+      if (valor === '' || valor === undefined || valor === null) {
+        delete filtrosMesclados[key as keyof FiltrosContasReceber];
+      } else {
+        (filtrosMesclados as any)[key] = valor;
+      }
+    });
+
+    setFiltros(filtrosMesclados);
     setPaginaAtual(1);
-    toast.success('Filtros avançados aplicados!');
   };
 
   // Função para salvar nova conta
@@ -965,6 +985,12 @@ export default function ContasAReceber() {
             screenKey="contas-a-receber"
             userName={user?.usuario}
             initialFilters={{ status: { tipo: 'igual', valor: 'pendente' } }}
+            statusFilterOptions={[
+              { value: 'pendente', label: 'Pendente' },
+              { value: 'recebido_parcial', label: 'Recebido Parcial' },
+              { value: 'recebido', label: 'Recebido' },
+              { value: 'cancelado', label: 'Cancelado' },
+            ]}
             headers={headers}
             rows={prepararDadosTabela()}
             meta={meta}
