@@ -31,7 +31,7 @@ export default function Modal({
             ✕
           </button>
         </div>
-        <div className="space-y-3 overflow-y-auto max-h-[85vh]">{children}</div>
+        <div className="space-y-3 overflow-visible max-h-[85vh]">{children}</div>
       </div>
     </div>
   );

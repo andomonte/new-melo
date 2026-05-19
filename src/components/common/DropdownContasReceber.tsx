@@ -96,7 +96,7 @@ export default function DropdownContasReceber({
           className="group flex items-center gap-2 px-2 py-2 hover:bg-amber-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
         >
           <Edit className="size-4 text-amber-600 group-hover:text-white transition group-disabled:text-gray-400" />
-          Alterar
+          Editar
         </DropdownMenuItem>
 
         <DropdownMenuItem

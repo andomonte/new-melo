@@ -18,6 +18,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload } from 'lucide-react';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
+import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export default function ContasAReceber() {
   const { user } = useContext(AuthContext);
@@ -206,7 +208,7 @@ export default function ContasAReceber() {
   // Calcular tarifa quando operadora ou valor mudar
   useEffect(() => {
     if (operadoraSelecionada && valorRecebido && totalParcelas && (formaPgtoReceb === '005' || formaPgtoReceb === '006')) {
-      const valorNum = valorFormatadoParaNumero(valorRecebido);
+      const valorNum = desmascarar(valorRecebido);
       if (valorNum > 0) {
         fetch('/api/operadoras/calcular-tarifa', {
           method: 'POST',
@@ -413,7 +415,7 @@ export default function ContasAReceber() {
     setDadosEdicao({
       dt_venc: conta.dt_venc ? new Date(conta.dt_venc).toISOString().split('T')[0] : '',
       dt_emissao: conta.dt_emissao ? new Date(conta.dt_emissao).toISOString().split('T')[0] : '',
-      valor_pgto: conta.valor_original?.toString() || '',
+      valor_pgto: mascaraInputBRL(String(Math.round(Number(conta.valor_original || 0) * 100))),
       nro_doc: conta.nro_doc || '',
       codcli: conta.codcli?.toString() || '',
       rec_cof_id: conta.rec_cof_id?.toString() || ''
@@ -429,7 +431,7 @@ export default function ContasAReceber() {
       await editarConta(contaSelecionada.cod_receb, {
         dt_venc: dadosEdicao.dt_venc || undefined,
         dt_emissao: dadosEdicao.dt_emissao || undefined,
-        valor_pgto: parseFloat(dadosEdicao.valor_pgto) || undefined,
+        valor_pgto: desmascarar(dadosEdicao.valor_pgto) || undefined,
         nro_doc: dadosEdicao.nro_doc || undefined,
         codcli: dadosEdicao.codcli ? parseInt(dadosEdicao.codcli) : undefined,
         rec_cof_id: dadosEdicao.rec_cof_id ? parseInt(dadosEdicao.rec_cof_id) : undefined
@@ -510,7 +512,7 @@ export default function ContasAReceber() {
       toast.error('Informe a data de recebimento');
       return;
     }
-    if (!valorRecebido || valorFormatadoParaNumero(valorRecebido) <= 0) {
+    if (!valorRecebido || desmascarar(valorRecebido) <= 0) {
       toast.error('Informe um valor válido');
       return;
     }
@@ -544,8 +546,8 @@ export default function ContasAReceber() {
     }
 
     try {
-      const valorRecebidoNum = valorFormatadoParaNumero(valorRecebido);
-      const valorJurosNum = parseFloat(valorJuros) || 0;
+      const valorRecebidoNum = desmascarar(valorRecebido);
+      const valorJurosNum = desmascarar(valorJuros) || 0;
 
       await darBaixa(contaSelecionada.cod_receb, {
         dt_receb: dataRecebimento,
@@ -595,14 +597,14 @@ export default function ContasAReceber() {
       toast.error('Para parcelamento automático, informe pelo menos 2 parcelas');
       return;
     }
-    if (!valorRecebido || valorFormatadoParaNumero(valorRecebido) <= 0) {
+    if (!valorRecebido || desmascarar(valorRecebido) <= 0) {
       toast.error('Informe o valor total');
       return;
     }
 
     try {
       setGerandoParcelas(true);
-      const valorNum = valorFormatadoParaNumero(valorRecebido);
+      const valorNum = desmascarar(valorRecebido);
 
       const response = await fetch('/api/contas-receber/gerar-parcelas-cartao', {
         method: 'POST',
@@ -934,21 +936,20 @@ export default function ContasAReceber() {
           </div>
 
           <div className="flex gap-2">
-            <Button
+            <AuxButton
+              variant="secondary"
+              size="default"
               onClick={() => setModalImportacaoCartao(true)}
-              variant="outline"
-              className="flex items-center gap-2"
-            >
-              <CreditCard className="w-4 h-4" />
-              Importar Cartão
-            </Button>
-            <Button
+              icon={<CreditCard className="w-4 h-4" />}
+              text="Importar Cartão"
+            />
+            <DefaultButton
+              variant="primary"
+              size="default"
               onClick={() => setModalNovaContaAberto(true)}
-              className="flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Novo
-            </Button>
+              icon={<Plus className="w-4 h-4" />}
+              text="Novo"
+            />
           </div>
         </div>
 
@@ -963,6 +964,7 @@ export default function ContasAReceber() {
           <DataTableContasPagar
             screenKey="contas-a-receber"
             userName={user?.usuario}
+            initialFilters={{ status: { tipo: 'igual', valor: 'pendente' } }}
             headers={headers}
             rows={prepararDadosTabela()}
             meta={meta}
@@ -997,36 +999,30 @@ export default function ContasAReceber() {
           onClose={() => { setModalRecebidoAberto(false); setContaSelecionada(null); }}
           title="Dar Baixa - Recebimento"
         >
-          <div className="space-y-4">
+          <div className="form-compact space-y-3">
             {/* Resumo do Título */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
-              <p className="text-sm text-blue-800 dark:text-blue-200 font-medium">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2">
+              <p className="text-xs text-blue-800 dark:text-blue-200 font-medium">
                 Recebimento de: <strong>{contaSelecionada.nome_cliente}</strong>
+                <span className="ml-2 text-blue-600 dark:text-blue-300">| Título: {contaSelecionada.cod_receb} - Doc: {contaSelecionada.nro_doc || 'N/A'}</span>
               </p>
-              <p className="text-xs text-blue-600 dark:text-blue-300 mt-1 flex items-center gap-1">
-                <FileText className="w-3 h-3" />
-                Título: {contaSelecionada.cod_receb} - Nº Doc: {contaSelecionada.nro_doc || 'N/A'}
-              </p>
-              <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-                <div className="text-blue-600 dark:text-blue-300 flex items-center gap-1">
-                  <FileText className="w-3 h-3" />
-                  <strong>Valor Original:</strong> {formatarMoeda(contaSelecionada.valor_original || 0)}
-                </div>
+              <div className="flex gap-4 mt-1 text-[11px]">
+                <span className="text-blue-600 dark:text-blue-300">
+                  <strong>Original:</strong> {formatarMoeda(contaSelecionada.valor_original || 0)}
+                </span>
                 {(contaSelecionada.valor_recebido || 0) > 0 && (
-                  <div className="text-green-600 dark:text-green-300 flex items-center gap-1">
-                    <CheckCircle className="w-3 h-3" />
+                  <span className="text-green-600 dark:text-green-300">
                     <strong>Já Recebido:</strong> {formatarMoeda(contaSelecionada.valor_recebido || 0)}
-                  </div>
+                  </span>
                 )}
-                <div className="text-purple-600 dark:text-purple-300 font-bold flex items-center gap-1">
-                  <DollarSign className="w-3 h-3" />
+                <span className="text-purple-600 dark:text-purple-300 font-bold">
                   <strong>Restante:</strong> {formatarMoeda((contaSelecionada.valor_original || 0) - (contaSelecionada.valor_recebido || 0))}
-                </div>
+                </span>
               </div>
             </div>
 
-            {/* Formulário Principal */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Linha 1: Data + Valor + Juros + Forma */}
+            <div className="grid grid-cols-4 gap-3">
               <div>
                 <Label htmlFor="dt_receb">Data do Recebimento *</Label>
                 <Input
@@ -1034,7 +1030,6 @@ export default function ContasAReceber() {
                   type="date"
                   value={dataRecebimento}
                   onChange={(e) => setDataRecebimento(e.target.value)}
-                  className="mt-1"
                   required
                 />
               </div>
@@ -1042,7 +1037,7 @@ export default function ContasAReceber() {
               <div>
                 <Label htmlFor="valor_recebido">Valor a Receber *</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
                     R$
                   </span>
                   <Input
@@ -1050,72 +1045,49 @@ export default function ContasAReceber() {
                     type="text"
                     value={valorRecebido}
                     onChange={(e) => {
-                      const valor = e.target.value;
-                      const apenasNumerosVirgula = valor.replace(/[^\d,]/g, '');
-                      setValorRecebido(apenasNumerosVirgula);
+                      const mascarado = mascaraInputBRL(e.target.value);
+                      setValorRecebido(mascarado);
                     }}
-                    onBlur={(e) => {
-                      const num = valorFormatadoParaNumero(e.target.value);
-                      if (num > 0) {
-                        setValorRecebido(formatarValorParaInput(num));
-                      }
-                    }}
-                    className="mt-1 pl-10"
+                    className="pl-8"
                     placeholder="0,00"
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Saldo restante já preenchido automaticamente
-                </p>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="valor_juros">Juros/Multa</Label>
-                <Input
-                  id="valor_juros"
-                  type="text"
-                  value={valorJuros}
-                  onChange={(e) => {
-                    const valor = e.target.value;
-                    if (valor === '' || /^[\d.,]+$/.test(valor)) {
-                      setValorJuros(valor);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    let valor = e.target.value.replace(',', '.');
-                    const numero = parseFloat(valor);
-                    if (!isNaN(numero) && numero > 0) {
-                      setValorJuros(numero.toString());
-                    } else if (valor === '' || numero === 0) {
-                      setValorJuros('0');
-                    }
-                  }}
-                  placeholder="Ex: 5.8 ou 10.50"
-                  className="mt-1"
-                />
-                {contaSelecionada.dt_venc && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Venc: {new Date(contaSelecionada.dt_venc).toLocaleDateString('pt-BR')}
-                  </p>
-                )}
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
+                    R$
+                  </span>
+                  <Input
+                    id="valor_juros"
+                    type="text"
+                    value={valorJuros}
+                    onChange={(e) => {
+                      const mascarado = mascaraInputBRL(e.target.value);
+                      setValorJuros(mascarado);
+                    }}
+                    className="pl-8"
+                    placeholder="0,00"
+                  />
+                </div>
               </div>
 
               <div>
                 <Label htmlFor="forma_pgto_receb">Forma de Pagamento *</Label>
                 <Select value={formaPgtoReceb} onValueChange={setFormaPgtoReceb}>
-                  <SelectTrigger className="mt-1">
+                  <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="001">001 - Dinheiro</SelectItem>
                     <SelectItem value="002">002 - Cheque</SelectItem>
                     <SelectItem value="003">003 - PIX</SelectItem>
-                    <SelectItem value="004">004 - Transferência Bancária</SelectItem>
-                    <SelectItem value="005">005 - Cartão de Crédito</SelectItem>
-                    <SelectItem value="006">006 - Cartão de Débito</SelectItem>
+                    <SelectItem value="004">004 - Transferência</SelectItem>
+                    <SelectItem value="005">005 - Cartão Crédito</SelectItem>
+                    <SelectItem value="006">006 - Cartão Débito</SelectItem>
                     <SelectItem value="007">007 - Boleto</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1123,17 +1095,18 @@ export default function ContasAReceber() {
             </div>
 
             {formaPgtoReceb === '002' && (
-              <div>
-                <Label htmlFor="nro_cheque">Número do Cheque</Label>
-                <Input
-                  id="nro_cheque"
-                  type="text"
-                  value={nroCheque}
-                  onChange={(e) => setNroCheque(e.target.value)}
-                  className="mt-1"
-                  placeholder="Ex: 000123"
-                  maxLength={15}
-                />
+              <div className="grid grid-cols-4 gap-3">
+                <div>
+                  <Label htmlFor="nro_cheque">Número do Cheque</Label>
+                  <Input
+                    id="nro_cheque"
+                    type="text"
+                    value={nroCheque}
+                    onChange={(e) => setNroCheque(e.target.value)}
+                    placeholder="Ex: 000123"
+                    maxLength={15}
+                  />
+                </div>
               </div>
             )}
 
@@ -1172,27 +1145,18 @@ export default function ContasAReceber() {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-4 gap-3">
                   <div>
                     <Label htmlFor="operadora">Operadora *</Label>
-                    <Select value={operadoraSelecionada} onValueChange={setOperadoraSelecionada}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Selecione a operadora..." />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {operadoras.length > 0 ? (
-                          operadoras.map((op) => (
-                            <SelectItem key={op.codopera} value={op.codopera}>
-                              {op.descr} - {op.txopera}% ({op.pzopera} dias)
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="carregando" disabled>
-                            Carregando operadoras...
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={operadoraSelecionada}
+                      onValueChange={setOperadoraSelecionada}
+                      placeholder="Selecione a operadora..."
+                      options={operadoras.map((op) => ({
+                        value: op.codopera,
+                        label: `${op.descr} - ${op.txopera}% (${op.pzopera} dias)`
+                      }))}
+                    />
                   </div>
 
                   <div>
@@ -1394,13 +1358,13 @@ export default function ContasAReceber() {
         onClose={() => setModalEditarAberto(false)}
         title="Editar Título a Receber"
       >
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Edite os dados do título de <strong>{contaSelecionada?.nome_cliente}</strong>
+        <div className="form-compact space-y-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            Editando título de <strong>{contaSelecionada?.nome_cliente}</strong>
           </p>
 
-          {/* Datas */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Linha 1: Datas + Cliente + Valor */}
+          <div className="grid grid-cols-4 gap-3">
             <div>
               <Label htmlFor="dt_emissao_edit">Data de Emissão</Label>
               <Input
@@ -1408,7 +1372,6 @@ export default function ContasAReceber() {
                 type="date"
                 value={dadosEdicao.dt_emissao}
                 onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_emissao: e.target.value }))}
-                className="mt-1"
               />
             </div>
 
@@ -1419,69 +1382,70 @@ export default function ContasAReceber() {
                 type="date"
                 value={dadosEdicao.dt_venc}
                 onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_venc: e.target.value }))}
-                className="mt-1"
                 required
+              />
+            </div>
+
+            <div>
+              <Label>Cliente</Label>
+              <Autocomplete
+                placeholder="Buscar cliente..."
+                apiUrl="/api/clientes/buscar"
+                value={dadosEdicao.codcli}
+                initialLabel={contaSelecionada?.nome_cliente || (contaSelecionada?.codcli ? `Cód: ${contaSelecionada.codcli}` : undefined)}
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, codcli: value }))}
+                mapResponse={(data) => data.clientes || []}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="valor_pgto_edit">Valor *</Label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
+                  R$
+                </span>
+                <Input
+                  id="valor_pgto_edit"
+                  type="text"
+                  value={dadosEdicao.valor_pgto}
+                  onChange={(e) => {
+                    const mascarado = mascaraInputBRL(e.target.value);
+                    setDadosEdicao(prev => ({ ...prev, valor_pgto: mascarado }));
+                  }}
+                  className="pl-8"
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Linha 2: Conta + Documento */}
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <Label>Conta Financeira</Label>
+              <Autocomplete
+                placeholder="Buscar conta..."
+                apiUrl="/api/contas-receber/contas"
+                value={dadosEdicao.rec_cof_id}
+                initialLabel={contaSelecionada?.descricao_conta || (contaSelecionada?.rec_cof_id ? `Cód: ${contaSelecionada.rec_cof_id}` : undefined)}
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, rec_cof_id: value }))}
+                mapResponse={(data) => data.contas || []}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="nro_doc_edit">Nº Documento</Label>
+              <Input
+                id="nro_doc_edit"
+                value={dadosEdicao.nro_doc}
+                onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_doc: e.target.value }))}
+                placeholder="Ex: 12345"
               />
             </div>
           </div>
 
-          {/* Cliente */}
-          <div>
-            <Label>Cliente</Label>
-            <Autocomplete
-              placeholder="Buscar cliente..."
-              apiUrl="/api/clientes/buscar"
-              value={dadosEdicao.codcli}
-              onChange={(value) => setDadosEdicao(prev => ({ ...prev, codcli: value }))}
-              mapResponse={(data) => data.clientes || []}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Atual: {contaSelecionada?.nome_cliente} (Cód: {contaSelecionada?.codcli})
-            </p>
-          </div>
-
-          {/* Conta Financeira */}
-          <div>
-            <Label>Conta Financeira</Label>
-            <Autocomplete
-              placeholder="Buscar conta..."
-              apiUrl="/api/contas-receber/contas"
-              value={dadosEdicao.rec_cof_id}
-              onChange={(value) => setDadosEdicao(prev => ({ ...prev, rec_cof_id: value }))}
-              mapResponse={(data) => data.contas || []}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Atual: {contaSelecionada?.descricao_conta}
-            </p>
-          </div>
-
-          {/* Valor */}
-          <div>
-            <Label htmlFor="valor_pgto_edit">Valor *</Label>
-            <Input
-              id="valor_pgto_edit"
-              type="number"
-              step="0.01"
-              value={dadosEdicao.valor_pgto}
-              onChange={(e) => setDadosEdicao(prev => ({ ...prev, valor_pgto: e.target.value }))}
-              className="mt-1"
-              required
-            />
-          </div>
-
-          {/* Número do Documento */}
-          <div>
-            <Label htmlFor="nro_doc_edit">Nº Documento</Label>
-            <Input
-              id="nro_doc_edit"
-              value={dadosEdicao.nro_doc}
-              onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_doc: e.target.value }))}
-              className="mt-1"
-              placeholder="Ex: 12345"
-            />
-          </div>
-
-          <div className="flex gap-2 justify-end pt-4 border-t">
+          <div className="flex gap-2 justify-end pt-3 border-t">
             <AuxButton
               variant="secondary"
               onClick={() => setModalEditarAberto(false)}
@@ -1816,28 +1780,24 @@ export default function ContasAReceber() {
         }}
         title="Novo Título a Receber"
       >
-        <div className="space-y-6">
-          {/* Seção: Informações do Cliente */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Informações do Cliente</h3>
-            <div>
-              <Label>Cliente *</Label>
-              <Autocomplete
-                placeholder="Buscar cliente..."
-                apiUrl="/api/contas-receber/clientes"
-                value={novaContaDados.codcli}
-                onChange={(value) => {
-                  setNovaContaDados({ ...novaContaDados, codcli: value });
-                }}
-                mapResponse={(data) => data.clientes || []}
-              />
-            </div>
-          </div>
+        <div className="form-compact space-y-3">
+          {/* Seção: Informações Básicas */}
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Informações Básicas</h3>
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <Label>Cliente *</Label>
+                <Autocomplete
+                  placeholder="Buscar cliente..."
+                  apiUrl="/api/contas-receber/clientes"
+                  value={novaContaDados.codcli}
+                  onChange={(value) => {
+                    setNovaContaDados({ ...novaContaDados, codcli: value });
+                  }}
+                  mapResponse={(data) => data.clientes || []}
+                />
+              </div>
 
-          {/* Seção: Dados Financeiros */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Dados Financeiros</h3>
-            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Conta Financeira *</Label>
                 <Autocomplete
@@ -1847,43 +1807,12 @@ export default function ContasAReceber() {
                   onChange={(value) => {
                     setNovaContaDados({ ...novaContaDados, rec_cof_id: value });
                   }}
-                  mapResponse={(data) => 
+                  mapResponse={(data) =>
                     (data.contas || []).map((conta: any) => ({
                       value: conta.id,
                       label: conta.label
                     }))
                   }
-                />
-              </div>
-
-              <div>
-                <Label>Data de Vencimento *</Label>
-                <Input
-                  type="date"
-                  value={novaContaDados.dt_venc}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, dt_venc: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <Label>Valor do Título *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0,00"
-                  value={novaContaDados.valor_pgto || ''}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, valor_pgto: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-
-              <div>
-                <Label>Número do Documento</Label>
-                <Input
-                  type="text"
-                  placeholder="Ex: 001/2024"
-                  value={novaContaDados.nro_doc}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, nro_doc: e.target.value })}
                 />
               </div>
 
@@ -1920,6 +1849,52 @@ export default function ContasAReceber() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </div>
+
+          {/* Seção: Valores e Datas */}
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Valores e Datas</h3>
+            <div className="grid grid-cols-4 gap-3">
+              <div>
+                <Label>Data de Vencimento *</Label>
+                <Input
+                  type="date"
+                  value={novaContaDados.dt_venc}
+                  onChange={(e) => setNovaContaDados({ ...novaContaDados, dt_venc: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <Label>Valor do Título *</Label>
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
+                    R$
+                  </span>
+                  <Input
+                    type="text"
+                    placeholder="0,00"
+                    value={typeof novaContaDados.valor_pgto === 'number' && novaContaDados.valor_pgto > 0
+                      ? mascaraInputBRL(String(Math.round(novaContaDados.valor_pgto * 100)))
+                      : novaContaDados.valor_pgto_input || ''}
+                    onChange={(e) => {
+                      const mascarado = mascaraInputBRL(e.target.value);
+                      setNovaContaDados({ ...novaContaDados, valor_pgto: desmascarar(mascarado), valor_pgto_input: mascarado } as any);
+                    }}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Número do Documento</Label>
+                <Input
+                  type="text"
+                  placeholder="Ex: 001/2024"
+                  value={novaContaDados.nro_doc}
+                  onChange={(e) => setNovaContaDados({ ...novaContaDados, nro_doc: e.target.value })}
+                />
+              </div>
 
               <div>
                 <Label>Banco</Label>
@@ -1937,8 +1912,8 @@ export default function ContasAReceber() {
           </div>
 
           {/* Seção: Parcelamento */}
-          <div className="border-b pb-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Parcelamento</h3>
+          <div className="border-b pb-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Parcelamento</h3>
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <input
