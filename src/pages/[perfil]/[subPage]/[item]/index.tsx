@@ -63,7 +63,16 @@ const Page = () => {
     }
 
     setDadosCarregados(true);
-  }, [router, subPage, item, user, perfil, isLoading]); // ✅ Adicione isLoading como dependência // ✅ Mostre o carregamento apenas se a página ou o usuário estiverem carregando
+
+    // Salvar última tela acessada no banco
+    if (user?.usuario && telaAtual) {
+      fetch('/api/userPreferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: user.usuario, screen: 'ultima_tela', preferences: { value: telaAtual } }),
+      }).catch(() => {});
+    }
+  }, [router, subPage, item, user, perfil, isLoading]);
 
   if (isLoading || !dadosCarregados || !permissaoAtual) {
     return <div className="h-screen bg-white dark:bg-zinc-900" />;

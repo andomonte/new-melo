@@ -257,33 +257,37 @@ export function ContasAPagar() {
   // Estados para filtro de range de data
   const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
   const rangeInteracaoRef = useRef(false);
+  const [prefsProntas, setPrefsProntas] = useState(false);
 
-  // Carregar preferência de período ao montar — aplica filtros direto
+  // Carregar preferência de período ao montar — aplica filtros e libera consulta
   useEffect(() => {
-    if (!user?.usuario) return;
+    if (!user?.usuario) {
+      setPrefsProntas(true);
+      return;
+    }
     fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=contas-a-pagar_rangeData`)
       .then(r => r.json())
       .then(data => {
-        if (data.preferences?.value) {
-          const valor = data.preferences.value as 'semana' | 'mes' | 'personalizado' | 'todos';
-          setRangeDataAtivoLocal(valor);
-          const hoje = new Date();
-          if (valor === 'semana') {
-            const s = calcularSemanaAtual();
-            setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
-          } else if (valor === 'mes') {
-            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-            setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
-          } else if (valor === 'todos') {
-            setFiltros(prev => {
-              const { data_inicio, data_fim, ...rest } = prev as any;
-              return rest;
-            });
-          }
+        const hoje = new Date();
+        const valor = (data.preferences?.value || 'semana') as 'semana' | 'mes' | 'personalizado' | 'todos';
+        setRangeDataAtivoLocal(valor);
+
+        if (valor === 'semana') {
+          const s = calcularSemanaAtual();
+          setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
+        } else if (valor === 'mes') {
+          const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+          const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+          setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
+        } else if (valor === 'todos') {
+          setFiltros(prev => {
+            const { data_inicio, data_fim, ...rest } = prev as any;
+            return rest;
+          });
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setPrefsProntas(true));
   }, [user?.usuario]);
 
   // Wrapper que salva no banco ao mudar (só por interação do usuário)
@@ -473,11 +477,12 @@ export function ContasAPagar() {
     }
   };
 
-  // Efeito para buscar dados quando filtros mudam
+  // Efeito para buscar dados quando filtros mudam (só após preferências carregadas)
   useEffect(() => {
+    if (!prefsProntas) return;
     consultarContasPagar(paginaAtual, limite, filtros);
     buscarResumo(filtros);
-  }, [filtros]);
+  }, [filtros, prefsProntas]);
 
   // Efeito para aplicar paginação local quando página ou limite mudam (sem refazer busca)
   useEffect(() => {

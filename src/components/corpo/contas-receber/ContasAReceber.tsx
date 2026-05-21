@@ -62,37 +62,38 @@ export default function ContasAReceber() {
   });
   const [termoBusca, setTermoBusca] = useState('');
   const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
-  const rangeCarregadoRef = useRef(false);
   const rangeInteracaoRef = useRef(false);
+  const [prefsProntas, setPrefsProntas] = useState(false);
 
-  // Carregar preferência de período ao montar — aplica filtros direto sem disparar useEffect
+  // Carregar preferência de período ao montar — aplica filtros e libera consulta
   useEffect(() => {
-    if (!user?.usuario) return;
+    if (!user?.usuario) {
+      setPrefsProntas(true);
+      return;
+    }
     fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=contas-a-receber_rangeData`)
       .then(r => r.json())
       .then(data => {
-        if (data.preferences?.value) {
-          const valor = data.preferences.value as 'semana' | 'mes' | 'personalizado' | 'todos';
-          setRangeDataAtivoLocal(valor);
-          // Aplica filtros de data direto
-          const hoje = new Date();
-          if (valor === 'semana') {
-            const s = calcularSemanaAtual();
-            setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
-          } else if (valor === 'mes') {
-            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-            setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
-          } else if (valor === 'todos') {
-            setFiltros(prev => {
-              const { data_inicio, data_fim, ...rest } = prev as any;
-              return rest;
-            });
-          }
+        const hoje = new Date();
+        const valor = (data.preferences?.value || 'semana') as 'semana' | 'mes' | 'personalizado' | 'todos';
+        setRangeDataAtivoLocal(valor);
+
+        if (valor === 'semana') {
+          const s = calcularSemanaAtual();
+          setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
+        } else if (valor === 'mes') {
+          const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+          const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+          setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
+        } else if (valor === 'todos') {
+          setFiltros(prev => {
+            const { data_inicio, data_fim, ...rest } = prev as any;
+            return rest;
+          });
         }
-        rangeCarregadoRef.current = true;
       })
-      .catch(() => { rangeCarregadoRef.current = true; });
+      .catch(() => {})
+      .finally(() => setPrefsProntas(true));
   }, [user?.usuario]);
 
   // Wrapper que salva no banco ao mudar (só por interação do usuário)
@@ -231,10 +232,11 @@ export default function ContasAReceber() {
     setPaginaAtual(1);
   }, [rangeDataAtivo, dataInicioPersonalizada, dataFimPersonalizada]);
 
-  // Carregar contas ao montar componente
+  // Carregar contas (só após preferências carregadas)
   useEffect(() => {
+    if (!prefsProntas) return;
     consultarContasReceber(paginaAtual, itensPorPagina, filtros);
-  }, [paginaAtual, itensPorPagina, filtros]);
+  }, [paginaAtual, itensPorPagina, filtros, prefsProntas]);
 
   // Marca quando o primeiro carregamento terminou (dados da tabela prontos)
   useEffect(() => {

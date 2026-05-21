@@ -55,53 +55,51 @@ const Page = () => {
       .map((p) => p.tb_telas?.PATH_TELA)
       .filter((x): x is string => !!x);
 
-    // 1) Prioridade: rota vinda do sessionStorage (ex.: '/vendas/novaVenda')
-    let destFromStorage: string | null = null;
-    if (typeof window !== 'undefined') {
-      const raw = sessionStorage.getItem('telaAtualMelo');
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (typeof parsed === 'string') destFromStorage = parsed;
-        } catch {
-          destFromStorage = null;
+    if (jaRedirecionou.current) return;
+
+    // 1) Buscar última tela do banco (persistente entre dispositivos)
+    const buscarUltimaTela = async () => {
+      try {
+        const resp = await fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=ultima_tela`);
+        const data = await resp.json();
+        const ultimaTela = data?.preferences?.value;
+
+        if (ultimaTela && destinosPermitidos.includes(ultimaTela) && router.asPath !== ultimaTela) {
+          jaRedirecionou.current = true;
+          router.replace(ultimaTela);
+          return;
+        }
+      } catch {}
+
+      // 2) Fallback: sessionStorage (compatibilidade)
+      let destFromStorage: string | null = null;
+      if (typeof window !== 'undefined') {
+        const raw = sessionStorage.getItem('telaAtualMelo');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed === 'string') destFromStorage = parsed;
+          } catch {}
         }
       }
-    }
 
-    // Se veio do storage e é permitida → ir pra ela
-    if (
-      destFromStorage &&
-      destinosPermitidos.includes(destFromStorage) &&
-      router.asPath !== destFromStorage
-    ) {
-      jaRedirecionou.current = true;
-      // não limpar aqui: a tela alvo pode limpar quando terminar de carregar
-      router.replace(destFromStorage);
-      return;
-    }
+      if (destFromStorage && destinosPermitidos.includes(destFromStorage) && router.asPath !== destFromStorage) {
+        jaRedirecionou.current = true;
+        router.replace(destFromStorage);
+        return;
+      }
 
-    // Se veio do storage mas NÃO é permitida → limpar e cair no fallback
-    if (destFromStorage && !destinosPermitidos.includes(destFromStorage)) {
-      try {
-        sessionStorage.removeItem('telaAtualMelo');
-      } catch {}
-    }
+      // 3) Fallback: primeira rota permitida
+      const destinoFallback = destinosPermitidos[0];
+      if (destinoFallback && router.asPath !== destinoFallback && !jaRedirecionou.current) {
+        jaRedirecionou.current = true;
+        router.replace(destinoFallback);
+      } else if (!destinoFallback) {
+        setErro('Erro ao carregar permissões. Por favor, entre em contato com o suporte.');
+      }
+    };
 
-    // 2) Fallback: primeira rota permitida
-    const destinoFallback = destinosPermitidos[0];
-    if (
-      destinoFallback &&
-      router.asPath !== destinoFallback &&
-      !jaRedirecionou.current
-    ) {
-      jaRedirecionou.current = true;
-      router.replace(destinoFallback);
-    } else if (!destinoFallback) {
-      setErro(
-        'Erro ao carregar permissões. Por favor, entre em contato com o suporte.',
-      );
-    }
+    buscarUltimaTela();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router.isReady, isRotaPublica, user]);
   // ============================

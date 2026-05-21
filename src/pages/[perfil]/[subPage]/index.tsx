@@ -46,6 +46,15 @@ const Page = () => {
     }
 
     setDadosCarregados(true);
+
+    // Salvar última tela acessada no banco
+    if (user?.usuario && telaAtual) {
+      fetch('/api/userPreferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: user.usuario, screen: 'ultima_tela', preferences: { value: telaAtual } }),
+      }).catch(() => {});
+    }
   }, [router.isReady, subPage, user, router, perfil, isLoading]);
 
   if (!dadosCarregados || !permissaoAtual) {
