@@ -66,11 +66,7 @@ const Page = () => {
   }, [router, subPage, item, user, perfil, isLoading]); // ✅ Adicione isLoading como dependência // ✅ Mostre o carregamento apenas se a página ou o usuário estiverem carregando
 
   if (isLoading || !dadosCarregados || !permissaoAtual) {
-    return (
-      <div className="h-screen">
-        <Carregamento texto="Aguarde..." />{' '}
-      </div>
-    );
+    return <div className="h-screen bg-white dark:bg-zinc-900" />;
   }
 
   return (

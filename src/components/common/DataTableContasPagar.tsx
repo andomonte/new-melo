@@ -1,6 +1,6 @@
 import React, { ChangeEvent, KeyboardEvent, useState, useRef, useEffect } from 'react';
 import { Meta } from '@/data/common/meta';
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical } from 'lucide-react';
 import { RiFileExcel2Line, RiFilePdf2Line } from 'react-icons/ri';
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ import { Select as RadixSelect, SelectTrigger as RadixSelectTrigger, SelectValue
 import SearchInput from './SearchInput';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
+import Carregamento from '@/utils/carregamento';
 
 const tiposDeFiltro = [
   { label: 'Começa com', value: 'começa' },
@@ -248,16 +249,43 @@ export default function DataTableContasPagar({
     onFiltroChange?.(filtrosAtualizados);
   };
 
-  const handlePreviousPage = () => {
-    if (meta.currentPage > 1) {
-      onPageChange(meta.currentPage - 1);
+  // Página visual — muda IMEDIATO ao clicar, busca no banco com debounce
+  const paginaVisualRef = useRef(meta?.currentPage || 1);
+  const [paginaVisual, setPaginaVisual] = useState(meta?.currentPage || 1);
+  const [navegando, setNavegando] = useState(false);
+  const navegarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sincroniza quando meta atualiza (dados voltaram da API)
+  useEffect(() => {
+    if (meta?.currentPage) {
+      paginaVisualRef.current = meta.currentPage;
+      setPaginaVisual(meta.currentPage);
+      setNavegando(false);
     }
+  }, [meta?.currentPage]);
+
+  const navegarPagina = (pagina: number) => {
+    // Label muda IMEDIATO
+    paginaVisualRef.current = pagina;
+    setPaginaVisual(pagina);
+    // Loading aparece IMEDIATO
+    setNavegando(true);
+
+    // Busca no banco só depois de 1.5s sem clicar
+    if (navegarTimeoutRef.current) clearTimeout(navegarTimeoutRef.current);
+    navegarTimeoutRef.current = setTimeout(() => {
+      onPageChange(paginaVisualRef.current);
+    }, 1500);
+  };
+
+  const handlePreviousPage = () => {
+    const prox = paginaVisualRef.current - 1;
+    if (prox >= 1) navegarPagina(prox);
   };
 
   const handleNextPage = () => {
-    if (meta.currentPage < meta.lastPage) {
-      onPageChange(meta.currentPage + 1);
-    }
+    const prox = paginaVisualRef.current + 1;
+    if (prox <= (meta?.lastPage || 1)) navegarPagina(prox);
   };
 
   const handlePerPageChangeInternal = (value: string) => {
@@ -292,7 +320,7 @@ export default function DataTableContasPagar({
   return (
     <div className="flex flex-col w-full gap-2 flex-1 min-h-0">
     {/* ===== CARD: Busca + Tabela ===== */}
-    <div className="border border-gray-300 dark:border-gray-300 bg-white dark:bg-zinc-900 rounded-lg flex flex-col flex-1 min-h-0 overflow-hidden shadow-sm">
+    <div className="relative border border-gray-300 dark:border-gray-300 bg-white dark:bg-zinc-900 rounded-lg flex flex-col flex-1 min-h-0 overflow-hidden shadow-sm">
       {/* Cabeçalho de busca */}
       <div className="border-b border-gray-200 dark:border-zinc-700 p-2">
         <div className="flex justify-between items-center gap-2">
@@ -411,7 +439,13 @@ export default function DataTableContasPagar({
       </div>
 
       {/* Tabela com scroll */}
-      <div className="flex-1 min-h-0 overflow-auto" ref={containerRef}>
+      <div className="relative flex-1 min-h-0 overflow-auto" ref={containerRef}>
+          {/* Loading Melo — overlay fixo na área visível do grid */}
+          {(loading || navegando) && (
+            <div className="absolute inset-0 z-20 bg-white/80 dark:bg-zinc-900/80 flex items-center justify-center">
+              <Carregamento texto="Carregando..." />
+            </div>
+          )}
           <div className="min-w-max">
             <table className="table-auto w-full border-collapse text-xs text-center">
             <colgroup>
@@ -564,16 +598,7 @@ export default function DataTableContasPagar({
             </thead>
 
             <tbody className="bg-white dark:bg-zinc-900 divide-y divide-gray-200 dark:divide-zinc-700">{
-              loading ? (
-                <tr>
-                  <td colSpan={headers.length} className="px-4 py-6 text-center">
-                    <div className="flex justify-center items-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                      <span className="ml-2 text-xs text-gray-700 dark:text-gray-300">Carregando...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : rows?.length === 0 ? (
+              rows?.length === 0 && !loading && !navegando ? (
                 <tr>
                   <td colSpan={headers.length} className="px-4 py-6 text-center">
                     <p className="text-gray-500 dark:text-gray-400 text-xs">
@@ -781,37 +806,52 @@ export default function DataTableContasPagar({
               type="number"
               min="1"
               max={meta?.lastPage}
-              defaultValue={meta?.currentPage}
-              placeholder={`1-${meta?.lastPage || 1}`}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const page = parseInt(e.currentTarget.value);
-                  if (page >= 1 && page <= (meta?.lastPage || 1)) {
-                    onPageChange(page);
-                  }
+              value={paginaVisual}
+              onChange={(e) => {
+                const v = parseInt(e.target.value);
+                if (v >= 1 && v <= (meta?.lastPage || 1)) {
+                  navegarPagina(v);
                 }
               }}
-              className="w-20 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-white"
+              className="w-16 px-2 py-1 text-center text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-zinc-700 text-gray-900 dark:text-white"
             />
-            <span className="text-xs text-gray-500 dark:text-gray-400">de {meta?.lastPage || 1}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">de {loading && !meta?.total ? <span className="inline-block h-3 w-6 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse align-middle" /> : (meta?.lastPage || 1)}</span>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-1 items-center">
+            <button
+              onClick={() => navegarPagina(1)}
+              disabled={paginaVisual === 1}
+              className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Primeira página"
+            >
+              <ChevronsLeft size={16} />
+            </button>
             <button
               onClick={handlePreviousPage}
-              disabled={meta?.currentPage === 1}
+              disabled={paginaVisual === 1}
               className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Página anterior"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </button>
-            <span className="whitespace-nowrap">
-              Página {meta?.currentPage} de {meta?.lastPage}
+            <span className="whitespace-nowrap text-xs">
+              Página {paginaVisual} de {loading && !meta?.total ? <span className="inline-block h-3 w-6 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse align-middle" /> : (meta?.lastPage || 1)}
             </span>
             <button
               onClick={handleNextPage}
-              disabled={meta?.currentPage === meta?.lastPage}
+              disabled={paginaVisual >= (meta?.lastPage || 1)}
               className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Próxima página"
             >
-              <ChevronRight size={18} />
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={() => navegarPagina(meta?.lastPage || 1)}
+              disabled={paginaVisual >= (meta?.lastPage || 1)}
+              className="p-1 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Última página"
+            >
+              <ChevronsRight size={16} />
             </button>
           </div>
         </div>

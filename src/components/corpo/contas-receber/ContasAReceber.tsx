@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useContext, ChangeEvent } from 'react';
+import { useState, useEffect, useContext, useRef, ChangeEvent } from 'react';
 import { useContasReceber, ContaReceber, FiltrosContasReceber } from '@/hooks/useContasReceber';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import { AuthContext } from '@/contexts/authContexts';
@@ -38,11 +38,77 @@ export default function ContasAReceber() {
   // Controle de primeiro carregamento
   const [primeiroCarregamento, setPrimeiroCarregamento] = useState(true);
 
+  // Função para calcular início e fim da semana atual
+  const calcularSemanaAtual = () => {
+    const hoje = new Date();
+    const diaSemana = hoje.getDay();
+    const inicioSemana = new Date(hoje);
+    inicioSemana.setDate(hoje.getDate() - diaSemana);
+    const fimSemana = new Date(inicioSemana);
+    fimSemana.setDate(inicioSemana.getDate() + 6);
+    return {
+      dataInicio: inicioSemana.toISOString().split('T')[0],
+      dataFim: fimSemana.toISOString().split('T')[0]
+    };
+  };
+
   // Estados para paginação e filtros
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(20);
-  const [filtros, setFiltros] = useState<FiltrosContasReceber>({});
+  const semanaAtual = calcularSemanaAtual();
+  const [filtros, setFiltros] = useState<FiltrosContasReceber>({
+    data_inicio: semanaAtual.dataInicio,
+    data_fim: semanaAtual.dataFim,
+  });
   const [termoBusca, setTermoBusca] = useState('');
+  const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
+  const rangeCarregadoRef = useRef(false);
+  const rangeInteracaoRef = useRef(false);
+
+  // Carregar preferência de período ao montar — aplica filtros direto sem disparar useEffect
+  useEffect(() => {
+    if (!user?.usuario) return;
+    fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=contas-a-receber_rangeData`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.preferences?.value) {
+          const valor = data.preferences.value as 'semana' | 'mes' | 'personalizado' | 'todos';
+          setRangeDataAtivoLocal(valor);
+          // Aplica filtros de data direto
+          const hoje = new Date();
+          if (valor === 'semana') {
+            const s = calcularSemanaAtual();
+            setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
+          } else if (valor === 'mes') {
+            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+            setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
+          } else if (valor === 'todos') {
+            setFiltros(prev => {
+              const { data_inicio, data_fim, ...rest } = prev as any;
+              return rest;
+            });
+          }
+        }
+        rangeCarregadoRef.current = true;
+      })
+      .catch(() => { rangeCarregadoRef.current = true; });
+  }, [user?.usuario]);
+
+  // Wrapper que salva no banco ao mudar (só por interação do usuário)
+  const setRangeDataAtivo = (value: 'semana' | 'mes' | 'personalizado' | 'todos') => {
+    rangeInteracaoRef.current = true;
+    setRangeDataAtivoLocal(value);
+    if (user?.usuario) {
+      fetch('/api/userPreferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: user.usuario, screen: 'contas-a-receber_rangeData', preferences: { value } }),
+      }).catch(() => {});
+    }
+  };
+  const [dataInicioPersonalizada, setDataInicioPersonalizada] = useState('');
+  const [dataFimPersonalizada, setDataFimPersonalizada] = useState('');
 
   // Estados para modais
   const [modalRecebidoAberto, setModalRecebidoAberto] = useState(false);
@@ -142,6 +208,28 @@ export default function ContasAReceber() {
     'Banco',                 // banco
     'Observações',           // obs
   ];
+
+  // Recalcular datas quando range muda (só por interação do usuário)
+  useEffect(() => {
+    if (!rangeInteracaoRef.current) return;
+    const hoje = new Date();
+    if (rangeDataAtivo === 'semana') {
+      const s = calcularSemanaAtual();
+      setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
+    } else if (rangeDataAtivo === 'mes') {
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+      setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
+    } else if (rangeDataAtivo === 'todos') {
+      setFiltros(prev => {
+        const { data_inicio, data_fim, ...rest } = prev as any;
+        return rest;
+      });
+    } else if (rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada) {
+      setFiltros(prev => ({ ...prev, data_inicio: dataInicioPersonalizada, data_fim: dataFimPersonalizada }));
+    }
+    setPaginaAtual(1);
+  }, [rangeDataAtivo, dataInicioPersonalizada, dataFimPersonalizada]);
 
   // Carregar contas ao montar componente
   useEffect(() => {
@@ -260,13 +348,15 @@ export default function ContasAReceber() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'recebido':
-        return <Badge className="bg-green-500 hover:bg-green-600">Recebido</Badge>;
+        return <Badge className="bg-green-500 hover:bg-green-600 text-[10px]">Recebido</Badge>;
       case 'recebido_parcial':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">Recebido Parcial</Badge>;
+        return <Badge className="bg-blue-500 hover:bg-blue-600 text-[10px]">Recebido Parcial</Badge>;
       case 'cancelado':
-        return <Badge className="bg-red-500 hover:bg-red-600">Cancelado</Badge>;
+        return <Badge className="bg-red-500 hover:bg-red-600 text-[10px]">Cancelado</Badge>;
+      case 'vencido':
+        return <Badge className="bg-orange-500 hover:bg-orange-600 text-[10px]">Vencido</Badge>;
       default:
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Pendente</Badge>;
+        return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-[10px]">Pendente</Badge>;
     }
   };
 
@@ -932,15 +1022,6 @@ export default function ContasAReceber() {
     total: paginacao?.total || 0,
   };
 
-  // Loading único até o primeiro carregamento completar
-  if (primeiroCarregamento) {
-    return (
-      <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
-        <Carregamento texto="Carregando Contas a Receber..." />
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
       <main className="flex-1 flex flex-col p-4 overflow-hidden">
@@ -955,7 +1036,69 @@ export default function ContasAReceber() {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Botões de filtro por período */}
+            <div className="flex gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-1">
+              <button
+                onClick={() => setRangeDataAtivo('semana')}
+                className={`px-3 py-1 text-xs rounded transition ${
+                  rangeDataAtivo === 'semana'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                Semana
+              </button>
+              <button
+                onClick={() => setRangeDataAtivo('mes')}
+                className={`px-3 py-1 text-xs rounded transition ${
+                  rangeDataAtivo === 'mes'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                Mês
+              </button>
+              <button
+                onClick={() => setRangeDataAtivo('personalizado')}
+                className={`px-3 py-1 text-xs rounded transition ${
+                  rangeDataAtivo === 'personalizado'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                Personalizado
+              </button>
+              <button
+                onClick={() => setRangeDataAtivo('todos')}
+                className={`px-3 py-1 text-xs rounded transition ${
+                  rangeDataAtivo === 'todos'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                Todos
+              </button>
+            </div>
+
+            {rangeDataAtivo === 'personalizado' && (
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="date"
+                  value={dataInicioPersonalizada}
+                  onChange={(e) => setDataInicioPersonalizada(e.target.value)}
+                  className="w-36 h-8 text-xs"
+                />
+                <span className="text-xs text-gray-500 dark:text-gray-400">até</span>
+                <Input
+                  type="date"
+                  value={dataFimPersonalizada}
+                  onChange={(e) => setDataFimPersonalizada(e.target.value)}
+                  className="w-36 h-8 text-xs"
+                />
+              </div>
+            )}
+
             <AuxButton
               variant="secondary"
               size="default"
@@ -984,9 +1127,10 @@ export default function ContasAReceber() {
           <DataTableContasPagar
             screenKey="contas-a-receber"
             userName={user?.usuario}
-            initialFilters={{ status: { tipo: 'igual', valor: 'pendente' } }}
+            initialFilters={{}}
             statusFilterOptions={[
               { value: 'pendente', label: 'Pendente' },
+              { value: 'vencido', label: 'Vencido' },
               { value: 'recebido_parcial', label: 'Recebido Parcial' },
               { value: 'recebido', label: 'Recebido' },
               { value: 'cancelado', label: 'Cancelado' },

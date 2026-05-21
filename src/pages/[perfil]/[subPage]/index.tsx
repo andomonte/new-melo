@@ -49,11 +49,7 @@ const Page = () => {
   }, [router.isReady, subPage, user, router, perfil, isLoading]);
 
   if (!dadosCarregados || !permissaoAtual) {
-    return (
-      <div className="h-screen">
-        <Carregamento texto="Aguarde..." />
-      </div>
-    );
+    return <div className="h-screen bg-white dark:bg-zinc-900" />;
   }
 
   return (

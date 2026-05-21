@@ -158,7 +158,7 @@ export interface NovaContaReceberData {
 export function useContasReceber() {
   const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
   const [paginacao, setPaginacao] = useState<Paginacao | null>(null);
-  const [carregando, setCarregando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   const consultarContasReceber = async (

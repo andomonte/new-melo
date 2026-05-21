@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useContext, ChangeEvent } from 'react';
+import React, { useState, useEffect, useContext, useRef, ChangeEvent } from 'react';
 import { AuthContext } from '@/contexts/authContexts';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +40,7 @@ export function ContasAPagar() {
   const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
   const [todasContasConsolidadas, setTodasContasConsolidadas] = useState<ContaPagar[]>([]);
   const [paginacaoLocal, setPaginacaoLocal] = useState<{ total: number; totalPaginas: number } | null>(null);
-  const [carregandoConsolidado, setCarregandoConsolidado] = useState(false);
+  const [carregandoConsolidado, setCarregandoConsolidado] = useState(true);
 
   // Função para buscar contas com múltiplos status
   const consultarContasPagar = async (pagina: number, limite: number, filtrosBase: FiltrosContasPagar) => {
@@ -254,7 +255,49 @@ export function ContasAPagar() {
   const [termoBusca, setTermoBusca] = useState('');
 
   // Estados para filtro de range de data
-  const [rangeDataAtivo, setRangeDataAtivo] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
+  const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
+  const rangeInteracaoRef = useRef(false);
+
+  // Carregar preferência de período ao montar — aplica filtros direto
+  useEffect(() => {
+    if (!user?.usuario) return;
+    fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=contas-a-pagar_rangeData`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.preferences?.value) {
+          const valor = data.preferences.value as 'semana' | 'mes' | 'personalizado' | 'todos';
+          setRangeDataAtivoLocal(valor);
+          const hoje = new Date();
+          if (valor === 'semana') {
+            const s = calcularSemanaAtual();
+            setFiltros(prev => ({ ...prev, data_inicio: s.dataInicio, data_fim: s.dataFim }));
+          } else if (valor === 'mes') {
+            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+            setFiltros(prev => ({ ...prev, data_inicio: inicioMes.toISOString().split('T')[0], data_fim: fimMes.toISOString().split('T')[0] }));
+          } else if (valor === 'todos') {
+            setFiltros(prev => {
+              const { data_inicio, data_fim, ...rest } = prev as any;
+              return rest;
+            });
+          }
+        }
+      })
+      .catch(() => {});
+  }, [user?.usuario]);
+
+  // Wrapper que salva no banco ao mudar (só por interação do usuário)
+  const setRangeDataAtivo = (value: 'semana' | 'mes' | 'personalizado' | 'todos') => {
+    rangeInteracaoRef.current = true;
+    setRangeDataAtivoLocal(value);
+    if (user?.usuario) {
+      fetch('/api/userPreferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: user.usuario, screen: 'contas-a-pagar_rangeData', preferences: { value } }),
+      }).catch(() => {});
+    }
+  };
   const [contasDaSemana, setContasDaSemana] = useState({ pendentes: 0, valorTotal: 0 });
   const [dataInicioPersonalizada, setDataInicioPersonalizada] = useState('');
   const [dataFimPersonalizada, setDataFimPersonalizada] = useState('');
@@ -558,8 +601,9 @@ export function ContasAPagar() {
     calcularContasDoPeriodo();
   }, [rangeDataAtivo, dataInicioPersonalizada, dataFimPersonalizada, filtros.status, contasPagar]); // Recalcular quando mudar o período, status ou a lista
 
-  // Aplicar filtro de range de data automaticamente
+  // Aplicar filtro de range de data (só por interação do usuário)
   useEffect(() => {
+    if (!rangeInteracaoRef.current) return;
     const hoje = new Date();
     let novosFiltros = { ...filtros };
 
@@ -2432,14 +2476,6 @@ export function ContasAPagar() {
     }
   };
 
-  if (primeiroCarregamento) {
-    return (
-      <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
-        <Carregamento texto="Carregando Contas a Pagar..." />
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
       <main className="flex-1 flex flex-col p-4 overflow-hidden">
@@ -2454,7 +2490,15 @@ export function ContasAPagar() {
               {rangeDataAtivo === 'mes' && 'Do mês: '}
               {rangeDataAtivo === 'personalizado' && 'Do período: '}
               {rangeDataAtivo === 'todos' && 'Total: '}
-              <strong>{contasDaSemana.pendentes}</strong> pagar (pendente) - <strong>R$ {contasDaSemana.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              {carregandoConsolidado && contasPagar.length === 0 ? (
+                <span className="inline-flex gap-2 items-center">
+                  <span className="inline-block h-3 w-8 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse" />
+                  pagar (pendente) -
+                  <span className="inline-block h-3 w-24 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse" />
+                </span>
+              ) : (
+                <><strong>{contasDaSemana.pendentes}</strong> pagar (pendente) - <strong>R$ {contasDaSemana.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></>
+              )}
             </p>
           </div>
 
@@ -2658,18 +2702,12 @@ export function ContasAPagar() {
 
               <div>
                 <Label htmlFor="banco-lote">Conta *</Label>
-                <Select value={bancoLote} onValueChange={setBancoLote}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione a conta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bancosDisponiveis.map(banco => (
-                      <SelectItem key={banco.value} value={banco.value}>
-                        {banco.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={bancoLote}
+                  onValueChange={setBancoLote}
+                  placeholder="Selecione a conta"
+                  options={bancosDisponiveis}
+                />
               </div>
             </div>
 
@@ -2920,24 +2958,12 @@ export function ContasAPagar() {
           <div className="grid grid-cols-4 gap-3">
             <div>
               <Label htmlFor="conta_pgto">Conta *</Label>
-              <Select value={contaSelecionadaPgto} onValueChange={setContaSelecionadaPgto}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a conta..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {contasDbconta.length > 0 ? (
-                    contasDbconta.map((conta) => (
-                      <SelectItem key={conta.value} value={conta.value}>
-                        {conta.label}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="carregando" disabled>
-                      Carregando contas...
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={contaSelecionadaPgto}
+                onValueChange={setContaSelecionadaPgto}
+                placeholder="Selecione a conta..."
+                options={contasDbconta}
+              />
             </div>
 
             {formaPgto === '002' && (
@@ -3500,16 +3526,12 @@ export function ContasAPagar() {
 
           <div>
             <Label htmlFor="titulo_banco">Banco</Label>
-            <Select value={bancoSelecionado} onValueChange={setBancoSelecionado}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="Selecione o banco" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Bradesco</SelectItem>
-                <SelectItem value="1">Banco do Brasil</SelectItem>
-                <SelectItem value="2">Itaú</SelectItem>
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={bancoSelecionado}
+              onValueChange={setBancoSelecionado}
+              placeholder="Selecione o banco"
+              options={bancosDisponiveis}
+            />
           </div>
 
           <div>

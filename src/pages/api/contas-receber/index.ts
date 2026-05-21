@@ -191,7 +191,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WHERE 1=1
       ${statusFilter ? `AND status = '${statusFilter}'` : ''}
       ${com_atraso === 'true' ? 'AND dias_atraso > 0' : ''}
-      ORDER BY id DESC
+      ORDER BY
+        CASE status
+          WHEN 'pendente' THEN 1
+          WHEN 'vencido' THEN 2
+          WHEN 'recebido_parcial' THEN 3
+          WHEN 'recebido' THEN 4
+          WHEN 'cancelado' THEN 5
+          ELSE 6
+        END,
+        dt_venc ASC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
