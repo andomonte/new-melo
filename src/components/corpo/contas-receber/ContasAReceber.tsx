@@ -987,9 +987,12 @@ export default function ContasAReceber() {
       const data = await response.json();
 
       if (data.sucesso) {
-        toast.success('Título criado com sucesso!');
+        const dtVencCriado = new Date(novaContaDados.dt_venc + 'T00:00:00');
+        const dtInicio = filtros.data_inicio ? new Date(filtros.data_inicio + 'T00:00:00') : null;
+        const dtFim = filtros.data_fim ? new Date(filtros.data_fim + 'T23:59:59') : null;
+        const foraDoPeriodo = dtInicio && dtFim && (dtVencCriado < dtInicio || dtVencCriado > dtFim);
+
         setModalNovaContaAberto(false);
-        // Resetar formulário
         setNovaContaDados({
           codcli: null,
           rec_cof_id: null,
@@ -1005,7 +1008,19 @@ export default function ContasAReceber() {
         });
         setParcelas([]);
         setNumParcelasInput('');
-        // Recarregar lista
+
+        if (foraDoPeriodo && rangeDataAtivo !== 'todos') {
+          toast.success('Título criado com sucesso! A data de vencimento está fora do período selecionado. Deseja ver todos?', {
+            duration: 8000,
+            action: {
+              label: 'Ver Todos',
+              onClick: () => setRangeDataAtivo('todos'),
+            },
+          });
+        } else {
+          toast.success('Título criado com sucesso!');
+        }
+
         consultarContasReceber(paginaAtual, itensPorPagina, filtros);
       } else {
         toast.error(data.mensagem || 'Erro ao criar título');
