@@ -167,7 +167,10 @@ export default function NotasConhecimento() {
     if (notasSelecionadas.size === selecionaveis.length) {
       setNotasSelecionadas(new Set());
     } else {
-      setNotasSelecionadas(new Set(selecionaveis.map((n, i) => `${n.codtransp}-${n.nrocon}-${n.serie || '0'}-${i}`)));
+      setNotasSelecionadas(new Set(selecionaveis.map((n) => {
+        const idx = notas.indexOf(n);
+        return `${n.codtransp}-${n.nrocon}-${n.serie || '0'}-${idx}`;
+      })));
     }
   };
 
@@ -188,7 +191,7 @@ export default function NotasConhecimento() {
   const prepararDadosTabela = () => {
     const notasFiltradas = getNotasFiltradas();
     return notasFiltradas.map((nota, index) => {
-      const chave = `${nota.codtransp}-${nota.nrocon}-${nota.serie || '0'}-${notasFiltradas.indexOf(nota)}`;
+      const chave = `${nota.codtransp}-${nota.nrocon}-${nota.serie || '0'}-${notas.indexOf(nota)}`;
       const isSelecionado = notasSelecionadas.has(chave);
       let mostrarCheckbox = filtroTituloGerado === 'sem_titulo' || (filtroTituloGerado === 'todos' && !nota.cod_pgto);
 
