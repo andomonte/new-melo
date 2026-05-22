@@ -36,7 +36,7 @@ export interface FiltrosNotasConhecimento {
 
 export function useNotasConhecimento() {
   const [notas, setNotas] = useState<NotaConhecimento[]>([]);
-  const [carregando, setCarregando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
   const [total, setTotal] = useState(0);
