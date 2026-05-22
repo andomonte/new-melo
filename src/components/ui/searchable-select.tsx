@@ -33,7 +33,7 @@ export function SearchableSelect({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [modified, setModified] = React.useState(false);
-  const [openUp, setOpenUp] = React.useState(false);
+  const [dropdownStyle, setDropdownStyle] = React.useState<React.CSSProperties>({});
   const initialValueRef = React.useRef<string | undefined>(undefined);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -58,14 +58,22 @@ export function SearchableSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Ao abrir: detecta se tem espaço embaixo, foca no input de busca
+  // Ao abrir: calcula posição fixa na tela (funciona dentro de scroll/modal)
   React.useEffect(() => {
     if (open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      // Abre para cima se não tem espaço embaixo (menos de 150px) ou está dentro de modal
-      setOpenUp(spaceBelow < 150 || spaceAbove > spaceBelow);
+      const openUp = spaceBelow < 180;
+
+      setDropdownStyle({
+        position: 'fixed',
+        width: rect.width,
+        left: rect.left,
+        ...(openUp
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+        zIndex: 9999,
+      });
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
@@ -132,10 +140,10 @@ export function SearchableSelect({
       </button>
 
       {open && (
-        <div className={cn(
-          'absolute z-50 w-full rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg',
-          openUp ? 'bottom-full mb-1' : 'top-full mt-1'
-        )}>
+        <div
+          className="rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg"
+          style={dropdownStyle}
+        >
           {/* Campo de busca */}
           <div className="p-1.5 border-b border-gray-200 dark:border-zinc-700">
             <div className="relative">

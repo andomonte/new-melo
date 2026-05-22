@@ -395,7 +395,7 @@ export default function ContasAReceber() {
         <div key={`status-${conta.cod_receb}`} className="flex items-center">{getStatusBadge(conta.status)}</div>,
 
         // Número Título
-        <span key={`titulo-${conta.cod_receb}`} className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">
+        <span key={`titulo-${conta.cod_receb}`} className="font-mono text-xs">
           {conta.cod_receb}
         </span>,
 
@@ -429,10 +429,10 @@ export default function ContasAReceber() {
         <span key={`pgto-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{conta.dt_pgto ? formatarData(conta.dt_pgto) : '-'}</span>,
 
         // Valor Original
-        <span key={`valor-original-${conta.cod_receb}`} className="font-mono text-xs font-medium text-gray-900 dark:text-white">{formatarMoeda(conta.valor_original)}</span>,
+        <span key={`valor-original-${conta.cod_receb}`} className="font-mono text-xs">{formatarMoeda(conta.valor_original)}</span>,
 
         // Valor Recebido
-        <span key={`valor-recebido-${conta.cod_receb}`} className={`font-mono text-xs font-medium ${conta.valor_recebido > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>{conta.valor_recebido > 0 ? formatarMoeda(conta.valor_recebido) : '-'}</span>,
+        <span key={`valor-recebido-${conta.cod_receb}`} className={`font-mono text-xs ${conta.valor_recebido > 0 ? 'text-green-600' : 'text-gray-400'}`}>{conta.valor_recebido > 0 ? formatarMoeda(conta.valor_recebido) : '-'}</span>,
 
         // Juros (se houver)
         <span key={`juros-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{(conta as any).valor_juros ? formatarMoeda((conta as any).valor_juros) : '-'}</span>,
