@@ -50,7 +50,7 @@ const Select = ({ onValueChange, children, ...props }: React.ComponentProps<type
   };
 
   return (
-    <div ref={wrapperRef} data-modified={modified || undefined}>
+    <div ref={wrapperRef} data-modified={modified || undefined} style={{ minHeight: 0 }}>
       <SelectPrimitive.Root onValueChange={handleValueChange} {...props}>
         {children}
       </SelectPrimitive.Root>
@@ -71,8 +71,9 @@ const SelectTrigger = React.forwardRef<
     const el = triggerRef.current;
     if (!el) return;
     const wrapper = el.closest('[data-modified]');
-    setIsModified(!!wrapper);
-  });
+    const mod = !!wrapper;
+    if (mod !== isModified) setIsModified(mod);
+  }, [props.value]);
 
   return (
   <SelectPrimitive.Trigger

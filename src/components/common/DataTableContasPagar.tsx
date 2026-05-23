@@ -447,7 +447,7 @@ export default function DataTableContasPagar({
             </div>
           )}
           <div className="min-w-max">
-            <table className="table-auto w-full border-collapse text-xs text-center">
+            <table className="table-fixed w-full border-collapse text-xs text-center">
             <colgroup>
               {columnWidths && columnWidths.length > 0 ? (
                 columnWidths.map((width, index) => (
