@@ -47,9 +47,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       if (initialValueRef.current !== undefined && e.target.value !== initialValueRef.current) {
         setModified(true);
       }
-      if (type === 'date' && e.target.value) {
-        setTimeout(() => focusNextField(e.target), 100);
-      }
     };
 
     return (

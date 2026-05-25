@@ -2513,11 +2513,11 @@ export function ContasAPagar() {
               {carregandoConsolidado && contasPagar.length === 0 ? (
                 <span className="inline-flex gap-2 items-center">
                   <span className="inline-block h-3 w-8 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse" />
-                  pagar (pendente) -
+                  registros -
                   <span className="inline-block h-3 w-24 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse" />
                 </span>
               ) : (
-                <><strong>{contasDaSemana.pendentes}</strong> pagar (pendente) - <strong>R$ {contasDaSemana.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></>
+                <><strong>{contasDaSemana.pendentes}</strong> {filtros.status === 'pago' ? 'pagos' : filtros.status === 'cancelado' ? 'cancelados' : filtros.status === 'pago_parcial' ? 'pagos parcialmente' : 'registros'} - <strong>R$ {contasDaSemana.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></>
               )}
             </p>
           </div>
@@ -3206,7 +3206,8 @@ export function ContasAPagar() {
                 id="dt_emissao_edit"
                 type="date"
                 value={dadosEdicao.dt_emissao}
-                onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_emissao: e.target.value }))}
+                disabled
+                className="opacity-60 cursor-not-allowed"
               />
             </div>
 
@@ -4082,11 +4083,12 @@ export function ContasAPagar() {
                 />
               </div>
               <div>
-                <Label>Data de Emissão *</Label>
+                <Label>Data de Emissão</Label>
                 <Input
                   type="date"
                   value={novaContaDados.dt_emissao}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, dt_emissao: e.target.value })}
+                  disabled
+                  className="opacity-60 cursor-not-allowed"
                 />
               </div>
               <div>

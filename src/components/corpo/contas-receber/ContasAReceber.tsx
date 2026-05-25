@@ -1558,7 +1558,8 @@ export default function ContasAReceber() {
                 id="dt_emissao_edit"
                 type="date"
                 value={dadosEdicao.dt_emissao}
-                onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_emissao: e.target.value }))}
+                disabled
+                className="opacity-60 cursor-not-allowed"
               />
             </div>
 
