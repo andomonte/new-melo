@@ -381,9 +381,6 @@ export default function DataTablePadrao({
               </DialogContent>
             </Dialog>
 
-            {/* Ações customizadas do header */}
-            {customHeaderActions}
-
             {/* Botão Opções com Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -451,6 +448,9 @@ export default function DataTablePadrao({
                     Dashboard Geral
                   </DropdownMenuItem>
                 )}
+
+                {/* Ações customizadas (dentro do DropdownMenu) */}
+                {customHeaderActions}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
