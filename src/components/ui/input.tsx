@@ -40,6 +40,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       if (initialValueRef.current === undefined) {
         initialValueRef.current = e.target.value;
       }
+      // Limpar zero sozinho ao focar (campos numéricos/monetários)
+      if (e.target.value === '0' || e.target.value === '0,00' || e.target.value === '0.00') {
+        e.target.value = '';
+        onChange?.({ ...e, target: { ...e.target, value: '' } } as any);
+      }
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
