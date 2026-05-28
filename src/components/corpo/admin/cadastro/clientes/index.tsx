@@ -12,7 +12,7 @@ import {
   Cliente,
 } from '@/data/clientes/clientes';
 import { useDebouncedCallback } from 'use-debounce';
-import DataTable from '@/components/common/DataTableFiltro';
+import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import ClientFormModal from '@/components/corpo/admin/cadastro/clientes/ClientFormModal';
@@ -657,10 +657,13 @@ const ClientesPage = () => {
 
         {/* DataTable */}
         <DataTable
+          screenKey="cadastro-clientes"
+          userName={user?.usuario}
           carregando={loading}
           headers={headers}
           rows={rows || []}
           semColunaDeAcaoPadrao={true}
+          nonsortableColumns={['Ações']}
           onColunaSubstituida={handleColunaSubstituida}
           meta={clientes.meta}
           // Paginação
