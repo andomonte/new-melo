@@ -1068,9 +1068,14 @@ export function ContasAPagar() {
         <span className="font-mono text-xs">{conta.id}</span>,
         // Tipo
         (
-          <Badge variant="outline" className="text-[10px] px-1 py-0">
-            {getTipoTexto(conta.tipo || '')}
-          </Badge>
+          <div className="flex items-center gap-1">
+            <Badge variant="outline" className="text-[10px] px-1 py-0">
+              {getTipoTexto(conta.tipo || '')}
+            </Badge>
+            {conta.titulo_importado && (
+              <Badge className="text-[9px] px-1 py-0 bg-orange-500 hover:bg-orange-600">CT-e</Badge>
+            )}
+          </div>
         ),
         // Credor
         (

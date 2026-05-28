@@ -31,7 +31,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       moeda,
       nro_invoice,
       nro_contrato,
-      search // Busca geral
+      search, // Busca geral
+      origem // 'cte' para notas de conhecimento, 'manual' para cadastro manual
     } = req.query;
 
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -69,6 +70,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       whereClause += ` AND p.cod_conta = $${paramIndex}`;
       params.push(conta);
       paramIndex++;
+    }
+
+    // Filtro por origem (CT-e ou manual)
+    if (origem === 'cte') {
+      whereClause += ` AND p.titulo_importado = true`;
+    } else if (origem === 'manual') {
+      whereClause += ` AND (p.titulo_importado IS NULL OR p.titulo_importado = false)`;
     }
 
     // Filtro por tipo (Fornecedor ou Transporte)
