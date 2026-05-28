@@ -17,7 +17,7 @@ export default async function handle(
 
     const result = await executePaginatedQuery(
       'dbsegmento',
-      'codsegmento, descricao',
+      'codseg as codsegmento, descricao',
       searchClause,
       'descricao',
       Number(page),
