@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { desmascarar } from '@/utils/monetario';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X, AlertTriangle } from 'lucide-react';
@@ -354,7 +355,7 @@ export default function ClientFormModal({
           tipo: data.tipoPessoa,
           email: data.email || '',
           debito: clientToEdit.debito || 0,
-          limite: Number(data.limiteCredito) || 0,
+          limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
           codigo_filial: clientToEdit.codigo_filial || 1,
           bairro: data.bairro || '',
@@ -415,7 +416,7 @@ export default function ClientFormModal({
           tipo: data.tipoPessoa,
           email: data.email || '',
           debito: 0,
-          limite: Number(data.limiteCredito) || 0,
+          limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
           codigo_filial: 1,
           bairro: data.bairro || '',
