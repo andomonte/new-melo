@@ -628,7 +628,7 @@ export default function DataTableContasPagar({
                   if (sortColumn) {
                     const colIndex = headers.indexOf(sortColumn);
                     if (colIndex !== -1) {
-                      sortedRows = [...rows].sort((a, b) => {
+                      sortedRows = [...filteredRows].sort((a, b) => {
                         let valA = a[colIndex];
                         let valB = b[colIndex];
 
@@ -651,6 +651,16 @@ export default function DataTableContasPagar({
                         const textA = extractText(valA).trim();
                         const textB = extractText(valB).trim();
 
+                        // Tenta comparar como data BR (DD/MM/YYYY)
+                        const parseDataBR = (s: string) => {
+                          const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                          if (!m) return null;
+                          return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+                        };
+
+                        const dataA = parseDataBR(textA);
+                        const dataB = parseDataBR(textB);
+
                         // Tenta comparar como número (remove R$, pontos, troca vírgula)
                         const parseNum = (s: string) => {
                           const limpo = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
@@ -662,7 +672,9 @@ export default function DataTableContasPagar({
                         const numB = parseNum(textB);
 
                         let cmp: number;
-                        if (numA !== null && numB !== null) {
+                        if (dataA !== null && dataB !== null) {
+                          cmp = dataA - dataB;
+                        } else if (numA !== null && numB !== null) {
                           cmp = numA - numB;
                         } else {
                           cmp = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base' });
