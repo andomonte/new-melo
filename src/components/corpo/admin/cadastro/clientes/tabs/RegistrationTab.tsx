@@ -15,6 +15,7 @@ import { Plus, Trash2, Loader2, AlertTriangle, Phone, Smartphone, Building2, Mes
 import InputMask from 'react-input-mask';
 import { CountryCombobox } from '@/components/common/CountryCombobox';
 import { buscaCep } from '@/data/cep';
+import { buscaCnpj } from '@/data/cnpj';
 import { toast } from 'sonner';
 
 interface RegistrationTabProps {
@@ -42,6 +43,7 @@ export function RegistrationTab({
     formState: { errors },
   } = useFormContext();
   const [loadingCep, setLoadingCep] = useState(false);
+  const [loadingCnpj, setLoadingCnpj] = useState(false);
   const [classesCliente, setClassesCliente] = useState<ClasseCliente[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
 
@@ -86,6 +88,47 @@ export function RegistrationTab({
     control,
     name: 'pessoasContato',
   });
+
+  // CNPJ Handler — consulta BrasilAPI e preenche campos automaticamente
+  const handleDocumentoBlur = async () => {
+    const tipoPessoa = getValues('tipoPessoa');
+    if (tipoPessoa !== 'J') return;
+
+    const doc = getValues('documento');
+    if (!doc) return;
+
+    const cleanDoc = doc.replace(/\D/g, '');
+    if (cleanDoc.length !== 14) return;
+
+    setLoadingCnpj(true);
+    try {
+      const data = await buscaCnpj(cleanDoc);
+      if (data) {
+        // Preenche campos com dados oficiais
+        if (data.razao_social) setValue('nome', data.razao_social.substring(0, 40));
+        if (data.nome_fantasia) setValue('nomeFantasia', data.nome_fantasia.substring(0, 30));
+        if (data.email) setValue('email', data.email.toLowerCase());
+        if (data.logradouro) setValue('endereco', data.logradouro);
+        if (data.numero) setValue('numero', data.numero);
+        if (data.complemento) setValue('complemento', data.complemento);
+        if (data.bairro) setValue('bairro', data.bairro);
+        if (data.municipio) setValue('cidade', data.municipio);
+        if (data.uf) setValue('uf', data.uf);
+        if (data.cep) setValue('cep', data.cep.replace(/\D/g, ''));
+        setValue('pais', '1058'); // Brasil
+
+        toast.success('Dados do CNPJ preenchidos automaticamente!', {
+          description: `${data.razao_social} - ${data.descricao_situacao_cadastral || ''}`,
+          duration: 4000,
+        });
+      }
+    } catch (error: any) {
+      // Não bloqueia — só não preenche
+      console.warn('CNPJ não encontrado na BrasilAPI:', error.message);
+    } finally {
+      setLoadingCnpj(false);
+    }
+  };
 
   // CEP Handler
   const handleCepBlur = async () => {
@@ -194,7 +237,7 @@ export function RegistrationTab({
                     placeholder="Documento Internacional"
                   />
                 ) : (
-                  <InputMask {...fieldProps} mask={getMask()} maskChar="_">
+                  <InputMask {...fieldProps} mask={getMask()} maskChar="_" onBlur={() => { fieldProps.onBlur?.(); handleDocumentoBlur(); }}>
                     {(inputProps: any) => (
                       <Input
                         {...inputProps}
@@ -214,7 +257,7 @@ export function RegistrationTab({
               }
             />
 
-            {isChecking && (
+            {(isChecking || loadingCnpj) && (
               <div className="absolute right-3 top-2.5">
                 <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
               </div>
