@@ -10,6 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -147,30 +149,45 @@ export function FinancialTab() {
   }, [getValues]);
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b pb-2">
+    <div className="form-compact space-y-3">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-b pb-2">
         Configurações de Crédito
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-4 gap-3">
         {/* Limite de Crédito */}
         <div>
           <Label>Limite de Crédito (R$)</Label>
-          <div className="relative">
-            <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              {...register('limiteCredito')}
-              className={`pl-9 ${
-                errors.limiteCredito
-                  ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20 focus-visible:ring-red-500'
-                  : ''
-              }`}
-              placeholder="0,00"
-            />
-          </div>
+          <Controller
+            control={control}
+            name="limiteCredito"
+            render={({ field }) => (
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">R$</span>
+                <Input
+                  value={typeof field.value === 'number' && field.value > 0
+                    ? mascaraInputBRL(String(Math.round(field.value * 100)))
+                    : field.value || ''}
+                  onChange={(e) => {
+                    const mascarado = mascaraInputBRL(e.target.value);
+                    field.onChange(mascarado);
+                  }}
+                  onBlur={() => {
+                    const num = desmascarar(String(field.value || ''));
+                    field.onChange(num > 0 ? num : '');
+                  }}
+                  className={`pl-8 ${
+                    errors.limiteCredito
+                      ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
+                      : ''
+                  }`}
+                  placeholder="0,00"
+                />
+              </div>
+            )}
+          />
           {errors.limiteCredito && (
-            <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
+            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
               {errors.limiteCredito.message as string}
             </p>
           )}
@@ -235,10 +252,18 @@ export function FinancialTab() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="A">A - À Vista</SelectItem>
-                    <SelectItem value="B">B - A Prazo</SelectItem>
-                    <SelectItem value="C">C - Misto</SelectItem>
-                    <SelectItem value="X">X - Especial</SelectItem>
+                    <SelectItem value="A">A - Em Dia</SelectItem>
+                    <SelectItem value="B">B - Pgto Cobrança</SelectItem>
+                    <SelectItem value="C">C - Difícil Receber</SelectItem>
+                    <SelectItem value="D">D - Não Receber</SelectItem>
+                    <SelectItem value="E">E - Estratégico</SelectItem>
+                    <SelectItem value="V">V - À Vista</SelectItem>
+                    <SelectItem value="I">I - Inativo</SelectItem>
+                    <SelectItem value="F">F - Funcionário</SelectItem>
+                    <SelectItem value="N">N - Novação Dívida</SelectItem>
+                    <SelectItem value="O">O - Órgão Público</SelectItem>
+                    <SelectItem value="P">P - Perda</SelectItem>
+                    <SelectItem value="Z">Z - Cobrança Judicial</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.classePagamento && (
@@ -298,7 +323,7 @@ export function FinancialTab() {
       </div>
 
       {/* ICMS, Faixa Financeira, Banco, Forma de Pagamento */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-4 gap-3">
         <div>
           <Label>ICMS</Label>
           <Controller
@@ -364,35 +389,18 @@ export function FinancialTab() {
             name="banco"
             render={({ field }) => (
               <>
-                <Select
+                <SearchableSelect
                   value={field.value ? String(field.value) : ''}
-                  onValueChange={(val) =>
-                    field.onChange(val ? Number(val) : undefined)
-                  }
+                  onValueChange={(val) => field.onChange(val ? Number(val) : undefined)}
+                  placeholder="Selecione o banco"
                   disabled={loadingBancos}
-                >
-                  <SelectTrigger
-                    className={
-                      errors.banco
-                        ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
-                        : ''
-                    }
-                  >
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {bancos.map((b) => (
-                      <SelectItem key={b.banco} value={String(b.banco)}>
-                        {b.banco} - {b.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
+                  options={bancos.map((b) => ({
+                    value: String(b.banco),
+                    label: `${b.banco} - ${b.nome}`,
+                  }))}
+                />
                 {errors.banco && (
-                  <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                     {errors.banco.message as string}
                   </p>
                 )}

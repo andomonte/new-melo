@@ -329,19 +329,18 @@ export function CommercialTab() {
       </div>
 
       {/* Configurações Comerciais */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-6 mb-4 border-b pb-2">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mt-4 mb-2 border-b pb-2">
         Configurações Comerciais
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-4 gap-3">
         {/* Acréscimo */}
         <div>
           <Label>Acréscimo (%)</Label>
           <Input
             {...register('acrescimo')}
-            type="number"
-            step="0.01"
-            placeholder="0.00"
+            type="text"
+            placeholder="0,00"
           />
         </div>
 
@@ -350,20 +349,31 @@ export function CommercialTab() {
           <Label>Desconto (%)</Label>
           <Input
             {...register('desconto')}
-            type="number"
-            step="0.01"
-            placeholder="0.00"
+            type="text"
+            placeholder="0,00"
           />
         </div>
 
         {/* Preço de Venda */}
         <div>
           <Label>Preço de Venda</Label>
-          <Input
-            {...register('precoVenda')}
-            type="number"
-            step="0.01"
-            placeholder="0.00"
+          <Controller
+            control={control}
+            name="precoVenda"
+            render={({ field }) => (
+              <Select onValueChange={field.onChange} value={field.value || '0'}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0 - Balcão</SelectItem>
+                  <SelectItem value="1">1 - Revenda</SelectItem>
+                  <SelectItem value="2">2 - Revenda 2</SelectItem>
+                  <SelectItem value="3">3 - P. Velho</SelectItem>
+                  <SelectItem value="4">4 - B. Vista</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           />
         </div>
 
@@ -372,9 +382,8 @@ export function CommercialTab() {
           <Label>Kickback</Label>
           <Input
             {...register('kickback')}
-            type="number"
-            step="0.01"
-            placeholder="0.00"
+            type="text"
+            placeholder="0,00"
           />
         </div>
 
@@ -385,12 +394,11 @@ export function CommercialTab() {
             control={control}
             name="descontoAplicado"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={field.onChange} value={field.value || 'N'}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="2">2 - INTERCOM</SelectItem>
                   <SelectItem value="S">Sim</SelectItem>
                   <SelectItem value="N">Não</SelectItem>
                 </SelectContent>
