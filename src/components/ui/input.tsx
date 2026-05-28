@@ -43,7 +43,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       // Limpar zero sozinho ao focar (campos numéricos/monetários)
       if (e.target.value === '0' || e.target.value === '0,00' || e.target.value === '0.00') {
         e.target.value = '';
-        onChange?.({ ...e, target: { ...e.target, value: '' } } as any);
       }
     };
 
