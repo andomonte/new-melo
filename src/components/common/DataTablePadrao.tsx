@@ -648,8 +648,8 @@ export default function DataTablePadrao({
                     const colIndex = headers.indexOf(sortColumn);
                     if (colIndex !== -1) {
                       sortedRows = [...filteredRows].sort((a, b) => {
-                        let valA = a[colIndex];
-                        let valB = b[colIndex];
+                        let valA = Array.isArray(a) ? a[colIndex] : a[sortColumn];
+                        let valB = Array.isArray(b) ? b[colIndex] : b[sortColumn];
 
                         // Extrai texto de elementos React
                         const extractText = (v: any): string => {
@@ -713,7 +713,8 @@ export default function DataTablePadrao({
                     {ordemColunas.map((header) => {
                       const cellIndex = headers.indexOf(header);
                       if (!colunasVisiveis.includes(header) || cellIndex === -1) return null;
-                      const value = row[cellIndex];
+                      // Suporta rows como array (ContasPagar) ou objeto (DataTableFiltro)
+                      const value = Array.isArray(row) ? row[cellIndex] : row[header];
                       const isLastColumn = cellIndex === headers.length - 1;
                       return (
                         <td
