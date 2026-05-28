@@ -165,9 +165,9 @@ export function FinancialTab() {
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">R$</span>
                 <Input
-                  value={typeof field.value === 'number' && field.value > 0
-                    ? mascaraInputBRL(String(Math.round(field.value * 100)))
-                    : field.value || ''}
+                  value={typeof field.value === 'number'
+                    ? (field.value > 0 ? mascaraInputBRL(String(Math.round(field.value * 100))) : '')
+                    : (field.value && field.value !== '0' ? field.value : '')}
                   onChange={(e) => {
                     const mascarado = mascaraInputBRL(e.target.value);
                     field.onChange(mascarado);
