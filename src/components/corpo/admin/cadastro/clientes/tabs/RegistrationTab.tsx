@@ -595,6 +595,10 @@ export function RegistrationTab({
           <Input {...register('complemento')} />
         </div>
         <div>
+          <Label>Referência</Label>
+          <Input {...register('referencia')} placeholder="Ponto de referência" />
+        </div>
+        <div>
           <Label>Bairro</Label>
           <Input {...register('bairro')} />
         </div>

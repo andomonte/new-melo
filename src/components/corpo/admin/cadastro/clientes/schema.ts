@@ -52,6 +52,7 @@ export const clientSchema = z.object({
   endereco: z.string().max(100).optional().nullable(),
   numero: z.string().max(10).optional().nullable(),
   complemento: z.string().max(50).optional().nullable(),
+  referencia: z.string().max(100).optional().nullable(),
   bairro: z.string().max(50).optional().default(''),
   cidade: z.string().max(60).optional().nullable(),
   uf: z.string().max(2).optional().nullable(),
