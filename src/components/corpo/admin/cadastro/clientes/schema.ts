@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { validarDocumento, limparDocumento } from '@/utils/validarDocumento';
 
 export const clientSchema = z.object({
   // Identificação
@@ -8,12 +9,12 @@ export const clientSchema = z.object({
     .string()
     .min(1, 'Documento é obrigatório')
     .refine((val) => {
-      // Simple length check as proxy for mask completion,
-      // strictly we should check typePessoa and validate CPF/CNPJ
-      const clean = val.replace(/\D/g, '');
+      const clean = limparDocumento(val);
       if (clean.length === 0) return false;
-      return true;
-    }, 'Documento inválido'),
+      // Exterior não valida CPF/CNPJ
+      if (clean.length !== 11 && clean.length !== 14) return clean.length > 0;
+      return validarDocumento(val);
+    }, 'CPF ou CNPJ inválido'),
   nome: z
     .string()
     .min(2, 'Nome / Razão Social é obrigatório')
