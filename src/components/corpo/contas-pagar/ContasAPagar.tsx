@@ -503,108 +503,17 @@ export function ContasAPagar() {
 
   // Calcular contas do período ativo (semana/mês/personalizado)
   useEffect(() => {
-    const calcularContasDoPeriodo = async () => {
-      try {
-        const hoje = new Date();
-        let dataInicio: string;
-        let dataFim: string;
+    // Calcula totais a partir dos dados já carregados na listagem
+    const dados = todasContasConsolidadas.length > 0 ? todasContasConsolidadas : contasPagar;
+    const valorTotal = dados.reduce((acc: number, conta: any) => {
+      return acc + Number(conta.valor_pgto || 0);
+    }, 0);
 
-        if (rangeDataAtivo === 'semana') {
-          const inicioSemana = new Date(hoje);
-          inicioSemana.setDate(hoje.getDate() - hoje.getDay()); // Domingo
-          const fimSemana = new Date(inicioSemana);
-          fimSemana.setDate(inicioSemana.getDate() + 6); // Sábado
-          dataInicio = inicioSemana.toISOString().split('T')[0];
-          dataFim = fimSemana.toISOString().split('T')[0];
-        } else if (rangeDataAtivo === 'mes') {
-          const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-          const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-          dataInicio = inicioMes.toISOString().split('T')[0];
-          dataFim = fimMes.toISOString().split('T')[0];
-        } else if (rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada) {
-          dataInicio = dataInicioPersonalizada;
-          dataFim = dataFimPersonalizada;
-        } else if (rangeDataAtivo === 'todos') {
-          // Para 'todos', buscar sem filtro de data, apenas com status
-          const statusPendentes = ['pendente', 'pago_parcial', 'pendente_parcial'];
-          const promises = statusPendentes.map(status =>
-            fetch(`/api/contas-pagar?status=${status}&limite=1000`)
-              .then(res => res.ok ? res.json() : { contas_pagar: [] })
-          );
-
-          const results = await Promise.all(promises);
-          const todasContas = results.flatMap(data => data.contas_pagar || []);
-          
-          // Remover duplicados pelo ID
-          const contasUnicas = Array.from(
-            new Map(todasContas.map(conta => [conta.id, conta])).values()
-          );
-          
-          const valorTotal = contasUnicas.reduce((acc: number, conta: any) => {
-            const valorPendente = Number(conta.valor_pgto) - Number(conta.valor_pago || 0);
-            return acc + valorPendente;
-          }, 0);
-
-          setContasDaSemana({
-            pendentes: contasUnicas.length,
-            valorTotal
-          });
-          return;
-        } else {
-          // Se não tiver configuração válida, não calcular
-          setContasDaSemana({ pendentes: 0, valorTotal: 0 });
-          return;
-        }
-
-        // Se há filtro de status específico, usar apenas ele
-        // Senão, buscar contas pendentes e pagas parcialmente
-        let contasUnicas: any[];
-        
-        if (filtros.status) {
-          // Usar o status específico do filtro
-          const response = await fetch(
-            `/api/contas-pagar?data_inicio=${dataInicio}&data_fim=${dataFim}&status=${filtros.status}&limite=1000`
-          );
-          
-          if (response.ok) {
-            const data = await response.json();
-            contasUnicas = data.contas_pagar || [];
-          } else {
-            contasUnicas = [];
-          }
-        } else {
-          // Buscar múltiplos status (pendentes e pagos parcialmente)
-          const statusPendentes = ['pendente', 'pago_parcial', 'pendente_parcial'];
-          const promises = statusPendentes.map(status =>
-            fetch(`/api/contas-pagar?data_inicio=${dataInicio}&data_fim=${dataFim}&status=${status}&limite=1000`)
-              .then(res => res.ok ? res.json() : { contas_pagar: [] })
-          );
-
-          const results = await Promise.all(promises);
-          const todasContas = results.flatMap(data => data.contas_pagar || []);
-          
-          // Remover duplicados pelo ID
-          contasUnicas = Array.from(
-            new Map(todasContas.map(conta => [conta.id, conta])).values()
-          );
-        }
-        
-        const valorTotal = contasUnicas.reduce((acc: number, conta: any) => {
-          const valorPendente = Number(conta.valor_pgto) - Number(conta.valor_pago || 0);
-          return acc + valorPendente;
-        }, 0);
-
-        setContasDaSemana({
-          pendentes: contasUnicas.length,
-          valorTotal
-        });
-      } catch (error) {
-        console.error('Erro ao calcular contas do período:', error);
-      }
-    };
-
-    calcularContasDoPeriodo();
-  }, [rangeDataAtivo, dataInicioPersonalizada, dataFimPersonalizada, filtros.status, contasPagar]); // Recalcular quando mudar o período, status ou a lista
+    setContasDaSemana({
+      pendentes: dados.length,
+      valorTotal
+    });
+  }, [contasPagar, todasContasConsolidadas]);
 
   // Aplicar filtro de range de data (só por interação do usuário)
   useEffect(() => {

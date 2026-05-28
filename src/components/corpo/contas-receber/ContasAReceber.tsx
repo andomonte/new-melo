@@ -1049,7 +1049,15 @@ export default function ContasAReceber() {
                Contas a Receber
             </h1>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-              Gerencie seus títulos, duplicatas e recebimentos
+              {carregando && contasReceber.length === 0 ? (
+                <span className="inline-flex gap-2 items-center">
+                  <span className="inline-block h-3 w-8 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse" />
+                  registros -
+                  <span className="inline-block h-3 w-24 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse" />
+                </span>
+              ) : (
+                <><strong>{contasReceber.length}</strong> registros - <strong>{formatarMoeda(contasReceber.reduce((acc, c) => acc + Number(c.valor_original || 0), 0))}</strong></>
+              )}
             </p>
           </div>
 
