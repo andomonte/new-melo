@@ -451,7 +451,7 @@ export function FinancialTab() {
       {/* Resto do código permanece igual... */}
       {/* Histórico Financeiro */}
       <div className="mt-8">
-        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b pb-2">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-2 border-b pb-2">
           Histórico Financeiro
         </h3>
 

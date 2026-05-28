@@ -195,7 +195,7 @@ export function CommercialTab() {
     <div className="space-y-6">
       {/* Vendedores por Segmento */}
       <div className="flex flex-row items-center justify-between border-b pb-2 mb-4">
-        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
           Vendedores por Segmento
         </h3>
         <Button
@@ -466,7 +466,7 @@ export function CommercialTab() {
       {/* Grid de Dados Financeiros - Replicado da aba Financeira */}
       <div className="mt-8">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 border-b pb-2">
+          <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-b pb-2">
             Visualização de Dados Financeiros
           </h3>
           {loadingFinancial && (

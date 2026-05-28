@@ -187,15 +187,15 @@ export function RegistrationTab({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="form-compact space-y-3">
       {/* Identificação Section Title */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-4 border-b pb-2">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mb-2 border-b pb-2">
         Identificação
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+      <div className="grid grid-cols-4 gap-3">
         {/* Tipo Pessoa */}
-        <div className="md:col-span-2">
+        <div>
           <Label>Tipo Pessoa</Label>
           <Controller
             control={control}
@@ -216,7 +216,7 @@ export function RegistrationTab({
         </div>
 
         {/* Documento */}
-        <div className="md:col-span-4 relative">
+        <div className="relative">
           <Label>
             {tipoPessoa === 'J'
               ? 'CNPJ'
@@ -276,7 +276,7 @@ export function RegistrationTab({
         </div>
 
         {/* Nome / Razão Social */}
-        <div className="md:col-span-6">
+        <div className="col-span-2">
           <Label>
             Nome / Razão Social
             <span className="text-red-500 ml-1">*</span>
@@ -298,13 +298,13 @@ export function RegistrationTab({
         </div>
 
         {/* Fantasia */}
-        <div className="md:col-span-6">
+        <div className="col-span-2">
           <Label>Nome Fantasia</Label>
           <Input {...register('nomeFantasia')} />
         </div>
 
         {/* Email */}
-        <div className="md:col-span-6">
+        <div className="col-span-2">
           <Label>Email</Label>
           <Input
             {...register('email')}
@@ -320,11 +320,11 @@ export function RegistrationTab({
       </div>
 
       {/* Classificação Tributária e Comercial Section */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-6 mb-4 border-b pb-2">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mt-4 mb-2 border-b pb-2">
         Classificação
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-3">
         {/* Tipo Cliente */}
         <div>
           <Label>Tipo Cliente</Label>
@@ -436,11 +436,11 @@ export function RegistrationTab({
       </div>
 
       {/* Fiscal Info Section Title */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-6 mb-4 border-b pb-2">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mt-4 mb-2 border-b pb-2">
         Inscrições Fiscais
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-4 gap-3">
         {/* IE */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -536,12 +536,12 @@ export function RegistrationTab({
       </div>
 
       {/* Endereço Section Title */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-6 mb-4 border-b pb-2">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mt-4 mb-2 border-b pb-2">
         Endereço
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-2 relative">
+      <div className="grid grid-cols-4 gap-3">
+        <div className="relative">
           <Label>CEP</Label>
           <div className="relative">
             <Controller
@@ -569,27 +569,27 @@ export function RegistrationTab({
             )}
           </div>
         </div>
-        <div className="md:col-span-6">
+        <div className="col-span-2">
           <Label>Logradouro</Label>
           <Input {...register('endereco')} />
         </div>
-        <div className="md:col-span-2">
+        <div>
           <Label>Número</Label>
           <Input {...register('numero')} name="numero" />
         </div>
-        <div className="md:col-span-2">
+        <div>
           <Label>Complemento</Label>
           <Input {...register('complemento')} />
         </div>
-        <div className="md:col-span-4">
+        <div>
           <Label>Bairro</Label>
           <Input {...register('bairro')} />
         </div>
-        <div className="md:col-span-4">
+        <div>
           <Label>Cidade</Label>
           <Input {...register('cidade')} />
         </div>
-        <div className="md:col-span-2">
+        <div>
           <Label>UF</Label>
           <Controller
             control={control}
@@ -638,7 +638,7 @@ export function RegistrationTab({
             )}
           />
         </div>
-        <div className="md:col-span-2">
+        <div>
           <Label>País</Label>
           <Controller
             control={control}
@@ -654,7 +654,7 @@ export function RegistrationTab({
       </div>
 
       {/* Endereço de Cobrança Section */}
-      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mt-6 mb-4 border-b pb-2">
+      <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mt-4 mb-2 border-b pb-2">
         Endereço de Cobrança
       </h3>
 
@@ -676,8 +676,8 @@ export function RegistrationTab({
       </div>
 
       {!enderecoCobrancaIgual && (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 bg-gray-50 dark:bg-zinc-800/50 rounded-md border">
-          <div className="md:col-span-2">
+        <div className="grid grid-cols-4 gap-3 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-md border">
+          <div>
             <Label>CEP</Label>
             <Controller
               control={control}
@@ -691,27 +691,27 @@ export function RegistrationTab({
               )}
             />
           </div>
-          <div className="md:col-span-6">
+          <div className="col-span-2">
             <Label>Logradouro</Label>
             <Input {...register('endercobr')} />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <Label>Número</Label>
             <Input {...register('numerocobr')} />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <Label>Complemento</Label>
             <Input {...register('complementocobr')} />
           </div>
-          <div className="md:col-span-4">
+          <div>
             <Label>Bairro</Label>
             <Input {...register('bairrocobr')} />
           </div>
-          <div className="md:col-span-4">
+          <div>
             <Label>Cidade</Label>
             <Input {...register('cidadecobr')} />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <Label>UF</Label>
             <Controller
               control={control}
@@ -736,7 +736,7 @@ export function RegistrationTab({
               )}
             />
           </div>
-          <div className="md:col-span-2">
+          <div>
             <Label>Referência</Label>
             <Input {...register('referenciacobr')} placeholder="Ponto de referência" />
           </div>
@@ -745,7 +745,7 @@ export function RegistrationTab({
 
       {/* Contatos Section - Compacto */}
       <div className="flex flex-row items-center justify-between mt-6 mb-3 border-b pb-2">
-        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
           Telefones e Contatos
         </h3>
         <Button
@@ -870,7 +870,7 @@ export function RegistrationTab({
 
       {/* Pessoas de Contato Section - Compacto */}
       <div className="flex flex-row items-center justify-between mt-6 mb-3 border-b pb-2">
-        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
           Pessoas de Contato
         </h3>
         <Button
