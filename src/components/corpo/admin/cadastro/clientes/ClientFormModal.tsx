@@ -110,6 +110,13 @@ export default function ClientFormModal({
   // Gatekeeper hook - só verifica se NÃO estiver editando
   const { matches } = useGatekeeper(documento, !isEditing);
 
+  // Mostra modal de duplicidade quando encontra matches
+  useEffect(() => {
+    if (matches.length > 0 && !isEditing) {
+      setShowGatekeeperModal(true);
+    }
+  }, [matches, isEditing]);
+
   // Reset form when opening/closing or changing edit mode
   useEffect(() => {
     const loadData = async () => {

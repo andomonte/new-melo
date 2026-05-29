@@ -66,6 +66,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       motivo_cancelamento || 'Cancelamento solicitado pelo usuário'
     ]);
 
+    // Se era conta gerada por CT-e (titulo_importado), remove vínculos
+    // para que as notas voltem ao status "SEM TITULO"
+    try {
+      await pool.query(
+        'DELETE FROM db_manaus.dbconhecimento WHERE codpgto = $1',
+        [id]
+      );
+    } catch (e) {
+      // Ignora se tabela não existe ou não tem vínculos
+      console.warn('Aviso ao limpar vínculos CT-e:', e);
+    }
+
     res.status(200).json({
       sucesso: true,
       mensagem: 'Conta a pagar cancelada com sucesso.',
