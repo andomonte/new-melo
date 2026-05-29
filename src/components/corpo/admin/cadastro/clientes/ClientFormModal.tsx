@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { desmascarar } from '@/utils/monetario';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -65,7 +65,8 @@ export default function ClientFormModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
-  const isEditing = !!clientToEdit;
+  const [editandoViaGatekeeper, setEditandoViaGatekeeper] = useState(false);
+  const isEditing = !!clientToEdit || editandoViaGatekeeper;
 
   const methods = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -109,18 +110,27 @@ export default function ClientFormModal({
 
   // Gatekeeper hook - só verifica se NÃO estiver editando
   const { matches } = useGatekeeper(documento, !isEditing);
+  const prevMatchesRef = useRef(0);
 
-  // Mostra modal de duplicidade quando encontra matches
+  // Mostra modal de duplicidade APENAS quando matches mudam de 0 para >0
+  // e o documento tem tamanho válido (CPF=14 com máscara, CNPJ=18 com máscara)
   useEffect(() => {
-    if (matches.length > 0 && !isEditing) {
+    const docLimpo = (documento || '').replace(/\D/g, '');
+    const docCompleto = docLimpo.length === 11 || docLimpo.length === 14;
+
+    if (matches.length > 0 && prevMatchesRef.current === 0 && !isEditing && docCompleto) {
       setShowGatekeeperModal(true);
     }
-  }, [matches, isEditing]);
+    prevMatchesRef.current = matches.length;
+  }, [matches, isEditing, documento]);
 
   // Reset form when opening/closing or changing edit mode
   useEffect(() => {
     const loadData = async () => {
       if (isOpen) {
+        prevMatchesRef.current = 0;
+        setShowGatekeeperModal(false);
+        setEditandoViaGatekeeper(false);
         if (clientToEdit) {
           setIsLoadingData(true);
           try {
@@ -907,6 +917,7 @@ export default function ClientFormModal({
                                 });
 
                                 setShowGatekeeperModal(false);
+                                setEditandoViaGatekeeper(true);
                                 toast.success(`Editando: ${fullCliente.nome}`);
                               } catch (error) {
                                 console.error('Error loading client:', error);
