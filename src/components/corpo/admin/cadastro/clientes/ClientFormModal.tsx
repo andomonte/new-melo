@@ -781,9 +781,12 @@ export default function ClientFormModal({
             open={showGatekeeperModal}
             onOpenChange={(open) => {
               if (!open) {
-                // Ao fechar modal de duplicidade sem resolver, fecha o form
                 setShowGatekeeperModal(false);
-                onClose();
+                // Se tem match como CLIENTE, fechar form (não pode criar duplicado)
+                // Se match é só FORNECEDOR/TRANSPORTADORA, permite continuar
+                if (matches.some(m => m.type === 'CLIENTE')) {
+                  onClose();
+                }
               }
             }}
           >
@@ -949,7 +952,7 @@ export default function ClientFormModal({
                 </div>
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -959,6 +962,16 @@ export default function ClientFormModal({
                 >
                   Cancelar e Sair
                 </Button>
+                {!matches.some(m => m.type === 'CLIENTE') && (
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      setShowGatekeeperModal(false);
+                    }}
+                  >
+                    Continuar Cadastro
+                  </Button>
+                )}
               </DialogFooter>
             </DialogContent>
           </Dialog>
