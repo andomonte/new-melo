@@ -433,29 +433,40 @@ export function FinancialTab() {
         </div>
 
         <div>
-          <Label>Forma de Pagamento</Label>
+          <Label>Formas de Pagamento</Label>
           <Controller
             control={control}
             name="formaPagamento"
-            render={({ field }) => (
-              <>
-                <SearchableSelect
-                  value={field.value || ''}
-                  onValueChange={field.onChange}
-                  placeholder={loadingFormasPgto ? 'Carregando...' : 'Selecione'}
-                  disabled={loadingFormasPgto}
-                  options={formasPagamento.map((fp) => ({
-                    value: fp.id,
-                    label: `${fp.id} - ${fp.descricao}`,
-                  }))}
-                />
-                {errors.formaPagamento && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                    {errors.formaPagamento.message as string}
-                  </p>
-                )}
-              </>
-            )}
+            render={({ field }) => {
+              const selecionadas = field.value ? String(field.value).split(',').filter(Boolean) : [];
+              const toggleForma = (id: string) => {
+                const novas = selecionadas.includes(id)
+                  ? selecionadas.filter(s => s !== id)
+                  : [...selecionadas, id];
+                field.onChange(novas.join(','));
+              };
+              return (
+                <div className="max-h-24 overflow-y-auto border border-gray-300 dark:border-zinc-600 rounded p-1.5 space-y-0.5">
+                  {loadingFormasPgto ? (
+                    <p className="text-[10px] text-gray-400">Carregando...</p>
+                  ) : formasPagamento.length === 0 ? (
+                    <p className="text-[10px] text-gray-400">Nenhuma forma encontrada</p>
+                  ) : (
+                    formasPagamento.map((fp) => (
+                      <label key={fp.id} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 rounded px-1 py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={selecionadas.includes(fp.id)}
+                          onChange={() => toggleForma(fp.id)}
+                          className="w-3 h-3 text-blue-600 border-gray-300 rounded"
+                        />
+                        <span className="text-[11px] text-gray-700 dark:text-gray-200">{fp.id} - {fp.descricao}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              );
+            }}
           />
         </div>
       </div>
