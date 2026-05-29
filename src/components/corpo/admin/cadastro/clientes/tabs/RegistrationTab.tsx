@@ -265,15 +265,29 @@ export function RegistrationTab({
               <div className="absolute right-3 top-2.5">
                 <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
               </div>
-            ) : tipoPessoa === 'J' && (
-              <button
-                type="button"
-                onClick={handleDocumentoBlur}
-                className="absolute right-2 top-1.5 px-1.5 py-0.5 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
-                title="Buscar dados do CNPJ na Receita Federal"
-              >
-                Buscar
-              </button>
+            ) : (
+              <div className="absolute right-1 top-1 flex gap-1">
+                {watch('documento')?.replace(/\D/g, '').length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setValue('documento', '')}
+                    className="px-1 py-0.5 text-[10px] text-gray-400 hover:text-red-500 transition-colors"
+                    title="Limpar documento"
+                  >
+                    ✕
+                  </button>
+                )}
+                {tipoPessoa === 'J' && (
+                  <button
+                    type="button"
+                    onClick={handleDocumentoBlur}
+                    className="px-1.5 py-0.5 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                    title="Buscar dados do CNPJ na Receita Federal"
+                  >
+                    Buscar
+                  </button>
+                )}
+              </div>
             )}
           </div>
           {duplicateFound && (

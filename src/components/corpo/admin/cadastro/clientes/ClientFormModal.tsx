@@ -779,7 +779,13 @@ export default function ClientFormModal({
           {/* Gatekeeper Alert Modal */}
           <Dialog
             open={showGatekeeperModal}
-            onOpenChange={setShowGatekeeperModal}
+            onOpenChange={(open) => {
+              if (!open) {
+                // Ao fechar modal de duplicidade sem resolver, fecha o form
+                setShowGatekeeperModal(false);
+                onClose();
+              }
+            }}
           >
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-zinc-900">
               <DialogHeader>
