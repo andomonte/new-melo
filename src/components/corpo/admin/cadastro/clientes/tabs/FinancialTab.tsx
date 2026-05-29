@@ -81,8 +81,10 @@ export function FinancialTab() {
     atrasoMedio: 0,
   });
   const [bancos, setBancos] = useState<Banco[]>([]);
+  const [formasPagamento, setFormasPagamento] = useState<{ id: string; descricao: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingBancos, setLoadingBancos] = useState(true);
+  const [loadingFormasPgto, setLoadingFormasPgto] = useState(true);
 
   useEffect(() => {
     async function fetchBancos() {
@@ -100,6 +102,27 @@ export function FinancialTab() {
     }
 
     fetchBancos();
+
+    async function fetchFormasPagamento() {
+      try {
+        const response = await fetch('/api/vendas/fpagamento');
+        if (response.ok) {
+          const data = await response.json();
+          const rows = Array.isArray(data?.data)
+            ? data.data.map((o: any) => ({
+                id: String(o?.id ?? o?.ID ?? o?.codigo ?? ''),
+                descricao: String(o?.descricao ?? o?.DESCRICAO ?? o?.descr ?? ''),
+              })).filter((o: any) => o.id.length > 0 && o.descricao.length > 0)
+            : [];
+          setFormasPagamento(rows);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar formas de pagamento:', error);
+      } finally {
+        setLoadingFormasPgto(false);
+      }
+    }
+    fetchFormasPagamento();
   }, []);
 
   useEffect(() => {
@@ -416,29 +439,18 @@ export function FinancialTab() {
             name="formaPagamento"
             render={({ field }) => (
               <>
-                <Select
-                  onValueChange={field.onChange}
+                <SearchableSelect
                   value={field.value || ''}
-                >
-                  <SelectTrigger
-                    className={
-                      errors.formaPagamento
-                        ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
-                        : ''
-                    }
-                  >
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="boleto">Boleto</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="cartao">Cartão</SelectItem>
-                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onValueChange={field.onChange}
+                  placeholder={loadingFormasPgto ? 'Carregando...' : 'Selecione'}
+                  disabled={loadingFormasPgto}
+                  options={formasPagamento.map((fp) => ({
+                    value: fp.id,
+                    label: `${fp.id} - ${fp.descricao}`,
+                  }))}
+                />
                 {errors.formaPagamento && (
-                  <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                     {errors.formaPagamento.message as string}
                   </p>
                 )}
