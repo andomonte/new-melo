@@ -110,11 +110,21 @@ export default async function handle(
     // O objeto 'cliente' retornado já deve ter os tipos corretos (números, datas).
     // O driver 'pg' geralmente lida bem com isso, mas se algum campo numérico
     // vier como string, a conversão para Number() é uma boa prática.
+    // Extrair formas de pagamento do JSON contato
+    let formasPagamentoSalvas: string[] = [];
+    try {
+      const contatoObj = typeof cliente.contato === 'string' ? JSON.parse(cliente.contato) : cliente.contato;
+      if (contatoObj?.formasPagamento && Array.isArray(contatoObj.formasPagamento)) {
+        formasPagamentoSalvas = contatoObj.formasPagamento;
+      }
+    } catch {}
+
     res.status(200).json({
       ...cliente,
       // Serializa contatos como JSON string para compatibilidade com o frontend que espera JSON.parse
       contatos: JSON.stringify(contatosList),
       vendedores_list: vendedoresList,
+      formaPagamento: formasPagamentoSalvas.join(','),
 
       // Converte apenas os campos que você tem certeza que são numéricos, se necessário
       debito: Number(cliente.debito),

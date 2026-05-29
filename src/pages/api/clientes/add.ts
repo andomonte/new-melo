@@ -287,6 +287,7 @@ export default async function handle(
         telefones: data.contatos || [],
         pessoas: data.pessoasContato || [],
         vendedores: data.vendedores_list || [],
+        formasPagamento: data.formaPagamento ? String(data.formaPagamento).split(',').filter(Boolean) : [],
       });
       await client.query(
         'UPDATE dbclien SET contato = $1 WHERE codcli = $2',

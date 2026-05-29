@@ -199,7 +199,7 @@ export default function ClientFormModal({
               icms: (fullCliente.icms as 'S' | 'N') || 'N',
               faixaFinanceira: fullCliente.faixafin || '',
               banco: Number(fullCliente.banco) || undefined,
-              formaPagamento: '',
+              formaPagamento: fullCliente.formaPagamento || '',
               enderecoCobrancaIgual:
                 fullCliente.ender === fullCliente.endercobr &&
                 fullCliente.cep === fullCliente.cepcobr,
