@@ -210,7 +210,7 @@ export default function ClientFormModal({
               complemento: fullCliente.complemento || '',
               pais: Number(fullCliente.codpais) || 1058, // ✅ CORRIGIDO: Number()
               limiteCredito: String(fullCliente.limite || '0'),
-              credito: (fullCliente.status as 'S' | 'N') || 'S',
+              credito: fullCliente.status === '1' || fullCliente.status === 'S' ? 'S' : 'N',
               classePagamento:
                 (fullCliente.claspgto as 'A' | 'B' | 'C' | 'X') || 'A',
               aceitaAtraso: (fullCliente.atraso || 0) > 0,
@@ -404,7 +404,7 @@ export default function ClientFormModal({
           iest: data.inscricaoEstadual || '',
           imun: data.inscricaoMunicipal || '',
           isuframa: data.suframa || '',
-          status: data.credito || 'S',
+          status: data.credito === 'S' ? '1' : '2',
           icms: data.icms || 'N',
           atraso: Number(data.diasAtraso) || 0,
           faixafin: data.faixaFinanceira || '',
@@ -465,7 +465,7 @@ export default function ClientFormModal({
           iest: data.inscricaoEstadual || '',
           imun: data.inscricaoMunicipal || '',
           isuframa: data.suframa || '',
-          status: data.credito || 'S',
+          status: data.credito === 'S' ? '1' : '2',
           icms: data.icms || 'N',
           atraso: Number(data.diasAtraso) || 0,
           faixafin: data.faixaFinanceira || '',
