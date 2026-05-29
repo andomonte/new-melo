@@ -7,6 +7,7 @@ import { useGatekeeper } from '@/hooks/useGatekeeper';
 import { RegistrationTab } from './tabs/RegistrationTab';
 import { FinancialTab } from './tabs/FinancialTab';
 import { CommercialTab } from './tabs/CommercialTab';
+import { DeliveryTab } from './tabs/DeliveryTab';
 import { clientSchema, ClientFormValues } from './schema';
 import {
   Cliente,
@@ -50,6 +51,7 @@ const tabs = [
   { name: 'Dados Cadastrais', key: 'registration' },
   { name: 'Dados Financeiros', key: 'financial' },
   { name: 'Dados Comerciais', key: 'commercial' },
+  { name: 'Dados Entrega', key: 'delivery' },
 ];
 
 export default function ClientFormModal({
@@ -211,6 +213,21 @@ export default function ClientFormModal({
               cepcobr: fullCliente.cepcobr || '',
               complementocobr: fullCliente.complementocobr || '',
               referenciacobr: fullCliente.referenciacobr || '',
+              tipoPessoaEntrega: fullCliente.tipoPessoaEntrega || 'F',
+              nomeEntrega: fullCliente.nomeEntrega || '',
+              emailEntrega: fullCliente.emailEntrega || '',
+              cepEntrega: fullCliente.cepEntrega || '',
+              enderecoEntrega: fullCliente.enderecoEntrega || '',
+              numeroEntrega: fullCliente.numeroEntrega || '',
+              complementoEntrega: fullCliente.complementoEntrega || '',
+              referenciaEntrega: fullCliente.referenciaEntrega || '',
+              bairroEntrega: fullCliente.bairroEntrega || '',
+              cidadeEntrega: fullCliente.cidadeEntrega || '',
+              ufEntrega: fullCliente.ufEntrega || '',
+              paisEntrega: fullCliente.paisEntrega || '',
+              iestEntrega: fullCliente.iestEntrega || '',
+              imunEntrega: fullCliente.imunEntrega || '',
+              suframaEntrega: fullCliente.suframaEntrega || '',
               acrescimo: String(fullCliente.acrescimo || 0),
               desconto: String(fullCliente.desconto || 0),
               obs: (fullCliente.obs || '').substring(0, 100),
@@ -641,9 +658,17 @@ export default function ClientFormModal({
       'obs',
     ];
 
+    const deliveryFields = [
+      'tipoPessoaEntrega', 'nomeEntrega', 'emailEntrega',
+      'cepEntrega', 'enderecoEntrega', 'numeroEntrega', 'complementoEntrega',
+      'referenciaEntrega', 'bairroEntrega', 'cidadeEntrega', 'ufEntrega',
+      'paisEntrega', 'iestEntrega', 'imunEntrega', 'suframaEntrega',
+    ];
+
     if (registrationFields.includes(field)) return 'registration';
     if (financialFields.includes(field)) return 'financial';
     if (commercialFields.includes(field)) return 'commercial';
+    if (deliveryFields.includes(field)) return 'delivery';
 
     return 'registration'; // default
   };
@@ -703,6 +728,8 @@ export default function ClientFormModal({
         return <FinancialTab />;
       case 'commercial':
         return <CommercialTab />;
+      case 'delivery':
+        return <DeliveryTab />;
       default:
         return null;
     }

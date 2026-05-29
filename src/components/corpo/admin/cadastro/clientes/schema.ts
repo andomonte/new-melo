@@ -154,6 +154,23 @@ export const clientSchema = z.object({
   complementocobr: z.string().max(100).optional().nullable(),
   referenciacobr: z.string().max(200).optional().nullable(),
 
+  // Entrega
+  tipoPessoaEntrega: z.enum(['F', 'J']).optional().nullable(),
+  nomeEntrega: z.string().max(100).optional().nullable(),
+  emailEntrega: z.string().max(100).optional().nullable(),
+  cepEntrega: z.string().max(9).optional().nullable(),
+  enderecoEntrega: z.string().max(100).optional().nullable(),
+  numeroEntrega: z.string().max(10).optional().nullable(),
+  complementoEntrega: z.string().max(50).optional().nullable(),
+  referenciaEntrega: z.string().max(100).optional().nullable(),
+  bairroEntrega: z.string().max(50).optional().nullable(),
+  cidadeEntrega: z.string().max(60).optional().nullable(),
+  ufEntrega: z.string().max(2).optional().nullable(),
+  paisEntrega: z.string().max(60).optional().nullable(),
+  iestEntrega: z.string().max(20).optional().nullable(),
+  imunEntrega: z.string().max(20).optional().nullable(),
+  suframaEntrega: z.string().max(20).optional().nullable(),
+
   // Comercial
   acrescimo: z.union([z.string(), z.number()]).optional().nullable(),
   desconto: z.union([z.string(), z.number()]).optional().nullable(),

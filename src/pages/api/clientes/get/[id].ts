@@ -110,12 +110,16 @@ export default async function handle(
     // O objeto 'cliente' retornado já deve ter os tipos corretos (números, datas).
     // O driver 'pg' geralmente lida bem com isso, mas se algum campo numérico
     // vier como string, a conversão para Number() é uma boa prática.
-    // Extrair formas de pagamento do JSON contato
+    // Extrair formas de pagamento e dados de entrega do JSON contato
     let formasPagamentoSalvas: string[] = [];
+    let entregaDados: any = {};
     try {
       const contatoObj = typeof cliente.contato === 'string' ? JSON.parse(cliente.contato) : cliente.contato;
       if (contatoObj?.formasPagamento && Array.isArray(contatoObj.formasPagamento)) {
         formasPagamentoSalvas = contatoObj.formasPagamento;
+      }
+      if (contatoObj?.entrega) {
+        entregaDados = contatoObj.entrega;
       }
     } catch {}
 
@@ -125,6 +129,21 @@ export default async function handle(
       contatos: JSON.stringify(contatosList),
       vendedores_list: vendedoresList,
       formaPagamento: formasPagamentoSalvas.join(','),
+      tipoPessoaEntrega: entregaDados.tipoPessoa || '',
+      nomeEntrega: entregaDados.nome || '',
+      emailEntrega: entregaDados.email || '',
+      cepEntrega: entregaDados.cep || '',
+      enderecoEntrega: entregaDados.endereco || '',
+      numeroEntrega: entregaDados.numero || '',
+      complementoEntrega: entregaDados.complemento || '',
+      referenciaEntrega: entregaDados.referencia || '',
+      bairroEntrega: entregaDados.bairro || '',
+      cidadeEntrega: entregaDados.cidade || '',
+      ufEntrega: entregaDados.uf || '',
+      paisEntrega: entregaDados.pais || '',
+      iestEntrega: entregaDados.iest || '',
+      imunEntrega: entregaDados.imun || '',
+      suframaEntrega: entregaDados.suframa || '',
 
       // Converte apenas os campos que você tem certeza que são numéricos, se necessário
       debito: Number(cliente.debito),

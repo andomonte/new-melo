@@ -213,6 +213,23 @@ export default async function handle(
         pessoas: cliente.pessoasContato || [],
         vendedores: cliente.vendedores_list || [],
         formasPagamento: cliente.formaPagamento ? String(cliente.formaPagamento).split(',').filter(Boolean) : [],
+        entrega: {
+          tipoPessoa: cliente.tipoPessoaEntrega || '',
+          nome: cliente.nomeEntrega || '',
+          email: cliente.emailEntrega || '',
+          cep: cliente.cepEntrega || '',
+          endereco: cliente.enderecoEntrega || '',
+          numero: cliente.numeroEntrega || '',
+          complemento: cliente.complementoEntrega || '',
+          referencia: cliente.referenciaEntrega || '',
+          bairro: cliente.bairroEntrega || '',
+          cidade: cliente.cidadeEntrega || '',
+          uf: cliente.ufEntrega || '',
+          pais: cliente.paisEntrega || '',
+          iest: cliente.iestEntrega || '',
+          imun: cliente.imunEntrega || '',
+          suframa: cliente.suframaEntrega || '',
+        },
       });
       await client.query(
         'UPDATE dbclien SET contato = $1 WHERE codcli = $2',
