@@ -300,7 +300,7 @@ export function CommercialTab() {
                           <SelectValue placeholder={loadingSegmentos ? 'Carregando...' : 'Segmento (opcional)'} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Todos os segmentos</SelectItem>
+                          <SelectItem value="__todos__">Todos os segmentos</SelectItem>
                           {segmentos.map((seg) => (
                             <SelectItem key={seg.codsegmento} value={seg.codsegmento}>
                               {seg.codsegmento} - {seg.descricao}
