@@ -109,7 +109,7 @@ export const clientSchema = z.object({
   // Financeiro / Outros (Mapeando campos do banco)
   limiteCredito: z.union([z.string(), z.number()]).optional().nullable(),
   credito: z.enum(['S', 'N']).optional().nullable(),
-  classePagamento: z.enum(['A', 'B', 'C', 'X']).optional().nullable(),
+  classePagamento: z.enum(['A', 'B', 'C', 'D', 'E', 'V', 'I', 'F', 'N', 'O', 'P', 'Z', 'X']).optional().nullable(),
   aceitaAtraso: z.boolean().default(false),
   diasAtraso: z.union([z.string(), z.number()]).optional().nullable(),
   icms: z.enum(['S', 'N']).optional().nullable(),

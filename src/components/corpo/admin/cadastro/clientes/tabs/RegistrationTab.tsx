@@ -237,22 +237,32 @@ export function RegistrationTab({
                     placeholder="Documento Internacional"
                   />
                 ) : (
-                  <InputMask {...fieldProps} mask={getMask()} maskChar="_">
-                    {(inputProps: any) => (
-                      <Input
-                        {...inputProps}
-                        ref={ref}
-                        className={`flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
-                          duplicateFound ? 'border-amber-500 bg-amber-50' : ''
-                        }`}
-                        placeholder={
-                          tipoPessoa === 'J'
-                            ? '00.000.000/0000-00'
-                            : '000.000.000-00'
-                        }
-                      />
-                    )}
-                  </InputMask>
+                  <Input
+                    {...fieldProps}
+                    ref={ref}
+                    value={fieldProps.value || ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, '');
+                      let formatted = raw;
+                      if (tipoPessoa === 'J') {
+                        // CNPJ: 00.000.000/0000-00
+                        formatted = raw.slice(0, 14)
+                          .replace(/^(\d{2})(\d)/, '$1.$2')
+                          .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+                          .replace(/\.(\d{3})(\d)/, '.$1/$2')
+                          .replace(/(\d{4})(\d)/, '$1-$2');
+                      } else {
+                        // CPF: 000.000.000-00
+                        formatted = raw.slice(0, 11)
+                          .replace(/^(\d{3})(\d)/, '$1.$2')
+                          .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+                          .replace(/\.(\d{3})(\d)/, '.$1-$2');
+                      }
+                      fieldProps.onChange(formatted);
+                    }}
+                    className={duplicateFound ? 'border-amber-500 bg-amber-50' : ''}
+                    placeholder={tipoPessoa === 'J' ? '00.000.000/0000-00' : '000.000.000-00'}
+                  />
                 )
               }
             />
