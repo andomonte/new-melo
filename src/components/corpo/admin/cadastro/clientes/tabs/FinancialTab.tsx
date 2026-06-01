@@ -402,7 +402,7 @@ export function FinancialTab() {
           )}
         </div>
 
-        <div>
+        <div className={errors.banco ? 'field-error' : ''}>
           <Label>
             Banco
             <span className="text-red-500 ml-1">*</span>
