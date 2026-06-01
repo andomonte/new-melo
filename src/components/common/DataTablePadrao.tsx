@@ -49,7 +49,7 @@ interface DataTablePadraoProps {
   loading?: boolean;
   /** Alias para loading (compatibilidade com DataTableFiltro) */
   carregando?: boolean;
-  noDataMessage?: string;
+  noDataMessage?: string | React.ReactNode;
   onFiltroChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
   colunasFiltro?: string[];
   onExportarExcel?: () => void;

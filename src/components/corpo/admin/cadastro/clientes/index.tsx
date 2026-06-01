@@ -671,19 +671,8 @@ const ClientesPage = () => {
           </div>
         </div>
 
-        {/* DataTable ou mensagem de busca */}
+        {/* DataTable */}
         <div className="flex-1 min-h-20 flex flex-col">
-        {(!search || search.length < 3) && (!filtros || filtros.length === 0) ? (
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <BsPersonVcard className="dark:text-orange-300 text-orange-600" size={60} />
-            <div className="text-center font-bold dark:text-orange-300 text-orange-600 mt-3">
-              PESQUISAR UM CLIENTE
-            </div>
-            <div className="font-bold text-orange-600 dark:text-orange-300 text-sm mt-1">
-              Digite pelo menos 3 caracteres e pressione enter...
-            </div>
-          </div>
-        ) : (
         <DataTable
           screenKey="cadastro-clientes"
           userName={user?.usuario}
@@ -705,7 +694,13 @@ const ClientesPage = () => {
           onSearchBlur={() => {}}
           onSearchKeyDown={() => {}}
           searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar..."
-          noDataMessage={!search || search.length < 3 ? '' : 'Nenhum cliente encontrado'}
+          noDataMessage={!search || search.length < 3 ? (
+            <div className="flex flex-col items-center py-8">
+              <BsPersonVcard className="dark:text-orange-300 text-orange-600" size={60} />
+              <div className="text-center font-bold dark:text-orange-300 text-orange-600 mt-3">PESQUISAR UM CLIENTE</div>
+              <div className="text-orange-600 dark:text-orange-300 text-xs mt-1">Digite pelo menos 3 caracteres e pressione enter...</div>
+            </div>
+          ) : 'Nenhum cliente encontrado'}
           // Filtros
           colunasFiltro={colunasDb}
           onFiltroChange={(novosFiltros) => {
@@ -765,7 +760,6 @@ const ClientesPage = () => {
             </>
           }
         />
-        )}
         </div>
       </main>
 
