@@ -282,6 +282,11 @@ export default async function handle(
         }
       }
 
+      // Garantir que campo contato aceita JSON
+      try {
+        await client.query('ALTER TABLE dbclien ALTER COLUMN contato TYPE TEXT');
+      } catch { /* ignora se já é TEXT */ }
+
       // Salvar JSON estruturado no campo contato (inclui vendedores por segmento)
       const contatoJson = JSON.stringify({
         telefones: data.contatos || [],
