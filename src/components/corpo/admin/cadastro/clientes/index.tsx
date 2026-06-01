@@ -695,7 +695,7 @@ const ClientesPage = () => {
           onSearchKeyDown={() => {}}
           searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar..."
           noDataMessage={!search || search.length < 3 ? (
-            <div className="flex flex-col items-center py-8">
+            <div className="flex flex-col items-center py-24">
               <BsPersonVcard className="dark:text-orange-300 text-orange-600" size={60} />
               <div className="text-center font-bold dark:text-orange-300 text-orange-600 mt-3">PESQUISAR UM CLIENTE</div>
               <div className="text-orange-600 dark:text-orange-300 text-xs mt-1">Digite pelo menos 3 caracteres e pressione enter...</div>
