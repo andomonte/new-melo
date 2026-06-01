@@ -88,6 +88,25 @@ textarea:focus,
   color: #9ca3af;
 }
 
+/* Padrão de erro em campos obrigatórios */
+.field-error input,
+.field-error select,
+.field-error textarea,
+.field-error [role="combobox"],
+.field-error button[role="combobox"] {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+}
+
+.dark .field-error input,
+.dark .field-error select,
+.dark .field-error textarea,
+.dark .field-error [role="combobox"],
+.dark .field-error button[role="combobox"] {
+  border-color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.1) !important;
+}
+
 /* Remove leading zeros em inputs numéricos */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

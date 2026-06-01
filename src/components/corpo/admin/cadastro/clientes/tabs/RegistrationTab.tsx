@@ -363,7 +363,7 @@ export function RegistrationTab({
 
       <div className="grid grid-cols-4 gap-3">
         {/* Tipo Cliente */}
-        <div>
+        <div className={errors.tipoCliente ? 'field-error' : ''}>
           <Label>Tipo Cliente <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
@@ -383,10 +383,11 @@ export function RegistrationTab({
               </Select>
             )}
           />
+          {errors.tipoCliente && <p className="text-xs text-red-500 mt-0.5">{errors.tipoCliente.message as string}</p>}
         </div>
 
         {/* Situação Tributária */}
-        <div>
+        <div className={errors.situacaoTributaria ? 'field-error' : ''}>
           <Label>Situação Tributária <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
@@ -405,10 +406,11 @@ export function RegistrationTab({
               </Select>
             )}
           />
+          {errors.situacaoTributaria && <p className="text-xs text-red-500 mt-0.5">{errors.situacaoTributaria.message as string}</p>}
         </div>
 
         {/* Tipo Empresa */}
-        <div>
+        <div className={errors.tipoEmpresa ? 'field-error' : ''}>
           <Label>Tipo Empresa <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
@@ -419,9 +421,7 @@ export function RegistrationTab({
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="EPP">
-                    EPP - Empresa de Pequeno Porte
-                  </SelectItem>
+                  <SelectItem value="EPP">EPP - Empresa de Pequeno Porte</SelectItem>
                   <SelectItem value="ME">ME - Microempresa</SelectItem>
                   <SelectItem value="NL">NL - Normal</SelectItem>
                   <SelectItem value="PF">PF - Pessoa Física</SelectItem>
@@ -429,10 +429,11 @@ export function RegistrationTab({
               </Select>
             )}
           />
+          {errors.tipoEmpresa && <p className="text-xs text-red-500 mt-0.5">{errors.tipoEmpresa.message as string}</p>}
         </div>
 
         {/* Classe Cliente */}
-        <div>
+        <div className={errors.classeCliente ? 'field-error' : ''}>
           <Label>Classe Cliente <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
@@ -460,6 +461,7 @@ export function RegistrationTab({
               </Select>
             )}
           />
+          {errors.classeCliente && <p className="text-xs text-red-500 mt-0.5">{errors.classeCliente.message as string}</p>}
         </div>
       </div>
 
@@ -622,15 +624,17 @@ export function RegistrationTab({
           <Label>Referência</Label>
           <Input {...register('referencia')} placeholder="Ponto de referência" />
         </div>
-        <div>
+        <div className={errors.bairro ? 'field-error' : ''}>
           <Label>Bairro <span className="text-red-500">*</span></Label>
           <Input {...register('bairro')} />
+          {errors.bairro && <p className="text-xs text-red-500 mt-0.5">{errors.bairro.message as string}</p>}
         </div>
-        <div>
+        <div className={errors.cidade ? 'field-error' : ''}>
           <Label>Cidade <span className="text-red-500">*</span></Label>
           <Input {...register('cidade')} />
+          {errors.cidade && <p className="text-xs text-red-500 mt-0.5">{errors.cidade.message as string}</p>}
         </div>
-        <div>
+        <div className={errors.uf ? 'field-error' : ''}>
           <Label>UF <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
@@ -678,8 +682,9 @@ export function RegistrationTab({
               </Select>
             )}
           />
+          {errors.uf && <p className="text-xs text-red-500 mt-0.5">{errors.uf.message as string}</p>}
         </div>
-        <div>
+        <div className={errors.pais ? 'field-error' : ''}>
           <Label>País <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
@@ -691,6 +696,7 @@ export function RegistrationTab({
               />
             )}
           />
+          {errors.pais && <p className="text-xs text-red-500 mt-0.5">País é obrigatório</p>}
         </div>
       </div>
 
