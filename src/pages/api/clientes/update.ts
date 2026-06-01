@@ -127,15 +127,32 @@ export default async function handle(
       return;
     }
 
+    // Limites de caracteres por campo (conforme CREATE TABLE DBCLIEN)
+    const FIELD_MAX_LENGTH: Record<string, number> = {
+      nome: 40, nomefant: 30, cpfcgc: 20, tipo: 1, codcc: 5, codvend: 5,
+      ender: 100, bairro: 20, cidade: 20, uf: 2, cep: 9,
+      iest: 20, isuframa: 20, imun: 20, status: 1, obs: 100,
+      tipoemp: 2, icms: 1, endercobr: 100, cidadecobr: 20, bairrocobr: 20,
+      ufcobr: 2, cepcobr: 9, claspgto: 1, email: 40, ipi: 1, prvenda: 1,
+      codbairro: 5, codbairrocobr: 5, banco: 1, tipocliente: 1,
+    };
+
     const setClause = fields
       .map((field, index) => `"${field}" = $${index + 2}`)
       .join(', ');
-    const sanitizeDbValue = (val: any) => (val === '' ? null : val);
+    const sanitizeDbValue = (val: any, field?: string) => {
+      if (val === '' || val === undefined) return null;
+      // Truncar strings que excedem limite do banco
+      if (typeof val === 'string' && field && FIELD_MAX_LENGTH[field]) {
+        return val.substring(0, FIELD_MAX_LENGTH[field]);
+      }
+      return val;
+    };
 
     // Converte strings vazias para NULL para evitar erro de cast (ex: bigint = "")
     const values = [
       cliente.codcli,
-      ...fields.map((field) => sanitizeDbValue(cliente[field])),
+      ...fields.map((field) => sanitizeDbValue(cliente[field], field)),
     ];
 
     const updateQuery = `

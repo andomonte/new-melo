@@ -53,8 +53,8 @@ export const clientSchema = z.object({
   numero: z.string().max(10).optional().nullable(),
   complemento: z.string().max(50).optional().nullable(),
   referencia: z.string().max(100).optional().nullable(),
-  bairro: z.string().max(50).optional().default(''),
-  cidade: z.string().max(60).optional().nullable(),
+  bairro: z.string().max(20, 'Máximo 20 caracteres').optional().default(''),
+  cidade: z.string().max(20, 'Máximo 20 caracteres').optional().nullable(),
   uf: z.string().max(2).optional().nullable(),
 
   // País: Aceita string ou number, mas converte para number se possível
@@ -147,8 +147,8 @@ export const clientSchema = z.object({
   enderecoCobrancaIgual: z.boolean().default(true),
   endercobr: z.string().max(100).optional().nullable(),
   numerocobr: z.string().max(60).optional().nullable(),
-  bairrocobr: z.string().max(50).optional().nullable(),
-  cidadecobr: z.string().max(60).optional().nullable(),
+  bairrocobr: z.string().max(20, 'Máximo 20 caracteres').optional().nullable(),
+  cidadecobr: z.string().max(20, 'Máximo 20 caracteres').optional().nullable(),
   ufcobr: z.string().max(2).optional().nullable(),
   cepcobr: z.string().max(9).optional().nullable(),
   complementocobr: z.string().max(100).optional().nullable(),
