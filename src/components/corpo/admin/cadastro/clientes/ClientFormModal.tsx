@@ -906,11 +906,12 @@ export default function ClientFormModal({
 
               <DialogFooter className="flex gap-2">
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   onClick={() => {
                     setShowGatekeeperModal(false);
                     onClose();
                   }}
+                  className="bg-red-600 hover:bg-red-700 text-white dark:bg-red-700 dark:hover:bg-red-800"
                 >
                   Cancelar e Sair
                 </Button>
@@ -920,6 +921,7 @@ export default function ClientFormModal({
                     onClick={() => {
                       setShowGatekeeperModal(false);
                     }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-800"
                   >
                     Continuar Cadastro
                   </Button>
