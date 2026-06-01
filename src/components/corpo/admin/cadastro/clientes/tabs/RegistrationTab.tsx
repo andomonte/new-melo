@@ -364,7 +364,7 @@ export function RegistrationTab({
       <div className="grid grid-cols-4 gap-3">
         {/* Tipo Cliente */}
         <div>
-          <Label>Tipo Cliente</Label>
+          <Label>Tipo Cliente <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
             name="tipoCliente"
@@ -387,7 +387,7 @@ export function RegistrationTab({
 
         {/* Situação Tributária */}
         <div>
-          <Label>Situação Tributária</Label>
+          <Label>Situação Tributária <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
             name="situacaoTributaria"
@@ -409,7 +409,7 @@ export function RegistrationTab({
 
         {/* Tipo Empresa */}
         <div>
-          <Label>Tipo Empresa</Label>
+          <Label>Tipo Empresa <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
             name="tipoEmpresa"
@@ -433,7 +433,7 @@ export function RegistrationTab({
 
         {/* Classe Cliente */}
         <div>
-          <Label>Classe Cliente</Label>
+          <Label>Classe Cliente <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
             name="classeCliente"
@@ -623,15 +623,15 @@ export function RegistrationTab({
           <Input {...register('referencia')} placeholder="Ponto de referência" />
         </div>
         <div>
-          <Label>Bairro</Label>
+          <Label>Bairro <span className="text-red-500">*</span></Label>
           <Input {...register('bairro')} />
         </div>
         <div>
-          <Label>Cidade</Label>
+          <Label>Cidade <span className="text-red-500">*</span></Label>
           <Input {...register('cidade')} />
         </div>
         <div>
-          <Label>UF</Label>
+          <Label>UF <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
             name="uf"
@@ -680,7 +680,7 @@ export function RegistrationTab({
           />
         </div>
         <div>
-          <Label>País</Label>
+          <Label>País <span className="text-red-500">*</span></Label>
           <Controller
             control={control}
             name="pais"

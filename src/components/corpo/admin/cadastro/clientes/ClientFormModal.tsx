@@ -525,25 +525,19 @@ export default function ClientFormModal({
           onSubmit(data);
         },
         (errors) => {
-          console.log('❌ Validação falhou!');
-          console.log('Errors:', errors);
-
-          // Determinar qual aba tem erro e navegar para ela
+          // Navegar para a aba do primeiro erro e focar no campo
           const firstErrorField = Object.keys(errors)[0];
           const errorTab = getTabForField(firstErrorField);
 
           if (errorTab && errorTab !== activeTab) {
             setActiveTab(errorTab);
-            console.log(`📍 Navegando para aba: ${errorTab}`);
           }
 
-          // Após pequeno delay (para garantir que a aba mudou), focar no campo
           setTimeout(() => {
             const fieldElement = document.querySelector(
               `[name="${firstErrorField}"]`,
             ) as HTMLElement;
             if (fieldElement) {
-              // Adicionar classe de erro visual
               const inputElement =
                 fieldElement.tagName === 'INPUT' ||
                 fieldElement.tagName === 'SELECT' ||
@@ -554,58 +548,16 @@ export default function ClientFormModal({
                     ) as HTMLElement);
 
               if (inputElement) {
-                // Adicionar borda vermelha
-                inputElement.style.borderColor = '#ef4444';
-                inputElement.style.borderWidth = '2px';
-                inputElement.style.boxShadow =
-                  '0 0 0 3px rgba(239, 68, 68, 0.1)';
-
-                // Focar e fazer scroll
                 inputElement.focus();
-                inputElement.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'center',
-                });
-
-                // Piscar o campo para chamar atenção
-                let blinkCount = 0;
-                const blinkInterval = setInterval(() => {
-                  inputElement.style.backgroundColor =
-                    blinkCount % 2 === 0 ? '#fee2e2' : 'white';
-                  blinkCount++;
-                  if (blinkCount > 5) {
-                    clearInterval(blinkInterval);
-                    inputElement.style.backgroundColor = '#fee2e2'; // Mantém rosa claro
-                  }
-                }, 200);
+                inputElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }
             }
-          }, 150);
+          }, 200);
 
-          // Mostrar erros para o usuário de forma amigável
-          const errorMessages: string[] = [];
-
-          Object.entries(errors).forEach(([field, error]) => {
-            const fieldName = getFieldLabel(field);
-            const message = formatErrorMessage(
-              error?.message || 'Valor inválido',
-            );
-            errorMessages.push(`• ${fieldName}: ${message}`);
-            console.log(`🔴 Campo "${field}":`, error);
-          });
-
-          // Toast com todos os erros
-          toast.error(
-            <div>
-              <p className="font-semibold mb-2">Corrija os seguintes campos:</p>
-              <div className="text-sm space-y-1">
-                {errorMessages.map((msg, idx) => (
-                  <div key={idx}>{msg}</div>
-                ))}
-              </div>
-            </div>,
-            { duration: 8000 },
-          );
+          // Toast simples
+          const fieldName = getFieldLabel(firstErrorField);
+          const msg = errors[firstErrorField]?.message || 'Campo obrigatório';
+          toast.error(`${fieldName}: ${msg}`);
         },
       )();
     } catch (error) {
