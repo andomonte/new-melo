@@ -34,10 +34,10 @@ export const clientSchema = z.object({
     .or(z.literal('')),
 
   // Classificação Tributária e Comercial
-  tipoCliente: z.enum(['R', 'F', 'L', 'S', 'X']).optional().nullable(),
-  situacaoTributaria: z.enum(['1', '2', '3', '4']).optional().nullable(),
-  tipoEmpresa: z.enum(['EPP', 'ME', 'NL', 'PF']).optional().nullable(),
-  classeCliente: z.string().optional().nullable(),
+  tipoCliente: z.enum(['R', 'F', 'L', 'S', 'X'], { required_error: 'Tipo de cliente é obrigatório' }),
+  situacaoTributaria: z.enum(['1', '2', '3', '4'], { required_error: 'Situação tributária é obrigatória' }),
+  tipoEmpresa: z.enum(['EPP', 'ME', 'NL', 'PF'], { required_error: 'Tipo de empresa é obrigatório' }),
+  classeCliente: z.string().min(1, 'Classe de cliente é obrigatória'),
 
   // Inscrições
   inscricaoEstadual: z.string().max(20).optional().nullable(),
@@ -53,14 +53,13 @@ export const clientSchema = z.object({
   numero: z.string().max(10).optional().nullable(),
   complemento: z.string().max(50).optional().nullable(),
   referencia: z.string().max(100).optional().nullable(),
-  bairro: z.string().max(20, 'Máximo 20 caracteres').optional().default(''),
-  cidade: z.string().max(20, 'Máximo 20 caracteres').optional().nullable(),
-  uf: z.string().max(2).optional().nullable(),
+  bairro: z.string().min(1, 'Bairro é obrigatório').max(20, 'Máximo 20 caracteres').default(''),
+  cidade: z.string().min(1, 'Cidade é obrigatória').max(20, 'Máximo 20 caracteres'),
+  uf: z.string().min(1, 'UF é obrigatória').max(2),
 
-  // País: Aceita string ou number, mas converte para number se possível
+  // País: Aceita string ou number
   pais: z
-    .union([z.string(), z.number()])
-    .optional()
+    .union([z.string().min(1, 'País é obrigatório'), z.number()])
     .nullable()
     .transform((val) => {
       if (val === null || val === undefined || val === '') return null;
