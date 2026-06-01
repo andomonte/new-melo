@@ -77,7 +77,7 @@ const ClientesPage = () => {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [clientes, setClientes] = useState<Clientes>({} as Clientes);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Modal State - Cadastro/Edição
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -147,12 +147,23 @@ const ClientesPage = () => {
 
   /**
    * Busca dados com base em search ou filtros
+   * Só busca se tiver pelo menos 3 caracteres ou filtros ativos
    */
   const fetchData = useCallback(async () => {
+    // Não buscar se não tem search com 3+ caracteres e não tem filtros
+    const temBusca = search && search.length >= 3;
+    const temFiltros = filtros && filtros.length > 0;
+
+    if (!temBusca && !temFiltros) {
+      setClientes({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage } } as any);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       let response;
-      if (search) {
+      if (temBusca) {
         response = await getClientes({ page, perPage, search });
       } else {
         response = await buscaClientes({ page, perPage, filtros });
@@ -351,6 +362,10 @@ const ClientesPage = () => {
    * Sucesso em operação individual
    */
   const handleSuccess = () => {
+    // Após salvar, buscar pelo último cliente criado/editado
+    if (clientToEdit?.nome) {
+      setSearch(clientToEdit.nome);
+    }
     setForceUpdate((prev) => prev + 1);
   };
 
@@ -677,7 +692,8 @@ const ClientesPage = () => {
           onSearch={(e) => debouncedSearch(e.target.value)}
           onSearchBlur={() => {}}
           onSearchKeyDown={() => {}}
-          searchInputPlaceholder="Pesquisar por código, nome, fantasia ou CPF/CNPJ..."
+          searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar..."
+          noDataMessage={!search || search.length < 3 ? '🔍 Digite pelo menos 3 caracteres para buscar clientes' : 'Nenhum cliente encontrado'}
           // Filtros
           colunasFiltro={colunasDb}
           onFiltroChange={(novosFiltros) => {
