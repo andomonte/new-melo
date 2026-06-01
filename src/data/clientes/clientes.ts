@@ -148,9 +148,16 @@ export async function insertCliente(cliente: Cliente): Promise<Cliente> {
   }
 
   // Enviar para a API
-  await api.post('/api/clientes/add', cliente).then((res) => {
+  try {
+    const res = await api.post('/api/clientes/add', cliente);
+    if (res.data?.error) {
+      throw new Error(res.data.error);
+    }
     response = res.data;
-  });
+  } catch (err: any) {
+    const msg = err?.response?.data?.error || err?.message || 'Erro ao salvar cliente';
+    throw new Error(msg);
+  }
 
   return response;
 }
@@ -218,7 +225,15 @@ export async function buscaClientes({
 }
 
 export async function updateCliente(cliente: Cliente): Promise<void> {
-  await api.put(`/api/clientes/update`, cliente);
+  try {
+    const res = await api.put(`/api/clientes/update`, cliente);
+    if (res.data?.error) {
+      throw new Error(res.data.error);
+    }
+  } catch (err: any) {
+    const msg = err?.response?.data?.error || err?.message || 'Erro ao atualizar cliente';
+    throw new Error(msg);
+  }
 }
 
 export async function insertClienteComLimite(
