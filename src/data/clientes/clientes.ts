@@ -148,18 +148,19 @@ export async function insertCliente(cliente: Cliente): Promise<Cliente> {
   }
 
   // Enviar para a API
-  try {
-    const res = await api.post('/api/clientes/add', cliente);
-    if (res.data?.error) {
-      throw new Error(res.data.error);
-    }
-    response = res.data;
-  } catch (err: any) {
-    const msg = err?.response?.data?.error || err?.message || 'Erro ao salvar cliente';
-    throw new Error(msg);
+  const res = await fetch('/api/clientes/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cliente),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || data.error) {
+    throw new Error(data.error || data.detail || `Erro HTTP ${res.status}`);
   }
 
-  return response;
+  return data;
 }
 
 export async function getCliente(id: string): Promise<Cliente> {
@@ -225,14 +226,16 @@ export async function buscaClientes({
 }
 
 export async function updateCliente(cliente: Cliente): Promise<void> {
-  try {
-    const res = await api.put(`/api/clientes/update`, cliente);
-    if (res.data?.error) {
-      throw new Error(res.data.error);
-    }
-  } catch (err: any) {
-    const msg = err?.response?.data?.error || err?.message || 'Erro ao atualizar cliente';
-    throw new Error(msg);
+  const res = await fetch('/api/clientes/update', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cliente),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || data.error) {
+    throw new Error(data.error || data.detail || `Erro HTTP ${res.status}`);
   }
 }
 
