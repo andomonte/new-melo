@@ -402,7 +402,7 @@ export default function ClientFormModal({
         // updateCliente espera apenas Cliente, não (id, data)
         const clienteToUpdate: Cliente = {
           codcli: clientToEdit.codcli,
-          cpfcgc: data.documento,
+          cpfcgc: String(data.documento || '').replace(/\D/g, ''),
           nome: toUpper(data.nome),
           nomefant: toUpper(data.nomeFantasia),
           tipo: data.tipoPessoa,
@@ -467,7 +467,7 @@ export default function ClientFormModal({
         // insertCliente também precisa de campos obrigatórios
         const clienteToInsert: Cliente = {
           codcli: '',
-          cpfcgc: data.documento,
+          cpfcgc: String(data.documento || '').replace(/\D/g, ''),
           nome: toUpper(data.nome),
           nomefant: toUpper(data.nomeFantasia),
           tipo: data.tipoPessoa,
