@@ -465,6 +465,14 @@ export default function DataTablePadrao({
               <Carregamento texto="Carregando..." />
             </div>
           )}
+          {/* Mensagem centralizada quando não há dados */}
+          {rows?.length === 0 && !isLoading && !navegando && (
+            <div className="absolute inset-0 flex items-center justify-center z-10">
+              <div className="text-gray-500 dark:text-gray-400 text-xs">
+                {noDataMessage}
+              </div>
+            </div>
+          )}
           <div className="min-w-max">
             <table className="table-auto w-full border-collapse text-xs text-center">
             <colgroup>
@@ -617,14 +625,8 @@ export default function DataTablePadrao({
             </thead>
 
             <tbody className="bg-white dark:bg-zinc-900 divide-y divide-gray-200 dark:divide-zinc-700">{
-              rows?.length === 0 && !isLoading && !navegando ? (
-                <tr>
-                  <td colSpan={headers.length} className="px-4 py-6 text-center">
-                    <p className="text-gray-500 dark:text-gray-400 text-xs">
-                      {noDataMessage}
-                    </p>
-                  </td>
-                </tr>
+              rows?.length === 0 ? (
+                null
               ) : (
                 (() => {
                   // Filtro local do ☑️

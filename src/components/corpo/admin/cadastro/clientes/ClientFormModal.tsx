@@ -182,14 +182,14 @@ export default function ClientFormModal({
                 .substring(0, 30),
               email: fullCliente.email || '',
               tipoCliente:
-                (fullCliente.tipocliente as 'R' | 'F' | 'L' | 'S' | 'X') ||
+                (String(fullCliente.tipocliente || '').trim() as 'R' | 'F' | 'L' | 'S' | 'X') ||
                 null,
               situacaoTributaria: fullCliente.sit_tributaria
-                ? (String(fullCliente.sit_tributaria) as '1' | '2' | '3' | '4')
+                ? (String(fullCliente.sit_tributaria).trim() as '1' | '2' | '3' | '4')
                 : null,
               tipoEmpresa:
-                (fullCliente.tipoemp as 'EPP' | 'ME' | 'NL' | 'PF') || null,
-              classeCliente: fullCliente.codcc || '',
+                (String(fullCliente.tipoemp || '').trim() as 'EPP' | 'ME' | 'NL' | 'PF') || null,
+              classeCliente: String(fullCliente.codcc || '').trim(),
               inscricaoEstadual:
                 fullCliente.iest === 'ISENTO' ? 'ISENTO' : fullCliente.iest,
               isentoIE: fullCliente.iest === 'ISENTO',
@@ -303,6 +303,13 @@ export default function ClientFormModal({
               nomeFantasia: (clientToEdit.nomefant || '')
                 .trim()
                 .substring(0, 30),
+              tipoCliente:
+                (String(clientToEdit.tipocliente || '').trim() as 'R' | 'F' | 'L' | 'S' | 'X') || null,
+              situacaoTributaria: clientToEdit.sit_tributaria
+                ? (String(clientToEdit.sit_tributaria).trim() as '1' | '2' | '3' | '4')
+                : null,
+              tipoEmpresa:
+                (String(clientToEdit.tipoemp || '').trim() as 'EPP' | 'ME' | 'NL' | 'PF') || null,
               inscricaoEstadual:
                 clientToEdit.iest === 'ISENTO' ? 'ISENTO' : clientToEdit.iest,
               isentoIE: clientToEdit.iest === 'ISENTO',
@@ -323,6 +330,7 @@ export default function ClientFormModal({
               complemento: clientToEdit.complemento || '',
               pais: Number(clientToEdit.codpais) || 1058, // ✅ CORRIGIDO: Number()
               limiteCredito: String(clientToEdit.limite || 0),
+              classeCliente: String(clientToEdit.codcc || '').trim(),
               classePagamento:
                 (clientToEdit.claspgto as 'A' | 'B' | 'C' | 'X') || 'A',
               enderecoCobrancaIgual: true,
@@ -387,10 +395,14 @@ export default function ClientFormModal({
           nome: data.nome,
           nomefant: data.nomeFantasia || '',
           tipo: data.tipoPessoa,
+          tipocliente: data.tipoCliente || '',
+          sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
+          tipoemp: data.tipoEmpresa || '',
           email: data.email || '',
           debito: clientToEdit.debito || 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
+          codcc: data.classeCliente || '',
           codigo_filial: clientToEdit.codigo_filial || 1,
           bairro: data.bairro || '',
           banco: String(data.banco || '').substring(0, 1),
@@ -448,10 +460,14 @@ export default function ClientFormModal({
           nome: data.nome,
           nomefant: data.nomeFantasia || '',
           tipo: data.tipoPessoa,
+          tipocliente: data.tipoCliente || '',
+          sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
+          tipoemp: data.tipoEmpresa || '',
           email: data.email || '',
           debito: 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
+          codcc: data.classeCliente || '',
           codigo_filial: 1,
           bairro: data.bairro || '',
           banco: String(data.banco || '').substring(0, 1),
@@ -742,7 +758,11 @@ export default function ClientFormModal({
               }
             }}
           >
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-zinc-900">
+            <DialogContent
+              className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-white dark:bg-zinc-900"
+              onInteractOutside={(e) => e.preventDefault()}
+              onEscapeKeyDown={(e) => e.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
                   <AlertTriangle className="h-5 w-5" />
@@ -824,6 +844,13 @@ export default function ClientFormModal({
                                   nomeFantasia: (fullCliente.nomefant || '')
                                     .trim()
                                     .substring(0, 30),
+                                  tipoCliente:
+                                    (String(fullCliente.tipocliente || '').trim() as 'R' | 'F' | 'L' | 'S' | 'X') || null,
+                                  situacaoTributaria: fullCliente.sit_tributaria
+                                    ? (String(fullCliente.sit_tributaria).trim() as '1' | '2' | '3' | '4')
+                                    : null,
+                                  tipoEmpresa:
+                                    (String(fullCliente.tipoemp || '').trim() as 'EPP' | 'ME' | 'NL' | 'PF') || null,
                                   inscricaoEstadual:
                                     fullCliente.iest === 'ISENTO'
                                       ? 'ISENTO'
@@ -851,6 +878,7 @@ export default function ClientFormModal({
                                   limiteCredito: String(
                                     fullCliente.limite || 0,
                                   ),
+                                  classeCliente: String(fullCliente.codcc || '').trim(),
                                   classePagamento:
                                     (fullCliente.claspgto as
                                       | 'A'

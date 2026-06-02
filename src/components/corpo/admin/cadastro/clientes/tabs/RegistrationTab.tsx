@@ -54,7 +54,13 @@ export function RegistrationTab({
         const response = await fetch('/api/cClientes/get?perPage=999');
         if (response.ok) {
           const data = await response.json();
-          setClassesCliente(data.data || []);
+          // Limpa espaços dos códigos vindos do banco
+          const classes = (data.data || []).map((c: ClasseCliente) => ({
+            ...c,
+            codcc: String(c.codcc || '').trim(),
+            descr: String(c.descr || '').trim(),
+          }));
+          setClassesCliente(classes);
         }
       } catch (error) {
         console.error('Erro ao carregar classes de cliente:', error);
@@ -593,6 +599,12 @@ export function RegistrationTab({
                     onBlur();
                     handleCepBlur();
                   }}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCepBlur();
+                    }
+                  }}
                   mask="99999-999"
                 >
                   {(inputProps: any) => (
@@ -601,10 +613,19 @@ export function RegistrationTab({
                 </InputMask>
               )}
             />
-            {loadingCep && (
+            {loadingCep ? (
               <div className="absolute right-2 top-2.5">
                 <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCepBlur}
+                className="absolute right-1 top-1 px-1.5 py-0.5 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                title="Buscar endereço pelo CEP"
+              >
+                Buscar
+              </button>
             )}
           </div>
         </div>

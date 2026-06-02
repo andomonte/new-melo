@@ -34,9 +34,27 @@ export const clientSchema = z.object({
     .or(z.literal('')),
 
   // Classificação Tributária e Comercial
-  tipoCliente: z.enum(['R', 'F', 'L', 'S', 'X'], { required_error: 'Tipo de cliente é obrigatório' }),
-  situacaoTributaria: z.enum(['1', '2', '3', '4'], { required_error: 'Situação tributária é obrigatória' }),
-  tipoEmpresa: z.enum(['EPP', 'ME', 'NL', 'PF'], { required_error: 'Tipo de empresa é obrigatório' }),
+  tipoCliente: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : val),
+    z.enum(['R', 'F', 'L', 'S', 'X'], {
+      required_error: 'Tipo de cliente é obrigatório',
+      invalid_type_error: 'Tipo de cliente é obrigatório',
+    }),
+  ),
+  situacaoTributaria: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : val),
+    z.enum(['1', '2', '3', '4'], {
+      required_error: 'Situação tributária é obrigatória',
+      invalid_type_error: 'Situação tributária é obrigatória',
+    }),
+  ),
+  tipoEmpresa: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : val),
+    z.enum(['EPP', 'ME', 'NL', 'PF'], {
+      required_error: 'Tipo de empresa é obrigatório',
+      invalid_type_error: 'Tipo de empresa é obrigatório',
+    }),
+  ),
   classeCliente: z.string().min(1, 'Classe de cliente é obrigatória'),
 
   // Inscrições
