@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2 } from 'lucide-react';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
@@ -117,6 +117,9 @@ export default function ContasAReceber() {
   const [modalCancelarAberto, setModalCancelarAberto] = useState(false);
   const [modalDetalhesAberto, setModalDetalhesAberto] = useState(false);
   const [modalNovaContaAberto, setModalNovaContaAberto] = useState(false);
+  const [modalRelatorioAberto, setModalRelatorioAberto] = useState(false);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
+  const [tipoRelatorio, setTipoRelatorio] = useState<'geral' | 'por_cliente'>('geral');
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [modalImportacaoCartao, setModalImportacaoCartao] = useState(false);
   const [contaSelecionada, setContaSelecionada] = useState<ContaReceber | null>(null);
@@ -748,6 +751,45 @@ export default function ContasAReceber() {
     }
   };
 
+  // Função para gerar relatório (PDF ou Excel)
+  const handleGerarRelatorio = async (formato: 'pdf' | 'excel') => {
+    try {
+      setGerandoRelatorio(true);
+      const params = new URLSearchParams();
+      params.append('formato', formato);
+      params.append('tipo', tipoRelatorio);
+
+      if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
+      if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+      if (filtros.status && filtros.status !== 'todos') params.append('status', filtros.status as string);
+
+      const response = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Erro ao gerar relatório');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const nomeArquivo = tipoRelatorio === 'por_cliente' ? 'contas_receber_por_cliente' : 'contas_receber';
+      a.download = formato === 'pdf' ? `${nomeArquivo}.pdf` : `${nomeArquivo}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Relatório ${formato.toUpperCase()} gerado com sucesso!`);
+      setModalRelatorioAberto(false);
+    } catch (error: any) {
+      console.error('Erro ao gerar relatório:', error);
+      toast.error(error.message || 'Erro ao gerar relatório');
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
   // Função de exportação para Excel
   const handleExportarDireto = async () => {
     try {
@@ -1124,6 +1166,13 @@ export default function ContasAReceber() {
               </div>
             )}
 
+            <AuxButton
+              variant="secondary"
+              size="default"
+              onClick={() => setModalRelatorioAberto(true)}
+              icon={<FileBarChart className="w-4 h-4" />}
+              text="Relatório"
+            />
             <AuxButton
               variant="secondary"
               size="default"
@@ -2578,6 +2627,95 @@ export default function ContasAReceber() {
               )}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Modal Relatório */}
+      <Modal
+        isOpen={modalRelatorioAberto}
+        onClose={() => setModalRelatorioAberto(false)}
+        title="Gerar Relatório - Contas a Receber"
+      >
+        <div className="form-compact space-y-4 p-4">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            O relatório será gerado com os filtros de período atualmente aplicados na tela
+            {rangeDataAtivo === 'semana' && ' (semana atual)'}
+            {rangeDataAtivo === 'mes' && ' (mês atual)'}
+            {rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada &&
+              ` (${dataInicioPersonalizada} a ${dataFimPersonalizada})`}
+            {rangeDataAtivo === 'todos' && ' (todos os períodos)'}
+            .
+          </p>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
+            Tipo de Relatório
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTipoRelatorio('geral')}
+              className={`flex-1 px-3 py-2 text-xs rounded-md border transition ${
+                tipoRelatorio === 'geral'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
+              }`}
+            >
+              Geral (lista)
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoRelatorio('por_cliente')}
+              className={`flex-1 px-3 py-2 text-xs rounded-md border transition ${
+                tipoRelatorio === 'por_cliente'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
+              }`}
+            >
+              Por Cliente (agrupado)
+            </button>
+          </div>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
+            Colunas do Relatório
+          </div>
+          <div className="grid grid-cols-4 gap-1 text-[11px] text-gray-600 dark:text-gray-400">
+            <span>• NRO_DOC</span>
+            <span>• DIAS</span>
+            <span>• CLIENTE</span>
+            <span>• COD_CONTA</span>
+            <span>• VALOR_PGTO</span>
+            <span>• VALOR_JUROS</span>
+            <span>• VALOR_REC</span>
+            <span>• VALOR_ABERTO</span>
+            <span>• DT_EMISSAO</span>
+            <span>• DT_VENC</span>
+            <span>• TARIFA</span>
+            <span>• DT_PGTO</span>
+          </div>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">
+            Formato de Saída
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              disabled={gerandoRelatorio}
+              onClick={() => handleGerarRelatorio('pdf')}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-md transition-colors text-sm font-medium"
+            >
+              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+              Gerar PDF
+            </button>
+            <button
+              type="button"
+              disabled={gerandoRelatorio}
+              onClick={() => handleGerarRelatorio('excel')}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md transition-colors text-sm font-medium"
+            >
+              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              Gerar Excel
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -384,6 +384,12 @@ export default function ClientFormModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, clientToEdit]);
 
+  // Converte todos os campos texto para maiúscula antes de salvar
+  const toUpper = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    return String(val).toUpperCase();
+  };
+
   const onSubmit = async (data: ClientFormValues) => {
     setIsSubmitting(true);
     try {
@@ -391,58 +397,58 @@ export default function ClientFormModal({
         // updateCliente espera apenas Cliente, não (id, data)
         const clienteToUpdate: Cliente = {
           codcli: clientToEdit.codcli,
-          cpfcgc: data.documento, // ✅ Mapear documento → cpfcgc
-          nome: data.nome,
-          nomefant: data.nomeFantasia || '',
+          cpfcgc: data.documento,
+          nome: toUpper(data.nome),
+          nomefant: toUpper(data.nomeFantasia),
           tipo: data.tipoPessoa,
           tipocliente: data.tipoCliente || '',
           sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
           tipoemp: data.tipoEmpresa || '',
-          email: data.email || '',
+          email: toUpper(data.email),
           debito: clientToEdit.debito || 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
           codcc: data.classeCliente || '',
           codigo_filial: clientToEdit.codigo_filial || 1,
-          bairro: data.bairro || '',
+          bairro: toUpper(data.bairro),
           banco: String(data.banco || '').substring(0, 1),
-          ender: data.endereco || '',
-          cidade: data.cidade || '',
-          uf: data.uf || '',
+          ender: toUpper(data.endereco),
+          cidade: toUpper(data.cidade),
+          uf: toUpper(data.uf),
           cep: data.cep || '',
-          numero: data.numero || '',
-          complemento: data.complemento || '',
+          numero: toUpper(data.numero),
+          complemento: toUpper(data.complemento),
           codpais: data.pais,
-          iest: data.inscricaoEstadual || '',
-          imun: data.inscricaoMunicipal || '',
-          isuframa: data.suframa || '',
+          iest: toUpper(data.inscricaoEstadual),
+          imun: toUpper(data.inscricaoMunicipal),
+          isuframa: toUpper(data.suframa),
           status: data.credito === 'S' ? '1' : '2',
           icms: data.icms || 'N',
           atraso: Number(data.diasAtraso) || 0,
-          faixafin: data.faixaFinanceira || '',
-          obs: data.obs || '',
+          faixafin: toUpper(data.faixaFinanceira),
+          obs: toUpper(data.obs),
           contatos: data.contatos || [],
           pessoasContato: data.pessoasContato || [],
           vendedores_list: data.vendedores_list || [],
           // Campos de cobrança
-          endercobr: data.enderecoCobrancaIgual
+          endercobr: toUpper(data.enderecoCobrancaIgual
             ? data.endereco
-            : data.endercobr,
-          cidadecobr: data.enderecoCobrancaIgual
+            : data.endercobr),
+          cidadecobr: toUpper(data.enderecoCobrancaIgual
             ? data.cidade
-            : data.cidadecobr,
-          bairrocobr: data.enderecoCobrancaIgual
+            : data.cidadecobr),
+          bairrocobr: toUpper(data.enderecoCobrancaIgual
             ? data.bairro
-            : data.bairrocobr,
-          ufcobr: data.enderecoCobrancaIgual ? data.uf : data.ufcobr,
+            : data.bairrocobr),
+          ufcobr: toUpper(data.enderecoCobrancaIgual ? data.uf : data.ufcobr),
           cepcobr: data.enderecoCobrancaIgual ? data.cep : data.cepcobr,
-          numerocobr: data.enderecoCobrancaIgual
+          numerocobr: toUpper(data.enderecoCobrancaIgual
             ? data.numero
-            : data.numerocobr,
-          complementocobr: data.enderecoCobrancaIgual
+            : data.numerocobr),
+          complementocobr: toUpper(data.enderecoCobrancaIgual
             ? data.complemento
-            : data.complementocobr,
-          referenciacobr: data.referenciacobr || '',
+            : data.complementocobr),
+          referenciacobr: toUpper(data.referenciacobr),
           // Campos comerciais
           acrescimo: Number(data.acrescimo) || 0,
           desconto: Number(data.desconto) || 0,
@@ -455,59 +461,59 @@ export default function ClientFormModal({
       } else {
         // insertCliente também precisa de campos obrigatórios
         const clienteToInsert: Cliente = {
-          codcli: '', // Será gerado pela API
-          cpfcgc: data.documento, // ✅ Mapear documento → cpfcgc
-          nome: data.nome,
-          nomefant: data.nomeFantasia || '',
+          codcli: '',
+          cpfcgc: data.documento,
+          nome: toUpper(data.nome),
+          nomefant: toUpper(data.nomeFantasia),
           tipo: data.tipoPessoa,
           tipocliente: data.tipoCliente || '',
           sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
           tipoemp: data.tipoEmpresa || '',
-          email: data.email || '',
+          email: toUpper(data.email),
           debito: 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
           codcc: data.classeCliente || '',
           codigo_filial: 1,
-          bairro: data.bairro || '',
+          bairro: toUpper(data.bairro),
           banco: String(data.banco || '').substring(0, 1),
-          ender: data.endereco || '',
-          cidade: data.cidade || '',
-          uf: data.uf || '',
+          ender: toUpper(data.endereco),
+          cidade: toUpper(data.cidade),
+          uf: toUpper(data.uf),
           cep: data.cep || '',
-          numero: data.numero || '',
-          complemento: data.complemento || '',
+          numero: toUpper(data.numero),
+          complemento: toUpper(data.complemento),
           codpais: data.pais,
-          iest: data.inscricaoEstadual || '',
-          imun: data.inscricaoMunicipal || '',
-          isuframa: data.suframa || '',
+          iest: toUpper(data.inscricaoEstadual),
+          imun: toUpper(data.inscricaoMunicipal),
+          isuframa: toUpper(data.suframa),
           status: data.credito === 'S' ? '1' : '2',
           icms: data.icms || 'N',
           atraso: Number(data.diasAtraso) || 0,
-          faixafin: data.faixaFinanceira || '',
-          obs: data.obs || '',
+          faixafin: toUpper(data.faixaFinanceira),
+          obs: toUpper(data.obs),
           contatos: data.contatos || [],
           pessoasContato: data.pessoasContato || [],
           vendedores_list: data.vendedores_list || [],
           // Campos de cobrança
-          endercobr: data.enderecoCobrancaIgual
+          endercobr: toUpper(data.enderecoCobrancaIgual
             ? data.endereco
-            : data.endercobr,
-          cidadecobr: data.enderecoCobrancaIgual
+            : data.endercobr),
+          cidadecobr: toUpper(data.enderecoCobrancaIgual
             ? data.cidade
-            : data.cidadecobr,
-          bairrocobr: data.enderecoCobrancaIgual
+            : data.cidadecobr),
+          bairrocobr: toUpper(data.enderecoCobrancaIgual
             ? data.bairro
-            : data.bairrocobr,
-          ufcobr: data.enderecoCobrancaIgual ? data.uf : data.ufcobr,
+            : data.bairrocobr),
+          ufcobr: toUpper(data.enderecoCobrancaIgual ? data.uf : data.ufcobr),
           cepcobr: data.enderecoCobrancaIgual ? data.cep : data.cepcobr,
-          numerocobr: data.enderecoCobrancaIgual
+          numerocobr: toUpper(data.enderecoCobrancaIgual
             ? data.numero
-            : data.numerocobr,
-          complementocobr: data.enderecoCobrancaIgual
+            : data.numerocobr),
+          complementocobr: toUpper(data.enderecoCobrancaIgual
             ? data.complemento
-            : data.complementocobr,
-          referenciacobr: data.referenciacobr || '',
+            : data.complementocobr),
+          referenciacobr: toUpper(data.referenciacobr),
           // Campos comerciais
           acrescimo: Number(data.acrescimo) || 0,
           desconto: Number(data.desconto) || 0,
