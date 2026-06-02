@@ -759,8 +759,11 @@ export default function ContasAReceber() {
       params.append('formato', formato);
       params.append('tipo', tipoRelatorio);
 
-      if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
-      if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+      // Usa os filtros de data da tela (se não for "todos")
+      if (rangeDataAtivo !== 'todos') {
+        if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
+        if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+      }
       if (filtros.status && filtros.status !== 'todos') params.append('status', filtros.status as string);
 
       const response = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);

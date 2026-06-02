@@ -580,6 +580,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       status as string | undefined,
     );
 
+    console.log('📊 Relatório Contas a Receber:', { tipoVal, data_inicio, data_fim, status, paramsCount: params.length });
+
     const client = await pool.connect();
     let rows: any[];
     try {
@@ -587,6 +589,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       rows = result.rows;
     } finally {
       client.release();
+    }
+
+    console.log(`📊 Registros encontrados: ${rows.length}`);
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Nenhum registro encontrado para o período/filtros selecionados.' });
     }
 
     const periodoStr =
