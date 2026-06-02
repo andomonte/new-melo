@@ -25,24 +25,28 @@ export default async function handle(
     const offset = (Number(page) - 1) * Number(perPage);
     const limit = Number(perPage);
     const searchTerm = `%${search}%`;
+    // Busca por CNPJ/CPF: limpa pontuação para comparar só dígitos
+    const searchDigits = String(search).replace(/\D/g, '');
+    const searchDigitsTerm = searchDigits.length >= 3 ? `%${searchDigits}%` : null;
 
     // Query de busca com filtros e paginação
     const query = `
-      SELECT 
-        codcli, 
-        nome, 
-        cpfcgc, 
-        CAST(atraso AS INTEGER) AS atraso, 
-        CAST(kickback AS INTEGER) AS kickback, 
-        CAST(sit_tributaria AS INTEGER) AS sit_tributaria, 
-        CAST(codpais AS INTEGER) AS codpais, 
-        CAST(codpaiscobr AS INTEGER) AS codpaiscobr, 
+      SELECT
+        codcli,
+        nome,
+        cpfcgc,
+        CAST(atraso AS INTEGER) AS atraso,
+        CAST(kickback AS INTEGER) AS kickback,
+        CAST(sit_tributaria AS INTEGER) AS sit_tributaria,
+        CAST(codpais AS INTEGER) AS codpais,
+        CAST(codpaiscobr AS INTEGER) AS codpaiscobr,
         CAST(codigo_filial AS INTEGER) AS codigo_filial
       FROM dbclien
-      WHERE 
+      WHERE
         codcli ILIKE $1 OR
         nome ILIKE $1 OR
         cpfcgc ILIKE $1
+        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''}
       ORDER BY nome ASC
       LIMIT $2 OFFSET $3;
     `;
@@ -50,16 +54,28 @@ export default async function handle(
     const countQuery = `
       SELECT COUNT(*) AS total
       FROM dbclien
-      WHERE 
+      WHERE
         codcli ILIKE $1 OR
         nome ILIKE $1 OR
-        cpfcgc ILIKE $1;
+        cpfcgc ILIKE $1
+        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''};
     `;
 
     // Executa as queries em paralelo
+    const queryParams = searchDigitsTerm
+      ? [searchTerm, limit, offset, searchDigitsTerm]
+      : [searchTerm, limit, offset];
+    const countParams = searchDigitsTerm
+      ? [searchTerm, searchDigitsTerm]
+      : [searchTerm];
+    // Ajustar countQuery params — $4 no count vira $2
+    const countQueryFinal = searchDigitsTerm
+      ? countQuery.replace('$4', '$2')
+      : countQuery;
+
     const [result, countResult] = await Promise.all([
-      client.query(query, [searchTerm, limit, offset]),
-      client.query(countQuery, [searchTerm]),
+      client.query(query, queryParams),
+      client.query(countQueryFinal, countParams),
     ]);
 
     const total = parseInt(countResult.rows[0]?.total || '0', 10);
