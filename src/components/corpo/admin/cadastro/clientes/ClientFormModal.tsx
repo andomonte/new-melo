@@ -390,6 +390,11 @@ export default function ClientFormModal({
     return String(val).toUpperCase();
   };
 
+  const toLower = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    return String(val).toLowerCase();
+  };
+
   const onSubmit = async (data: ClientFormValues) => {
     setIsSubmitting(true);
     try {
@@ -404,7 +409,7 @@ export default function ClientFormModal({
           tipocliente: data.tipoCliente || '',
           sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
           tipoemp: data.tipoEmpresa || '',
-          email: toUpper(data.email),
+          email: toLower(data.email),
           debito: clientToEdit.debito || 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
@@ -469,7 +474,7 @@ export default function ClientFormModal({
           tipocliente: data.tipoCliente || '',
           sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
           tipoemp: data.tipoEmpresa || '',
-          email: toUpper(data.email),
+          email: toLower(data.email),
           debito: 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
