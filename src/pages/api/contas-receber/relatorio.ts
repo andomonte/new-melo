@@ -74,10 +74,7 @@ function buildQuery(
     whereClause += ` AND r.cancel != 'S'`;
   }
 
-  const orderBy =
-    tipo === 'por_cliente'
-      ? 'c.nome ASC, r.dt_venc ASC'
-      : 'c.nome ASC, r.dt_venc ASC';
+  const orderBy = 'cliente ASC, dt_venc ASC';
 
   const sql = `
     WITH base AS (
