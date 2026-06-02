@@ -593,24 +593,27 @@ export function RegistrationTab({
               control={control}
               name="cep"
               render={({ field: { ref, onBlur, ...fieldProps } }) => (
-                <InputMask
+                <Input
                   {...fieldProps}
+                  ref={ref}
+                  value={fieldProps.value || ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '').slice(0, 8);
+                    const formatted = raw.replace(/^(\d{5})(\d)/, '$1-$2');
+                    fieldProps.onChange(formatted);
+                  }}
                   onBlur={() => {
                     onBlur();
                     handleCepBlur();
                   }}
-                  onKeyDown={(e: React.KeyboardEvent) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       handleCepBlur();
                     }
                   }}
-                  mask="99999-999"
-                >
-                  {(inputProps: any) => (
-                    <Input {...inputProps} ref={ref} placeholder="00000-000" />
-                  )}
-                </InputMask>
+                  placeholder="00000-000"
+                />
               )}
             />
             {loadingCep ? (
@@ -751,11 +754,17 @@ export function RegistrationTab({
               control={control}
               name="cepcobr"
               render={({ field: { ref, ...fieldProps } }) => (
-                <InputMask {...fieldProps} mask="99999-999">
-                  {(inputProps: any) => (
-                    <Input {...inputProps} ref={ref} placeholder="00000-000" />
-                  )}
-                </InputMask>
+                <Input
+                  {...fieldProps}
+                  ref={ref}
+                  value={fieldProps.value || ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '').slice(0, 8);
+                    const formatted = raw.replace(/^(\d{5})(\d)/, '$1-$2');
+                    fieldProps.onChange(formatted);
+                  }}
+                  placeholder="00000-000"
+                />
               )}
             />
           </div>
