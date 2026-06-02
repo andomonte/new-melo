@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { toast } from 'sonner';
-import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2 } from 'lucide-react';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import DropdownContasPagar from '@/components/common/DropdownContasPagar';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
@@ -190,6 +190,8 @@ export function ContasAPagar() {
     status: 'todos',
   });
   const [exportando, setExportando] = useState(false);
+  const [modalRelatorioAberto, setModalRelatorioAberto] = useState(false);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [dadosParaExportar, setDadosParaExportar] = useState<ContaPagar[]>([]);
   const [colunasParaExportar, setColunasParaExportar] = useState<string[]>([]);
 
@@ -2152,6 +2154,65 @@ export function ContasAPagar() {
     modais.setModalSelecaoColunas(true);
   };
 
+  // Função para gerar relatório (PDF ou Excel)
+  const handleGerarRelatorio = async (formato: 'pdf' | 'excel') => {
+    try {
+      setGerandoRelatorio(true);
+
+      // Construir filtros de data baseado no range ativo
+      const params = new URLSearchParams();
+      params.append('formato', formato);
+
+      const hoje = new Date();
+      if (rangeDataAtivo === 'semana') {
+        const inicioSemana = new Date(hoje);
+        inicioSemana.setDate(hoje.getDate() - hoje.getDay());
+        const fimSemana = new Date(inicioSemana);
+        fimSemana.setDate(inicioSemana.getDate() + 6);
+        params.append('data_inicio', inicioSemana.toISOString().split('T')[0]);
+        params.append('data_fim', fimSemana.toISOString().split('T')[0]);
+      } else if (rangeDataAtivo === 'mes') {
+        const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+        params.append('data_inicio', inicioMes.toISOString().split('T')[0]);
+        params.append('data_fim', fimMes.toISOString().split('T')[0]);
+      } else if (rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada) {
+        params.append('data_inicio', dataInicioPersonalizada);
+        params.append('data_fim', dataFimPersonalizada);
+      }
+
+      if (filtros.status && filtros.status !== 'todos') {
+        params.append('status', filtros.status);
+      }
+
+      const response = await fetch(`/api/contas-pagar/relatorio?${params.toString()}`);
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Erro ao gerar relatório');
+      }
+
+      // Download do arquivo
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = formato === 'pdf' ? 'contas_a_pagar.pdf' : 'contas_a_pagar.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Relatório ${formato.toUpperCase()} gerado com sucesso!`);
+      setModalRelatorioAberto(false);
+    } catch (error: any) {
+      console.error('Erro ao gerar relatório:', error);
+      toast.error(error.message || 'Erro ao gerar relatório');
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
   // Função para exportar diretamente com filtros aplicados
   const handleExportarDireto = async () => {
     try {
@@ -2512,6 +2573,13 @@ export function ContasAPagar() {
                 className="relative"
               />
             )}
+            <DefaultButton
+              variant="secondary"
+              size="default"
+              onClick={() => setModalRelatorioAberto(true)}
+              icon={<FileBarChart className="w-4 h-4" />}
+              text="Relatório"
+            />
             <DefaultButton
               variant="primary"
               size="default"
@@ -4564,6 +4632,70 @@ export function ContasAPagar() {
         resumo={notasAssociadas?.resumo || null}
         carregando={carregandoNotas}
       />
+
+      {/* Modal Relatório */}
+      <Modal
+        isOpen={modalRelatorioAberto}
+        onClose={() => setModalRelatorioAberto(false)}
+        title="Gerar Relatório - Contas a Pagar"
+      >
+        <div className="form-compact space-y-4 p-4">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            O relatório será gerado com os filtros atualmente aplicados na tela
+            {rangeDataAtivo === 'semana' && ' (período: semana atual)'}
+            {rangeDataAtivo === 'mes' && ' (período: mês atual)'}
+            {rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada &&
+              ` (período: ${dataInicioPersonalizada} a ${dataFimPersonalizada})`}
+            {rangeDataAtivo === 'todos' && ' (todos os períodos)'}
+            {filtros.status && filtros.status !== 'todos' && ` — Status: ${filtros.status}`}
+            .
+          </p>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
+            Colunas do Relatório
+          </div>
+          <div className="grid grid-cols-4 gap-1 text-[11px] text-gray-600 dark:text-gray-400">
+            <span>• COD</span>
+            <span>• NRO_DUP</span>
+            <span>• NOME</span>
+            <span>• VALOR</span>
+            <span>• PAGO</span>
+            <span>• ABERTO</span>
+            <span>• NRO_NF</span>
+            <span>• DT_VENC</span>
+            <span>• CONTA FINANCEIRA</span>
+            <span>• DT_PGTO</span>
+            <span>• DT_EMISSAO</span>
+            <span>• COD_CONTA</span>
+            <span>• OBS</span>
+            <span>• PAGA</span>
+          </div>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">
+            Formato de Saída
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              disabled={gerandoRelatorio}
+              onClick={() => handleGerarRelatorio('pdf')}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-md transition-colors text-sm font-medium"
+            >
+              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
+              Gerar PDF
+            </button>
+            <button
+              type="button"
+              disabled={gerandoRelatorio}
+              onClick={() => handleGerarRelatorio('excel')}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md transition-colors text-sm font-medium"
+            >
+              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              Gerar Excel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
