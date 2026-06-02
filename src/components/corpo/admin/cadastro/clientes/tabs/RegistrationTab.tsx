@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext, Controller, useFieldArray } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -163,6 +163,24 @@ export function RegistrationTab({
       onCepBlur?.();
     }
   };
+
+  // Quando tipo pessoa = Física: auto-marca isentos e situação tributária "Não contribuinte"
+  const tipoPessoaAnterior = useRef(tipoPessoa);
+  useEffect(() => {
+    // Só aplica quando o usuário MUDA para Física (não no carregamento inicial da edição)
+    if (tipoPessoa === 'F' && tipoPessoaAnterior.current !== 'F') {
+      setValue('isentoIE', true);
+      setValue('inscricaoEstadual', 'ISENTO');
+      setValue('isentoIM', true);
+      setValue('inscricaoMunicipal', 'ISENTO');
+      setValue('isentoSuframa', true);
+      setValue('suframa', 'ISENTO');
+      setValue('situacaoTributaria', '1'); // 1 = Não Contribuinte
+      setValue('tipoEmpresa', 'PF'); // PF = Pessoa Física
+    }
+    tipoPessoaAnterior.current = tipoPessoa;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoPessoa, setValue]);
 
   // Effects for Isento Logic
   useEffect(() => {
