@@ -301,21 +301,21 @@ function gerarPDF(
       fontSize: 7,
     },
     columnStyles: {
-      0:  { cellWidth: 18 },   // NRO_DOC
-      1:  { cellWidth: 10, halign: 'right' },  // DIAS
-      2:  { cellWidth: 45 },   // CLIENTE
-      3:  { cellWidth: 14 },   // COD_CONTA
-      4:  { cellWidth: 20, halign: 'right' },  // VALOR_PGTO
-      5:  { cellWidth: 18, halign: 'right' },  // VALOR_JUROS
-      6:  { cellWidth: 20, halign: 'right' },  // VALOR_REC
-      7:  { cellWidth: 20, halign: 'right' },  // VALOR_ABERTO
-      8:  { cellWidth: 18 },   // DT_EMISSAO
-      9:  { cellWidth: 18 },   // DT_VENC
-      10: { cellWidth: 16, halign: 'right' },  // TARIFA
-      11: { cellWidth: 18 },   // DT_PGTO
+      0:  { cellWidth: 28 },   // NRO_DOC
+      1:  { cellWidth: 12, halign: 'right' },  // DIAS
+      2:  { cellWidth: 65 },   // CLIENTE
+      3:  { cellWidth: 16 },   // COD_CONTA
+      4:  { cellWidth: 24, halign: 'right' },  // VALOR_PGTO
+      5:  { cellWidth: 22, halign: 'right' },  // VALOR_JUROS
+      6:  { cellWidth: 24, halign: 'right' },  // VALOR_REC
+      7:  { cellWidth: 24, halign: 'right' },  // VALOR_ABERTO
+      8:  { cellWidth: 22 },   // DT_EMISSAO
+      9:  { cellWidth: 22 },   // DT_VENC
+      10: { cellWidth: 14, halign: 'right' },  // TARIFA
+      11: { cellWidth: 22 },   // DT_PGTO
     },
     theme: 'grid',
-    margin: { top: 25, left: 5, right: 5 },
+    margin: { top: 25, left: 3, right: 3 },
     didDrawPage: (data) => {
       doc.setFontSize(7);
       doc.text(
