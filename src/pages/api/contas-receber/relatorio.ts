@@ -293,7 +293,7 @@ function gerarPDF(
     startY: 25,
     head: [headers],
     body: allBody,
-    styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+    styles: { fontSize: 7, cellPadding: 1, overflow: 'ellipsize' },
     headStyles: {
       fillColor: [31, 73, 125],
       textColor: 255,
@@ -301,19 +301,14 @@ function gerarPDF(
       fontSize: 7,
     },
     columnStyles: {
-      0:  { cellWidth: 28 },   // NRO_DOC
-      1:  { cellWidth: 12, halign: 'right' },  // DIAS
-      2:  { cellWidth: 65 },   // CLIENTE
-      3:  { cellWidth: 16 },   // COD_CONTA
-      4:  { cellWidth: 24, halign: 'right' },  // VALOR_PGTO
-      5:  { cellWidth: 22, halign: 'right' },  // VALOR_JUROS
-      6:  { cellWidth: 24, halign: 'right' },  // VALOR_REC
-      7:  { cellWidth: 24, halign: 'right' },  // VALOR_ABERTO
-      8:  { cellWidth: 22 },   // DT_EMISSAO
-      9:  { cellWidth: 22 },   // DT_VENC
-      10: { cellWidth: 14, halign: 'right' },  // TARIFA
-      11: { cellWidth: 22 },   // DT_PGTO
+      1:  { halign: 'right' },  // DIAS
+      4:  { halign: 'right' },  // VALOR_PGTO
+      5:  { halign: 'right' },  // VALOR_JUROS
+      6:  { halign: 'right' },  // VALOR_REC
+      7:  { halign: 'right' },  // VALOR_ABERTO
+      10: { halign: 'right' },  // TARIFA
     },
+    tableWidth: 'auto',
     theme: 'grid',
     margin: { top: 25, left: 3, right: 3 },
     didDrawPage: (data) => {

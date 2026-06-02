@@ -277,7 +277,7 @@ function gerarPDF(
     startY: 25,
     head: [headers],
     body: allBody,
-    styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+    styles: { fontSize: 7, cellPadding: 1, overflow: 'ellipsize' },
     headStyles: {
       fillColor: [31, 73, 125],
       textColor: 255,
@@ -285,23 +285,13 @@ function gerarPDF(
       fontSize: 7,
     },
     columnStyles: {
-      0:  { cellWidth: 12 },   // COD
-      1:  { cellWidth: 18 },   // NRO_DUP
-      2:  { cellWidth: 35 },   // NOME
-      3:  { cellWidth: 18, halign: 'right' },  // VALOR
-      4:  { cellWidth: 18, halign: 'right' },  // PAGO
-      5:  { cellWidth: 18, halign: 'right' },  // ABERTO
-      6:  { cellWidth: 14 },   // NRO_NF
-      7:  { cellWidth: 16 },   // DT_VENC
-      8:  { cellWidth: 28 },   // CONTA_FINANCEIRA
-      9:  { cellWidth: 16 },   // DT_PGTO
-      10: { cellWidth: 16 },   // DT_EMISSAO
-      11: { cellWidth: 14 },   // COD_CONTA
-      12: { cellWidth: 30 },   // OBS
-      13: { cellWidth: 10 },   // PAGA
+      3:  { halign: 'right' },  // VALOR
+      4:  { halign: 'right' },  // PAGO
+      5:  { halign: 'right' },  // ABERTO
     },
+    tableWidth: 'auto',
     theme: 'grid',
-    margin: { top: 25, left: 5, right: 5 },
+    margin: { top: 25, left: 3, right: 3 },
     didDrawPage: (data) => {
       // Footer with page number
       const pageCount = (doc as any).internal.getNumberOfPages();
