@@ -117,7 +117,8 @@ export const clientSchema = z.object({
     .array(
       z.object({
         sellerId: z.string(),
-        segmentoId: z.string().optional(), // código do segmento (dbsegmento.codsegmento)
+        segmentoId: z.string().optional(),
+        tipoVendedor: z.enum(['externo', 'tmk']).optional().default('externo'),
       }),
     )
     .optional()
@@ -193,6 +194,7 @@ export const clientSchema = z.object({
   desconto: z.union([z.string(), z.number()]).optional().nullable(),
   precoVenda: z.union([z.string(), z.number()]).optional().nullable(),
   kickback: z.union([z.string(), z.number()]).optional().nullable(),
+  precoVendaKickback: z.union([z.string(), z.number()]).optional().nullable(),
   descontoAplicado: z.enum(['S', 'N']).optional().nullable(),
   benmd: z.enum(['S', 'N']).optional().nullable(), // Bloqueio de preço de venda
   habilitarLocalEntrega: z.enum(['0', '1']).optional().nullable(),

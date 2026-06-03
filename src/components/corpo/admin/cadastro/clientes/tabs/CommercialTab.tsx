@@ -193,19 +193,29 @@ export function CommercialTab() {
 
   return (
     <div className="space-y-6">
-      {/* Vendedores por Segmento */}
+      {/* Vendedores por Segmento (Externo e TMK) */}
       <div className="flex flex-row items-center justify-between border-b pb-2 mb-4">
         <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
-          Vendedores por Segmento
+          Vendedores (Externo / TMK) por Segmento
         </h3>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => append({ sellerId: '', segmentoId: '' })}
-        >
-          <Plus size={14} className="mr-1" /> Adicionar
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => append({ sellerId: '', segmentoId: '', tipoVendedor: 'externo' })}
+          >
+            <Plus size={14} className="mr-1" /> Vendedor Externo
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => append({ sellerId: '', segmentoId: '', tipoVendedor: 'tmk' })}
+          >
+            <Plus size={14} className="mr-1" /> Vendedor TMK
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -220,6 +230,14 @@ export function CommercialTab() {
                 key={field.id}
                 className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-zinc-800 rounded-md border border-gray-200 dark:border-zinc-700"
               >
+                {/* Tipo do Vendedor */}
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  (field as any).tipoVendedor === 'tmk'
+                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                }`}>
+                  {(field as any).tipoVendedor === 'tmk' ? 'TMK' : 'EXT'}
+                </span>
                 {/* Vendedor */}
                 <div className="flex-1 min-w-[200px]">
                   <Controller
@@ -379,9 +397,19 @@ export function CommercialTab() {
 
         {/* Kickback */}
         <div>
-          <Label>Kickback</Label>
+          <Label>Kickback (%)</Label>
           <Input
             {...register('kickback')}
+            type="text"
+            placeholder="0,00"
+          />
+        </div>
+
+        {/* Preço Venda Kick Back */}
+        <div>
+          <Label>Preço Venda Kick Back</Label>
+          <Input
+            {...register('precoVendaKickback')}
             type="text"
             placeholder="0,00"
           />
