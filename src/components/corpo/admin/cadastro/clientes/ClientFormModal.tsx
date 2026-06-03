@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import TabNavigation from '@/components/common/TabNavigation';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
 import Carregamento from '@/utils/carregamento';
 import FormFooter from '@/components/common/FormFooter2';
 
@@ -62,6 +63,8 @@ export default function ClientFormModal({
 }: ClientFormModalProps) {
   const [activeTab, setActiveTab] = useState('registration');
   const [showGatekeeperModal, setShowGatekeeperModal] = useState(false);
+  const [modalConfirmAba, setModalConfirmAba] = useState(false);
+  const [abaPendente, setAbaPendente] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
@@ -670,24 +673,29 @@ export default function ClientFormModal({
     return 'registration'; // default
   };
 
+  // Retorna os campos obrigatórios de uma aba
+  const getFieldsForTab = (tab: string): string[] => {
+    const registrationFields = [
+      'tipoPessoa', 'documento', 'nome', 'tipoCliente', 'situacaoTributaria',
+      'tipoEmpresa', 'classeCliente', 'cep', 'endereco', 'bairro', 'cidade', 'uf', 'pais',
+    ];
+    const financialFields = ['banco'];
+    if (tab === 'registration') return registrationFields;
+    if (tab === 'financial') return financialFields;
+    return [];
+  };
+
   // Ao trocar de aba, valida os campos da aba atual e pergunta se quer prosseguir
   const handleTabChange = async (newTab: string) => {
-    // Valida todos os campos
-    const isValid = await trigger();
+    // Força validação dos campos da aba atual
+    const fieldsToValidate = getFieldsForTab(activeTab);
+    const isValid = await trigger(fieldsToValidate as any);
 
     if (!isValid) {
-      // Verifica se há erros na aba atual
-      const currentErrors = Object.keys(errors).filter(
-        (field) => getTabForField(field) === activeTab,
-      );
-
-      if (currentErrors.length > 0) {
-        const tabName = tabs.find((t) => t.key === activeTab)?.name || activeTab;
-        const confirmar = window.confirm(
-          `Existem campos obrigatórios não preenchidos na aba "${tabName}".\n\nDeseja prosseguir mesmo assim ou voltar para corrigir?\n\nOK = Prosseguir\nCancelar = Voltar e corrigir`,
-        );
-        if (!confirmar) return;
-      }
+      // Guarda a aba destino e mostra modal de confirmação
+      setAbaPendente(newTab);
+      setModalConfirmAba(true);
+      return;
     }
 
     setActiveTab(newTab);
@@ -778,6 +786,27 @@ export default function ClientFormModal({
               </button>
             </div>
           </div>
+
+          {/* Modal de confirmação ao trocar aba com campos pendentes */}
+          <ConfirmationModal
+            isOpen={modalConfirmAba}
+            onClose={() => {
+              setModalConfirmAba(false);
+              setAbaPendente(null);
+            }}
+            onConfirm={() => {
+              setModalConfirmAba(false);
+              if (abaPendente) {
+                setActiveTab(abaPendente);
+                setAbaPendente(null);
+              }
+            }}
+            title="Campos obrigatórios pendentes"
+            message={`Existem campos obrigatórios não preenchidos na aba "${tabs.find((t) => t.key === activeTab)?.name || activeTab}". Deseja prosseguir mesmo assim?`}
+            type="warning"
+            confirmText="Prosseguir"
+            cancelText="Voltar e corrigir"
+          />
 
           {/* Gatekeeper Alert Modal */}
           <Dialog
