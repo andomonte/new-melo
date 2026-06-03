@@ -354,9 +354,9 @@ export function CommercialTab() {
           />
         </div>
 
-        {/* Preço de Venda */}
+        {/* Desconto Aplicado (Preço de Venda no Delphi) */}
         <div>
-          <Label>Preço de Venda</Label>
+          <Label>Desconto Aplicado</Label>
           <Controller
             control={control}
             name="precoVenda"
@@ -387,9 +387,9 @@ export function CommercialTab() {
           />
         </div>
 
-        {/* Desconto Aplicado */}
+        {/* Preço de Venda (flag S/N) */}
         <div>
-          <Label>Desconto Aplicado</Label>
+          <Label>Preço de Venda</Label>
           <Controller
             control={control}
             name="descontoAplicado"

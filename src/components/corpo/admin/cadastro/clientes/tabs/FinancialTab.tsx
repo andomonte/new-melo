@@ -385,21 +385,27 @@ export function FinancialTab() {
 
         <div>
           <Label>Faixa Financeira</Label>
-          <Input
-            {...register('faixaFinanceira')}
-            className={
-              errors.faixaFinanceira
-                ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
-                : ''
-            }
-            placeholder="01"
+          <Controller
+            control={control}
+            name="faixaFinanceira"
+            render={({ field }) => (
+              <Select onValueChange={field.onChange} value={field.value || ''}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 10 }, (_, i) => {
+                    const val = String(i + 1).padStart(2, '0');
+                    return (
+                      <SelectItem key={val} value={val}>
+                        {val}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
           />
-          {errors.faixaFinanceira && (
-            <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              {errors.faixaFinanceira.message as string}
-            </p>
-          )}
         </div>
 
         <div className={errors.banco ? 'field-error' : ''}>

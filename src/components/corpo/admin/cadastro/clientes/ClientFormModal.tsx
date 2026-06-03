@@ -526,8 +526,9 @@ export default function ClientFormModal({
           local_entrega: data.habilitarLocalEntrega === '1' ? 'S' : 'N',
         } as Cliente;
 
-        await insertCliente(clienteToInsert);
-        toast.success('Cliente cadastrado com sucesso!');
+        const resultado = await insertCliente(clienteToInsert);
+        const codigoGerado = resultado?.codcli || resultado?.codigo || '';
+        toast.success(`Cliente cadastrado com sucesso!${codigoGerado ? ` Código: ${codigoGerado}` : ''}`, { duration: 5000 });
       }
 
       if (onSuccess) onSuccess();

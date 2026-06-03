@@ -77,7 +77,7 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
           disabled={disabled}
           className={cn("w-full justify-between", className)}
         >
-          {selectedCountry ? selectedCountry.descricao : (value ? `País ${value}` : "Selecione o país...")}
+          {selectedCountry ? `${selectedCountry.codpais} - ${selectedCountry.descricao}` : (value ? `${value}` : "Selecione o país...")}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -109,7 +109,7 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
                         String(value) === String(country.codpais) ? "opacity-100" : "opacity-0"
                         )}
                     />
-                    {country.descricao}
+                    {country.codpais} - {country.descricao}
                     </CommandItem>
                 ))}
                 </CommandGroup>
