@@ -91,6 +91,16 @@ export interface Produto {
   // Campos de Taxa de Câmbio
   txdolarfabrica?: number;     // Taxa Dólar Fábrica
   txdolarcompramedio?: number; // Taxa Dólar Compra Médio
+
+  // Referências de Fábrica
+  referenciasFabrica?: {
+    id?: string;
+    cod_id?: number;
+    referencia: string;
+    codmarca?: string;
+    codcredor?: string;
+    marca_nome?: string;
+  }[];
 }
 
 /**

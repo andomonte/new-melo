@@ -225,4 +225,7 @@ export const cadastroProdutoSchema = z.object({
   { message: '% Agregado (MVA) é obrigatório quando Tributado = SIM', path: ['percsubst'] }
 );
 
+// Nota: validação de Compra Direta SIM exige Ref. Fábrica é feita no modal (não no schema)
+// porque o campo referenciasFabrica não faz parte do schema Zod (é gerenciado separadamente)
+
 export type ProdutoSchema = z.infer<typeof cadastroProdutoSchema>;

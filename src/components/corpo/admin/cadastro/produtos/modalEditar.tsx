@@ -137,6 +137,14 @@ export default function CustomModal({
   const handleSubmit = async () => {
     try {
       const produtoFinal = produtoUpperCase(produto);
+
+      // Validação: Compra Direta SIM exige pelo menos 1 Ref. Fábrica
+      if (produtoFinal.compradireta === 'S' && (!produtoFinal.referenciasFabrica || produtoFinal.referenciasFabrica.length === 0)) {
+        toast({ description: 'Compra Direta = SIM exige pelo menos 1 Referência de Fábrica cadastrada.', variant: 'destructive' });
+        setActiveTab('referenciaFabrica');
+        return;
+      }
+
       cadastroProdutoSchema.parse(produtoFinal);
 
       setLoading(true);

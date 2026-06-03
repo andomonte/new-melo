@@ -74,7 +74,6 @@ export default async function handle(
     const result = await client.query(insertQuery, values);
 
     // ✅ RECALCULAR PREÇOS AUTOMATICAMENTE (igual ao Delphi)
-    // Gera os 8 tipos de preço na tabela DBFORMACAOPRVENDA
     await recalcularPrecosProduto(client, {
       codprod: data.codprod,
       prcompra: data.prcompra,
@@ -82,6 +81,43 @@ export default async function handle(
       dolar: data.dolar,
       txdolarcompra: data.txdolarcompra,
     });
+
+    // ✅ SALVAR REFERÊNCIAS DE FÁBRICA (se houver)
+    if (data.referenciasFabrica && Array.isArray(data.referenciasFabrica) && data.referenciasFabrica.length > 0) {
+      for (const ref of data.referenciasFabrica) {
+        if (!ref.referencia) continue;
+
+        // Verificar se já existe em dbref_fabrica
+        const checkRef = await client.query(
+          `SELECT cod_id FROM dbref_fabrica WHERE referencia = $1 AND codmarca = $2 AND codcredor = $3`,
+          [ref.referencia, ref.codmarca || data.codmarca || '', ref.codcredor || '']
+        );
+
+        let codId: number;
+        if (checkRef.rows.length > 0) {
+          codId = checkRef.rows[0].cod_id;
+        } else {
+          const maxId = await client.query('SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica');
+          codId = maxId.rows[0].next_id;
+          await client.query(
+            `INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor) VALUES ($1, $2, $3, $4)`,
+            [codId, ref.codmarca || data.codmarca || '', ref.referencia, ref.codcredor || '']
+          );
+        }
+
+        // Criar vínculo produto <-> referência
+        const checkVinculo = await client.query(
+          `SELECT 1 FROM dbprod_ref_fabrica WHERE codprod = $1 AND cod_id = $2`,
+          [data.codprod, codId]
+        );
+        if (checkVinculo.rows.length === 0) {
+          await client.query(
+            `INSERT INTO dbprod_ref_fabrica (codprod, cod_id) VALUES ($1, $2)`,
+            [data.codprod, codId]
+          );
+        }
+      }
+    }
 
     // Commit da transação
     await client.query('COMMIT');

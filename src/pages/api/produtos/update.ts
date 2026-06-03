@@ -49,6 +49,39 @@ export default async function handle(
       txdolarcompra: produto.txdolarcompra,
     });
 
+    // ✅ SALVAR REFERÊNCIAS DE FÁBRICA (se houver)
+    if (produto.referenciasFabrica && Array.isArray(produto.referenciasFabrica)) {
+      // Remove vínculos antigos
+      await client.query('DELETE FROM dbprod_ref_fabrica WHERE codprod = $1', [produto.codprod]);
+
+      // Insere novos
+      for (const ref of produto.referenciasFabrica) {
+        if (!ref.referencia) continue;
+
+        const checkRef = await client.query(
+          `SELECT cod_id FROM dbref_fabrica WHERE referencia = $1 AND codmarca = $2 AND codcredor = $3`,
+          [ref.referencia, ref.codmarca || produto.codmarca || '', ref.codcredor || '']
+        );
+
+        let codId: number;
+        if (checkRef.rows.length > 0) {
+          codId = checkRef.rows[0].cod_id;
+        } else {
+          const maxId = await client.query('SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica');
+          codId = maxId.rows[0].next_id;
+          await client.query(
+            `INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor) VALUES ($1, $2, $3, $4)`,
+            [codId, ref.codmarca || produto.codmarca || '', ref.referencia, ref.codcredor || '']
+          );
+        }
+
+        await client.query(
+          `INSERT INTO dbprod_ref_fabrica (codprod, cod_id) VALUES ($1, $2)`,
+          [produto.codprod, codId]
+        );
+      }
+    }
+
     // Commit da transação
     await client.query('COMMIT');
 
