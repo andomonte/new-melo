@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import FormInput from '@/components/common/FormInput';
 import { Produto } from '@/data/produtos/produtos';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 interface DadosCustosProps {
   produto: Produto;
@@ -37,6 +39,11 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
   handleProdutoChange,
   error,
 }) => {
+  const [comissaoHabilitada, setComissaoHabilitada] = useState(
+    !!(produto.comdifeext || produto.comdifeext_int || produto.comdifint)
+  );
+  const moeda = produto.dolar === 'S' ? 'US$' : 'R$';
+
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -47,7 +54,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="prfabr"
             type="number"
-            label="Preço Fábrica"
+            label={`Preço Fábrica (${moeda})`}
             value={displayNumberValue(produto.prfabr)}
             onChange={(e) =>
               handleProdutoChange({
@@ -60,7 +67,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="prcustoatual"
             type="number"
-            label="Preço Líquido"
+            label={`Preço Líquido (${moeda})`}
             value={displayNumberValue(produto.prcustoatual)}
             onChange={(e) =>
               handleProdutoChange({
@@ -73,7 +80,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="preconf"
             type="number"
-            label="Preço NF"
+            label={`Preço NF (${moeda})`}
             value={displayNumberValue(produto.preconf)}
             onChange={(e) =>
               handleProdutoChange({
@@ -86,7 +93,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="precosnf"
             type="number"
-            label="Preço sem NF"
+            label={`Preço sem NF (${moeda})`}
             value={displayNumberValue(produto.precosnf)}
             onChange={(e) =>
               handleProdutoChange({
@@ -104,7 +111,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="prcompra"
             type="number"
-            label="Custo Compra"
+            label={`Custo Compra (${moeda})`}
             value={displayNumberValue(produto.prcompra)}
             onChange={(e) =>
               handleProdutoChange({
@@ -118,7 +125,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="prcomprasemst"
             type="number"
-            label="Custo Transf. Líquido"
+            label={`Custo Transf. Líquido (${moeda})`}
             value={displayNumberValue(produto.prcomprasemst)}
             onChange={(e) =>
               handleProdutoChange({
@@ -131,7 +138,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="pratualdesp"
             type="number"
-            label="Custo Transf. Bruto"
+            label={`Custo Transf. Bruto (${moeda})`}
             value={displayNumberValue(produto.pratualdesp)}
             onChange={(e) =>
               handleProdutoChange({
@@ -168,7 +175,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="prvenda"
             type="number"
-            label="Preço Venda"
+            label={`Preço Venda (${moeda})`}
             value={displayNumberValue(produto.prvenda)}
             onChange={(e) =>
               handleProdutoChange({
@@ -220,7 +227,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <FormInput
             name="concor"
             type="number"
-            label="Preço Concorrência"
+            label={`Preço Concorrência (${moeda})`}
             value={displayNumberValue(produto.concor)}
             onChange={(e) =>
               handleProdutoChange({
@@ -247,9 +254,22 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
 
         {/* Seção de Comissões */}
         <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 dark:text-gray-200 font-bold">
-            Comissões Diferenciadas
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={comissaoHabilitada}
+              onCheckedChange={(checked) => {
+                setComissaoHabilitada(!!checked);
+                if (!checked) {
+                  handleProdutoChange({ ...produto, comdifeext: undefined, comdifeext_int: undefined, comdifint: undefined });
+                }
+              }}
+              id="chk-comissao"
+            />
+            <Label htmlFor="chk-comissao" className="font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
+              Comissões Diferenciadas (%)
+            </Label>
           </div>
+          {comissaoHabilitada && (<>
           <FormInput
             name="comdifeext"
             type="number"
@@ -289,6 +309,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
             }
             error={error?.comdifint}
           />
+          </>)}
         </div>
 
         {/* Seção de Taxas de Câmbio Adicionais */}

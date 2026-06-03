@@ -11,7 +11,7 @@ import FormFooter from '@/components/common/FormFooter';
 import Carregamento from '@/utils/carregamento';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 
 const tabs = [
@@ -89,6 +89,30 @@ export default function CustomModal({
 
   const [modalConfirmAba, setModalConfirmAba] = useState(false);
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
+  const [modalExcluir, setModalExcluir] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const handleExcluir = async () => {
+    if (!produto.codprod) return;
+    setExcluindo(true);
+    try {
+      const response = await fetch('/api/produtos/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codprod: produto.codprod }),
+      });
+      const resultado = await response.json();
+      if (!response.ok) throw new Error(resultado.error || 'Erro ao excluir');
+      toast({ description: `Produto ${produto.codprod} excluído com sucesso!` });
+      setModalExcluir(false);
+      onClose();
+      onSuccess?.();
+    } catch (error: any) {
+      toast({ description: error.message || 'Erro ao excluir produto', variant: 'destructive' });
+    } finally {
+      setExcluindo(false);
+    }
+  };
 
   const camposObrigatoriosPorAba: Record<string, string[]> = {
     dadosCadastrais: ['ref', 'descr', 'unimed'],
@@ -143,6 +167,26 @@ export default function CustomModal({
         toast({ description: 'Compra Direta = SIM exige pelo menos 1 Referência de Fábrica cadastrada.', variant: 'destructive' });
         setActiveTab('referenciaFabrica');
         return;
+      }
+
+      // Validação CEST/NCM — bloqueia save se inválido
+      if (produtoFinal.cest && produtoFinal.cest.length > 0) {
+        const ncm = produtoFinal.clasfiscal || '';
+        if (!ncm || ncm.length < 8) {
+          toast({ description: 'NCM é obrigatório quando CEST está preenchido.', variant: 'destructive' });
+          setActiveTab('dadosFiscais');
+          return;
+        }
+        const cestResp = await fetch('/api/produtos/validar-cest', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ncm, cest: produtoFinal.cest }),
+        });
+        const cestResult = await cestResp.json();
+        if (cestResult.resultado === 'NOK1' || cestResult.resultado === 'NOK2') {
+          toast({ description: cestResult.message, variant: 'destructive' });
+          setActiveTab('dadosFiscais');
+          return;
+        }
       }
 
       cadastroProdutoSchema.parse(produtoFinal);
@@ -319,7 +363,16 @@ export default function CustomModal({
               Editar Produto
             </h4>
           </header>
-          <div className="w-[35%] h-full flex justify-end">
+          <div className="w-[35%] h-full flex justify-end gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => setModalExcluir(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+              title="Excluir produto"
+            >
+              <Trash2 size={14} />
+              Excluir
+            </button>
             {footer || (
               <FormFooter onSubmit={handleSubmit} onClear={handleClear} />
             )}
@@ -377,6 +430,19 @@ export default function CustomModal({
           type="warning"
           confirmText="Prosseguir"
           cancelText="Voltar e corrigir"
+        />
+
+        {/* Modal de confirmação de exclusão */}
+        <ConfirmationModal
+          isOpen={modalExcluir}
+          onClose={() => setModalExcluir(false)}
+          onConfirm={handleExcluir}
+          title="Excluir Produto"
+          message={`Tem certeza que deseja excluir o produto ${produto.codprod} - ${produto.descr}? Esta ação pode ser desfeita.`}
+          type="danger"
+          confirmText="Excluir"
+          cancelText="Cancelar"
+          loading={excluindo}
         />
       </div>
     </div>

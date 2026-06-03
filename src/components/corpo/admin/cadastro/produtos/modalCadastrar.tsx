@@ -160,6 +160,26 @@ export default function CustomModal({
         return;
       }
 
+      // Validação CEST/NCM — bloqueia save se inválido
+      if (produtoFinal.cest && produtoFinal.cest.length > 0) {
+        const ncm = produtoFinal.clasfiscal || '';
+        if (!ncm || ncm.length < 8) {
+          toast({ description: 'NCM é obrigatório quando CEST está preenchido.', variant: 'destructive' });
+          setActiveTab('dadosFiscais');
+          return;
+        }
+        const cestResp = await fetch('/api/produtos/validar-cest', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ncm, cest: produtoFinal.cest }),
+        });
+        const cestResult = await cestResp.json();
+        if (cestResult.resultado === 'NOK1' || cestResult.resultado === 'NOK2') {
+          toast({ description: cestResult.message, variant: 'destructive' });
+          setActiveTab('dadosFiscais');
+          return;
+        }
+      }
+
       cadastroProdutoSchema.parse(produtoFinal);
 
       await insertProduto(produtoFinal);

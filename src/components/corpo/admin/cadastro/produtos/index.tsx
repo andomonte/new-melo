@@ -485,6 +485,50 @@ const ProdutosPage = () => {
     fetchProdutos({ page, perPage, search, filtros });
   }, [page, perPage, search, filtros, fetchProdutos]);
 
+  // Exportar lista de produtos para Excel
+  const handleExportarExcel = useCallback(async () => {
+    if (!produtos.data || produtos.data.length === 0) {
+      toast({ description: 'Nenhum produto para exportar', variant: 'destructive' });
+      return;
+    }
+    try {
+      const ExcelJS = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Produtos');
+
+      // Headers baseados nas colunas visíveis (exceto selecionar e ações)
+      const colunasExport = headers.filter(h => !['selecionar', 'ações'].includes(h.toLowerCase()));
+      ws.columns = colunasExport.map(col => ({ header: col, key: col, width: 20 }));
+
+      // Estilo do header
+      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+
+      // Dados
+      produtos.data.forEach((prod: any) => {
+        const row: Record<string, any> = {};
+        colunasExport.forEach(col => { row[col] = prod[col] ?? ''; });
+        ws.addRow(row);
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'produtos.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({ description: 'Produtos exportados com sucesso!' });
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
+      toast({ description: 'Erro ao exportar produtos', variant: 'destructive' });
+    }
+  }, [produtos.data, headers, toast]);
+
   /**
    * ZOOM - Inspeção detalhada do produto
    */
@@ -1081,6 +1125,7 @@ const ProdutosPage = () => {
             </div>
           ) : 'Nenhum produto encontrado'}
           colunasFiltro={colunasDbProd}
+          onExportarExcel={handleExportarExcel}
           onFiltroChange={(novosFiltros) => {
             setFiltros(novosFiltros);
             fetchProdutos({ page: 1, perPage, search, filtros: novosFiltros });
