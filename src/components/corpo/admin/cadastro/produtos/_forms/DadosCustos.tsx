@@ -41,7 +41,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
     <>
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 font-bold">
+          <div className="block text-gray-700 dark:text-gray-200 font-bold">
             Custo Referente a Lista de Fábrica
           </div>
           <FormInput
@@ -98,7 +98,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           />
         </div>
         <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 font-bold">
+          <div className="block text-gray-700 dark:text-gray-200 font-bold">
             Custo Referente a Compra e Transferência
           </div>
           <FormInput
@@ -154,17 +154,17 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
             }
             error={error?.txdolarcompra}
           />
-          {/*<FormInput*/}
-          {/*  name="prcusto"*/}
-          {/*  type="number"*/}
-          {/*  label="Custo Contábil"*/}
-          {/*  value={displayNumberValue(produto.prcusto)}
-          {/*  onChange={(e) => handleProdutoChange({ ...produto, prcusto: handleOptionalNumberChange(e.target.value) })}*/}
-          {/*  error={error?.prcusto}*/}
-          {/*/>*/}
+          <FormInput
+            name="prcusto"
+            type="number"
+            label="Custo Contábil"
+            value={displayNumberValue(produto.prcusto)}
+            onChange={(e) => handleProdutoChange({ ...produto, prcusto: handleOptionalNumberChange(e.target.value) })}
+            error={error?.prcusto}
+          />
         </div>
         <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 font-bold">Lista de Preço</div>
+          <div className="block text-gray-700 dark:text-gray-200 font-bold">Lista de Preço</div>
           <FormInput
             name="prvenda"
             type="number"
@@ -247,7 +247,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
 
         {/* Seção de Comissões */}
         <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 font-bold">
+          <div className="block text-gray-700 dark:text-gray-200 font-bold">
             Comissões Diferenciadas
           </div>
           <FormInput
@@ -293,7 +293,7 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
 
         {/* Seção de Taxas de Câmbio Adicionais */}
         <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 font-bold">
+          <div className="block text-gray-700 dark:text-gray-200 font-bold">
             Taxas de Câmbio Adicionais
           </div>
           <FormInput

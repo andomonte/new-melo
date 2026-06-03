@@ -227,6 +227,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           <SelectInput
             name="trib"
             label="Tributado"
+            required
             options={tributadoOptions}
             value={produto.trib || ''}
             onValueChange={(value) =>
@@ -264,7 +265,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             error={error?.dtdi}
           />
           <div className="text-gray-700 dark:text-gray-200">
-            <Label htmlFor="strib">Situação Tributária</Label>
+            <Label htmlFor="strib">Situação Tributária <span className="text-red-500">*</span></Label>
             <div className="grid grid-cols-2 gap-4">
               <SelectInput
                 name="strib_primeiro"
@@ -306,6 +307,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           <SelectInput
             name="isentopiscofins"
             label="Isento PIS/COFINS?"
+            required
             options={isentoPisCofinsOptions}
             value={produto.isentopiscofins || ''}
             onValueChange={(value) =>
@@ -347,6 +349,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           <SelectInput
             name="isentoipi"
             label="Situação IPI?"
+            required
             options={situacaoIpiOptions}
             value={produto.isentoipi || ''}
             onValueChange={(value) =>
@@ -367,9 +370,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.ipi}
           />
-          <div>
-            <label className="block text-gray-700">Reservado CheckBox</label>
-          </div>
+          <div></div>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <SelectInput
@@ -388,7 +389,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           <FormInput
             name="ii"
             type="number"
-            label="IPI"
+            label="Imp. Importação (II)"
             value={displayNumberValue(produto.ii)}
             onChange={(e) =>
               handleProdutoChange({

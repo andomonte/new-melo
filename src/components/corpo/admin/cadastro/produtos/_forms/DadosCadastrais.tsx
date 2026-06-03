@@ -239,7 +239,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <FormInput
             name="codbar"
             type="text"
-            label="Código de Barra"
+            label="Código de Barras"
             value={produto.codbar || ''}
             onChange={(e) =>
               handleProdutoChange({ ...produto, codbar: e.target.value })

@@ -12,6 +12,7 @@ import Carregamento from '@/utils/carregamento';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { X } from 'lucide-react';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
 
 const tabs = [
   { name: 'Dados Cadastrais', key: 'dadosCadastrais' },
@@ -86,7 +87,29 @@ export default function CustomModal({
     setProduto({} as Produto);
   };
 
+  const [modalConfirmAba, setModalConfirmAba] = useState(false);
+  const [abaPendente, setAbaPendente] = useState<string | null>(null);
+
+  const camposObrigatoriosPorAba: Record<string, string[]> = {
+    dadosCadastrais: ['ref', 'descr', 'unimed'],
+    dadosFiscais: ['trib', 'strib', 'isentopiscofins', 'isentoipi'],
+    dadosCustos: [],
+    referenciaFabrica: [],
+  };
+
   const handleActiveTab = (tab: string) => {
+    const camposAba = camposObrigatoriosPorAba[activeTab] || [];
+    const camposPendentes = camposAba.filter((campo) => {
+      const valor = (produto as any)[campo];
+      return valor === undefined || valor === null || valor === '';
+    });
+
+    if (camposPendentes.length > 0) {
+      setAbaPendente(tab);
+      setModalConfirmAba(true);
+      return;
+    }
+
     setActiveTab(tab);
   };
 
@@ -313,6 +336,27 @@ export default function CustomModal({
         </div>
 
         <Toaster />
+
+        {/* Modal de confirmação ao trocar aba com campos pendentes */}
+        <ConfirmationModal
+          isOpen={modalConfirmAba}
+          onClose={() => {
+            setModalConfirmAba(false);
+            setAbaPendente(null);
+          }}
+          onConfirm={() => {
+            setModalConfirmAba(false);
+            if (abaPendente) {
+              setActiveTab(abaPendente);
+              setAbaPendente(null);
+            }
+          }}
+          title="Campos obrigatórios pendentes"
+          message={`Existem campos obrigatórios não preenchidos na aba "${tabs.find((t) => t.key === activeTab)?.name || activeTab}". Deseja prosseguir mesmo assim?`}
+          type="warning"
+          confirmText="Prosseguir"
+          cancelText="Voltar e corrigir"
+        />
       </div>
     </div>
   );
