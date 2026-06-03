@@ -101,10 +101,10 @@ export default function ClientFormModal({
       numero: '',
       complemento: '',
     },
-    mode: 'onSubmit',
+    mode: 'onTouched',
   });
 
-  const { watch, handleSubmit, reset, formState } = methods;
+  const { watch, handleSubmit, reset, formState, trigger } = methods;
   const documento = watch('documento');
   const { errors } = formState;
 
@@ -670,6 +670,12 @@ export default function ClientFormModal({
     return 'registration'; // default
   };
 
+  // Ao trocar de aba, valida os campos da aba atual
+  const handleTabChange = (newTab: string) => {
+    trigger(); // Valida todos os campos para mostrar erros
+    setActiveTab(newTab);
+  };
+
   // Formata mensagem de erro de forma mais amigável
   const formatErrorMessage = (message: string): string => {
     // Traduz mensagens comuns do Zod
@@ -977,7 +983,7 @@ export default function ClientFormModal({
                 <TabNavigation
                   tabs={tabs}
                   activeTab={activeTab}
-                  setActiveTab={setActiveTab}
+                  setActiveTab={handleTabChange}
                 />
                 <div className="mt-4">
                   {isLoadingData ? (

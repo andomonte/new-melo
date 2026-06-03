@@ -297,7 +297,7 @@ export default function CustomModal({
               <Carregamento />
             </div>
           ) : (
-            <div className="min-h-screen p-6">
+            <div className="p-6">
               <div className="shadow-md rounded-lg max-w-6xl mx-auto p-6 bg-white dark:bg-zinc-800">
                 <TabNavigation
                   tabs={tabs}

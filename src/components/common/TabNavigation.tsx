@@ -12,7 +12,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({
   setActiveTab,
 }) => {
   return (
-    <nav className="flex space-x-4 border-b-2 mb-4 text-blue-600 dark:text-blue-300">
+    <nav className="flex space-x-4 border-b-2 mb-4 text-blue-600 dark:text-blue-300 sticky top-0 z-10 bg-white dark:bg-zinc-800 -mx-6 px-6 pt-2">
       {tabs.map((tab) => (
         <button
           key={tab.key}
