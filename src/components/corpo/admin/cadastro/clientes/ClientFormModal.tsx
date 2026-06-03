@@ -717,6 +717,14 @@ export default function ClientFormModal({
       return 'Campo obrigatório';
     }
 
+    if (message === 'Required') {
+      return 'Campo obrigatório';
+    }
+
+    if (message.includes('Expected')) {
+      return 'Campo obrigatório';
+    }
+
     return message;
   };
 

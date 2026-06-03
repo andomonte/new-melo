@@ -4,7 +4,7 @@ import { validarDocumento, limparDocumento } from '@/utils/validarDocumento';
 export const clientSchema = z.object({
   // Identificação
   codcli: z.string().optional(),
-  tipoPessoa: z.enum(['F', 'J', 'E']),
+  tipoPessoa: z.enum(['F', 'J', 'E'], { required_error: 'Tipo de pessoa é obrigatório', invalid_type_error: 'Tipo de pessoa é obrigatório' }),
   documento: z
     .string()
     .min(1, 'Documento é obrigatório')
@@ -55,7 +55,7 @@ export const clientSchema = z.object({
       invalid_type_error: 'Tipo de empresa é obrigatório',
     }),
   ),
-  classeCliente: z.string().min(1, 'Classe de cliente é obrigatória'),
+  classeCliente: z.string({ required_error: 'Classe de cliente é obrigatória' }).min(1, 'Classe de cliente é obrigatória'),
 
   // Inscrições
   inscricaoEstadual: z.string().max(20).optional().nullable(),
@@ -66,14 +66,14 @@ export const clientSchema = z.object({
   isentoSuframa: z.boolean().default(false),
 
   // Endereço
-  cep: z.string().min(1, 'CEP é obrigatório').max(9),
-  endereco: z.string().min(1, 'Logradouro é obrigatório').max(100),
+  cep: z.string({ required_error: 'CEP é obrigatório' }).min(1, 'CEP é obrigatório').max(9),
+  endereco: z.string({ required_error: 'Logradouro é obrigatório' }).min(1, 'Logradouro é obrigatório').max(100),
   numero: z.string().max(10).optional().nullable(),
   complemento: z.string().max(50).optional().nullable(),
   referencia: z.string().max(100).optional().nullable(),
-  bairro: z.string().min(1, 'Bairro é obrigatório').max(20, 'Máximo 20 caracteres').default(''),
-  cidade: z.string().min(1, 'Cidade é obrigatória').max(20, 'Máximo 20 caracteres'),
-  uf: z.string().min(1, 'UF é obrigatória').max(2),
+  bairro: z.string({ required_error: 'Bairro é obrigatório' }).min(1, 'Bairro é obrigatório').max(20, 'Máximo 20 caracteres').default(''),
+  cidade: z.string({ required_error: 'Cidade é obrigatória' }).min(1, 'Cidade é obrigatória').max(20, 'Máximo 20 caracteres'),
+  uf: z.string({ required_error: 'UF é obrigatória' }).min(1, 'UF é obrigatória').max(2),
 
   // País: Aceita string ou number
   pais: z
