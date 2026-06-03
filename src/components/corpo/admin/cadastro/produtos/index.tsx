@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { Produtos, getProdutos } from '@/data/produtos/produtos';
 import { useDebouncedCallback } from 'use-debounce';
-import DataTable from '@/components/common/DataTableFiltro';
+import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import CadastrarProduto from './modalCadastrar';
@@ -1019,40 +1019,46 @@ const ProdutosPage = () => {
 
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
-      <main className="p-4 w-full">
-        <header className="mb-2">
-          <div className="flex justify-between mb-4 mr-6 ml-6">
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
-                Produtos
-              </div>
-              {selectedProducts.size > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  ({selectedProducts.size} selecionado
-                  {selectedProducts.size > 1 ? 's' : ''})
-                </span>
-              )}
-            </div>
+      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div>
+            <h1 className="text-base font-semibold text-black dark:text-white">
+              Produtos
+            </h1>
+            {selectedProducts.size > 0 && (
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                {selectedProducts.size} selecionado{selectedProducts.size > 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
 
+          <div className="flex gap-2 items-center">
             {userPermissions.cadastrar && (
               <DefaultButton
+                variant="primary"
+                size="default"
                 onClick={() => {
                   setSelectedRow('');
                   setCadastrarOpen(true);
                 }}
-                className="flex items-center gap-0 px-3 py-2 text-sm h-8"
                 text="Novo"
-                icon={<PlusIcon size={18} />}
+                icon={<PlusIcon size={16} />}
               />
             )}
           </div>
-        </header>
+        </div>
 
+        {/* DataTable */}
+        <div className="flex-1 min-h-20 flex flex-col">
         <DataTable
+          screenKey="cadastro-produtos"
+          userName={user?.usuario}
           carregando={loading}
           headers={headers}
           rows={rows || []}
           semColunaDeAcaoPadrao={true}
+          nonsortableColumns={['Ações', 'selecionar']}
           onColunaSubstituida={handleColunaSubstituida}
           meta={produtos.meta}
           onPageChange={(newPage) => {
@@ -1120,6 +1126,7 @@ const ProdutosPage = () => {
             </>
           }
         />
+        </div>
       </main>
 
       <CadastrarProduto
