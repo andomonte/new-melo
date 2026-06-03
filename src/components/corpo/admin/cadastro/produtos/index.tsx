@@ -22,6 +22,7 @@ import { ProdutosRelacionadosModal } from './ProdutosRelacionadosModal';
 import { TransferenciaArmazemModal } from './TransferenciaArmazemModal';
 import { TransferenciaArmazemMassaModal } from './TransferenciaArmazemMassaModal';
 import { GoPencil } from 'react-icons/go';
+import { BsBoxes } from 'react-icons/bs';
 import {
   PlusIcon,
   CircleChevronDown,
@@ -98,8 +99,8 @@ const ProdutosPage = () => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
-  const [produtos, setProdutos] = useState<Produtos>({} as Produtos);
-  const [loading, setLoading] = useState(true);
+  const [produtos, setProdutos] = useState<Produtos>({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 } } as any);
+  const [loading, setLoading] = useState(false);
   const [filtros, setFiltros] = useState<Filtro[]>([]);
   const [colunasDbProd, setColunasDbProd] = useState<string[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -396,6 +397,10 @@ const ProdutosPage = () => {
   );
 
   const debouncedSearchUnico = useDebouncedCallback((value: string) => {
+    if (value.length < 3) {
+      setProdutos({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage } } as any);
+      return;
+    }
     setPage(1);
     setFiltros([]);
     fetchProdutosUnico({ page: 1, perPage, search: value });
@@ -680,23 +685,12 @@ const ProdutosPage = () => {
   // ========================================
 
   // Carregamento inicial - EXECUTA UMA ÚNICA VEZ
+  // Montagem do componente — NÃO carrega dados automaticamente (igual clientes)
   useEffect(() => {
-    console.log('🎬 Montagem do componente');
     isMountedRef.current = true;
-
-    const timer = setTimeout(() => {
-      if (isMountedRef.current) {
-        fetchProdutos({ page: 1, perPage, search: '', filtros: [] });
-        dismiss();
-      }
-    }, 100);
-
     return () => {
-      console.log('🔚 Desmontagem do componente');
       isMountedRef.current = false;
-      clearTimeout(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Recarrega quando limiteColunas mudar (EXCETO na primeira montagem)
@@ -1078,7 +1072,14 @@ const ProdutosPage = () => {
           onSearchKeyDown={(e) => {
             if (e.key === 'Enter') debouncedSearchUnico(search);
           }}
-          searchInputPlaceholder="Pesquisar por código, referência ou descrição..."
+          searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar..."
+          noDataMessage={!search || search.length < 3 ? (
+            <div className="flex flex-col items-center">
+              <BsBoxes className="dark:text-blue-200 text-[#347AB6]" size={60} />
+              <div className="text-center font-bold dark:text-blue-200 text-[#347AB6] mt-3">PESQUISAR UM PRODUTO</div>
+              <div className="text-[#347AB6] dark:text-blue-200 text-xs mt-1">Digite pelo menos 3 caracteres e pressione enter...</div>
+            </div>
+          ) : 'Nenhum produto encontrado'}
           colunasFiltro={colunasDbProd}
           onFiltroChange={(novosFiltros) => {
             setFiltros(novosFiltros);
