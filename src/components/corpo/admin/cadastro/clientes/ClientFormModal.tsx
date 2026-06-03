@@ -670,9 +670,26 @@ export default function ClientFormModal({
     return 'registration'; // default
   };
 
-  // Ao trocar de aba, valida os campos da aba atual
-  const handleTabChange = (newTab: string) => {
-    trigger(); // Valida todos os campos para mostrar erros
+  // Ao trocar de aba, valida os campos da aba atual e pergunta se quer prosseguir
+  const handleTabChange = async (newTab: string) => {
+    // Valida todos os campos
+    const isValid = await trigger();
+
+    if (!isValid) {
+      // Verifica se há erros na aba atual
+      const currentErrors = Object.keys(errors).filter(
+        (field) => getTabForField(field) === activeTab,
+      );
+
+      if (currentErrors.length > 0) {
+        const tabName = tabs.find((t) => t.key === activeTab)?.name || activeTab;
+        const confirmar = window.confirm(
+          `Existem campos obrigatórios não preenchidos na aba "${tabName}".\n\nDeseja prosseguir mesmo assim ou voltar para corrigir?\n\nOK = Prosseguir\nCancelar = Voltar e corrigir`,
+        );
+        if (!confirmar) return;
+      }
+    }
+
     setActiveTab(newTab);
   };
 

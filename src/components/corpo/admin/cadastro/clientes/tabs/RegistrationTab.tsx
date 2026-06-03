@@ -604,8 +604,8 @@ export function RegistrationTab({
       </h3>
 
       <div className="grid grid-cols-4 gap-3">
-        <div className="relative">
-          <Label>CEP</Label>
+        <div className={`relative ${errors.cep ? 'field-error' : ''}`}>
+          <Label>CEP <span className="text-red-500">*</span></Label>
           <div className="relative">
             <Controller
               control={control}
@@ -650,8 +650,8 @@ export function RegistrationTab({
             )}
           </div>
         </div>
-        <div className="col-span-2">
-          <Label>Logradouro</Label>
+        <div className={`col-span-2 ${errors.endereco ? 'field-error' : ''}`}>
+          <Label>Logradouro <span className="text-red-500">*</span></Label>
           <Input {...register('endereco')} />
         </div>
         <div>

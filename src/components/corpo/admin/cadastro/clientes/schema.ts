@@ -66,8 +66,8 @@ export const clientSchema = z.object({
   isentoSuframa: z.boolean().default(false),
 
   // Endereço
-  cep: z.string().max(9).optional().nullable(),
-  endereco: z.string().max(100).optional().nullable(),
+  cep: z.string().min(1, 'CEP é obrigatório').max(9),
+  endereco: z.string().min(1, 'Logradouro é obrigatório').max(100),
   numero: z.string().max(10).optional().nullable(),
   complemento: z.string().max(50).optional().nullable(),
   referencia: z.string().max(100).optional().nullable(),
