@@ -86,7 +86,10 @@ export const cadastroProdutoSchema = z.object({
     .max(100, 'Observações não pode ter mais de 100 caracteres')
     .optional()
     .nullable(),
-  inf: z.string().max(1).optional().nullable(),
+  inf: z.string().max(1).optional().nullable()
+    .refine((val) => !val || !['D', 'E', 'S'].includes(val.toUpperCase()), {
+      message: 'Informativo não pode ser D, E ou S',
+    }),
   pesoliq: numberOrNull.optional(),
   qtembal: numberOrNull.optional(),
   qtestmin: numberOrNull.optional(),
@@ -188,8 +191,38 @@ export const cadastroProdutoSchema = z.object({
   },
   {
     message: 'Grupo de Produto inválido: Mercadoria Comercial (MC) não pode começar com "Z" e Mercadoria Especial (ME) deve começar com "Z"',
-    path: ['codgpp'], // Mostra erro no campo codgpp
+    path: ['codgpp'],
   }
+)
+.refine(
+  (data) => {
+    // PIS obrigatório quando não isento
+    if (data.isentopiscofins === 'N' && (data.pis === null || data.pis === undefined)) {
+      return false;
+    }
+    return true;
+  },
+  { message: 'PIS é obrigatório quando não isento', path: ['pis'] }
+)
+.refine(
+  (data) => {
+    // COFINS obrigatório quando não isento
+    if (data.isentopiscofins === 'N' && (data.cofins === null || data.cofins === undefined)) {
+      return false;
+    }
+    return true;
+  },
+  { message: 'COFINS é obrigatório quando não isento', path: ['cofins'] }
+)
+.refine(
+  (data) => {
+    // % Agregado (MVA) não pode ser 0 quando tributado = SIM
+    if (data.trib === 'S' && (data.percsubst === null || data.percsubst === undefined || data.percsubst === 0)) {
+      return false;
+    }
+    return true;
+  },
+  { message: '% Agregado (MVA) é obrigatório quando Tributado = SIM', path: ['percsubst'] }
 );
 
 export type ProdutoSchema = z.infer<typeof cadastroProdutoSchema>;

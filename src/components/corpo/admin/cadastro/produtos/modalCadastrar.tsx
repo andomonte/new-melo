@@ -61,13 +61,16 @@ const campoParaAba: Record<string, string> = {
   isentopiscofins: 'dadosFiscais',
   isentoipi: 'dadosFiscais',
   cest: 'dadosFiscais',
+  pis: 'dadosFiscais',
+  cofins: 'dadosFiscais',
+  percsubst: 'dadosFiscais',
+  ii: 'dadosFiscais',
+  ipi: 'dadosFiscais',
 
-  // Dados de Consumo
-  // Nenhum campo obrigatório aparente (exemplo de referência é uma lista com adicionar/remover, sem `*`)
-  // Então, nada mapeado aqui por enquanto
-
-  // Referência de Fábrica
-  // Nenhum campo obrigatório marcado com `*`
+  // Dados de Custos
+  prcompra: 'dadosCustos',
+  prvenda: 'dadosCustos',
+  prfabr: 'dadosCustos',
 };
 
 export default function CustomModal({
@@ -134,11 +137,24 @@ export default function CustomModal({
     setActiveTab(tab);
   };
 
+  // Converte campos de texto para uppercase antes de salvar
+  const produtoUpperCase = (prod: Produto): Produto => {
+    const upper = { ...prod };
+    const camposTexto = ['ref', 'reforiginal', 'descr', 'aplic_extendida', 'obs', 'descr_importacao', 'codbar'] as const;
+    camposTexto.forEach((campo) => {
+      if (upper[campo] && typeof upper[campo] === 'string') {
+        (upper as any)[campo] = (upper[campo] as string).toUpperCase();
+      }
+    });
+    return upper;
+  };
+
   const handleSubmit = async () => {
     try {
-      cadastroProdutoSchema.parse(produto);
+      const produtoFinal = produtoUpperCase(produto);
+      cadastroProdutoSchema.parse(produtoFinal);
 
-      await insertProduto(produto);
+      await insertProduto(produtoFinal);
 
       setErrors({});
 

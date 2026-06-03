@@ -122,12 +122,25 @@ export default function CustomModal({
     onClose();
   };
 
+  // Converte campos de texto para uppercase antes de salvar
+  const produtoUpperCase = (prod: Produto): Produto => {
+    const upper = { ...prod };
+    const camposTexto = ['ref', 'reforiginal', 'descr', 'aplic_extendida', 'obs', 'descr_importacao', 'codbar'] as const;
+    camposTexto.forEach((campo) => {
+      if (upper[campo] && typeof upper[campo] === 'string') {
+        (upper as any)[campo] = (upper[campo] as string).toUpperCase();
+      }
+    });
+    return upper;
+  };
+
   const handleSubmit = async () => {
     try {
-      cadastroProdutoSchema.parse(produto);
+      const produtoFinal = produtoUpperCase(produto);
+      cadastroProdutoSchema.parse(produtoFinal);
 
       setLoading(true);
-      await updateProduto(produto);
+      await updateProduto(produtoFinal);
 
       setErrors({});
 
