@@ -76,6 +76,7 @@ export default function CustomModal({
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
+  const [emPromocao, setEmPromocao] = useState<string | null>(null);
 
   const { toast } = useToast();
 
@@ -279,6 +280,18 @@ export default function CustomModal({
 
           setProduto(produtoNormalizado);
           setLoading(false);
+
+          // Verifica se produto está em promoção ativa
+          fetch(`/api/produtos/verificar-promocao?codprod=${produtoId}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+              if (data?.emPromocao) {
+                setEmPromocao(data.nomePromocao || 'Promoção ativa');
+              } else {
+                setEmPromocao(null);
+              }
+            })
+            .catch(() => setEmPromocao(null));
         } catch (error: any) {
           // Ignora erros de abort (quando requisição é cancelada)
           if (error.name === 'AbortError' || error.name === 'CanceledError') {
@@ -386,6 +399,15 @@ export default function CustomModal({
             </button>
           </div>
         </div>
+
+        {/* Banner de promoção */}
+        {emPromocao && (
+          <div className="flex-shrink-0 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 border-b border-yellow-300 dark:border-yellow-700 text-center">
+            <span className="text-sm font-bold text-yellow-800 dark:text-yellow-200">
+              ⚠ PRODUTO EM PROMOÇÃO: {emPromocao}
+            </span>
+          </div>
+        )}
 
         {/* Conteúdo com scroll */}
         <div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-zinc-900">
