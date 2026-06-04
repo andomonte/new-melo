@@ -294,14 +294,40 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           onChange={(e) => handleFornecedorChange('referencia', e.target.value)}
           error={error?.referencia}
         />
-        <FormInput
-          name="contatos"
-          type="text"
-          label="Contatos"
-          defaultValue={fornecedor.contatos || ''}
-          onChange={(e) => handleFornecedorChange('contatos', e.target.value)}
-          error={error?.contatos}
-        />
+        <div>
+          <p className="text-gray-700 dark:text-gray-200 font-bold mb-2">CONTATOS / TELEFONES</p>
+          <FormInput
+            name="contatos"
+            type="text"
+            label="Contato Principal"
+            defaultValue={fornecedor.contatos || ''}
+            onChange={(e) => handleFornecedorChange('contatos', e.target.value)}
+            error={error?.contatos}
+          />
+          <div className="grid grid-cols-3 gap-4 mt-2">
+            <FormInput
+              name="fone1"
+              type="text"
+              label="Telefone 1"
+              defaultValue={fornecedor.fone1 || ''}
+              onChange={(e) => handleFornecedorChange('fone1', e.target.value)}
+            />
+            <FormInput
+              name="fone2"
+              type="text"
+              label="Telefone 2"
+              defaultValue={fornecedor.fone2 || ''}
+              onChange={(e) => handleFornecedorChange('fone2', e.target.value)}
+            />
+            <FormInput
+              name="email"
+              type="email"
+              label="E-mail"
+              defaultValue={fornecedor.email || ''}
+              onChange={(e) => handleFornecedorChange('email', e.target.value)}
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-4">
           <CheckInput
             name="isentoim"
