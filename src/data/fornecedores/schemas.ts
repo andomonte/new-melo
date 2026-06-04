@@ -11,6 +11,12 @@ export const cadastroFornecedorSchema = z.object({
   nome: z
     .string({ required_error: 'Campo nome é obrigatório.' })
     .min(1, 'Campo nome é obrigatório.'),
+  nome_fant: z
+    .string({ required_error: 'Campo nome fantasia é obrigatório.' })
+    .min(1, 'Campo nome fantasia é obrigatório.'),
+  regime_tributacao: z
+    .string({ required_error: 'Campo regime tributário é obrigatório.' })
+    .min(1, 'Campo regime tributário é obrigatório.'),
   cep: z
     .string({ required_error: 'Campo CEP é obrigatório.' })
     .min(8, 'CEP deve ter 8 dígitos.')
@@ -89,6 +95,12 @@ export const edicaoFornecedorSchema = z.object({
   nome: z
     .string({ required_error: 'Campo nome é obrigatório.' })
     .min(1, 'Campo nome é obrigatório.'),
+  nome_fant: z
+    .string({ required_error: 'Campo nome fantasia é obrigatório.' })
+    .min(1, 'Campo nome fantasia é obrigatório.'),
+  regime_tributacao: z
+    .string({ required_error: 'Campo regime tributário é obrigatório.' })
+    .min(1, 'Campo regime tributário é obrigatório.'),
   cep: z
     .string({ required_error: 'Campo CEP é obrigatório.' })
     .min(8, 'CEP deve ter 8 dígitos.')

@@ -177,9 +177,21 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           defaultValue={fornecedor.nome_fant || ''}
           onChange={(e) => handleFornecedorChange('nome_fant', e.target.value)}
           error={error?.nome_fant}
+          required
         />
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={fornecedor.fabricante === 'S'}
+              onChange={(e) => handleFornecedorChange('fabricante', e.target.checked ? 'S' : 'N')}
+              className="rounded border-gray-300 dark:border-gray-600"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Fabricante</span>
+          </label>
+        </div>
         <div className="flex gap-4 justify-between">
-          <p className="text-gray-700 font-bold">
+          <p className="text-gray-700 dark:text-gray-200 font-bold">
             ENDEREÇO PARA CORRESPONDÊNCIA
           </p>
         </div>

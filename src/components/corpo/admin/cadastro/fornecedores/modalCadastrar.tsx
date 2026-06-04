@@ -11,6 +11,7 @@ import { getBairroByDescricao } from '@/data/bairros/bairros';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { CircleCheck } from 'lucide-react';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { campoParaAba } from './_forms/campoParaAba';
 import { cadastroFornecedorSchema } from '@/data/fornecedores/schemas'; // Importa o novo schema
 import {
@@ -65,7 +66,30 @@ export default function CustomModal({
 
   const { toast } = useToast();
 
-  const handleActiveTab = (tab: string) => setActiveTab(tab);
+  const [modalConfirmAba, setModalConfirmAba] = useState(false);
+  const [abaPendente, setAbaPendente] = useState<string | null>(null);
+
+  const camposObrigatoriosPorAba: Record<string, string[]> = {
+    dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf'],
+    dadosFinanceiros: ['regime_tributacao'],
+    regrasFaturamento: [],
+  };
+
+  const handleActiveTab = (tab: string) => {
+    const camposAba = camposObrigatoriosPorAba[activeTab] || [];
+    const camposPendentes = camposAba.filter((campo) => {
+      const valor = (fornecedor as any)[campo];
+      return valor === undefined || valor === null || valor === '';
+    });
+
+    if (camposPendentes.length > 0) {
+      setAbaPendente(tab);
+      setModalConfirmAba(true);
+      return;
+    }
+
+    setActiveTab(tab);
+  };
 
   const handleFornecedorChange = useCallback(
     (field: keyof Fornecedor, value: any) => {
@@ -395,6 +419,27 @@ export default function CustomModal({
         content={mensagemInfo}
       />
       <Toaster />
+
+      {/* Modal de confirmação ao trocar aba com campos pendentes */}
+      <ConfirmationModal
+        isOpen={modalConfirmAba}
+        onClose={() => {
+          setModalConfirmAba(false);
+          setAbaPendente(null);
+        }}
+        onConfirm={() => {
+          setModalConfirmAba(false);
+          if (abaPendente) {
+            setActiveTab(abaPendente);
+            setAbaPendente(null);
+          }
+        }}
+        title="Campos obrigatórios pendentes"
+        message={`Existem campos obrigatórios não preenchidos na aba "${tabs.find((t) => t.key === activeTab)?.name || activeTab}". Deseja prosseguir mesmo assim?`}
+        type="warning"
+        confirmText="Prosseguir"
+        cancelText="Voltar e corrigir"
+      />
     </div>
   );
 }

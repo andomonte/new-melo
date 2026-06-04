@@ -69,6 +69,7 @@ const DadosFinanceiros: React.FC<DadosFinanceirosProps> = ({
         <SelectInput
           name="regime_tributacao"
           label="Regime Tributário"
+          required
           options={regimeTributarioOptions}
           defaultValue={fornecedor.regime_tributacao || ''}
           onValueChange={(value) =>

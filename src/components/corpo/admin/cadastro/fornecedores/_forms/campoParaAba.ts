@@ -4,7 +4,9 @@ export const campoParaAba: Record<string, string> = {
   // Dados Cadastrais
   tipo: 'dadosCadastrais',
   nome: 'dadosCadastrais',
+  nome_fant: 'dadosCadastrais',
   nomefantasia: 'dadosCadastrais',
+  fabricante: 'dadosCadastrais',
   cnpj: 'dadosCadastrais',
   cpf: 'dadosCadastrais',
   cpf_cgc: 'dadosCadastrais',
@@ -37,6 +39,7 @@ export const campoParaAba: Record<string, string> = {
   isuframa: 'dadosCadastrais',
 
   // Dados Financeiros
+  regime_tributacao: 'dadosFinanceiros',
   prazo: 'dadosFinanceiros',
   percdescfin: 'dadosFinanceiros',
   limcred: 'dadosFinanceiros',

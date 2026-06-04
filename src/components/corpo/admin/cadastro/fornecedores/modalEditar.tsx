@@ -22,6 +22,7 @@ import { Toaster } from '@/components/ui/toaster';
 import ModalForm from '@/components/common/modalform';
 import InfoModal from '@/components/common/infoModal';
 import { CircleCheck } from 'lucide-react';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
 
 const tabs = [
   { name: 'Dados Cadastrais', key: 'dadosCadastrais' },
@@ -65,7 +66,28 @@ export default function CustomModal({
 
   const { toast } = useToast();
 
+  const [modalConfirmAba, setModalConfirmAba] = useState(false);
+  const [abaPendente, setAbaPendente] = useState<string | null>(null);
+
+  const camposObrigatoriosPorAba: Record<string, string[]> = {
+    dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf'],
+    dadosFinanceiros: ['regime_tributacao'],
+    regrasFaturamento: [],
+  };
+
   const handleActiveTab = (tab: string) => {
+    const camposAba = camposObrigatoriosPorAba[activeTab] || [];
+    const camposPendentes = camposAba.filter((campo) => {
+      const valor = (fornecedor as any)[campo];
+      return valor === undefined || valor === null || valor === '';
+    });
+
+    if (camposPendentes.length > 0) {
+      setAbaPendente(tab);
+      setModalConfirmAba(true);
+      return;
+    }
+
     setActiveTab(tab);
   };
 
@@ -465,6 +487,26 @@ export default function CustomModal({
         content={mensagemInfo}
       />
       <Toaster />
+
+      <ConfirmationModal
+        isOpen={modalConfirmAba}
+        onClose={() => {
+          setModalConfirmAba(false);
+          setAbaPendente(null);
+        }}
+        onConfirm={() => {
+          setModalConfirmAba(false);
+          if (abaPendente) {
+            setActiveTab(abaPendente);
+            setAbaPendente(null);
+          }
+        }}
+        title="Campos obrigatórios pendentes"
+        message={`Existem campos obrigatórios não preenchidos na aba "${tabs.find((t) => t.key === activeTab)?.name || activeTab}". Deseja prosseguir mesmo assim?`}
+        type="warning"
+        confirmText="Prosseguir"
+        cancelText="Voltar e corrigir"
+      />
     </div>
   );
 }
