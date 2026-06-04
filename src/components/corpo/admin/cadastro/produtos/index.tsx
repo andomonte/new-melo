@@ -106,8 +106,11 @@ const ProdutosPage = () => {
   const [headers, setHeaders] = useState<string[]>([]);
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const salvo = localStorage.getItem('limiteColunasProutos');
-    return salvo ? parseInt(salvo, 10) : 5;
+    return salvo ? parseInt(salvo, 10) : 10;
   });
+
+  // Colunas prioritárias na ordem do Delphi
+  const colunasPrioritarias = ['codprod', 'ref', 'descr', 'codmarca', 'qtest', 'prvenda', 'prcompra', 'unimed', 'codbar', 'obs'];
 
   // Estados de modais
   const [cadastrarOpen, setCadastrarOpen] = useState(false);
@@ -281,14 +284,15 @@ const ProdutosPage = () => {
           const colunasDinamicas = Object.keys(data.data[0]).filter(
             (coluna) => !['selecionar', 'ações'].includes(coluna.toLowerCase()),
           );
-          const filtrasColunasDinamicas = colunasDinamicas.slice(
-            0,
-            limiteColunas,
-          );
+          // Ordena colunas: prioritárias primeiro, depois as restantes
+          const ordenadas = [
+            ...colunasPrioritarias.filter(c => colunasDinamicas.includes(c)),
+            ...colunasDinamicas.filter(c => !colunasPrioritarias.includes(c)),
+          ];
+          const filtrasColunasDinamicas = ordenadas.slice(0, limiteColunas);
 
           setColunasDbProd(colunasDinamicas);
 
-          // Headers: selecionar, ações, e colunas dinâmicas
           const novosHeaders = ['selecionar', 'ações', ...filtrasColunasDinamicas];
           setHeaders(novosHeaders);
           console.log(
@@ -365,14 +369,15 @@ const ProdutosPage = () => {
           const colunasDinamicas = Object.keys(data.data[0]).filter(
             (coluna) => !['selecionar', 'ações'].includes(coluna.toLowerCase()),
           );
-          const filtrasColunasDinamicas = colunasDinamicas.slice(
-            0,
-            limiteColunas,
-          );
+          // Ordena colunas: prioritárias primeiro, depois as restantes
+          const ordenadas = [
+            ...colunasPrioritarias.filter(c => colunasDinamicas.includes(c)),
+            ...colunasDinamicas.filter(c => !colunasPrioritarias.includes(c)),
+          ];
+          const filtrasColunasDinamicas = ordenadas.slice(0, limiteColunas);
 
           setColunasDbProd(colunasDinamicas);
 
-          // Headers: selecionar, ações, e colunas dinâmicas
           const novosHeaders = ['selecionar', 'ações', ...filtrasColunasDinamicas];
           setHeaders(novosHeaders);
         }
