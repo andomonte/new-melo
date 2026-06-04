@@ -127,18 +127,28 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             label="Tipo"
             options={tipoPessoaOptions}
             defaultValue={fornecedor.tipo || ''}
-            onValueChange={(value) => handleFornecedorChange('tipo', value)}
+            onValueChange={(value) => {
+              handleFornecedorChange('tipo', value);
+              // Exterior: seta CPF como "EXTERIOR" e limpa tipo fornecedor
+              if (value === 'X') {
+                handleFornecedorChange('cpf_cgc', 'EXTERIOR');
+                handleFornecedorChange('tipofornecedor', '');
+              } else if (fornecedor.cpf_cgc === 'EXTERIOR') {
+                handleFornecedorChange('cpf_cgc', '');
+              }
+            }}
             error={error?.tipo}
           />
           <FormInput
             name="cpf_cgc"
             type="text"
-            label={fornecedor.tipo === 'F' ? 'CPF' : 'CNPJ'}
+            label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
             defaultValue={fornecedor.cpf_cgc || ''}
             onChange={(e) => handleFornecedorChange('cpf_cgc', e.target.value)}
-            onBlur={(e) => validarCnpjCpf(e.target.value)}
-            error={cnpjCpfError || error?.cpf_cgc}
+            onBlur={(e) => fornecedor.tipo !== 'X' ? validarCnpjCpf(e.target.value) : undefined}
+            error={fornecedor.tipo !== 'X' ? (cnpjCpfError || error?.cpf_cgc) : undefined}
             required
+            disabled={fornecedor.tipo === 'X'}
           />
           <SelectInput
             name="tipoemp"
@@ -366,12 +376,17 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               handleFornecedorChange('tipofornecedor', value)
             }
             error={error?.tipofornecedor}
-            required
+            required={fornecedor.tipo !== 'X'}
+            disabled={fornecedor.tipo === 'X'}
           />
-          <SearchSelectInput
-            name="contacontabil"
-            label="Conta Contábil"
-            options={[]}
+          <FormInput
+            name="codccontabil"
+            type="text"
+            label={`Conta Contábil${fornecedor.tipo === 'X' ? ' *' : ''}`}
+            defaultValue={fornecedor.codccontabil || ''}
+            onChange={(e) => handleFornecedorChange('codccontabil', e.target.value)}
+            error={error?.codccontabil}
+            required={fornecedor.tipo === 'X'}
           />
         </div>
       </div>

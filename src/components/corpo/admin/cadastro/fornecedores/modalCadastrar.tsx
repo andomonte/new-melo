@@ -255,7 +255,30 @@ export default function CustomModal({
         cpf_cgc: fornecedorParaValidacao.cpf_cgc,
       });
 
-      // ✅ CORREÇÃO: Validar dados antes de enviar com tratamento de erro melhorado
+      // Validação: Exterior exige Conta Contábil
+      if (fornecedorParaValidacao.tipo === 'X' && !fornecedorParaValidacao.codccontabil) {
+        toast({ description: 'Conta Contábil é obrigatória para fornecedor Exterior.', variant: 'destructive' });
+        setActiveTab('dadosCadastrais');
+        return;
+      }
+
+      // Validação: PIS/COFINS quando regra diferenciada ativa
+      if (disableFields.regraDiferenciada) {
+        const piscofinsVazios = [
+          fornecedorParaValidacao.piscofins_365,
+          fornecedorParaValidacao.piscofins_925,
+          fornecedorParaValidacao.piscofins_1150,
+          fornecedorParaValidacao.piscofins_1310,
+        ].some((v) => v === undefined || v === null || v === '');
+
+        if (piscofinsVazios) {
+          toast({ description: 'Todos os campos PIS/COFINS são obrigatórios quando a regra diferenciada está ativa.', variant: 'destructive' });
+          setActiveTab('regrasFaturamento');
+          return;
+        }
+      }
+
+      // Validar dados antes de enviar
       console.log('🔍 Validando dados do fornecedor...');
       try {
         cadastroFornecedorSchema.parse({

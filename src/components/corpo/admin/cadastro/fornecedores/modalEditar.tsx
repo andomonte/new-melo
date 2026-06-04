@@ -316,6 +316,29 @@ export default function CustomModal({
           dadosParaValidacao.codcf,
         );
 
+        // Validação: Exterior exige Conta Contábil
+        if (fornecedor.tipo === 'X' && !fornecedor.codccontabil) {
+          toast({ description: 'Conta Contábil é obrigatória para fornecedor Exterior.', variant: 'destructive' });
+          setActiveTab('dadosCadastrais');
+          return;
+        }
+
+        // Validação: PIS/COFINS quando regra diferenciada ativa
+        if (disableFields.regraDiferenciada) {
+          const piscofinsVazios = [
+            fornecedor.piscofins_365,
+            fornecedor.piscofins_925,
+            fornecedor.piscofins_1150,
+            fornecedor.piscofins_1310,
+          ].some((v) => v === undefined || v === null || v === '');
+
+          if (piscofinsVazios) {
+            toast({ description: 'Todos os campos PIS/COFINS são obrigatórios quando a regra diferenciada está ativa.', variant: 'destructive' });
+            setActiveTab('regrasFaturamento');
+            return;
+          }
+        }
+
         edicaoFornecedorSchema.parse(dadosParaValidacao);
         console.log('✅ Validação de dados bem-sucedida');
       } catch (validationError) {
