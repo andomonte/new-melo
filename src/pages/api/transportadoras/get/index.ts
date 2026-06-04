@@ -26,43 +26,25 @@ export default async function handle(
     const offset = (Number(page) - 1) * Number(perPage);
     const limit = Number(perPage);
     const searchTerm = `%${search}%`;
+    const searchDigits = String(search).replace(/\D/g, '');
+    const searchDigitsTerm = searchDigits.length >= 3 ? `%${searchDigits}%` : null;
 
-    // Query de busca com filtros e paginação
+    // Query de busca com filtros e paginação (inclui busca por CPF/CNPJ sem formatação)
+    const digitClause = searchDigitsTerm
+      ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4`
+      : '';
+
     const query = `
-      SELECT 
-        codtransp,
-        nome,
-        nomefant,
-        cpfcgc,
-        tipo,
-        data_cad,
-        ender,
-        bairro,
-        cidade,
-        uf,
-        iest,
-        isuframa,
-        imun,
-        tipoemp,
-        contatos,
-        cc,
-        n_agencia,
-        banco,
-        cod_ident,
-        cep,
-        codbairro,
-        codmunicipio,
-        numero,
-        referencia,
-        CAST(codpais AS INTEGER) AS codpais,
-        complemento,
-        codunico
+      SELECT
+        codtransp, nome, nomefant, cpfcgc, tipo, data_cad,
+        ender, bairro, cidade, uf, iest, isuframa, imun, tipoemp,
+        contatos, cc, n_agencia, banco, cod_ident, cep,
+        codbairro, codmunicipio, numero, referencia,
+        CAST(codpais AS INTEGER) AS codpais, complemento, codunico
       FROM dbtransp
-      WHERE 
-        codtransp ILIKE $1 OR
-        nome ILIKE $1 OR
-        nomefant ILIKE $1 OR
-        cpfcgc ILIKE $1
+      WHERE
+        codtransp ILIKE $1 OR nome ILIKE $1 OR nomefant ILIKE $1 OR cpfcgc ILIKE $1
+        ${digitClause}
       ORDER BY nome ASC
       LIMIT $2 OFFSET $3;
     `;
@@ -70,16 +52,24 @@ export default async function handle(
     const countQuery = `
       SELECT COUNT(*) as total
       FROM dbtransp
-      WHERE 
-        codtransp ILIKE $1 OR
-        nome ILIKE $1 OR
-        nomefant ILIKE $1 OR
-        cpfcgc ILIKE $1;
+      WHERE
+        codtransp ILIKE $1 OR nome ILIKE $1 OR nomefant ILIKE $1 OR cpfcgc ILIKE $1
+        ${digitClause};
     `;
 
+    const queryParams = searchDigitsTerm
+      ? [searchTerm, limit, offset, searchDigitsTerm]
+      : [searchTerm, limit, offset];
+    const countParams = searchDigitsTerm
+      ? [searchTerm, searchDigitsTerm]
+      : [searchTerm];
+    const countQueryFinal = searchDigitsTerm
+      ? countQuery.replace('$4', '$2')
+      : countQuery;
+
     const [dataResult, countResult] = await Promise.all([
-      client.query(query, [searchTerm, limit, offset]),
-      client.query(countQuery, [searchTerm]),
+      client.query(query, queryParams),
+      client.query(countQueryFinal, countParams),
     ]);
 
     const total = parseInt(countResult.rows[0].total, 10);

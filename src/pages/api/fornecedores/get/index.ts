@@ -27,20 +27,31 @@ export default async function handle(
     const perPageNumber = Number(perPage);
     const offset = (pageNumber - 1) * perPageNumber;
 
-    // Construir a cláusula WHERE
-    const whereClause = search
-      ? 'WHERE cod_credor ILIKE $1 OR nome ILIKE $1 OR nome_fant ILIKE $1'
-      : '';
-    const queryParams = search ? [`%${search}%`] : [];
+    // Construir a cláusula WHERE — busca por código, nome, fantasia e CPF/CNPJ (com e sem formatação)
+    const searchDigits = String(search).replace(/\D/g, '');
+    const hasDigitSearch = searchDigits.length >= 3;
 
-    // Adicionar parâmetros de paginação
-    const limitOffset = search ? 'OFFSET $2 LIMIT $3' : 'OFFSET $1 LIMIT $2';
+    let whereClause = '';
+    const queryParams: any[] = [];
+    let paramIdx = 1;
 
     if (search) {
-      queryParams.push(offset.toString(), perPageNumber.toString());
-    } else {
-      queryParams.push(offset.toString(), perPageNumber.toString());
+      const searchTerm = `%${search}%`;
+      queryParams.push(searchTerm);
+      whereClause = `WHERE (cod_credor ILIKE $${paramIdx} OR nome ILIKE $${paramIdx} OR nome_fant ILIKE $${paramIdx} OR cpf_cgc ILIKE $${paramIdx}`;
+      paramIdx++;
+
+      if (hasDigitSearch) {
+        queryParams.push(`%${searchDigits}%`);
+        whereClause += ` OR REPLACE(REPLACE(REPLACE(REPLACE(cpf_cgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $${paramIdx}`;
+        paramIdx++;
+      }
+      whereClause += ')';
     }
+
+    // Paginação
+    queryParams.push(offset, perPageNumber);
+    const limitOffset = `OFFSET $${paramIdx} LIMIT $${paramIdx + 1}`;
 
     // Buscar os fornecedores
     const fornecedoresResult = await client.query(
@@ -49,7 +60,7 @@ export default async function handle(
     );
 
     // Contar o total
-    const countParams = search ? [`%${search}%`] : [];
+    const countParams = queryParams.slice(0, paramIdx - 1);
     const countResult = await client.query(
       `SELECT COUNT(*) as total FROM dbcredor ${whereClause}`,
       countParams,
