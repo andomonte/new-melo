@@ -127,33 +127,35 @@ export default function RelatorioConciliacaoCartao() {
   const erros = registros.filter(r => r.status === 'ERRO');
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto p-6 space-y-6">
-        {/* Cabeçalho */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Relatório de Conciliação
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Visualização consolidada de transações de cartão
-            </p>
-          </div>
-          <Button onClick={buscarDados} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
+    <div className="h-full flex flex-col border border-gray-300 bg-white dark:bg-slate-900">
+      {/* Cabeçalho fixo */}
+      <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-gray-200 dark:border-zinc-700">
+        <div>
+          <h1 className="text-base font-semibold text-black dark:text-white">
+            Relatório de Conciliação de Cartão
+          </h1>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+            Visualização consolidada de transações de cartão
+          </p>
         </div>
+        <Button onClick={buscarDados} disabled={loading} size="sm">
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
+      </div>
+
+      {/* Conteúdo com scroll */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
       {/* Filtros */}
-      <Card className="shadow-md">
-        <CardHeader className="border-b">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Filter className="w-5 h-5" />
+      <Card className="shadow-sm">
+        <CardHeader className="border-b py-2 px-4">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Filter className="w-4 h-4" />
             Filtros
           </h2>
         </CardHeader>
-        <CardContent className="pt-6">
+        <CardContent className="pt-4 px-4 pb-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="dataInicio">Data Início</Label>
@@ -459,3 +461,4 @@ export default function RelatorioConciliacaoCartao() {
     </div>
   );
 }
+
