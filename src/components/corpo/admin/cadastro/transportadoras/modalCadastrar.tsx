@@ -11,6 +11,7 @@ import InfoModal from '@/components/common/infoModal';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { CircleCheck } from 'lucide-react';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { campoParaAba } from './_forms/campoParaAba';
 import { z } from 'zod';
 
@@ -39,7 +40,28 @@ export default function CustomModal({
 
   const { toast } = useToast();
 
-  const handleActiveTab = (tab: string) => setActiveTab(tab);
+  const [modalConfirmAba, setModalConfirmAba] = useState(false);
+  const [abaPendente, setAbaPendente] = useState<string | null>(null);
+
+  const camposObrigatoriosPorAba: Record<string, string[]> = {
+    dadosCadastrais: ['nome', 'cpfcgc'],
+    dadosFinanceiros: [],
+    calculoFrete: [],
+  };
+
+  const handleActiveTab = (tab: string) => {
+    const camposAba = camposObrigatoriosPorAba[activeTab] || [];
+    const camposPendentes = camposAba.filter((campo) => {
+      const valor = (transportadora as any)[campo];
+      return valor === undefined || valor === null || valor === '';
+    });
+    if (camposPendentes.length > 0) {
+      setAbaPendente(tab);
+      setModalConfirmAba(true);
+      return;
+    }
+    setActiveTab(tab);
+  };
 
   const handleTransportadoraChange = useCallback(
     (field: string, value: any) => {
@@ -155,6 +177,16 @@ export default function CustomModal({
         content={mensagemInfo}
       />
       <Toaster />
+      <ConfirmationModal
+        isOpen={modalConfirmAba}
+        onClose={() => { setModalConfirmAba(false); setAbaPendente(null); }}
+        onConfirm={() => { setModalConfirmAba(false); if (abaPendente) { setActiveTab(abaPendente); setAbaPendente(null); } }}
+        title="Campos obrigatórios pendentes"
+        message={`Existem campos obrigatórios não preenchidos na aba "${tabs.find((t) => t.key === activeTab)?.name || activeTab}". Deseja prosseguir mesmo assim?`}
+        type="warning"
+        confirmText="Prosseguir"
+        cancelText="Voltar e corrigir"
+      />
     </div>
   );
 }

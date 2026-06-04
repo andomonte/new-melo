@@ -1,552 +1,255 @@
-import React, { useEffect, useRef, useState, useContext } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
 import {
   Transportadoras,
   buscaTransportadoras,
   getTransportadoras,
 } from '@/data/transportadoras/transportadoras';
 import { useDebouncedCallback } from 'use-debounce';
-import DataTable from '@/components/common/DataTableFiltro';
+import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import Cadastrar from './modalCadastrar';
 import Editar from './modalEditar';
 import { GoPencil } from 'react-icons/go';
+import { BsTruck } from 'react-icons/bs';
 import { PlusIcon, CircleChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
-
-// Tipos de permissão e usuário
-export type Permissao = {
-  cadastrar?: boolean;
-  editar?: boolean;
-  remover?: boolean;
-  consultar?: boolean;
-  grupoId: string;
-  id: number;
-  tb_telas: {
-    CODIGO_TELA: number;
-    PATH_TELA: string;
-    NOME_TELA: string;
-  };
-};
-
-type User = {
-  usuario: string;
-  perfil: string;
-  obs: string;
-  codusr: string;
-  filial: string;
-  permissoes?: Permissao[];
-  funcoes?: string[];
-};
-
-interface AuthContextProps {
-  user: User | null;
-}
 
 const TransportadorasPage = () => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [transportadoras, setTransportadoras] = useState<Transportadoras>(
-    {} as Transportadoras,
+    { data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 } } as any,
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [cadastrarOpen, setCadastrarOpen] = useState(false);
   const [editarOpen, setEditarOpen] = useState(false);
   const [idTransportadora, setIdTransportadora] = useState<string>('');
   const [filtros, setFiltros] = useState<
     { campo: string; tipo: string; valor: string }[]
   >([]);
-
   const [colunasDbTransp, setColunasDbTransp] = useState<string[]>([]);
-  const [limiteColunas, setLimiteColunas] = useState<number>(5);
-
-  const { dismiss, toast } = useToast();
-  const { user } = useContext(AuthContext) as AuthContextProps;
-
-  const [userPermissions, setUserPermissions] = useState<{
-    cadastrar: boolean;
-    editar: boolean;
-    remover: boolean;
-    consultar: boolean;
-  }>({ cadastrar: false, editar: false, remover: false, consultar: true });
-
-  // Estados para o Dropdown de Ações
-  const [dropdownStates, setDropdownStates] = useState<{
-    [key: string]: boolean;
-  }>({});
-  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
-  const actionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>(
-    {},
-  );
-  const [dropdownPositions, setDropdownPositions] = useState<{
-    [key: string]: { top: number; left: number } | null;
-  }>({});
-  const [iconRotations, setIconRotations] = useState<{
-    [key: string]: boolean;
-  }>({});
-
-  const ultimaChamada = useRef({
-    page: 0,
-    perPage: 0,
-    filtros: [] as { campo: string; tipo: string; valor: string }[],
-    limiteColunas,
-  });
-
-  const ultimaChamadaUnico = useRef({
-    page: 0,
-    perPage: 0,
-    search: '',
+  const [limiteColunas, setLimiteColunas] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const salvo = localStorage.getItem('limiteColunasTransportadoras');
+      return salvo ? parseInt(salvo, 10) : 5;
+    }
+    return 5;
   });
   const [headers, setHeaders] = useState<string[]>([]);
+  const { toast } = useToast();
+  const { user } = useContext(AuthContext) as any;
 
-  const fetchTransportadoras = async ({
-    page,
-    perPage,
-    filtros,
-  }: {
-    page: number;
-    perPage: number;
-    filtros: { campo: string; tipo: string; valor: string }[];
-  }) => {
-    const ultima = ultimaChamada.current;
-    const filtrosString = JSON.stringify(filtros);
-    const ultimaFiltrosString = JSON.stringify(ultima.filtros);
+  // Dropdown
+  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const actionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  const [dropdownStates, setDropdownStates] = useState<{ [key: string]: boolean }>({});
+  const [dropdownPositions, setDropdownPositions] = useState<{ [key: string]: { top: number; left: number } | null }>({});
+  const [iconRotations, setIconRotations] = useState<{ [key: string]: boolean }>({});
 
-    if (
-      ultima.page === page &&
-      ultima.perPage === perPage &&
-      filtrosString === ultimaFiltrosString &&
-      limiteColunas === ultima.limiteColunas
-    ) {
+  const closeAllDropdowns = useCallback(() => {
+    setDropdownStates({});
+    setIconRotations({});
+    setDropdownPositions({});
+  }, []);
+
+  const toggleDropdown = (id: string, buttonElement: HTMLButtonElement) => {
+    const wasOpen = dropdownStates[id];
+    closeAllDropdowns();
+    if (!wasOpen) {
+      const rect = buttonElement.getBoundingClientRect();
+      const dropdownWidth = 144;
+      let leftPosition = rect.right + window.scrollX + 5;
+      if (window.innerWidth - rect.right < dropdownWidth) {
+        leftPosition = rect.left + window.scrollX - dropdownWidth;
+      }
+      setDropdownStates({ [id]: true });
+      setIconRotations({ [id]: true });
+      setDropdownPositions({ [id]: { top: rect.top + window.scrollY, left: leftPosition } });
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      let shouldClose = true;
+      for (const id in dropdownStates) {
+        if (
+          dropdownRefs.current[id]?.contains(event.target as Node) ||
+          actionButtonRefs.current[id]?.contains(event.target as Node)
+        ) {
+          shouldClose = false;
+          break;
+        }
+      }
+      if (shouldClose) closeAllDropdowns();
+    };
+    document.addEventListener('mouseup', handleClickOutside);
+    return () => document.removeEventListener('mouseup', handleClickOutside);
+  }, [dropdownStates, closeAllDropdowns]);
+
+  // Busca — exige 3+ caracteres
+  const fetchData = useCallback(async () => {
+    const temBusca = search && search.length >= 3;
+    const temFiltros = filtros && filtros.length > 0;
+
+    if (!temBusca && !temFiltros) {
+      setTransportadoras({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage } } as any);
+      setLoading(false);
       return;
     }
 
-    ultimaChamada.current = { page, perPage, filtros, limiteColunas };
-
     setLoading(true);
-
     try {
-      const data = await buscaTransportadoras({ page, perPage, filtros });
-      setTransportadoras(data);
+      const response = temBusca
+        ? await getTransportadoras({ page, perPage, search })
+        : await buscaTransportadoras({ page, perPage, filtros });
+      setTransportadoras(response);
 
-      if (data.data?.length > 0) {
-        const colunasDinamicas = Object.keys(data.data[0]).filter(
-          (coluna) => coluna !== 'ações',
+      if (response.data?.length > 0) {
+        const colunasDinamicas = Object.keys(response.data[0]).filter(
+          (coluna) => !['ações'].includes(coluna.toLowerCase()),
         );
-        const filtrasColunasDinamicas = colunasDinamicas.slice(
-          0,
-          limiteColunas,
-        );
+        const colunasFiltradas = colunasDinamicas.slice(0, limiteColunas);
         setColunasDbTransp(colunasDinamicas);
-        if (!filtrasColunasDinamicas.includes('ações')) {
-          filtrasColunasDinamicas.push('ações');
-        }
-        setHeaders(filtrasColunasDinamicas);
+        setHeaders(['ações', ...colunasFiltradas]);
+      } else {
+        setHeaders(['ações']);
       }
     } catch (error) {
-      console.error('Erro ao buscar transportadoras:', error);
       toast({
         title: 'Erro ao carregar transportadoras',
-        description: 'Não foi possível obter os dados. Verifique sua conexão.',
+        description: 'Verifique sua conexão e tente novamente.',
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, perPage, search, filtros, limiteColunas, toast]);
 
   useEffect(() => {
-    if (search) {
-      fetchTransportadorasUnico({ page, perPage, search });
-    } else {
-      fetchTransportadoras({ page, perPage, filtros });
-    }
-    dismiss();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, perPage, filtros, limiteColunas]);
+    fetchData();
+  }, [fetchData]);
 
-  useEffect(() => {
-    // Carregar limiteColunas do localStorage apenas no cliente
-    const salvo = localStorage.getItem('limiteColunasTransportadoras');
-    if (salvo) {
-      setLimiteColunas(parseInt(salvo, 10));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (headers.length)
-      localStorage.setItem(
-        'headersSelecionadosTransportadoras',
-        JSON.stringify(headers),
-      );
-  }, [headers]);
-
-  const fetchTransportadorasUnico = async ({
-    page,
-    perPage,
-    search,
-  }: {
-    page: number;
-    perPage: number;
-    search: string;
-  }) => {
-    const ultima = ultimaChamadaUnico.current;
-    if (
-      ultima.page === page &&
-      ultima.perPage === perPage &&
-      ultima.search === search
-    ) {
-      return;
-    }
-
-    ultimaChamadaUnico.current = { page, perPage, search };
-
-    setLoading(true);
-    try {
-      const data = await getTransportadoras({ page, perPage, search });
-      setTransportadoras(data);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const debouncedSearchUnico = useDebouncedCallback((value: string) => {
+  const debouncedSearch = useDebouncedCallback((value: string) => {
     setPage(1);
-    if (value) {
-      fetchTransportadorasUnico({ page: 1, perPage, search: value });
-    } else {
-      fetchTransportadoras({ page: 1, perPage, filtros });
-    }
+    setFiltros([]);
+    setSearch(value);
   }, 500);
-
-  // Funções de controle do Dropdown
-  const toggleDropdown = (id: string, buttonElement: HTMLButtonElement) => {
-    setDropdownStates((prevStates) => ({
-      ...prevStates,
-      [id]: !prevStates[id],
-    }));
-
-    setIconRotations((prevRotations) => ({
-      ...prevRotations,
-      [id]: !prevRotations[id],
-    }));
-
-    if (!dropdownStates[id]) {
-      const rect = buttonElement.getBoundingClientRect();
-      const dropdownWidth = 144;
-      const spaceRightOfButton = window.innerWidth - rect.right;
-
-      let leftPosition: number;
-      const topPosition = rect.top + window.scrollY;
-
-      leftPosition = rect.right + window.scrollX + 5;
-
-      if (spaceRightOfButton < dropdownWidth) {
-        leftPosition = rect.left + window.scrollX - dropdownWidth;
-      }
-
-      setDropdownPositions((prevPositions) => ({
-        ...prevPositions,
-        [id]: {
-          top: topPosition,
-          left: leftPosition,
-        },
-      }));
-    } else {
-      setDropdownPositions((prevPositions) => ({
-        ...prevPositions,
-        [id]: null,
-      }));
-    }
-  };
-
-  const closeAllDropdowns = () => {
-    setDropdownStates({});
-    setIconRotations({});
-    setDropdownPositions({});
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      let shouldClose = false;
-      for (const id in dropdownStates) {
-        if (dropdownStates[id]) {
-          const dropdownNode = dropdownRefs.current[id];
-          const actionButtonNode = actionButtonRefs.current[id];
-          if (
-            dropdownNode &&
-            !dropdownNode.contains(event.target as Node) &&
-            actionButtonNode &&
-            !actionButtonNode.contains(event.target as Node)
-          ) {
-            shouldClose = true;
-            break;
-          }
-        }
-      }
-      if (shouldClose) {
-        closeAllDropdowns();
-      }
-    };
-
-    document.addEventListener('mouseup', handleClickOutside);
-
-    return () => {
-      document.removeEventListener('mouseup', handleClickOutside);
-    };
-  }, [dropdownStates]);
-
-  useEffect(() => {
-    const checkPermissions = () => {
-      if (user?.permissoes && Array.isArray(user.permissoes)) {
-        const telaHref = sessionStorage.getItem('telaAtualMelo');
-        let parsedTelaHref: string | undefined;
-
-        if (telaHref) {
-          try {
-            parsedTelaHref = JSON.parse(telaHref);
-          } catch (e) {
-            console.warn('telaHref não era um JSON válido', e);
-            parsedTelaHref = telaHref;
-          }
-        }
-
-        const telaPerfil = user.permissoes.find(
-          (permissao) => permissao.tb_telas?.PATH_TELA === parsedTelaHref,
-        );
-
-        if (telaPerfil) {
-          setUserPermissions({
-            cadastrar: telaPerfil.cadastrar || false,
-            editar: telaPerfil.editar || false,
-            remover: telaPerfil.remover || false,
-            consultar: telaPerfil.consultar || true,
-          });
-        } else {
-          setUserPermissions({
-            cadastrar: false,
-            editar: false,
-            remover: false,
-            consultar: true,
-          });
-          toast({
-            variant: 'destructive',
-            title: 'Erro de Permissão',
-            description: 'Você não tem permissão para acessar esta página.',
-          });
-        }
-      } else {
-        setUserPermissions({
-          cadastrar: false,
-          editar: false,
-          remover: false,
-          consultar: true,
-        });
-        toast({
-          variant: 'destructive',
-          title: 'Erro de Permissão',
-          description: 'Você não tem permissão para acessar esta página.',
-        });
-      }
-    };
-    checkPermissions();
-  }, [user, toast]);
 
   const rows = transportadoras.data?.map((transportadora) => {
     const linha: Record<string, any> = {};
+    const id = transportadora.codtransp;
 
     headers?.forEach((coluna) => {
-      if (coluna !== 'ações') {
-        linha[coluna] =
-          transportadora[coluna as keyof typeof transportadora] ?? '';
+      if (coluna.toLowerCase() === 'ações') {
+        linha[coluna] = (
+          <div className="relative flex items-center justify-center">
+            <button
+              ref={(el) => { if (el) actionButtonRefs.current[id] = el; }}
+              className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition-all duration-200 ${iconRotations[id] ? 'rotate-180' : ''}`}
+              onClick={(e) => { e.stopPropagation(); toggleDropdown(id, e.currentTarget); }}
+              aria-label="Ações"
+            >
+              <CircleChevronDown size={18} />
+            </button>
+            {dropdownStates[id] && dropdownPositions[id] && createPortal(
+              <div
+                ref={(el) => { if (el) dropdownRefs.current[id] = el; }}
+                className="text-slate-800 bg-white dark:text-gray-100 dark:bg-slate-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5"
+                style={{ position: 'absolute', top: dropdownPositions[id]?.top, left: dropdownPositions[id]?.left, minWidth: '144px', zIndex: 999 }}
+              >
+                <button
+                  onClick={() => { setIdTransportadora(id); setEditarOpen(true); closeAllDropdowns(); }}
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-left"
+                >
+                  <GoPencil className="mr-2 text-gray-400 dark:text-gray-500" size={16} />
+                  Editar
+                </button>
+              </div>,
+              document.body,
+            )}
+          </div>
+        );
+      } else {
+        linha[coluna] = transportadora[coluna as keyof typeof transportadora] ?? '';
       }
     });
-
-    linha.ações = (
-      <div className="relative">
-        {userPermissions.editar && (
-          <button
-            ref={(el) => {
-              if (el) {
-                actionButtonRefs.current[transportadora.codtransp] = el;
-              }
-            }}
-            onClick={(e) =>
-              toggleDropdown(transportadora.codtransp, e.currentTarget)
-            }
-            className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-transform duration-200"
-            title="Mais Ações"
-            style={{
-              transform: iconRotations[transportadora.codtransp]
-                ? 'rotate(180deg)'
-                : 'rotate(0deg)',
-            }}
-          >
-            <CircleChevronDown size={18} />
-          </button>
-        )}
-
-        {dropdownStates[transportadora.codtransp] &&
-          dropdownPositions[transportadora.codtransp] &&
-          createPortal(
-            <div
-              ref={(el) => {
-                if (el) {
-                  dropdownRefs.current[transportadora.codtransp] = el;
-                }
-              }}
-              className="text-slate-800 bg-white dark:text-gray-100 dark:bg-slate-800 rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 focus:outline-none"
-              style={{
-                position: 'absolute',
-                top: dropdownPositions[transportadora.codtransp]?.top,
-                left: dropdownPositions[transportadora.codtransp]?.left,
-                minWidth: '144px',
-                zIndex: 999,
-              }}
-            >
-              <div
-                className="py-1"
-                role="menu"
-                aria-orientation="vertical"
-                aria-labelledby="options-menu-button"
-              >
-                {userPermissions.editar && (
-                  <button
-                    onClick={() => {
-                      setIdTransportadora(transportadora.codtransp);
-                      setEditarOpen(true);
-                      closeAllDropdowns();
-                    }}
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 w-full text-left"
-                    role="menuitem"
-                  >
-                    <GoPencil
-                      className="mr-2 text-gray-400 dark:text-gray-500"
-                      size={16}
-                    />
-                    Editar
-                  </button>
-                )}
-              </div>
-            </div>,
-            document.body,
-          )}
-      </div>
-    );
 
     return linha;
   });
 
-  const handleColunaSubstituida = (
-    colA: string,
-    colB: string,
-    tipo: 'swap' | 'replace' = 'replace',
-  ) => {
-    setHeaders((prev) => {
-      const novaOrdem = [...prev];
-      const indexA = novaOrdem.indexOf(colA);
-      const indexB = novaOrdem.indexOf(colB);
-
-      if (tipo === 'swap' && indexA !== -1 && indexB !== -1) {
-        [novaOrdem[indexA], novaOrdem[indexB]] = [
-          novaOrdem[indexB],
-          novaOrdem[indexA],
-        ];
-      } else if (tipo === 'replace' && indexA !== -1) {
-        const filteredHeaders = novaOrdem.filter((h) => h !== colB);
-        const actualIndexA = filteredHeaders.indexOf(colA);
-        if (actualIndexA !== -1) {
-          filteredHeaders[actualIndexA] = colB;
-        }
-        return filteredHeaders;
-      }
-      return novaOrdem;
-    });
-  };
-
   return (
-    <div className=" h-full flex flex-col flex-grow border border-gray-300  bg-white dark:bg-slate-900">
-      <main className="p-4  w-full">
-        <header className="mb-2">
-          <div className="flex justify-between mb-4 mr-6 ml-6">
-            <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
+    <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
+      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div>
+            <h1 className="text-base font-semibold text-black dark:text-white">
               Transportadoras
-            </div>
-            {userPermissions.cadastrar && (
-              <DefaultButton
-                onClick={() => {
-                  setCadastrarOpen(true);
-                }}
-                className="flex items-center gap-0 px-3 py-2 text-sm h-8"
-                text="Novo"
-                icon={<PlusIcon size={18} />}
-              />
-            )}
+            </h1>
           </div>
-        </header>
+          <div className="flex gap-2 items-center">
+            <DefaultButton
+              variant="primary"
+              size="default"
+              onClick={() => setCadastrarOpen(true)}
+              text="Novo"
+              icon={<PlusIcon size={16} />}
+            />
+          </div>
+        </div>
 
-        <DataTable
-          carregando={loading}
-          headers={headers}
-          rows={rows || []}
-          onColunaSubstituida={handleColunaSubstituida}
-          meta={transportadoras.meta}
-          onPageChange={(newPage) => {
-            setPage(newPage);
-          }}
-          onPerPageChange={(newPerPage) => {
-            setPerPage(newPerPage);
-            setPage(1); // Reset para primeira página ao mudar perPage
-          }}
-          onSearch={(e) => setSearch(e.target.value)}
-          onSearchBlur={() => debouncedSearchUnico(search)}
-          onSearchKeyDown={(e) => {
-            if (e.key === 'Enter') debouncedSearchUnico(search);
-          }}
-          searchInputPlaceholder="Pesquisar por código, nome, fantasia ou CPF/CNPJ..."
-          colunasFiltro={colunasDbTransp}
-          onFiltroChange={(novosFiltros) => {
-            setFiltros(novosFiltros);
-            setPage(1); // Reset para primeira página ao mudar filtros
-          }}
-          limiteColunas={limiteColunas}
-          onLimiteColunasChange={(novoLimite) => {
-            setLimiteColunas(novoLimite);
-            localStorage.setItem(
-              'limiteColunasTransportadoras',
-              novoLimite.toString(),
-            );
-          }}
-        />
+        {/* DataTable */}
+        <div className="flex-1 min-h-20 flex flex-col">
+          <DataTable
+            screenKey="cadastro-transportadoras"
+            userName={user?.usuario}
+            carregando={loading}
+            headers={headers}
+            rows={rows || []}
+            semColunaDeAcaoPadrao={true}
+            nonsortableColumns={['ações']}
+            meta={transportadoras.meta}
+            onPageChange={setPage}
+            onPerPageChange={(newPerPage) => { setPerPage(newPerPage); setPage(1); }}
+            onSearch={(e) => debouncedSearch(e.target.value)}
+            onSearchBlur={() => {}}
+            onSearchKeyDown={() => {}}
+            searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar..."
+            noDataMessage={!search || search.length < 3 ? (
+              <div className="flex flex-col items-center">
+                <BsTruck className="dark:text-purple-300 text-purple-600" size={60} />
+                <div className="text-center font-bold dark:text-purple-300 text-purple-600 mt-3">PESQUISAR UMA TRANSPORTADORA</div>
+                <div className="text-purple-600 dark:text-purple-300 text-xs mt-1">Digite pelo menos 3 caracteres e pressione enter...</div>
+              </div>
+            ) : 'Nenhuma transportadora encontrada'}
+            colunasFiltro={colunasDbTransp}
+            onFiltroChange={(novosFiltros) => { setPage(1); setSearch(''); setFiltros(novosFiltros); }}
+            limiteColunas={limiteColunas}
+            onLimiteColunasChange={(novoLimite) => {
+              setLimiteColunas(novoLimite);
+              localStorage.setItem('limiteColunasTransportadoras', novoLimite.toString());
+            }}
+          />
+        </div>
       </main>
 
       <Cadastrar
         isOpen={cadastrarOpen}
         onClose={() => setCadastrarOpen(false)}
-        onSuccess={() => {
-          setPage(1);
-          if (search) {
-            fetchTransportadorasUnico({ page: 1, perPage, search });
-          } else {
-            fetchTransportadoras({ page: 1, perPage, filtros });
-          }
-        }}
+        onSuccess={() => { setPage(1); fetchData(); }}
       />
 
-      <Editar
-        isOpen={editarOpen}
-        onClose={() => setEditarOpen(false)}
-        transportadoraId={idTransportadora}
-        onSuccess={() => {
-          if (search) {
-            fetchTransportadorasUnico({ page, perPage, search });
-          } else {
-            fetchTransportadoras({ page, perPage, filtros });
-          }
-        }}
-      />
+      {editarOpen && (
+        <Editar
+          isOpen={editarOpen}
+          onClose={() => setEditarOpen(false)}
+          transportadoraId={idTransportadora}
+          onSuccess={fetchData}
+        />
+      )}
     </div>
   );
 };
