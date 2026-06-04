@@ -144,11 +144,11 @@ export default function RelatorioConciliacaoCartao() {
         </Button>
       </div>
 
-      {/* Conteúdo com scroll */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Conteúdo */}
+      <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
 
-      {/* Filtros */}
-      <Card className="shadow-sm">
+      {/* Filtros — fixo no topo */}
+      <Card className="shadow-sm flex-shrink-0">
         <CardHeader className="border-b py-2 px-4">
           <h2 className="text-sm font-semibold flex items-center gap-2">
             <Filter className="w-4 h-4" />
@@ -226,9 +226,9 @@ export default function RelatorioConciliacaoCartao() {
         </CardContent>
       </Card>
 
-      {/* Estatísticas */}
+      {/* Estatísticas — fixo */}
       {estatisticas.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-shrink-0">
           {estatisticas.map((stat) => (
             <Card key={stat.status} className={`shadow-md ${
               stat.status === 'CONCILIADO' ? 'border-l-4 border-l-green-500 bg-green-50 dark:bg-green-900/10' :
@@ -262,18 +262,18 @@ export default function RelatorioConciliacaoCartao() {
         </div>
       )}
 
-      {/* Tabela de Registros - 3 Colunas */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Tabela de Registros - 3 Colunas — ocupa todo o espaço restante */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
         {/* Coluna 1: Conciliados */}
-        <Card className="shadow-lg border-2 border-green-300 dark:border-green-700">
-          <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-b-2 border-green-200">
-            <h3 className="font-bold text-lg flex items-center gap-2 text-green-800 dark:text-green-200">
-              <CheckCircle className="w-5 h-5" />
+        <Card className="shadow-lg border-2 border-green-300 dark:border-green-700 flex flex-col overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-b-2 border-green-200 flex-shrink-0">
+            <h3 className="font-bold text-sm flex items-center gap-2 text-green-800 dark:text-green-200">
+              <CheckCircle className="w-4 h-4" />
               Conciliados ({conciliados.length})
             </h3>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-[600px] overflow-y-auto">
+          <CardContent className="p-0 flex-1 min-h-0">
+            <div className="h-full overflow-y-auto">
               {conciliados.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">Nenhum registro conciliado</p>
               ) : (
@@ -337,15 +337,15 @@ export default function RelatorioConciliacaoCartao() {
         </Card>
 
         {/* Coluna 2: Não Localizados */}
-        <Card className="shadow-lg border-2 border-yellow-300 dark:border-yellow-700">
-          <CardHeader className="bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/30 dark:to-yellow-800/30 border-b-2 border-yellow-200">
-            <h3 className="font-bold text-lg flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
-              <AlertTriangle className="w-5 h-5" />
+        <Card className="shadow-lg border-2 border-yellow-300 dark:border-yellow-700 flex flex-col overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/30 dark:to-yellow-800/30 border-b-2 border-yellow-200 flex-shrink-0">
+            <h3 className="font-bold text-sm flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+              <AlertTriangle className="w-4 h-4" />
               Não Localizados ({naoLocalizados.length})
             </h3>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-[600px] overflow-y-auto">
+          <CardContent className="p-0 flex-1 min-h-0">
+            <div className="h-full overflow-y-auto">
               {naoLocalizados.length === 0 ? (
                 <p className="text-center text-gray-500 py-8">Nenhum registro não localizado</p>
               ) : (
@@ -396,15 +396,15 @@ export default function RelatorioConciliacaoCartao() {
         </Card>
 
         {/* Coluna 3: Pendentes e Erros */}
-        <Card className="shadow-lg border-2 border-red-300 dark:border-red-700">
-          <CardHeader className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/30 border-b-2 border-red-200">
-            <h3 className="font-bold text-lg flex items-center gap-2 text-red-800 dark:text-red-200">
-              <XCircle className="w-5 h-5" />
+        <Card className="shadow-lg border-2 border-red-300 dark:border-red-700 flex flex-col overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/30 border-b-2 border-red-200 flex-shrink-0">
+            <h3 className="font-bold text-sm flex items-center gap-2 text-red-800 dark:text-red-200">
+              <XCircle className="w-4 h-4" />
               Pendentes/Erros ({pendentes.length + erros.length})
             </h3>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="max-h-[600px] overflow-y-auto">
+          <CardContent className="p-0 flex-1 min-h-0">
+            <div className="h-full overflow-y-auto">
               {(pendentes.length + erros.length) === 0 ? (
                 <p className="text-center text-gray-500 py-8">Nenhum registro pendente ou com erro</p>
               ) : (
