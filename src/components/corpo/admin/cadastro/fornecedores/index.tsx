@@ -19,30 +19,33 @@
  *    - Fallbacks para diferentes tipos de erro
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useContext } from 'react';
 import {
   Fornecedores,
   buscaFornecedores,
   getFornecedores,
 } from '@/data/fornecedores/fornecedores';
 import { useDebouncedCallback } from 'use-debounce';
-import DataTable from '@/components/common/DataTableFiltro';
+import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import ModalCadastrarFornecedor from './modalCadastrar';
 import ModalEditarFornecedor from './modalEditar';
 import { GoPencil } from 'react-icons/go';
 import { PlusIcon, CircleChevronDown } from 'lucide-react';
+import { BsTruck } from 'react-icons/bs';
 import { createPortal } from 'react-dom';
+import { AuthContext } from '@/contexts/authContexts';
 
 const FornecedoresPage = () => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [fornecedores, setFornecedores] = useState<Fornecedores>(
-    {} as Fornecedores,
+    { data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 } } as any,
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const { user } = useContext(AuthContext) as any;
   const [cadastrarOpen, setCadastrarOpen] = useState(false);
   const [editarOpen, setEditarOpen] = useState(false);
   const [idFornecedor, setIdFornecedor] = useState<string>('');
@@ -74,9 +77,18 @@ const FornecedoresPage = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      const temBusca = search && search.length >= 3;
+      const temFiltros = filtros && filtros.length > 0;
+
+      if (!temBusca && !temFiltros) {
+        setFornecedores({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage } } as any);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
-        const response = search
+        const response = temBusca
           ? await getFornecedores({ page, perPage, search })
           : await buscaFornecedores({ page, perPage, filtros });
         setFornecedores(response);
@@ -241,24 +253,35 @@ const FornecedoresPage = () => {
 
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
-      <main className="p-4 w-full">
-        <header className="mb-2">
-          <div className="flex justify-between mb-4 mr-6 ml-6">
-            <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
+      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+        {/* Cabeçalho */}
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <div>
+            <h1 className="text-base font-semibold text-black dark:text-white">
               Fornecedores
-            </div>
+            </h1>
+          </div>
+          <div className="flex gap-2 items-center">
             <DefaultButton
+              variant="primary"
+              size="default"
               onClick={() => setCadastrarOpen(true)}
-              className="flex items-center gap-0 px-3 py-2 text-sm h-8"
               text="Novo"
-              icon={<PlusIcon size={18} />}
+              icon={<PlusIcon size={16} />}
             />
           </div>
-        </header>
+        </div>
+
+        {/* DataTable */}
+        <div className="flex-1 min-h-20 flex flex-col">
         <DataTable
+          screenKey="cadastro-fornecedores"
+          userName={user?.usuario}
           carregando={loading}
           headers={headers}
           rows={rows || []}
+          semColunaDeAcaoPadrao={true}
+          nonsortableColumns={['ações']}
           meta={fornecedores.meta}
           onPageChange={setPage}
           onPerPageChange={(newPerPage) => {
@@ -268,7 +291,14 @@ const FornecedoresPage = () => {
           onSearch={(e) => debouncedSearch(e.target.value)}
           onSearchBlur={() => {}}
           onSearchKeyDown={() => {}}
-          searchInputPlaceholder="Pesquisar por código, nome ou fantasia"
+          searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar..."
+          noDataMessage={!search || search.length < 3 ? (
+            <div className="flex flex-col items-center">
+              <BsTruck className="dark:text-green-300 text-green-600" size={60} />
+              <div className="text-center font-bold dark:text-green-300 text-green-600 mt-3">PESQUISAR UM FORNECEDOR</div>
+              <div className="text-green-600 dark:text-green-300 text-xs mt-1">Digite pelo menos 3 caracteres e pressione enter...</div>
+            </div>
+          ) : 'Nenhum fornecedor encontrado'}
           colunasFiltro={colunasDb}
           onFiltroChange={(novosFiltros) => {
             setPage(1);
@@ -278,6 +308,7 @@ const FornecedoresPage = () => {
           limiteColunas={limiteColunas}
           onLimiteColunasChange={(novoLimite) => setLimiteColunas(novoLimite)}
         />
+        </div>
       </main>
       <ModalCadastrarFornecedor
         isOpen={cadastrarOpen}
