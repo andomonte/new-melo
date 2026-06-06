@@ -29,36 +29,32 @@ export default async function handle(
     const searchDigits = String(search).replace(/\D/g, '');
     const searchDigitsTerm = searchDigits.length >= 3 ? `%${searchDigits}%` : null;
 
-    // Query de busca com filtros e paginação
+    // Query com JOINs para nomes amigáveis (igual Delphi)
     const query = `
       SELECT
-        codcli,
-        nome,
-        cpfcgc,
-        CAST(atraso AS INTEGER) AS atraso,
-        CAST(kickback AS INTEGER) AS kickback,
-        CAST(sit_tributaria AS INTEGER) AS sit_tributaria,
-        CAST(codpais AS INTEGER) AS codpais,
-        CAST(codpaiscobr AS INTEGER) AS codpaiscobr,
-        CAST(codigo_filial AS INTEGER) AS codigo_filial
-      FROM dbclien
+        c.*,
+        COALESCE(cc.descr, '') as classe_nome,
+        COALESCE(p.descricao, '') as pais_nome
+      FROM dbclien c
+      LEFT JOIN dbcclien cc ON cc.codcc = c.codcc
+      LEFT JOIN dbpaises p ON p.codpais = CAST(c.codpais AS INTEGER)
       WHERE
-        codcli ILIKE $1 OR
-        nome ILIKE $1 OR
-        cpfcgc ILIKE $1
-        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''}
-      ORDER BY nome ASC
+        c.codcli ILIKE $1 OR
+        c.nome ILIKE $1 OR
+        c.cpfcgc ILIKE $1
+        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(c.cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''}
+      ORDER BY c.nome ASC
       LIMIT $2 OFFSET $3;
     `;
 
     const countQuery = `
       SELECT COUNT(*) AS total
-      FROM dbclien
+      FROM dbclien c
       WHERE
-        codcli ILIKE $1 OR
-        nome ILIKE $1 OR
-        cpfcgc ILIKE $1
-        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''};
+        c.codcli ILIKE $1 OR
+        c.nome ILIKE $1 OR
+        c.cpfcgc ILIKE $1
+        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(c.cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''};
     `;
 
     // Executa as queries em paralelo
@@ -82,8 +78,17 @@ export default async function handle(
     
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
+    // Enriquecer dados: "código - nome" como Delphi
+    const clientes = result.rows.map((c: any) => {
+      if (c.classe_nome && c.codcc) c.codcc = `${c.codcc} - ${c.classe_nome}`;
+      if (c.pais_nome && c.codpais) c.codpais = `${c.codpais} - ${c.pais_nome}`;
+      delete c.classe_nome;
+      delete c.pais_nome;
+      return c;
+    });
+
     res.status(200).json({
-      data: result.rows,
+      data: clientes,
       meta: {
         total,
         lastPage: total > 0 ? Math.ceil(total / limit) : 1,

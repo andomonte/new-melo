@@ -53,9 +53,13 @@ export default async function handle(
     queryParams.push(offset, perPageNumber);
     const limitOffset = `OFFSET $${paramIdx} LIMIT $${paramIdx + 1}`;
 
-    // Buscar os fornecedores
+    // Buscar os fornecedores com JOINs para nomes amigáveis
     const fornecedoresResult = await client.query(
-      `SELECT * FROM dbcredor ${whereClause} ORDER BY nome ${limitOffset}`,
+      `SELECT cr.*, COALESCE(cf.descr, '') as classe_nome
+       FROM dbcredor cr
+       LEFT JOIN dbcfornec cf ON cf.codcf = cr.codcf
+       ${whereClause ? whereClause.replace(/\b(cod_credor|nome|nome_fant|cpf_cgc)\b/g, 'cr.$1') : ''}
+       ORDER BY cr.nome ${limitOffset}`,
       queryParams,
     );
 
@@ -66,7 +70,12 @@ export default async function handle(
       countParams,
     );
 
-    const fornecedores = fornecedoresResult.rows;
+    // Enriquecer dados
+    const fornecedores = fornecedoresResult.rows.map((f: any) => {
+      if (f.classe_nome && f.codcf) f.codcf = `${f.codcf} - ${f.classe_nome}`;
+      delete f.classe_nome;
+      return f;
+    });
     const count = parseInt(countResult.rows[0].total, 10);
 
     res.status(200).json({
