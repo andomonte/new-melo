@@ -296,7 +296,7 @@ const ProdutosPage = () => {
           const novosHeaders = ['selecionar', 'ações', ...ordenadas];
           setHeaders(novosHeaders);
           console.log(
-            `📊 ${colunasDinamicas.length} colunas disponíveis, ${filtrasColunasDinamicas.length} visíveis`,
+            `📊 ${colunasDinamicas.length} colunas disponíveis, ${ordenadas.length} visíveis`,
           );
         } else {
           setHeaders(['selecionar', 'ações']);
