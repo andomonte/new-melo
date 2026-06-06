@@ -57,7 +57,7 @@ export default async function handle(
     const fornecedoresResult = await client.query(
       `SELECT cr.*, COALESCE(cf.descr, '') as classe_nome
        FROM dbcredor cr
-       LEFT JOIN dbcfornec cf ON cf.codcf = cr.codcf
+       LEFT JOIN dbclassefornecedor cf ON cf.codcf = cr.codcf
        ${whereClause ? whereClause.replace(/\b(cod_credor|nome|nome_fant|cpf_cgc)\b/g, 'cr.$1') : ''}
        ORDER BY cr.nome ${limitOffset}`,
       queryParams,

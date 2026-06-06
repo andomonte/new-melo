@@ -47,9 +47,9 @@ export default async function handle(
     // Buscar os produtos com subqueries para nomes (evita conflito de colunas com JOINs)
     const produtosQuery = `
       SELECT p.*,
-        COALESCE((SELECT m.descr FROM db_manaus.dbmarca m WHERE m.codmarca = p.codmarca LIMIT 1), '') as marca_nome,
-        COALESCE((SELECT gf.descr FROM db_manaus.dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), '') as grupo_funcao_nome,
-        COALESCE((SELECT gp.descr FROM db_manaus.dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), '') as grupo_produto_nome,
+        COALESCE((SELECT m.descr FROM dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), '') as marca_nome,
+        COALESCE((SELECT gf.descr FROM dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), '') as grupo_funcao_nome,
+        COALESCE((SELECT gp.descr FROM dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), '') as grupo_produto_nome,
         COALESCE((
           SELECT COUNT(DISTINCT cap.arp_arm_id)
           FROM cad_armazem_produto cap
