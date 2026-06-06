@@ -199,7 +199,7 @@ const GruposDeProdutosPage = () => {
   const [colunasDbGpp, setColunasDbGpp] = useState<string[]>([]);
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const salvo = localStorage.getItem('limiteColunasGruposProdutos');
-    return salvo ? parseInt(salvo, 10) : 4;
+    return salvo ? parseInt(salvo, 10) : 10;
   });
   const [headers, setHeaders] = useState<string[]>([]);
 

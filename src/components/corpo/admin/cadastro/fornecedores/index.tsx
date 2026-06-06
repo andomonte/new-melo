@@ -55,7 +55,7 @@ const FornecedoresPage = () => {
   const [colunasDb, setColunasDb] = useState<string[]>([]);
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const salvo = localStorage.getItem('limiteColunasFornecedores');
-    return salvo ? parseInt(salvo, 10) : 5;
+    return salvo ? parseInt(salvo, 10) : 10;
   });
   const [headers, setHeaders] = useState<string[]>([]);
   const [forceUpdate, setForceUpdate] = useState(0);

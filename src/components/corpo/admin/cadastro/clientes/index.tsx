@@ -110,7 +110,7 @@ const ClientesPage = () => {
   // Limite de colunas com persistência
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const salvo = localStorage.getItem('limiteColunasClientes');
-    return salvo ? parseInt(salvo, 10) : 5;
+    return salvo ? parseInt(salvo, 10) : 10;
   });
 
   const [forceUpdate, setForceUpdate] = useState(0);

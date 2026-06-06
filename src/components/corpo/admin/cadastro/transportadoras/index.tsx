@@ -34,9 +34,9 @@ const TransportadorasPage = () => {
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     if (typeof window !== 'undefined') {
       const salvo = localStorage.getItem('limiteColunasTransportadoras');
-      return salvo ? parseInt(salvo, 10) : 5;
+      return salvo ? parseInt(salvo, 10) : 10;
     }
-    return 5;
+    return 10;
   });
   const [headers, setHeaders] = useState<string[]>([]);
   const { toast } = useToast();

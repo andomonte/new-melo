@@ -56,7 +56,7 @@ const VendedoresPage = () => {
   const [colunasDbVendedor, setColunasDbVendedor] = useState<string[]>([]);
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const salvo = localStorage.getItem('limiteColunasVendedores');
-    return salvo ? parseInt(salvo, 10) : 5; // valor padrão: 5
+    return salvo ? parseInt(salvo, 10) : 10;
   });
 
   const { dismiss, toast } = useToast();
