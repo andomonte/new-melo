@@ -178,11 +178,10 @@ const ClientesPage = () => {
           (coluna) => !['selecionar', 'ações'].includes(coluna.toLowerCase()),
         );
 
-        const colunasFiltradas = colunasDinamicas.slice(0, limiteColunas);
         setColunasDb(colunasDinamicas);
 
-        // Headers: selecionar, ações, e colunas dinâmicas
-        setHeaders(['selecionar', 'ações', ...colunasFiltradas]);
+        // Headers: selecionar, ações, e TODAS as colunas (visibilidade gerenciada pelo DataTable)
+        setHeaders(['selecionar', 'ações', ...colunasDinamicas]);
       } else {
         setHeaders(['selecionar', 'ações']);
       }

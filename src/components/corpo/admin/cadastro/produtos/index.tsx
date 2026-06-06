@@ -289,11 +289,11 @@ const ProdutosPage = () => {
             ...colunasPrioritarias.filter(c => colunasDinamicas.includes(c)),
             ...colunasDinamicas.filter(c => !colunasPrioritarias.includes(c)),
           ];
-          const filtrasColunasDinamicas = ordenadas.slice(0, limiteColunas);
 
           setColunasDbProd(colunasDinamicas);
 
-          const novosHeaders = ['selecionar', 'ações', ...filtrasColunasDinamicas];
+          // Passa TODAS as colunas — visibilidade gerenciada pelo DataTable
+          const novosHeaders = ['selecionar', 'ações', ...ordenadas];
           setHeaders(novosHeaders);
           console.log(
             `📊 ${colunasDinamicas.length} colunas disponíveis, ${filtrasColunasDinamicas.length} visíveis`,
@@ -374,11 +374,11 @@ const ProdutosPage = () => {
             ...colunasPrioritarias.filter(c => colunasDinamicas.includes(c)),
             ...colunasDinamicas.filter(c => !colunasPrioritarias.includes(c)),
           ];
-          const filtrasColunasDinamicas = ordenadas.slice(0, limiteColunas);
 
           setColunasDbProd(colunasDinamicas);
 
-          const novosHeaders = ['selecionar', 'ações', ...filtrasColunasDinamicas];
+          // Passa TODAS as colunas — visibilidade gerenciada pelo DataTable
+          const novosHeaders = ['selecionar', 'ações', ...ordenadas];
           setHeaders(novosHeaders);
         }
       } catch (error) {

@@ -97,11 +97,10 @@ const FornecedoresPage = () => {
           const colunasDinamicas = Object.keys(response.data[0]).filter(
             (coluna) => coluna !== 'ações',
           );
-          const colunasLimitadas = colunasDinamicas.slice(0, limiteColunas);
           setColunasDb(colunasDinamicas);
 
-          // ✅ CORREÇÃO: Mover coluna "ações" para o início da tabela (extrema esquerda)
-          const headersOrganizados = ['ações', ...colunasLimitadas];
+          // Passa TODAS as colunas — visibilidade gerenciada pelo DataTable
+          const headersOrganizados = ['ações', ...colunasDinamicas];
           setHeaders(headersOrganizados);
         } else if (!search && filtros.length === 0) {
           setHeaders(['ações']);

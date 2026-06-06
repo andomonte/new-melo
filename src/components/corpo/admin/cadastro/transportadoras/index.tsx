@@ -111,9 +111,8 @@ const TransportadorasPage = () => {
         const colunasDinamicas = Object.keys(response.data[0]).filter(
           (coluna) => !['ações'].includes(coluna.toLowerCase()),
         );
-        const colunasFiltradas = colunasDinamicas.slice(0, limiteColunas);
         setColunasDbTransp(colunasDinamicas);
-        setHeaders(['ações', ...colunasFiltradas]);
+        setHeaders(['ações', ...colunasDinamicas]);
       } else {
         setHeaders(['ações']);
       }
