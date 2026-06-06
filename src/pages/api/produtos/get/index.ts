@@ -44,21 +44,18 @@ export default async function handle(
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
     const whereClauseCount = `WHERE ${whereConditionsCount.join(' AND ')}`;
 
-    // Buscar os produtos com JOINs para nomes amigáveis (igual Delphi)
+    // Buscar os produtos com subqueries para nomes (evita conflito de colunas com JOINs)
     const produtosQuery = `
       SELECT p.*,
-        COALESCE(m.descr, '') as marca_nome,
-        COALESCE(gf.descr, '') as grupo_funcao_nome,
-        COALESCE(gp.descr, '') as grupo_produto_nome,
+        COALESCE((SELECT m.descr FROM db_manaus.dbmarca m WHERE m.codmarca = p.codmarca LIMIT 1), '') as marca_nome,
+        COALESCE((SELECT gf.descr FROM db_manaus.dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), '') as grupo_funcao_nome,
+        COALESCE((SELECT gp.descr FROM db_manaus.dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), '') as grupo_produto_nome,
         COALESCE((
           SELECT COUNT(DISTINCT cap.arp_arm_id)
           FROM cad_armazem_produto cap
           WHERE cap.arp_codprod = p.codprod AND COALESCE(cap.arp_qtest, 0) > 0
         ), 0) as qtd_armazens
       FROM db_manaus.dbprod p
-      LEFT JOIN db_manaus.dbmarca m ON m.codmarca = p.codmarca
-      LEFT JOIN db_manaus.dbgpfunc gf ON gf.codgpf = p.codgpf
-      LEFT JOIN db_manaus.dbgpprod gp ON gp.codgpp = p.codgpp
       ${whereClause}
       ORDER BY p.descr
       OFFSET $${paramIndex} LIMIT $${paramIndex + 1}
