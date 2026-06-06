@@ -44,15 +44,21 @@ export default async function handle(
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
     const whereClauseCount = `WHERE ${whereConditionsCount.join(' AND ')}`;
 
-    // Buscar os produtos com contagem de armazéns
+    // Buscar os produtos com JOINs para nomes amigáveis (igual Delphi)
     const produtosQuery = `
       SELECT p.*,
+        COALESCE(m.descr, '') as marca_nome,
+        COALESCE(gf.descr, '') as grupo_funcao_nome,
+        COALESCE(gp.descr, '') as grupo_produto_nome,
         COALESCE((
           SELECT COUNT(DISTINCT cap.arp_arm_id)
           FROM cad_armazem_produto cap
           WHERE cap.arp_codprod = p.codprod AND COALESCE(cap.arp_qtest, 0) > 0
         ), 0) as qtd_armazens
       FROM db_manaus.dbprod p
+      LEFT JOIN db_manaus.dbmarca m ON m.codmarca = p.codmarca
+      LEFT JOIN db_manaus.dbgpfunc gf ON gf.codgpf = p.codgpf
+      LEFT JOIN db_manaus.dbgpprod gp ON gp.codgpp = p.codgpp
       ${whereClause}
       ORDER BY p.descr
       OFFSET $${paramIndex} LIMIT $${paramIndex + 1}
@@ -70,16 +76,22 @@ export default async function handle(
     const countParams = queryParams.slice(0, -2); // Remove offset e limit
     const countResult = await client.query(countQuery, countParams);
 
-    const produtos = produtosResult.rows;
     const count = parseInt(countResult.rows[0].total, 10);
 
-    console.log(`✅ API GET - Retornando ${produtos.length} produtos de ${count} total`);
-    if (produtos.length > 0) {
-      console.log('✅ Campos:', Object.keys(produtos[0]));
-    }
+    // Enriquecer dados: mostrar "código - nome" como Delphi faz
+    const produtos = produtosResult.rows.map((p: any) => {
+      if (p.marca_nome) p.codmarca = `${p.codmarca} - ${p.marca_nome}`;
+      if (p.grupo_funcao_nome) p.codgpf = `${p.codgpf} - ${p.grupo_funcao_nome}`;
+      if (p.grupo_produto_nome) p.codgpp = `${p.codgpp} - ${p.grupo_produto_nome}`;
+      // Remover colunas auxiliares
+      delete p.marca_nome;
+      delete p.grupo_funcao_nome;
+      delete p.grupo_produto_nome;
+      return p;
+    });
 
     res.status(200).json({
-      data: produtos.map((produto) => serializeBigInt(produto)),
+      data: produtos.map((produto: any) => serializeBigInt(produto)),
       meta: {
         total: count,
         lastPage: Math.max(1, Math.ceil(count / itemsPerPage)),

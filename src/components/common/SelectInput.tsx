@@ -46,7 +46,7 @@ export default function SelectInput({
       <Select
         {...(value !== undefined ? { value } : { defaultValue })}
         name={name}
-        onValueChange={onValueChange}
+        onValueChange={(val) => onValueChange?.(val === '__CLEAR__' ? '' : val)}
         required={required}
         disabled={disabled}
       >
@@ -63,6 +63,14 @@ export default function SelectInput({
           />
         </SelectTrigger>
         <SelectContent className="bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-600 text-gray-900 dark:text-white rounded-md shadow-md z-50">
+          {!required && (
+            <SelectItem
+              value="__CLEAR__"
+              className="cursor-pointer px-3 py-1.5 text-sm text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-700"
+            >
+              — Limpar seleção —
+            </SelectItem>
+          )}
           {options?.map((item) => (
             <SelectItem
               key={item.value}

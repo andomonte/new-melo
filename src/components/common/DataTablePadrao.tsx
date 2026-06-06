@@ -180,14 +180,31 @@ export default function DataTablePadrao({
     }
   }, [colunasVisiveis, ordemColunas, sortColumn, sortDirection, mostrarFiltros]);
 
-  // Inicializar colunas visíveis e ordem quando headers mudar (só se não veio do banco)
+  // Inicializar colunas visíveis e ordem quando headers mudar
   useEffect(() => {
     if (!prefsCarregadas) return;
-    if (colunasVisiveis.length === 0) {
-      setColunasVisiveis(headers);
+
+    // Sempre sincronizar ordemColunas com headers disponíveis
+    // Mantém a ordem existente + adiciona novas colunas que apareceram
+    const colunasAtuais = new Set(ordemColunas);
+    const novasColunas = headers.filter(h => !colunasAtuais.has(h));
+    if (novasColunas.length > 0 || ordemColunas.length === 0) {
+      const ordemAtualizada = [
+        ...ordemColunas.filter(h => headers.includes(h)), // mantém ordem existente, remove as que sumiram
+        ...novasColunas, // adiciona novas no final
+      ];
+      setOrdemColunas(ordemAtualizada.length > 0 ? ordemAtualizada : headers);
     }
-    if (ordemColunas.length === 0 || ordemColunas.length !== headers.length) {
-      setOrdemColunas(headers);
+
+    // Se não tem colunas visíveis definidas, mostra as 10 primeiras por padrão
+    if (colunasVisiveis.length === 0) {
+      setColunasVisiveis(headers.slice(0, Math.min(10, headers.length)));
+    } else {
+      // Remove colunas visíveis que não existem mais nos headers
+      const visiveisValidas = colunasVisiveis.filter(h => headers.includes(h));
+      if (visiveisValidas.length !== colunasVisiveis.length) {
+        setColunasVisiveis(visiveisValidas.length > 0 ? visiveisValidas : headers.slice(0, 10));
+      }
     }
   }, [headers]);
 
@@ -778,13 +795,16 @@ export default function DataTablePadrao({
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setColunasVisiveis(ordemColunas)}
+                      onClick={() => setColunasVisiveis([...headers])}
                       className="flex-1 px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
                     >
                       Mostrar Todas
                     </button>
                     <button
-                      onClick={() => setOrdemColunas(headers)}
+                      onClick={() => {
+                        setOrdemColunas([...headers]);
+                        setColunasVisiveis([...headers]);
+                      }}
                       className="flex-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
                     >
                       Resetar Ordem
