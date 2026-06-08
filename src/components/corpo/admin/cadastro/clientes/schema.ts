@@ -57,7 +57,7 @@ export const clientSchema = z.object({
   ),
   classeCliente: z.string({ required_error: 'Classe de cliente é obrigatória' }).min(1, 'Classe de cliente é obrigatória'),
 
-  // Inscrições
+  // Inscrições (obrigatórias no Delphi — ou preenchidas ou marcadas como ISENTO)
   inscricaoEstadual: z.string().max(20).optional().nullable(),
   isentoIE: z.boolean().default(false),
   inscricaoMunicipal: z.string().max(20).optional().nullable(),
@@ -68,7 +68,10 @@ export const clientSchema = z.object({
   // Endereço
   cep: z.string({ required_error: 'CEP é obrigatório' }).min(1, 'CEP é obrigatório').max(9),
   endereco: z.string({ required_error: 'Logradouro é obrigatório' }).min(1, 'Logradouro é obrigatório').max(100),
-  numero: z.string().max(10).optional().nullable(),
+  numero: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : val),
+    z.string({ required_error: 'Número é obrigatório' }).min(1, 'Número é obrigatório').max(10),
+  ),
   complemento: z.string().max(50).optional().nullable(),
   referencia: z.string().max(100).optional().nullable(),
   bairro: z.string({ required_error: 'Bairro é obrigatório' }).min(1, 'Bairro é obrigatório').max(20, 'Máximo 20 caracteres').default(''),
@@ -113,15 +116,16 @@ export const clientSchema = z.object({
   vendedores: z.array(z.string()).optional().default([]),
 
   // Vendedores por Segmento (vincula vendedor a segmento para este cliente)
+  // No Delphi, vendedor externo é obrigatório — validamos que tenha pelo menos 1
   vendedores_list: z
     .array(
       z.object({
-        sellerId: z.string(),
+        sellerId: z.string().min(1, 'Código do vendedor é obrigatório'),
         segmentoId: z.string().optional(),
         tipoVendedor: z.enum(['externo', 'tmk']).optional().default('externo'),
       }),
     )
-    .optional()
+    .min(1, 'Informe pelo menos um vendedor externo')
     .default([]),
 
   // Financeiro / Outros (Mapeando campos do banco)
@@ -130,7 +134,13 @@ export const clientSchema = z.object({
   classePagamento: z.enum(['A', 'B', 'C', 'D', 'E', 'V', 'I', 'F', 'N', 'O', 'P', 'Z', 'X']).optional().nullable(),
   aceitaAtraso: z.boolean().default(false),
   diasAtraso: z.union([z.string(), z.number()]).optional().nullable(),
-  icms: z.enum(['S', 'N']).optional().nullable(),
+  icms: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : val),
+    z.enum(['S', 'N'], {
+      required_error: 'ICMS é obrigatório',
+      invalid_type_error: 'ICMS é obrigatório',
+    }),
+  ),
   faixaFinanceira: z.string().optional().nullable(),
   // Banco no DB é numérico (ex: bigint). No Select do frontend, "" significa "não selecionado".
   // Validamos aqui para que o erro apareça no FinancialTab, em vez de estourar no backend.
@@ -161,7 +171,7 @@ export const clientSchema = z.object({
 
   obs: z.string().max(100).optional().nullable(),
 
-  // Campos de Cobrança
+  // Campos de Cobrança (obrigatórios no Delphi quando endereço diferente)
   enderecoCobrancaIgual: z.boolean().default(true),
   endercobr: z.string().max(100).optional().nullable(),
   numerocobr: z.string().max(60).optional().nullable(),
@@ -192,12 +202,45 @@ export const clientSchema = z.object({
   // Comercial
   acrescimo: z.union([z.string(), z.number()]).optional().nullable(),
   desconto: z.union([z.string(), z.number()]).optional().nullable(),
-  precoVenda: z.union([z.string(), z.number()]).optional().nullable(),
+  precoVenda: z.preprocess(
+    (val) => (val === null || val === '' ? undefined : String(val)),
+    z.string({ required_error: 'Preço de venda é obrigatório' }).min(1, 'Preço de venda é obrigatório'),
+  ),
   kickback: z.union([z.string(), z.number()]).optional().nullable(),
   precoVendaKickback: z.union([z.string(), z.number()]).optional().nullable(),
   descontoAplicado: z.enum(['S', 'N']).optional().nullable(),
   benmd: z.enum(['S', 'N']).optional().nullable(), // Bloqueio de preço de venda
   habilitarLocalEntrega: z.enum(['0', '1']).optional().nullable(),
+}).superRefine((data, ctx) => {
+  // Inscrições: obrigatório preencher OU marcar isento
+  if (!data.isentoIE && (!data.inscricaoEstadual || data.inscricaoEstadual.trim() === '')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Inscrição Estadual é obrigatória (ou marque como Isento)', path: ['inscricaoEstadual'] });
+  }
+  if (!data.isentoIM && (!data.inscricaoMunicipal || data.inscricaoMunicipal.trim() === '')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Inscrição Municipal é obrigatória (ou marque como Isento)', path: ['inscricaoMunicipal'] });
+  }
+  if (!data.isentoSuframa && (!data.suframa || data.suframa.trim() === '')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Suframa é obrigatório (ou marque como Isento)', path: ['suframa'] });
+  }
+
+  // Cobrança: obrigatório quando endereço diferente
+  if (!data.enderecoCobrancaIgual) {
+    if (!data.endercobr || data.endercobr.trim() === '') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Logradouro de cobrança é obrigatório', path: ['endercobr'] });
+    }
+    if (!data.numerocobr || data.numerocobr.trim() === '') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Número de cobrança é obrigatório', path: ['numerocobr'] });
+    }
+    if (!data.bairrocobr || data.bairrocobr.trim() === '') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Bairro de cobrança é obrigatório', path: ['bairrocobr'] });
+    }
+    if (!data.cidadecobr || data.cidadecobr.trim() === '') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cidade de cobrança é obrigatória', path: ['cidadecobr'] });
+    }
+    if (!data.ufcobr || data.ufcobr.trim() === '') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'UF de cobrança é obrigatória', path: ['ufcobr'] });
+    }
+  }
 });
 
 export type ClientFormValues = z.infer<typeof clientSchema>;

@@ -220,7 +220,7 @@ export function RegistrationTab({
       <div className="grid grid-cols-4 gap-3">
         {/* Tipo Pessoa */}
         <div>
-          <Label>Tipo Pessoa</Label>
+          <Label>Tipo Pessoa<span className="text-red-500"> *</span></Label>
           <Controller
             control={control}
             name="tipoPessoa"
@@ -511,7 +511,7 @@ export function RegistrationTab({
         {/* IE */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Inscrição Estadual</Label>
+            <Label>Inscrição Estadual<span className="text-red-500"> *</span></Label>
             <div className="flex items-center gap-2">
               <Controller
                 control={control}
@@ -542,7 +542,7 @@ export function RegistrationTab({
         {/* IM */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Inscrição Municipal</Label>
+            <Label>Inscrição Municipal<span className="text-red-500"> *</span></Label>
             <div className="flex items-center gap-2">
               <Controller
                 control={control}
@@ -573,7 +573,7 @@ export function RegistrationTab({
         {/* Suframa */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Suframa</Label>
+            <Label>Suframa<span className="text-red-500"> *</span></Label>
             <div className="flex items-center gap-2">
               <Controller
                 control={control}
@@ -659,7 +659,7 @@ export function RegistrationTab({
           <Input {...register('endereco')} />
         </div>
         <div>
-          <Label>Número</Label>
+          <Label>Número<span className="text-red-500"> *</span></Label>
           <Input {...register('numero')} name="numero" />
         </div>
         <div>
@@ -792,11 +792,11 @@ export function RegistrationTab({
             />
           </div>
           <div className="col-span-2">
-            <Label>Logradouro</Label>
+            <Label>Logradouro<span className="text-red-500"> *</span></Label>
             <Input {...register('endercobr')} />
           </div>
           <div>
-            <Label>Número</Label>
+            <Label>Número<span className="text-red-500"> *</span></Label>
             <Input {...register('numerocobr')} />
           </div>
           <div>
@@ -804,15 +804,15 @@ export function RegistrationTab({
             <Input {...register('complementocobr')} />
           </div>
           <div>
-            <Label>Bairro</Label>
+            <Label>Bairro<span className="text-red-500"> *</span></Label>
             <Input {...register('bairrocobr')} />
           </div>
           <div>
-            <Label>Cidade</Label>
+            <Label>Cidade<span className="text-red-500"> *</span></Label>
             <Input {...register('cidadecobr')} />
           </div>
           <div>
-            <Label>UF</Label>
+            <Label>UF<span className="text-red-500"> *</span></Label>
             <Controller
               control={control}
               name="ufcobr"

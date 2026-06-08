@@ -673,15 +673,19 @@ export default function ClientFormModal({
     return 'registration'; // default
   };
 
-  // Retorna os campos obrigatórios de uma aba
+  // Retorna os campos obrigatórios de uma aba (para validação ao trocar de aba)
   const getFieldsForTab = (tab: string): string[] => {
     const registrationFields = [
       'tipoPessoa', 'documento', 'nome', 'tipoCliente', 'situacaoTributaria',
-      'tipoEmpresa', 'classeCliente', 'cep', 'endereco', 'bairro', 'cidade', 'uf', 'pais',
+      'tipoEmpresa', 'classeCliente', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'pais',
+      'inscricaoEstadual', 'inscricaoMunicipal', 'suframa',
+      'endercobr', 'numerocobr', 'bairrocobr', 'cidadecobr', 'ufcobr',
     ];
-    const financialFields = ['banco'];
+    const financialFields = ['banco', 'icms', 'precoVenda'];
+    const commercialFields = ['vendedores_list'];
     if (tab === 'registration') return registrationFields;
     if (tab === 'financial') return financialFields;
+    if (tab === 'commercial') return commercialFields;
     return [];
   };
 

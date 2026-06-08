@@ -350,7 +350,7 @@ export function FinancialTab() {
       {/* ICMS, Faixa Financeira, Banco, Forma de Pagamento */}
       <div className="grid grid-cols-4 gap-3">
         <div>
-          <Label>ICMS</Label>
+          <Label>ICMS<span className="text-red-500"> *</span></Label>
           <Controller
             control={control}
             name="icms"

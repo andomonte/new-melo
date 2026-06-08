@@ -196,7 +196,7 @@ export function CommercialTab() {
       {/* Vendedores por Segmento (Externo e TMK) */}
       <div className="flex flex-row items-center justify-between border-b pb-2 mb-4">
         <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
-          Vendedores (Externo / TMK) por Segmento
+          Vendedores (Externo / TMK) por Segmento<span className="text-red-500"> *</span>
         </h3>
         <div className="flex gap-2">
           <Button
@@ -375,7 +375,7 @@ export function CommercialTab() {
 
         {/* Desconto Aplicado (Preço de Venda no Delphi) */}
         <div>
-          <Label>Desconto Aplicado</Label>
+          <Label>Desconto Aplicado<span className="text-red-500"> *</span></Label>
           <Controller
             control={control}
             name="precoVenda"
