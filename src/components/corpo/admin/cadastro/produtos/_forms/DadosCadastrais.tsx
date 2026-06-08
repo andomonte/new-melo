@@ -123,6 +123,9 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   const [searchGruposFuncao, setSearchGruposFuncao] = useState<string>('');
   const [searchGruposProduto, setSearchGruposProduto] = useState<string>('');
   const [validatingRef, setValidatingRef] = useState<boolean>(false);
+  const [loadingMarcas, setLoadingMarcas] = useState<boolean>(false);
+  const [loadingGruposFuncao, setLoadingGruposFuncao] = useState<boolean>(false);
+  const [loadingGruposProduto, setLoadingGruposProduto] = useState<boolean>(false);
 
   // Carrega as opções assim que o componente montar
   useEffect(() => {
@@ -159,33 +162,30 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   });
 
   const handleMarcas = async () => {
-    const fetchedMarcas: Marcas = await getMarcas({
-      page: 1,
-      perPage: 99,
-      search: searchMarcas,
-    });
-    if (!fetchedMarcas) return;
-    setMarcas(fetchedMarcas.data);
+    setLoadingMarcas(true);
+    try {
+      const fetchedMarcas: Marcas = await getMarcas({ page: 1, perPage: 99, search: searchMarcas });
+      if (!fetchedMarcas) return;
+      setMarcas(fetchedMarcas.data);
+    } finally { setLoadingMarcas(false); }
   };
 
   const handleGruposFuncao = async () => {
-    const fetchedGruposFuncao: GruposFuncao = await getGruposFuncao({
-      page: 1,
-      perPage: 99,
-      search: searchGruposFuncao,
-    });
-    if (!fetchedGruposFuncao) return;
-    setGruposFuncao(fetchedGruposFuncao.data);
+    setLoadingGruposFuncao(true);
+    try {
+      const fetchedGruposFuncao: GruposFuncao = await getGruposFuncao({ page: 1, perPage: 99, search: searchGruposFuncao });
+      if (!fetchedGruposFuncao) return;
+      setGruposFuncao(fetchedGruposFuncao.data);
+    } finally { setLoadingGruposFuncao(false); }
   };
 
   const handleGruposProduto = async () => {
-    const fetchedGruposProduto: GruposProduto = await getGruposProduto({
-      page: 1,
-      perPage: 99,
-      search: searchGruposProduto,
-    });
-    if (!fetchedGruposProduto) return;
-    setGruposProduto(fetchedGruposProduto.data);
+    setLoadingGruposProduto(true);
+    try {
+      const fetchedGruposProduto: GruposProduto = await getGruposProduto({ page: 1, perPage: 99, search: searchGruposProduto });
+      if (!fetchedGruposProduto) return;
+      setGruposProduto(fetchedGruposProduto.data);
+    } finally { setLoadingGruposProduto(false); }
   };
 
   const handleValidateRef = async () => {
@@ -309,6 +309,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             name="codmarca"
             label="Marca"
             required
+            loading={loadingMarcas}
             options={marcaOptions}
             value={produto.codmarca || ''}
             onValueChange={(value) =>
@@ -324,6 +325,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             name="codgpf"
             label="Grupo de Função"
             required
+            loading={loadingGruposFuncao}
             options={grupoFuncaoOptions}
             value={produto.codgpf || ''}
             onValueChange={(value) =>
@@ -341,6 +343,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             name="codgpp"
             label="Grupo de Produto"
             required
+            loading={loadingGruposProduto}
             options={grupoProdutoOptions}
             value={produto.codgpp || ''}
             onValueChange={(value) =>

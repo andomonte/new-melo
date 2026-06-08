@@ -104,6 +104,8 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
     useState<string>('');
   const [cestSearch, setCestSearch] = useState<string>('');
   const [validatingCest, setValidatingCest] = useState<boolean>(false);
+  const [loadingClassFiscal, setLoadingClassFiscal] = useState<boolean>(false);
+  const [loadingCest, setLoadingCest] = useState<boolean>(false);
 
   // Carrega as opções assim que o componente montar
   useEffect(() => {
@@ -134,23 +136,33 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
   });
 
   const handleClassificacoesFiscais = async () => {
-    const fetchedClassificacoesFiscais = await getClassificacoesFiscais({
-      page: 1,
-      perPage: 99,
-      search: classificacaoFiscalSearch,
-    });
-    if (!fetchedClassificacoesFiscais) return;
-    setClassificacoesFiscais(fetchedClassificacoesFiscais.data);
+    setLoadingClassFiscal(true);
+    try {
+      const fetchedClassificacoesFiscais = await getClassificacoesFiscais({
+        page: 1,
+        perPage: 99,
+        search: classificacaoFiscalSearch,
+      });
+      if (!fetchedClassificacoesFiscais) return;
+      setClassificacoesFiscais(fetchedClassificacoesFiscais.data);
+    } finally {
+      setLoadingClassFiscal(false);
+    }
   };
 
   const handleCests = async () => {
-    const fetchedCests = await getCests({
-      page: 1,
-      perPage: 99,
-      search: cestSearch,
-    });
-    if (!fetchedCests) return;
-    setCests(fetchedCests.data);
+    setLoadingCest(true);
+    try {
+      const fetchedCests = await getCests({
+        page: 1,
+        perPage: 99,
+        search: cestSearch,
+      });
+      if (!fetchedCests) return;
+      setCests(fetchedCests.data);
+    } finally {
+      setLoadingCest(false);
+    }
   };
 
   const handleValidateCest = async (cestValue?: string, ncmValue?: string) => {
@@ -238,6 +250,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             name="clasfiscal"
             label="Classif. Fiscal"
             required
+            loading={loadingClassFiscal}
             options={classificaoesFiscaisOptions}
             value={produto.clasfiscal || ''}
             onValueChange={(value) =>
@@ -402,6 +415,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           <SelectInput searchable
             name="cest"
             label="CEST"
+            loading={loadingCest}
             options={cestsOptions}
             value={produto.cest || ''}
             onValueChange={(value) => {

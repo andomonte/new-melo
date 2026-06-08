@@ -45,6 +45,8 @@ interface SelectPadraoProps {
   className?: string;
   /** Callback quando o texto de busca muda (para busca remota/API) */
   onInputChange?: (value: string) => void;
+  /** Mostra indicador de carregamento dentro do dropdown */
+  loading?: boolean;
 }
 
 /**
@@ -75,6 +77,7 @@ export default function SelectPadrao({
   uppercase = false,
   className,
   onInputChange,
+  loading = false,
 }: SelectPadraoProps) {
   // Modo searchable: renderiza dropdown customizado com campo de busca
   if (searchable) {
@@ -95,6 +98,7 @@ export default function SelectPadrao({
           required={required}
           placeholder={placeholder}
           uppercase={uppercase}
+          loading={loading}
         />
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
@@ -172,6 +176,7 @@ function SearchableDropdown({
   required,
   placeholder,
   uppercase,
+  loading,
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -181,6 +186,7 @@ function SearchableDropdown({
   required?: boolean;
   placeholder: string;
   uppercase?: boolean;
+  loading?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -332,9 +338,14 @@ function SearchableDropdown({
                 <span>— Limpar seleção —</span>
               </div>
             )}
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="px-2 py-3 text-xs text-center text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
+                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                Carregando...
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="px-2 py-3 text-xs text-center text-gray-500 dark:text-gray-400">
-                Nenhum resultado encontrado
+                {search ? 'Nenhum resultado encontrado' : 'Digite para buscar...'}
               </div>
             ) : (
               filtered.filter((item, index, arr) => arr.findIndex(o => o.value === item.value) === index).map((option, index) => (
