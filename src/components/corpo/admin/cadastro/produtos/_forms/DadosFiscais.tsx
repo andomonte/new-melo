@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
 import SelectInput from '@/components/common/SelectPadrao';
-import SearchSelectInput from '@/components/common/SearchSelectInput';
 import { Label } from '@/components/ui/label';
 import { IsentoIPI, Produto } from '@/data/produtos/produtos';
 import {
@@ -235,7 +234,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.trib}
           />
-          <SearchSelectInput
+          <SelectInput searchable
             name="clasfiscal"
             label="Classif. Fiscal"
             required
@@ -400,7 +399,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.ii}
           />
-          <SearchSelectInput
+          <SelectInput searchable
             name="cest"
             label="CEST"
             options={cestsOptions}

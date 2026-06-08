@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
 import SelectInput from '@/components/common/SelectPadrao';
-import SearchSelectInput from '@/components/common/SearchSelectInput';
 import {
   CompraDireta,
   Curva,
@@ -306,7 +305,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           error={error?.aplic_extendida}
         />
         <div className="grid grid-cols-2 gap-4">
-          <SearchSelectInput
+          <SelectInput searchable
             name="codmarca"
             label="Marca"
             required
@@ -321,7 +320,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             }}
             error={error?.codmarca}
           />
-          <SearchSelectInput
+          <SelectInput searchable
             name="codgpf"
             label="Grupo de Função"
             required
@@ -338,7 +337,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           />
         </div>
         <div className="grid grid-cols-4 gap-4">
-          <SearchSelectInput
+          <SelectInput searchable
             name="codgpp"
             label="Grupo de Produto"
             required

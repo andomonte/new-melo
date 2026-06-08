@@ -1,6 +1,6 @@
 import FormInput from '@/components/common/FormInput';
 import React from 'react';
-import SearchSelectInput from '@/components/common/SearchSelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 import { UsuarioEdit } from '@/data/usuarios/usuarios';
 import { Grupos } from '@/data/grupos/grupos';
 import { CadUsuarioSearchOptions } from '@/components/corpo/admin/controleAcesso/usuarios/modalCadastrar';
@@ -67,7 +67,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           error={error?.login_user_name}
           required
         />
-        <SearchSelectInput
+        <SelectInput searchable
           name="login_group_name"
           label="Grupo de Usuário"
           options={gruposOptions}

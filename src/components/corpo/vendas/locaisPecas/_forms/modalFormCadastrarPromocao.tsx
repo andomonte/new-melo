@@ -7,7 +7,7 @@ import { X, Plus, Pencil } from 'lucide-react';
 import FormInput from '@/components/common/FormInput'; // Certifique-se de que este FormInput suporta `ref`
 import FormFooter from '@/components/common/FormFooter2';
 import Carregamento from '@/utils/carregamento';
-import SearchSelectInput from '@/components/common/SearchSelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 
 import ModalViewPromocaoItems from './ModalViewPromocaoItems';
 
@@ -381,7 +381,7 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
 
                 <div className=" w-full">
                   {/* Tipo de Desconto */}
-                  <SearchSelectInput
+                  <SelectInput searchable
                     name="tipo_desconto"
                     label="Tipo de Desconto"
                     options={tipoDescontoOptions}

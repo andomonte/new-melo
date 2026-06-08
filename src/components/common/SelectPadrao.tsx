@@ -43,6 +43,8 @@ interface SelectPadraoProps {
   uppercase?: boolean;
   /** className extra no wrapper */
   className?: string;
+  /** Callback quando o texto de busca muda (para busca remota/API) */
+  onInputChange?: (value: string) => void;
 }
 
 /**
@@ -72,6 +74,7 @@ export default function SelectPadrao({
   compact = false,
   uppercase = false,
   className,
+  onInputChange,
 }: SelectPadraoProps) {
   // Modo searchable: renderiza dropdown customizado com campo de busca
   if (searchable) {
@@ -86,6 +89,7 @@ export default function SelectPadrao({
         <SearchableDropdown
           value={value || defaultValue || ''}
           onValueChange={(val) => onValueChange?.(val)}
+          onInputChange={onInputChange}
           options={options}
           disabled={disabled}
           required={required}
@@ -162,6 +166,7 @@ export default function SelectPadrao({
 function SearchableDropdown({
   value,
   onValueChange,
+  onInputChange,
   options,
   disabled,
   required,
@@ -170,6 +175,7 @@ function SearchableDropdown({
 }: {
   value: string;
   onValueChange: (value: string) => void;
+  onInputChange?: (value: string) => void;
   options: Option[];
   disabled?: boolean;
   required?: boolean;
@@ -299,7 +305,7 @@ function SearchableDropdown({
                 ref={inputRef}
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); onInputChange?.(e.target.value); }}
                 placeholder="Pesquisar..."
                 className="w-full pl-7 pr-2 py-1 text-xs rounded border border-gray-200 dark:border-zinc-600 bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400/50"
                 onKeyDown={(e) => {

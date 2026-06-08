@@ -6,7 +6,6 @@ import {
   Vendedor,
   VendedorPst,
 } from '@/data/vendedores/vendedores';
-import SearchSelectInput from '@/components/common/SearchSelectInput';
 import { Bairro, Bairros } from '@/data/bairros/bairros';
 import SelectInput from '@/components/common/SelectPadrao';
 import { GruposProduto } from '@/data/gruposProduto/gruposProduto';
@@ -172,7 +171,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           />
         </div>
       </div>
-      <SearchSelectInput
+      <SelectInput searchable
         name="codcv"
         label="Classe Vendedor"
         options={classesVendedorOptions}
@@ -230,7 +229,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
 
       {/* LINHA 2: Bairro, Cidade e UF */}
       <div className="grid grid-cols-3 gap-4">
-        <SearchSelectInput
+        <SelectInput searchable
           name="detalhadoVendedorBairro"
           label="Bairro"
           options={bairrosOptions}
@@ -314,7 +313,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
       <p className="text-gray-700 font-bold">GRUPO DE PRODUTOS</p>
       <div className="grid grid-cols-2 gap-4">
         <div className="grid grid-cols-2 gap-4 justify-center items-center">
-          <SearchSelectInput
+          <SelectInput searchable
             name="gruposProdutoVendedor"
             label="Grupos de Produto"
             options={gruposProdutoOptions}

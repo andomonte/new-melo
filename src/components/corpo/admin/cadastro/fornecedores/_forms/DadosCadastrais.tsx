@@ -8,7 +8,6 @@ import FormInput from '@/components/common/FormInput';
 import CheckInput from '@/components/common/CheckInput';
 import { buscaCep, ViaCepResponse } from '@/data/cep';
 import { useDebouncedCallback } from 'use-debounce';
-import SearchSelectInput from '@/components/common/SearchSelectInput';
 //import { Bancos } from '@/data/bancos/bancos';
 import { CadFornecedorSearchOptions } from '../modalCadastrar';
 import { Paises } from '@/data/paises/paises';
@@ -160,7 +159,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             error={error?.tipoemp}
             required
           />
-          <SearchSelectInput
+          <SelectInput searchable
             name="classefornecedor"
             label="Classe de Fornecedor"
             options={classesFornecedorOptions}
@@ -267,7 +266,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             error={error?.uf}
             required
           />
-          <SearchSelectInput
+          <SelectInput searchable
             name="codpais"
             label="País"
             options={paisesOptions}
