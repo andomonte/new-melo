@@ -310,7 +310,7 @@ export function CommercialTab() {
                     name={`vendedores_list.${index}.segmentoId`}
                     render={({ field }) => (
                       <Select
-                        onValueChange={field.onChange}
+                        onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
                         value={field.value || ''}
                         disabled={loadingSegmentos}
                       >
@@ -318,6 +318,7 @@ export function CommercialTab() {
                           <SelectValue placeholder={loadingSegmentos ? 'Carregando...' : 'Segmento (opcional)'} />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                           <SelectItem value="__todos__">Todos os segmentos</SelectItem>
                           {segmentos.map((seg) => (
                             <SelectItem key={seg.codsegmento} value={seg.codsegmento}>
@@ -379,11 +380,12 @@ export function CommercialTab() {
             control={control}
             name="precoVenda"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || '0'}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || '0'}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   <SelectItem value="0">0 - Balcão</SelectItem>
                   <SelectItem value="1">1 - Revenda</SelectItem>
                   <SelectItem value="2">2 - Revenda 2</SelectItem>
@@ -422,11 +424,12 @@ export function CommercialTab() {
             control={control}
             name="descontoAplicado"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || 'N'}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || 'N'}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   <SelectItem value="S">Sim</SelectItem>
                   <SelectItem value="N">Não</SelectItem>
                 </SelectContent>

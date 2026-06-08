@@ -37,7 +37,7 @@ export default async function handle(
         COALESCE(p.descricao, '') as pais_nome
       FROM dbclien c
       LEFT JOIN dbcclien cc ON cc.codcc = c.codcc
-      LEFT JOIN dbpais p ON p.codpais = CAST(c.codpais AS INTEGER)
+      LEFT JOIN dbpais p ON c.codpais = p.codpais
       WHERE
         c.codcli ILIKE $1 OR
         c.nome ILIKE $1 OR

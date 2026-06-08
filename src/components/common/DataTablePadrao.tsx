@@ -121,6 +121,8 @@ export default function DataTablePadrao({
   const [prefsCarregadas, setPrefsCarregadas] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+
+
   // Carregar preferências do banco ao montar
   useEffect(() => {
     if (!screenKey || !userName) {
@@ -180,33 +182,35 @@ export default function DataTablePadrao({
     }
   }, [colunasVisiveis, ordemColunas, sortColumn, sortDirection, mostrarFiltros]);
 
-  // Inicializar colunas visíveis e ordem quando headers mudar
+  // Sincronizar ordemColunas e colunasVisiveis quando headers ou prefsCarregadas mudar
   useEffect(() => {
-    if (!prefsCarregadas) return;
+    if (!prefsCarregadas || headers.length === 0) return;
 
-    // Sempre sincronizar ordemColunas com headers disponíveis
-    // Mantém a ordem existente + adiciona novas colunas que apareceram
+    // Sincronizar ordemColunas com headers disponíveis
     const colunasAtuais = new Set(ordemColunas);
     const novasColunas = headers.filter(h => !colunasAtuais.has(h));
-    if (novasColunas.length > 0 || ordemColunas.length === 0) {
-      const ordemAtualizada = [
-        ...ordemColunas.filter(h => headers.includes(h)), // mantém ordem existente, remove as que sumiram
-        ...novasColunas, // adiciona novas no final
-      ];
-      setOrdemColunas(ordemAtualizada.length > 0 ? ordemAtualizada : headers);
+    const ordemValida = ordemColunas.filter(h => headers.includes(h));
+
+    if (novasColunas.length > 0 || ordemValida.length === 0) {
+      setOrdemColunas(ordemValida.length > 0 ? [...ordemValida, ...novasColunas] : [...headers]);
+    } else if (ordemValida.length !== ordemColunas.length) {
+      setOrdemColunas(ordemValida);
     }
 
-    // Se não tem colunas visíveis definidas, mostra as 10 primeiras por padrão
-    if (colunasVisiveis.length === 0) {
+    // Sincronizar colunasVisiveis
+    const visiveisValidas = colunasVisiveis.filter(h => headers.includes(h));
+
+    if (visiveisValidas.length === 0) {
+      // Sem colunas visíveis válidas: mostra as 10 primeiras
       setColunasVisiveis(headers.slice(0, Math.min(10, headers.length)));
-    } else {
-      // Remove colunas visíveis que não existem mais nos headers
-      const visiveisValidas = colunasVisiveis.filter(h => headers.includes(h));
-      if (visiveisValidas.length !== colunasVisiveis.length) {
-        setColunasVisiveis(visiveisValidas.length > 0 ? visiveisValidas : headers.slice(0, 10));
-      }
+    } else if (headers.length > visiveisValidas.length * 3) {
+      // Headers cresceu muito vs preferências salvas (API mudou): resetar
+      setColunasVisiveis(headers.slice(0, Math.min(10, headers.length)));
+    } else if (visiveisValidas.length !== colunasVisiveis.length) {
+      // Algumas colunas sumiram dos headers: limpar as inválidas
+      setColunasVisiveis(visiveisValidas);
     }
-  }, [headers]);
+  }, [headers, prefsCarregadas]);
 
   // Ordenação por coluna
   const isColumnSortable = (header: string) => {
@@ -795,17 +799,34 @@ export default function DataTablePadrao({
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setColunasVisiveis([...headers])}
-                      className="flex-1 px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                      onClick={() => {
+                        const todas = headers.length > 0 ? headers : ordemColunas;
+                        if (todas.length === 0) return;
+                        const todasVisiveis = todas.every(h => colunasVisiveis.includes(h));
+                        if (todasVisiveis) {
+                          const fixas = todas.filter(h => ['selecionar', 'ações'].includes(h.toLowerCase()));
+                          setColunasVisiveis(fixas.length > 0 ? fixas : [todas[0]]);
+                        } else {
+                          setColunasVisiveis([...todas]);
+                          setOrdemColunas([...todas]);
+                        }
+                      }}
+                      className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
+                        headers.length > 0 && headers.every(h => colunasVisiveis.includes(h))
+                          ? 'bg-blue-300 hover:bg-blue-400 text-blue-900 dark:bg-blue-700 dark:hover:bg-blue-600 dark:text-blue-100'
+                          : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      }`}
                     >
-                      Mostrar Todas
+                      {headers.length > 0 && headers.every(h => colunasVisiveis.includes(h)) ? 'Ocultar Todas' : 'Mostrar Todas'}
                     </button>
                     <button
-                      onClick={() => {
-                        setOrdemColunas([...headers]);
-                        setColunasVisiveis([...headers]);
-                      }}
-                      className="flex-1 px-2 py-1 text-xs bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
+                      onClick={() => { if (headers.length > 0) setOrdemColunas([...headers]); }}
+                      disabled={headers.length === 0}
+                      className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
+                        headers.length === 0
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
+                          : 'bg-gray-500 hover:bg-gray-600 text-white'
+                      }`}
                     >
                       Resetar Ordem
                     </button>

@@ -1,37 +1,181 @@
-import * as React from 'react';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { CaretSortIcon, CheckIcon } from '@radix-ui/react-icons';
 import { Search } from 'lucide-react';
+import React from 'react';
 
 interface Option {
   value: string;
   label: string;
 }
 
-interface SearchableSelectProps {
-  value?: string;
-  onValueChange?: (value: string) => void;
-  placeholder?: string;
+interface SelectPadraoProps {
+  name: string;
   options: Option[];
-  disabled?: boolean;
-  className?: string;
+  /** Label exibida acima do select */
+  label?: string;
+  /** Valor controlado */
+  value?: string;
+  /** Valor padrão (não controlado) */
+  defaultValue?: string;
+  /** Callback ao mudar valor */
+  onValueChange?: (value: string) => void;
+  /** Campo obrigatório — mostra * e esconde "Limpar seleção" */
   required?: boolean;
+  /** Mensagem de erro */
+  error?: string;
+  /** Desabilitar */
+  disabled?: boolean;
+  /** Placeholder */
+  placeholder?: string;
+  /** Ativa campo de busca dentro do dropdown (para listas grandes) */
+  searchable?: boolean;
+  /** Modo compacto — largura fixa, altura menor */
+  compact?: boolean;
+  /** Texto em maiúsculas */
+  uppercase?: boolean;
+  /** className extra no wrapper */
+  className?: string;
 }
 
 /**
- * Select com campo de pesquisa integrado.
- * Substitui o Select padrão quando há muitos itens.
- * Mantém a mesma aparência visual do Radix Select.
+ * Select padrão do sistema.
+ * Substitui SelectInput, SelectInput2, SelectInputFixo e SearchableSelect.
+ *
+ * - Dark/light mode ✅
+ * - Posição dinâmica (cima/baixo) ✅
+ * - Limpar seleção (quando !required) ✅
+ * - Campo de busca (searchable) ✅
+ * - Destaque campo modificado (verde) ✅ (via select.tsx base)
+ * - Enter → próximo campo ✅ (via select.tsx base)
+ * - Label + error ✅
  */
-export function SearchableSelect({
+export default function SelectPadrao({
+  name,
+  options,
+  label,
+  value,
+  defaultValue,
+  onValueChange,
+  required,
+  error,
+  disabled,
+  placeholder = 'Selecione...',
+  searchable = false,
+  compact = false,
+  uppercase = false,
+  className,
+}: SelectPadraoProps) {
+  // Modo searchable: renderiza dropdown customizado com campo de busca
+  if (searchable) {
+    return (
+      <div className={cn('space-y-1 text-gray-700 dark:text-gray-200', className)}>
+        {label && (
+          <Label htmlFor={name}>
+            {label}
+            {required && <span className="text-red-500"> *</span>}
+          </Label>
+        )}
+        <SearchableDropdown
+          value={value || defaultValue || ''}
+          onValueChange={(val) => onValueChange?.(val)}
+          options={options}
+          disabled={disabled}
+          required={required}
+          placeholder={placeholder}
+          uppercase={uppercase}
+        />
+        {error && <p className="text-sm text-red-500">{error}</p>}
+      </div>
+    );
+  }
+
+  // Modo padrão: usa Radix Select
+  const currentValue = value !== undefined ? value : defaultValue;
+  const handleChange = (val: string) => {
+    onValueChange?.(val === '__CLEAR__' ? '' : val);
+  };
+
+  return (
+    <div className={cn('space-y-1 text-gray-700 dark:text-gray-200', className)}>
+      {label && (
+        <Label htmlFor={name}>
+          {label}
+          {required && <span className="text-red-500"> *</span>}
+        </Label>
+      )}
+      <Select
+        {...(value !== undefined ? { value } : defaultValue ? { defaultValue } : {})}
+        name={name}
+        onValueChange={handleChange}
+        required={required}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          id={name}
+          disabled={disabled}
+          className={cn(
+            compact
+              ? 'w-56 h-9 pr-2 px-3 py-1 text-sm truncate'
+              : 'flex h-9 w-full items-center justify-between px-3 py-1 text-sm',
+            uppercase && 'uppercase',
+          )}
+        >
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {!required && (
+            <SelectItem
+              value="__CLEAR__"
+              className="text-gray-400 dark:text-gray-500"
+            >
+              — Limpar seleção —
+            </SelectItem>
+          )}
+          {options?.map((item) => (
+            <SelectItem
+              key={item.value}
+              value={item.value}
+              className={cn(uppercase && 'uppercase')}
+            >
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {error && <p className="text-sm text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+// ============================================================
+// Dropdown com busca integrada (substitui SearchableSelect)
+// ============================================================
+
+function SearchableDropdown({
   value,
   onValueChange,
-  placeholder = 'Selecione...',
   options,
-  disabled = false,
-  className,
-  required = false,
-}: SearchableSelectProps) {
+  disabled,
+  required,
+  placeholder,
+  uppercase,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: Option[];
+  disabled?: boolean;
+  required?: boolean;
+  placeholder: string;
+  uppercase?: boolean;
+}) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [modified, setModified] = React.useState(false);
@@ -60,7 +204,7 @@ export function SearchableSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Ao abrir: calcula posição fixa na tela (funciona dentro de scroll/modal)
+  // Calcula posição fixa (funciona dentro de scroll/modal)
   React.useEffect(() => {
     if (open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
@@ -85,7 +229,7 @@ export function SearchableSelect({
   const filtered = search
     ? options.filter((o) =>
         o.label.toLowerCase().includes(search.toLowerCase()) ||
-        o.value.toLowerCase().includes(search.toLowerCase())
+        o.value.toLowerCase().includes(search.toLowerCase()),
       )
     : options;
 
@@ -93,7 +237,7 @@ export function SearchableSelect({
     if (initialValueRef.current === undefined) initialValueRef.current = value || '';
     if (optionValue !== initialValueRef.current) setModified(true);
 
-    onValueChange?.(optionValue);
+    onValueChange(optionValue);
     setOpen(false);
     setSearch('');
 
@@ -105,8 +249,8 @@ export function SearchableSelect({
       if (!form) return;
       const focusable = Array.from(
         form.querySelectorAll<HTMLElement>(
-          'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="combobox"]:not([disabled]), button[role="combobox"]:not([disabled])'
-        )
+          'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="combobox"]:not([disabled]), button[role="combobox"]:not([disabled])',
+        ),
       );
       const idx = focusable.indexOf(trigger);
       const next = focusable[idx + 1];
@@ -118,7 +262,7 @@ export function SearchableSelect({
   };
 
   return (
-    <div ref={wrapperRef} className={cn('relative', className)}>
+    <div ref={wrapperRef} className="relative">
       <button
         ref={buttonRef}
         type="button"
@@ -133,6 +277,7 @@ export function SearchableSelect({
           'text-gray-900 dark:text-white',
           'focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-400',
           'disabled:cursor-not-allowed disabled:opacity-50',
+          uppercase && 'uppercase',
         )}
       >
         <span className={cn('truncate', !selectedLabel && 'text-muted-foreground')}>
@@ -196,6 +341,7 @@ export function SearchableSelect({
                     value === option.value
                       ? 'bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300'
                       : 'text-gray-700 dark:text-gray-100',
+                    uppercase && 'uppercase',
                   )}
                 >
                   <span className="truncate">{option.label}</span>

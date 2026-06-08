@@ -225,7 +225,7 @@ export function FinancialTab() {
             render={({ field }) => (
               <>
                 <Select
-                  onValueChange={field.onChange}
+                  onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
                   value={field.value || 'S'}
                 >
                   <SelectTrigger
@@ -238,6 +238,7 @@ export function FinancialTab() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                     <SelectItem value="S">S - Sim</SelectItem>
                     <SelectItem value="N">N - Não</SelectItem>
                   </SelectContent>
@@ -262,7 +263,7 @@ export function FinancialTab() {
             render={({ field }) => (
               <>
                 <Select
-                  onValueChange={field.onChange}
+                  onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
                   value={field.value || 'A'}
                 >
                   <SelectTrigger
@@ -275,6 +276,7 @@ export function FinancialTab() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                     <SelectItem value="A">A - Em Dia</SelectItem>
                     <SelectItem value="B">B - Pgto Cobrança</SelectItem>
                     <SelectItem value="C">C - Difícil Receber</SelectItem>
@@ -355,7 +357,7 @@ export function FinancialTab() {
             render={({ field }) => (
               <>
                 <Select
-                  onValueChange={field.onChange}
+                  onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
                   value={field.value || 'N'}
                 >
                   <SelectTrigger
@@ -368,6 +370,7 @@ export function FinancialTab() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                     <SelectItem value="N">N - Não</SelectItem>
                     <SelectItem value="S">S - Sim</SelectItem>
                   </SelectContent>
@@ -389,11 +392,12 @@ export function FinancialTab() {
             control={control}
             name="faixaFinanceira"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   {Array.from({ length: 10 }, (_, i) => {
                     const val = String(i + 1).padStart(2, '0');
                     return (
@@ -423,6 +427,7 @@ export function FinancialTab() {
                   onValueChange={(val) => field.onChange(val ? Number(val) : undefined)}
                   placeholder="Selecione o banco"
                   disabled={loadingBancos}
+                  required
                   options={bancos.map((b) => ({
                     value: String(b.banco),
                     label: `${b.banco} - ${b.nome}`,

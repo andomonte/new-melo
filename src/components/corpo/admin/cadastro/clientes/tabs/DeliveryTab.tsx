@@ -55,11 +55,12 @@ export function DeliveryTab() {
             control={control}
             name="tipoPessoaEntrega"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || 'F'}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || 'F'}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   <SelectItem value="F">Pessoa Física</SelectItem>
                   <SelectItem value="J">Pessoa Jurídica</SelectItem>
                 </SelectContent>
@@ -137,11 +138,12 @@ export function DeliveryTab() {
             control={control}
             name="ufEntrega"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                 <SelectTrigger>
                   <SelectValue placeholder="UF" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   {UFS.map((uf) => (
                     <SelectItem key={uf} value={uf}>{uf}</SelectItem>
                   ))}

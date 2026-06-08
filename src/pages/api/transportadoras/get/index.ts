@@ -35,12 +35,7 @@ export default async function handle(
       : '';
 
     const query = `
-      SELECT
-        codtransp, nome, nomefant, cpfcgc, tipo, data_cad,
-        ender, bairro, cidade, uf, iest, isuframa, imun, tipoemp,
-        contatos, cc, n_agencia, banco, cod_ident, cep,
-        codbairro, codmunicipio, numero, referencia,
-        CAST(codpais AS INTEGER) AS codpais, complemento, codunico
+      SELECT *
       FROM dbtransp
       WHERE
         codtransp ILIKE $1 OR nome ILIKE $1 OR nomefant ILIKE $1 OR cpfcgc ILIKE $1

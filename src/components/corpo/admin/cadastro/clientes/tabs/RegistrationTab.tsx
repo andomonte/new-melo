@@ -393,11 +393,12 @@ export function RegistrationTab({
             control={control}
             name="tipoCliente"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   <SelectItem value="R">R - Revenda</SelectItem>
                   <SelectItem value="F">F - Cliente Fin</SelectItem>
                   <SelectItem value="L">L - Prod. Rural</SelectItem>
@@ -417,11 +418,12 @@ export function RegistrationTab({
             control={control}
             name="situacaoTributaria"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   <SelectItem value="1">NC - Não Contribuinte</SelectItem>
                   <SelectItem value="2">LP - Lucro Presumido</SelectItem>
                   <SelectItem value="3">LR - Lucro Real</SelectItem>
@@ -440,11 +442,12 @@ export function RegistrationTab({
             control={control}
             name="tipoEmpresa"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   <SelectItem value="EPP">EPP - Empresa de Pequeno Porte</SelectItem>
                   <SelectItem value="ME">ME - Microempresa</SelectItem>
                   <SelectItem value="NL">NL - Normal</SelectItem>
@@ -464,7 +467,7 @@ export function RegistrationTab({
             name="classeCliente"
             render={({ field }) => (
               <Select
-                onValueChange={field.onChange}
+                onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
                 value={field.value || ''}
                 disabled={loadingClasses}
               >
@@ -476,6 +479,7 @@ export function RegistrationTab({
                   />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   {classesCliente.map((classe) => (
                     <SelectItem key={classe.codcc} value={classe.codcc}>
                       {classe.codcc} - {classe.descr}
@@ -682,11 +686,12 @@ export function RegistrationTab({
             control={control}
             name="uf"
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value || ''}>
+              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                 <SelectTrigger>
                   <SelectValue placeholder="UF" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                   {[
                     'AC',
                     'AL',
@@ -812,11 +817,12 @@ export function RegistrationTab({
               control={control}
               name="ufcobr"
               render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value || ''}>
+                <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
                   <SelectTrigger>
                     <SelectValue placeholder="UF" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
                     {[
                       'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
                       'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
