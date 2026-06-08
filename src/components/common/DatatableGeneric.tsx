@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Meta } from '../../data/common/meta';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Carregamento from '@/utils/carregamento';
 

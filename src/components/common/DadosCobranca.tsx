@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
-import SelectInput from '@/components/common/SelectInput2';
+import SelectInput from '@/components/common/SelectPadrao';
 import SecaoCollapse from '@/components/common/SecaoCollapse';
 import { FaMoneyBill } from 'react-icons/fa6';
 import { FileSymlink } from 'lucide-react';

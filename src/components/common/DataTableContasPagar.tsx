@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import { Select as RadixSelect, SelectTrigger as RadixSelectTrigger, SelectValue as RadixSelectValue, SelectContent as RadixSelectContent, SelectItem as RadixSelectItem } from '@/components/ui/select';
 import SearchInput from './SearchInput';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';

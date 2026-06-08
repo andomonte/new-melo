@@ -31,7 +31,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import Carregamento from '@/utils/carregamento';
-import SelectInput from '@/components/common/SelectInput2';
+import SelectInput from '@/components/common/SelectPadrao';
 import SearchInput from '@/components/common/SearchInput2';
 import { colunasDbNFe } from '../colunasDbNFe';
 

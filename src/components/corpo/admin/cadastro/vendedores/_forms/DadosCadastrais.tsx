@@ -8,7 +8,7 @@ import {
 } from '@/data/vendedores/vendedores';
 import SearchSelectInput from '@/components/common/SearchSelectInput';
 import { Bairro, Bairros } from '@/data/bairros/bairros';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 import { GruposProduto } from '@/data/gruposProduto/gruposProduto';
 import CheckInput from '@/components/common/CheckInput';
 import { AuxButton } from '@/components/common/Buttons';

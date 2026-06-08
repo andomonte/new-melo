@@ -19,7 +19,7 @@ import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upl
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import SelectPadrao from '@/components/common/SelectPadrao';
 
 export default function ContasAReceber() {
   const { user } = useContext(AuthContext);
@@ -1395,7 +1395,7 @@ export default function ContasAReceber() {
                 <div className="grid grid-cols-4 gap-3">
                   <div>
                     <Label htmlFor="operadora">Operadora *</Label>
-                    <SearchableSelect
+                    <SelectPadrao searchable
                       value={operadoraSelecionada}
                       onValueChange={setOperadoraSelecionada}
                       placeholder="Selecione a operadora..."

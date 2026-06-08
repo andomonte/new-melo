@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import SelectInput from '@/components/common/SelectInput2';
+import SelectInput from '@/components/common/SelectPadrao';
 import { colunasDbEntrada } from '../colunasDbEntrada';
 import { isColumnFixed } from '../helpers';
 import { PER_PAGE_OPTIONS } from '../constants';

@@ -1,7 +1,7 @@
 import React from 'react';
 import FormInput from '@/components/common/FormInput';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 
 const regimeTributarioOptions = [
   { value: '1', label: 'Simples Nacional' },

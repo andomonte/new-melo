@@ -1,6 +1,6 @@
 import React from 'react';
 import ModalFormulario from '@/components/common/modalform';
-import SelectInput from '@/components/common/SelectInput2';
+import SelectInput from '@/components/common/SelectPadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 
 interface Props {

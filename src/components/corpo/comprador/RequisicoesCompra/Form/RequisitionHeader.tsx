@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 import FormInput from '@/components/common/FormInput';
 import SearchSelectInput from '@/components/common/SearchSelectInput';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';

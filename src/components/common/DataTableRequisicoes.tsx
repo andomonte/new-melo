@@ -37,7 +37,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import Carregamento from '@/utils/carregamento';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import SearchInput from './SearchInput2';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { colunasDbRequisicao } from '@/components/corpo/comprador/RequisicoesCompra/colunasDbRequisicao';

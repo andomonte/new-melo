@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef, ChangeEvent } from 'rea
 import { AuthContext } from '@/contexts/authContexts';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
@@ -2704,7 +2704,7 @@ export function ContasAPagar() {
 
               <div>
                 <Label htmlFor="banco-lote">Conta *</Label>
-                <SearchableSelect
+                <SelectPadrao searchable
                   value={bancoLote}
                   onValueChange={setBancoLote}
                   placeholder="Selecione a conta"
@@ -2960,7 +2960,7 @@ export function ContasAPagar() {
           <div className="grid grid-cols-4 gap-3">
             <div>
               <Label htmlFor="conta_pgto">Conta *</Label>
-              <SearchableSelect
+              <SelectPadrao searchable
                 value={contaSelecionadaPgto}
                 onValueChange={setContaSelecionadaPgto}
                 placeholder="Selecione a conta..."
@@ -3529,7 +3529,7 @@ export function ContasAPagar() {
 
           <div>
             <Label htmlFor="titulo_banco">Banco</Label>
-            <SearchableSelect
+            <SelectPadrao searchable
               value={bancoSelecionado}
               onValueChange={setBancoSelecionado}
               placeholder="Selecione o banco"

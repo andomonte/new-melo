@@ -22,7 +22,7 @@ import useFocusProd from './userFocus/prodUseFocus';
 import MascaraReal from '@/utils/mascaraReal';
 import ConfirmaDel from './confirmaDelete';
 import InformeCliente from './informeCliente';
-import SelectInput from '@/components/common/SelectInputFixo';
+import SelectInput from '@/components/common/SelectPadrao';
 import SelecionarVendedor from './selectVendedor';
 import SelecionarOperador from './selectOperador';
 import SelecionarEntrega from './selectEntrega';
@@ -3906,7 +3906,7 @@ export default function HomeVenda() {
       <div className=" h-auto bg-gray-50 dark:bg-zinc-800  w-full flex justify-center items-center ">
         <div className="flex space-x-6 mt-2 mb-2 h-full py-0   w-[98%]  justify-center items-center ">
           <div className="space-y-2 sm:space-y-0 w-full flex-col flex sm:flex-row sm:space-x-4 items-center justify-center ">
-            <SelectInput
+            <SelectInput compact
               name="armazens"
               options={armazens}
               defaultValue={selectedArmazem?.value}

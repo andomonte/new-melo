@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import SearchInput from './SearchInput';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import Carregamento from '@/utils/carregamento';
 import SearchInput from '@/components/common/SearchInput2';
-import SelectInput from '@/components/common/SelectInput2';
+import SelectInput from '@/components/common/SelectPadrao';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import api from '@/components/services/api';
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 import {
   ClassesFornecedor,
   Fornecedor,

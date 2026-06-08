@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import SearchInput from './SearchInput';
 import Carregamento from '@/utils/carregamento';
 import {

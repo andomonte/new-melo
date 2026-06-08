@@ -40,7 +40,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import Carregamento from '@/utils/carregamento';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import SearchInput from './SearchInput';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 

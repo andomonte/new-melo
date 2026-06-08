@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -422,7 +422,7 @@ export function FinancialTab() {
             name="banco"
             render={({ field }) => (
               <>
-                <SearchableSelect
+                <SelectPadrao searchable
                   value={field.value ? String(field.value) : ''}
                   onValueChange={(val) => field.onChange(val ? Number(val) : undefined)}
                   placeholder="Selecione o banco"

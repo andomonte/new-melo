@@ -1,7 +1,7 @@
 import React from 'react';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import CheckInput from '@/components/common/CheckInput';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 
 const pisCofinsOptions = [
   { value: '0', label: 'Não Aplicar' },

@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import Carregamento from '@/utils/carregamento';
-import SelectInput from './SelectInput2';
+import SelectInput from './SelectPadrao';
 import SearchInput from './SearchInput2';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { PiSmileySadFill } from 'react-icons/pi'; // Importe o ícone PiSmileySadFill

@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 
 import {
   type DateRange,

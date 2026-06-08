@@ -13,7 +13,7 @@ import {
 
 import DataTable from '@/components/common/DataTableNova'; //para 5 colunas
 import { DefaultButton } from '@/components/common/Buttons';
-import SelectInput from '@/components/common/SelectInput'; // NOSSO COMPONENTE PADRÃO
+import SelectInput from '@/components/common/SelectPadrao'; // NOSSO COMPONENTE PADRÃO
 import { useToast } from '@/hooks/use-toast';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';

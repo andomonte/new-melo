@@ -17,7 +17,7 @@ interface Option {
 }
 
 interface SelectPadraoProps {
-  name: string;
+  name?: string;
   options: Option[];
   /** Label exibida acima do select */
   label?: string;

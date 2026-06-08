@@ -15,7 +15,7 @@ import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import DropdownNotasConhecimento from '@/components/common/DropdownNotasConhecimento';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { Meta } from '@/data/common/meta';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import SelectPadrao from '@/components/common/SelectPadrao';
 
 export default function NotasConhecimento() {
   const { user } = useContext(AuthContext);
@@ -410,7 +410,7 @@ export default function NotasConhecimento() {
           <div className="grid grid-cols-4 gap-3">
             <div>
               <Label>Banco *</Label>
-              <SearchableSelect value={bancoTitulo} onValueChange={setBancoTitulo} placeholder="Selecione o banco" options={bancosDisponiveis} />
+              <SelectPadrao searchable value={bancoTitulo} onValueChange={setBancoTitulo} placeholder="Selecione o banco" options={bancosDisponiveis} />
             </div>
             <div className="col-span-3">
               <Label>Descrição (opcional)</Label>

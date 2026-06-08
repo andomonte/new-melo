@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import DataTable from '@/components/common/DatatableFaturamentoNovo';
-import SelectInput from '@/components/common/SelectInput2';
+import SelectInput from '@/components/common/SelectPadrao';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 

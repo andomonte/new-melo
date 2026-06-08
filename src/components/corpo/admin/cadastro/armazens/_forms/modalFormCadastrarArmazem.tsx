@@ -7,7 +7,7 @@ import FormInput from '@/components/common/FormInput';
 import FormFooter from '@/components/common/FormFooter2';
 import Carregamento from '@/utils/carregamento';
 import CheckInput from '@/components/common/CheckInput';
-import SelectInput from '@/components/common/SelectInput';
+import SelectInput from '@/components/common/SelectPadrao';
 import {
   getTodasFiliais,
   Filial,
