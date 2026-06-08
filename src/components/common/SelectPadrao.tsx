@@ -143,9 +143,9 @@ export default function SelectPadrao({
               — Limpar seleção —
             </SelectItem>
           )}
-          {options?.map((item) => (
+          {options?.filter((item, index, arr) => arr.findIndex(o => o.value === item.value) === index).map((item, index) => (
             <SelectItem
-              key={item.value}
+              key={`${item.value}-${index}`}
               value={item.value}
               className={cn(uppercase && 'uppercase')}
             >
@@ -337,9 +337,9 @@ function SearchableDropdown({
                 Nenhum resultado encontrado
               </div>
             ) : (
-              filtered.map((option) => (
+              filtered.filter((item, index, arr) => arr.findIndex(o => o.value === item.value) === index).map((option, index) => (
                 <div
-                  key={option.value}
+                  key={`${option.value}-${index}`}
                   onClick={() => handleSelect(option.value)}
                   className={cn(
                     'relative flex items-center rounded-sm py-1.5 pl-2 pr-8 text-sm cursor-pointer',
