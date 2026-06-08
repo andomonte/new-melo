@@ -30,18 +30,27 @@ export const cadastroProdutoSchema = z.object({
     .max(2, 'Unidade de medida não pode ter mais de 2 caracteres'),
 
   // Campos obrigatórios com valores padrão
-  codmarca: z
-    .string()
-    .max(5, 'Código marca não pode ter mais de 5 caracteres')
-    .default('00000'),
-  codgpf: z
-    .string()
-    .max(5, 'Código grupo função não pode ter mais de 5 caracteres')
-    .default('00000'),
-  codgpp: z
-    .string()
-    .max(5, 'Código grupo produto não pode ter mais de 5 caracteres')
-    .default('00000'),
+  codmarca: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z
+      .string()
+      .min(1, 'Marca é obrigatória')
+      .max(5, 'Código marca não pode ter mais de 5 caracteres'),
+  ),
+  codgpf: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z
+      .string()
+      .min(1, 'Grupo de Função é obrigatório')
+      .max(5, 'Código grupo função não pode ter mais de 5 caracteres'),
+  ),
+  codgpp: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z
+      .string()
+      .min(1, 'Grupo de Produto é obrigatório')
+      .max(5, 'Código grupo produto não pode ter mais de 5 caracteres'),
+  ),
   curva: z
     .string()
     .max(1, 'Curva deve ter exatamente 1 caractere')
@@ -57,13 +66,25 @@ export const cadastroProdutoSchema = z.object({
     .string()
     .max(2, 'Tipo não pode ter mais de 2 caracteres')
     .default('ME'),
-  trib: z.string().max(1).default('N'),
-  strib: z
-    .string()
-    .max(3, 'Situação tributária não pode ter mais de 3 caracteres')
-    .default('000'),
-  isentopiscofins: z.string().max(1).default('N'),
-  isentoipi: z.string().max(1).default('S'),
+  trib: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z.string().min(1, 'Tributado é obrigatório').max(1),
+  ),
+  strib: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z
+      .string()
+      .min(1, 'Situação Tributária é obrigatória')
+      .max(3, 'Situação tributária não pode ter mais de 3 caracteres'),
+  ),
+  isentopiscofins: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z.string().min(1, 'Isento PIS/COFINS é obrigatório').max(1),
+  ),
+  isentoipi: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z.string().min(1, 'Situação IPI é obrigatória').max(1),
+  ),
 
   // Campos opcionais
   codbar: z
@@ -86,10 +107,10 @@ export const cadastroProdutoSchema = z.object({
     .max(100, 'Observações não pode ter mais de 100 caracteres')
     .optional()
     .nullable(),
-  inf: z.string().max(1).optional().nullable()
-    .refine((val) => !val || !['D', 'E', 'S'].includes(val.toUpperCase()), {
-      message: 'Informativo não pode ser D, E ou S',
-    }),
+  inf: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z.string().min(1, 'Informativo é obrigatório').max(1),
+  ),
   pesoliq: numberOrNull.optional(),
   qtembal: numberOrNull.optional(),
   qtestmin: numberOrNull.optional(),
@@ -97,18 +118,18 @@ export const cadastroProdutoSchema = z.object({
   coddesc: numberOrNull.optional(),
   tabelado: z.string().max(1).optional().nullable(),
   dolar: z.string().max(1).optional().nullable(),
-  multiplocompra: z
-    .preprocess((val) => {
-      if (val === null || val === undefined || val === '') return 1;
-      const num = Number(val);
-      return isNaN(num) ? 1 : num;
-    }, z.number().min(1, 'Múltiplo de compra não pode ser menor que 1'))
-    .optional(),
-  clasfiscal: z
-    .string()
-    .max(10, 'Classificação fiscal não pode ter mais de 10 caracteres')
-    .optional()
-    .nullable(),
+  multiplocompra: z.preprocess((val) => {
+    if (val === null || val === undefined || val === '') return 1;
+    const num = Number(val);
+    return isNaN(num) ? 1 : num;
+  }, z.number().min(1, 'Múltiplo de compra não pode ser menor que 1')),
+  clasfiscal: z.preprocess(
+    (val) => (val === null || val === undefined ? '' : val),
+    z
+      .string()
+      .min(8, 'Classificação Fiscal (NCM) deve ter no mínimo 8 caracteres')
+      .max(10, 'Classificação fiscal não pode ter mais de 10 caracteres'),
+  ),
   percsubst: z
     .preprocess((val) => {
       if (val === null || val === undefined || val === '') return null;

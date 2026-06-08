@@ -32,7 +32,7 @@ const requiredStringField = (maxLength: number, fieldName: string) =>
 export const cadastroTransportadoraSchema = z.object({
   codtransp: requiredStringField(5, 'Código da transportadora'),
   nome: requiredStringField(50, 'Nome da transportadora'),
-  nomefant: optionalStringField(50, 'Nome fantasia').optional(),
+  nomefant: requiredStringField(40, 'Nome Fantasia'),
   cpfcgc: z
     .union([z.string(), z.null(), z.undefined()])
     .transform((val) => val ?? '')
@@ -46,13 +46,13 @@ export const cadastroTransportadoraSchema = z.object({
         }, 'CPF ou CNPJ inválido'),
     ),
   tipo: optionalStringField(1, 'Tipo').optional(),
-  ender: optionalStringField(100, 'Endereço').optional(),
-  numero: optionalStringField(60, 'Número').optional(),
+  ender: requiredStringField(100, 'Logradouro'),
+  numero: requiredStringField(60, 'Número'),
   complemento: optionalStringField(100, 'Complemento').optional(),
-  bairro: optionalStringField(100, 'Bairro').optional(),
-  cidade: optionalStringField(100, 'Cidade').optional(),
-  uf: optionalStringField(2, 'UF').optional(),
-  cep: optionalStringField(9, 'CEP').optional(),
+  bairro: requiredStringField(100, 'Bairro'),
+  cidade: requiredStringField(100, 'Cidade'),
+  uf: requiredStringField(2, 'UF'),
+  cep: requiredStringField(9, 'CEP'),
   codpais: z
     .union([z.number(), z.null(), z.undefined(), z.string()])
     .transform((val) => {
@@ -60,7 +60,9 @@ export const cadastroTransportadoraSchema = z.object({
       const num = typeof val === 'string' ? parseInt(val, 10) : val;
       return isNaN(num) ? undefined : num;
     })
-    .optional(),
+    .refine((val) => val !== undefined && val !== null, {
+      message: 'País é obrigatório',
+    }),
   referencia: optionalStringField(200, 'Referência').optional(),
   tipoemp: optionalStringField(2, 'Tipo de empresa').optional(),
   contatos: optionalStringField(50, 'Contatos').optional(),

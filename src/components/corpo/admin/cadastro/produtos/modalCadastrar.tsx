@@ -114,8 +114,8 @@ export default function CustomModal({
 
   // Campos obrigatórios por aba para validação ao trocar
   const camposObrigatoriosPorAba: Record<string, string[]> = {
-    dadosCadastrais: ['ref', 'descr', 'unimed'],
-    dadosFiscais: ['trib', 'strib', 'isentopiscofins', 'isentoipi'],
+    dadosCadastrais: ['ref', 'descr', 'unimed', 'codmarca', 'codgpf', 'codgpp', 'multiplo', 'multiplocompra'],
+    dadosFiscais: ['trib', 'strib', 'isentopiscofins', 'isentoipi', 'clasfiscal', 'inf'],
     dadosCustos: [],
     referenciaFabrica: [],
   };

@@ -309,6 +309,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <SearchSelectInput
             name="codmarca"
             label="Marca"
+            required
             options={marcaOptions}
             value={produto.codmarca || ''}
             onValueChange={(value) =>
@@ -323,6 +324,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <SearchSelectInput
             name="codgpf"
             label="Grupo de Função"
+            required
             options={grupoFuncaoOptions}
             value={produto.codgpf || ''}
             onValueChange={(value) =>
@@ -339,6 +341,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <SearchSelectInput
             name="codgpp"
             label="Grupo de Produto"
+            required
             options={grupoProdutoOptions}
             value={produto.codgpp || ''}
             onValueChange={(value) =>
@@ -455,6 +458,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             name="multiplo"
             type="number"
             label="Múltiplo Venda"
+            required
             value={displayNumberValue(produto.multiplo)}
             onChange={(e) =>
               handleProdutoChange({
@@ -518,6 +522,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             name="multiplocompra"
             type="number"
             label="Múltiplo Compra"
+            required
             value={displayNumberValue(produto.multiplocompra)}
             onChange={(e) =>
               handleProdutoChange({

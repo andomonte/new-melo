@@ -238,6 +238,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           <SearchSelectInput
             name="clasfiscal"
             label="Classif. Fiscal"
+            required
             options={classificaoesFiscaisOptions}
             value={produto.clasfiscal || ''}
             onValueChange={(value) =>

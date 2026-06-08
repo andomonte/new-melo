@@ -70,7 +70,7 @@ export default function CustomModal({
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
 
   const camposObrigatoriosPorAba: Record<string, string[]> = {
-    dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf'],
+    dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'codpais', 'tipoemp', 'tipofornecedor', 'tipo'],
     dadosFinanceiros: ['regime_tributacao'],
     regrasFaturamento: [],
   };
@@ -78,6 +78,8 @@ export default function CustomModal({
   const handleActiveTab = (tab: string) => {
     const camposAba = camposObrigatoriosPorAba[activeTab] || [];
     const camposPendentes = camposAba.filter((campo) => {
+      // tipofornecedor só é obrigatório quando tipo !== 'X'
+      if (campo === 'tipofornecedor' && fornecedor.tipo === 'X') return false;
       const valor = (fornecedor as any)[campo];
       return valor === undefined || valor === null || valor === '';
     });

@@ -127,6 +127,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             label="Tipo"
             options={tipoPessoaOptions}
             defaultValue={fornecedor.tipo || ''}
+            required
             onValueChange={(value) => {
               handleFornecedorChange('tipo', value);
               // Exterior: seta CPF como "EXTERIOR" e limpa tipo fornecedor
@@ -235,6 +236,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             defaultValue={fornecedor.numero || ''}
             onChange={(e) => handleFornecedorChange('numero', e.target.value)}
             error={error?.numero}
+            required
           />
         </div>
         <div className="grid grid-cols-4 gap-4">

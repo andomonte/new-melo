@@ -195,7 +195,7 @@ export default function DadosCadastrais({
           htmlFor="nomefant"
           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
         >
-          Nome Fantasia
+          Nome Fantasia<span className="text-red-500"> *</span>
         </label>
         <input
           type="text"
@@ -205,8 +205,12 @@ export default function DadosCadastrais({
             handleTransportadoraChange('nomefant', e.target.value)
           }
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          maxLength={50}
+          maxLength={40}
+          required
         />
+        {error.nomefant && (
+          <p className="text-red-500 text-xs mt-1">{error.nomefant}</p>
+        )}
       </div>
 
       {/* Endereço para Correspondência */}
@@ -221,7 +225,7 @@ export default function DadosCadastrais({
               htmlFor="cep"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              CEP
+              CEP<span className="text-red-500"> *</span>
             </label>
             <input
               type="text"
@@ -237,7 +241,11 @@ export default function DadosCadastrais({
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={9}
               placeholder="00000-000"
+              required
             />
+            {error.cep && (
+              <p className="text-red-500 text-xs mt-1">{error.cep}</p>
+            )}
           </div>
 
           <div>
@@ -245,7 +253,7 @@ export default function DadosCadastrais({
               htmlFor="ender"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Logradouro
+              Logradouro<span className="text-red-500"> *</span>
             </label>
             <input
               type="text"
@@ -256,7 +264,11 @@ export default function DadosCadastrais({
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={100}
+              required
             />
+            {error.ender && (
+              <p className="text-red-500 text-xs mt-1">{error.ender}</p>
+            )}
           </div>
 
           <div>
@@ -264,7 +276,7 @@ export default function DadosCadastrais({
               htmlFor="numero"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Número
+              Número<span className="text-red-500"> *</span>
             </label>
             <input
               type="text"
@@ -275,7 +287,11 @@ export default function DadosCadastrais({
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={60}
+              required
             />
+            {error.numero && (
+              <p className="text-red-500 text-xs mt-1">{error.numero}</p>
+            )}
           </div>
         </div>
 
@@ -285,7 +301,7 @@ export default function DadosCadastrais({
               htmlFor="uf"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              UF
+              UF<span className="text-red-500"> *</span>
             </label>
             <input
               type="text"
@@ -294,7 +310,11 @@ export default function DadosCadastrais({
               onChange={(e) => handleTransportadoraChange('uf', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={2}
+              required
             />
+            {error.uf && (
+              <p className="text-red-500 text-xs mt-1">{error.uf}</p>
+            )}
           </div>
 
           <div>
@@ -302,7 +322,7 @@ export default function DadosCadastrais({
               htmlFor="bairro"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Bairro
+              Bairro<span className="text-red-500"> *</span>
             </label>
             <input
               type="text"
@@ -313,7 +333,11 @@ export default function DadosCadastrais({
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={100}
+              required
             />
+            {error.bairro && (
+              <p className="text-red-500 text-xs mt-1">{error.bairro}</p>
+            )}
           </div>
         </div>
 
@@ -323,7 +347,7 @@ export default function DadosCadastrais({
               htmlFor="cidade"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              Cidade
+              Cidade<span className="text-red-500"> *</span>
             </label>
             <input
               type="text"
@@ -334,7 +358,11 @@ export default function DadosCadastrais({
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={100}
+              required
             />
+            {error.cidade && (
+              <p className="text-red-500 text-xs mt-1">{error.cidade}</p>
+            )}
           </div>
 
           <div>
@@ -342,7 +370,7 @@ export default function DadosCadastrais({
               htmlFor="codpais"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
-              País
+              País<span className="text-red-500"> *</span>
             </label>
             <input
               type="number"
@@ -352,7 +380,11 @@ export default function DadosCadastrais({
                 handleTransportadoraChange('codpais', Number(e.target.value))
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              required
             />
+            {error.codpais && (
+              <p className="text-red-500 text-xs mt-1">{error.codpais}</p>
+            )}
           </div>
         </div>
 

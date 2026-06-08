@@ -44,7 +44,7 @@ export default function CustomModal({
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
 
   const camposObrigatoriosPorAba: Record<string, string[]> = {
-    dadosCadastrais: ['nome', 'cpfcgc'],
+    dadosCadastrais: ['nome', 'cpfcgc', 'nomefant', 'ender', 'numero', 'bairro', 'cidade', 'uf', 'codpais', 'cep'],
     dadosFinanceiros: [],
     calculoFrete: [],
   };
