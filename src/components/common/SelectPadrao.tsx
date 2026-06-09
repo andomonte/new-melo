@@ -244,8 +244,8 @@ function SearchableDropdown({
 
   const filtered = search
     ? options.filter((o) =>
-        o.label.toLowerCase().includes(search.toLowerCase()) ||
-        o.value.toLowerCase().includes(search.toLowerCase()),
+        String(o.label).toLowerCase().includes(search.toLowerCase()) ||
+        String(o.value).toLowerCase().includes(search.toLowerCase()),
       )
     : options;
 
