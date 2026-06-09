@@ -7,6 +7,9 @@ export const cadastroFornecedorSchema = z.object({
     .min(1, 'Campo CNPJ/CPF é obrigatório.')
     .refine((value) => isValidCpfCnpj(value), {
       message: 'CNPJ/CPF inválido.',
+    })
+    .refine((value) => value.replace(/\D/g, '') !== '04618302000189', {
+      message: 'Não é permitido cadastrar o CNPJ da própria empresa como fornecedor',
     }),
   nome: z
     .string({ required_error: 'Campo nome é obrigatório.' })
@@ -82,6 +85,15 @@ export const cadastroFornecedorSchema = z.object({
       message:
         'Campo Inscrição Suframa é obrigatório quando Isento Suframa está desmarcado.',
     }),
+}).superRefine((data, ctx) => {
+  // Fornecedor exterior não pode ter Brasil como país
+  if (data.tipo === 'X' && String(data.codpais) === '1058') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Fornecedor exterior não pode ter Brasil como país',
+      path: ['codpais'],
+    });
+  }
 });
 
 // ✅ CORREÇÃO: Schema específico para edição - mais flexível com campos opcionais
@@ -91,6 +103,9 @@ export const edicaoFornecedorSchema = z.object({
     .min(1, 'Campo CNPJ/CPF é obrigatório.')
     .refine((value) => isValidCpfCnpj(value), {
       message: 'CNPJ/CPF inválido.',
+    })
+    .refine((value) => value.replace(/\D/g, '') !== '04618302000189', {
+      message: 'Não é permitido cadastrar o CNPJ da própria empresa como fornecedor',
     }),
   nome: z
     .string({ required_error: 'Campo nome é obrigatório.' })
@@ -166,6 +181,15 @@ export const edicaoFornecedorSchema = z.object({
       message:
         'Campo Inscrição Suframa é obrigatório quando Isento Suframa está desmarcado.',
     }),
+}).superRefine((data, ctx) => {
+  // Fornecedor exterior não pode ter Brasil como país
+  if (data.tipo === 'X' && String(data.codpais) === '1058') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Fornecedor exterior não pode ter Brasil como país',
+      path: ['codpais'],
+    });
+  }
 });
 
 export type CadastroFornecedor = z.infer<typeof cadastroFornecedorSchema>;

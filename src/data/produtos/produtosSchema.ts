@@ -112,7 +112,7 @@ export const cadastroProdutoSchema = z.object({
     z.string().min(1, 'Informativo é obrigatório').max(1),
   ),
   pesoliq: numberOrNull.optional(),
-  qtembal: numberOrNull.optional(),
+  qtembal: numberWithDefault(1),
   qtestmin: numberOrNull.optional(),
   qtestmax: numberOrNull.optional(),
   coddesc: numberOrNull.optional(),
@@ -128,7 +128,19 @@ export const cadastroProdutoSchema = z.object({
     z
       .string()
       .min(8, 'Classificação Fiscal (NCM) deve ter no mínimo 8 caracteres')
-      .max(10, 'Classificação fiscal não pode ter mais de 10 caracteres'),
+      .max(10, 'Classificação fiscal não pode ter mais de 10 caracteres')
+      .refine(
+        (val) => {
+          // Rejeita NCMs com padrões falsos (dígitos repetidos)
+          const fakePatterns = [
+            '00000000', '11111111', '22222222', '33333333', '44444444',
+            '55555555', '66666666', '77777777', '88888888', '99999999',
+            '0000.0.0',
+          ];
+          return !fakePatterns.includes(val);
+        },
+        { message: 'NCM inválido: não é permitido usar dígitos repetidos ou padrões fictícios' }
+      ),
   ),
   percsubst: z
     .preprocess((val) => {
@@ -237,10 +249,9 @@ export const cadastroProdutoSchema = z.object({
 )
 .refine(
   (data) => {
-    // % Agregado (MVA) não pode ser 0 quando tributado = SIM
-    if (data.trib === 'S' && (data.percsubst === null || data.percsubst === undefined || data.percsubst === 0)) {
-      return false;
-    }
+    // % Agregado (MVA): quando tributado = SIM e percsubst = 0, apenas avisa (não bloqueia)
+    // O aviso "Deseja salvar sem essa informação?" é tratado no componente de formulário
+    // conforme comportamento Delphi (MessageDlg mtWarning com mbYes/mbNo)
     return true;
   },
   { message: '% Agregado (MVA) é obrigatório quando Tributado = SIM', path: ['percsubst'] }

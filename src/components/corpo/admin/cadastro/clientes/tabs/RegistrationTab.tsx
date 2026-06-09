@@ -165,6 +165,8 @@ export function RegistrationTab({
   };
 
   // Quando tipo pessoa = Física: auto-marca isentos e situação tributária "Não contribuinte"
+  // NOTA: No Delphi, esses campos não são auto-preenchidos ao mudar para Pessoa Física.
+  // Mantido como melhoria de UX — o usuário pode alterar manualmente se necessário.
   const tipoPessoaAnterior = useRef(tipoPessoa);
   useEffect(() => {
     // Só aplica quando o usuário MUDA para Física (não no carregamento inicial da edição)

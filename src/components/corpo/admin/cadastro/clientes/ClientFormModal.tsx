@@ -681,7 +681,7 @@ export default function ClientFormModal({
       'inscricaoEstadual', 'inscricaoMunicipal', 'suframa',
       'endercobr', 'numerocobr', 'bairrocobr', 'cidadecobr', 'ufcobr',
     ];
-    const financialFields = ['banco', 'icms', 'precoVenda'];
+    const financialFields = ['banco', 'icms', 'precoVenda', 'aceitaAtraso', 'diasAtraso'];
     const commercialFields = ['vendedores_list'];
     if (tab === 'registration') return registrationFields;
     if (tab === 'financial') return financialFields;

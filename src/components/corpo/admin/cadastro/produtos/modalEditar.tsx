@@ -192,6 +192,15 @@ export default function CustomModal({
         }
       }
 
+      // Validação Informativo: na edição, 'E' e 'S' são sempre inválidos;
+      // 'D' idealmente exige checagem de estoque > 0, mas por ora apenas avisa sobre E/S (conforme Delphi)
+      const infVal = (produtoFinal.inf || '').toUpperCase();
+      if (infVal === 'E' || infVal === 'S') {
+        toast({ description: `Informativo "${infVal}" não é permitido para edição de produto.`, variant: 'destructive' });
+        setActiveTab('dadosCadastrais');
+        return;
+      }
+
       cadastroProdutoSchema.parse(produtoFinal);
 
       setLoading(true);

@@ -241,6 +241,15 @@ export const clientSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'UF de cobrança é obrigatória', path: ['ufcobr'] });
     }
   }
+
+  // Dias de atraso: obrigatório quando "Permitir atraso" NÃO está marcado
+  // No Delphi: se checkbox NOT checked AND (diasAtraso vazio OU <= 0), erro
+  if (!data.aceitaAtraso) {
+    const dias = data.diasAtraso;
+    if (dias === null || dias === undefined || dias === '' || Number(dias) <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o nº de dias de atraso ou marque "Permitir atraso"', path: ['diasAtraso'] });
+    }
+  }
 });
 
 export type ClientFormValues = z.infer<typeof clientSchema>;

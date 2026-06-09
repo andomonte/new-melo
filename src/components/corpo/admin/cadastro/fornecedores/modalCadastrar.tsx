@@ -295,6 +295,8 @@ export default function CustomModal({
         throw validationError; // Re-throw para ser capturado pelo catch principal
       }
 
+      // TODO: verificar duplicidade de CPF/CNPJ antes de salvar (conforme Delphi)
+
       console.log('🏠 Processando dados do bairro...');
       await handleBairroAndUpdateFornecedor();
 

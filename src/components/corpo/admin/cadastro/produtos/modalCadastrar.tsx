@@ -180,6 +180,14 @@ export default function CustomModal({
         }
       }
 
+      // Validação Informativo: no cadastro, 'D', 'E' e 'S' são inválidos (conforme Delphi)
+      const infVal = (produtoFinal.inf || '').toUpperCase();
+      if (infVal === 'D' || infVal === 'E' || infVal === 'S') {
+        toast({ description: 'Informativo inválido para cadastro. Valores "D", "E" e "S" não são permitidos ao criar um produto.', variant: 'destructive' });
+        setActiveTab('dadosFiscais');
+        return;
+      }
+
       cadastroProdutoSchema.parse(produtoFinal);
 
       await insertProduto(produtoFinal);

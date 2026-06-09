@@ -303,13 +303,15 @@ export default function DadosCadastrais({
             >
               UF<span className="text-red-500"> *</span>
             </label>
+            {/* TODO: quando UF='EX' (Exterior), pular validação de CNPJ/CPF e setar codmunicipio='9999999' (conforme Delphi) */}
             <input
               type="text"
               id="uf"
               value={transportadora.uf || ''}
-              onChange={(e) => handleTransportadoraChange('uf', e.target.value)}
+              onChange={(e) => handleTransportadoraChange('uf', e.target.value.toUpperCase())}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               maxLength={2}
+              placeholder="Ex: SP, RJ, EX"
               required
             />
             {error.uf && (

@@ -81,6 +81,7 @@ export default function CustomModal({
 
   const handleSubmit = async () => {
     try {
+      // TODO: verificar duplicidade de CPF/CNPJ+IE antes de salvar (conforme Delphi)
       await insertTransportadora(transportadora);
       setErrors({});
       setMensagemInfo('Transportadora cadastrada com sucesso!');
