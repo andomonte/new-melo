@@ -29,36 +29,27 @@ export default async function handle(
     const searchDigits = String(search).replace(/\D/g, '');
     const searchDigitsTerm = searchDigits.length >= 3 ? `%${searchDigits}%` : null;
 
-    // Query com JOINs para nomes amigáveis (igual Delphi)
+    // Query simples — enriquecimento feito no JavaScript após a query
     const query = `
-      SELECT
-        c.*,
-        COALESCE(cc.descr, '') as classe_nome,
-        COALESCE(p.descricao, '') as pais_nome,
-        COALESCE(v.nome, '') as vendedor_nome,
-        COALESCE(bc.nome, '') as banco_nome
-      FROM dbclien c
-      LEFT JOIN dbcclien cc ON cc.codcc = c.codcc
-      LEFT JOIN dbpais p ON c.codpais = p.codpais
-      LEFT JOIN dbvendedor v ON v.codvend = c.codvend
-      LEFT JOIN dbbanco_cobranca bc ON bc.banco = c.banco
+      SELECT *
+      FROM dbclien
       WHERE
-        c.codcli ILIKE $1 OR
-        c.nome ILIKE $1 OR
-        c.cpfcgc ILIKE $1
-        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(c.cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''}
-      ORDER BY c.nome ASC
+        codcli ILIKE $1 OR
+        nome ILIKE $1 OR
+        cpfcgc ILIKE $1
+        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''}
+      ORDER BY nome ASC
       LIMIT $2 OFFSET $3;
     `;
 
     const countQuery = `
       SELECT COUNT(*) AS total
-      FROM dbclien c
+      FROM dbclien
       WHERE
-        c.codcli ILIKE $1 OR
-        c.nome ILIKE $1 OR
-        c.cpfcgc ILIKE $1
-        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(c.cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''};
+        codcli ILIKE $1 OR
+        nome ILIKE $1 OR
+        cpfcgc ILIKE $1
+        ${searchDigitsTerm ? `OR REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') ILIKE $4` : ''};
     `;
 
     // Executa as queries em paralelo
@@ -82,20 +73,40 @@ export default async function handle(
     
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
+    // Buscar lookups para enriquecer (com try/catch para não quebrar se tabela não existir)
+    const lookups: Record<string, Record<string, string>> = {};
+    try {
+      const classeResult = await client.query('SELECT codcc, descr FROM dbcclien');
+      classeResult.rows.forEach((r: any) => { lookups[`cc_${String(r.codcc).trim()}`] = String(r.descr || '').trim(); });
+    } catch { /* tabela pode não existir */ }
+    try {
+      const paisResult = await client.query('SELECT codpais, descricao FROM dbpais');
+      paisResult.rows.forEach((r: any) => { lookups[`pais_${String(r.codpais).trim()}`] = String(r.descricao || '').trim(); });
+    } catch { /* tabela pode não existir */ }
+    try {
+      const vendResult = await client.query('SELECT codvend, nome FROM dbvend');
+      vendResult.rows.forEach((r: any) => { lookups[`vend_${String(r.codvend).trim()}`] = String(r.nome || '').trim(); });
+    } catch { /* tabela pode não existir */ }
+    try {
+      const bancoResult = await client.query('SELECT banco, nome FROM dbbanco_cobranca');
+      bancoResult.rows.forEach((r: any) => { lookups[`banco_${String(r.banco).trim()}`] = String(r.nome || '').trim(); });
+    } catch { /* tabela pode não existir */ }
+
+    // Mapas estáticos
+    const tipoClienteMap: Record<string, string> = { R: 'R - REVENDA', F: 'F - CLIENTE FINAL', L: 'L - PROD. RURAL', S: 'S - SOLIDÁRIO', X: 'X - EXPORTAÇÃO' };
+    const sitTribMap: Record<string, string> = { '1': '1 - NÃO CONTRIBUINTE', '2': '2 - LUCRO PRESUMIDO', '3': '3 - LUCRO REAL', '4': '4 - SIMPLES NACIONAL' };
+
     // Enriquecer dados: "código - nome" como Delphi
     const clientes = result.rows.map((c: any) => {
-      if (c.classe_nome && c.codcc) c.codcc = `${c.codcc} - ${c.classe_nome}`;
-      if (c.pais_nome && c.codpais) c.codpais = `${c.codpais} - ${c.pais_nome}`;
-      if (c.vendedor_nome && c.codvend) c.codvend = `${c.codvend} - ${c.vendedor_nome}`;
-      if (c.banco_nome && c.banco) c.banco = `${c.banco} - ${c.banco_nome}`;
-      delete c.classe_nome;
-      delete c.pais_nome;
-      delete c.vendedor_nome;
-      delete c.banco_nome;
+      const ccKey = `cc_${String(c.codcc || '').trim()}`;
+      const paisKey = `pais_${String(c.codpais || '').trim()}`;
+      const vendKey = `vend_${String(c.codvend || '').trim()}`;
+      const bancoKey = `banco_${String(c.banco || '').trim()}`;
 
-      // Mapear códigos para descrições legíveis
-      const tipoClienteMap: Record<string, string> = { R: 'R - REVENDA', F: 'F - CLIENTE FINAL', L: 'L - PROD. RURAL', S: 'S - SOLIDÁRIO', X: 'X - EXPORTAÇÃO' };
-      const sitTribMap: Record<string, string> = { '1': '1 - NÃO CONTRIBUINTE', '2': '2 - LUCRO PRESUMIDO', '3': '3 - LUCRO REAL', '4': '4 - SIMPLES NACIONAL' };
+      if (c.codcc && lookups[ccKey]) c.codcc = `${String(c.codcc).trim()} - ${lookups[ccKey]}`;
+      if (c.codpais && lookups[paisKey]) c.codpais = `${String(c.codpais).trim()} - ${lookups[paisKey]}`;
+      if (c.codvend && lookups[vendKey]) c.codvend = `${String(c.codvend).trim()} - ${lookups[vendKey]}`;
+      if (c.banco && lookups[bancoKey]) c.banco = `${String(c.banco).trim()} - ${lookups[bancoKey]}`;
 
       if (c.tipocliente && tipoClienteMap[c.tipocliente]) c.tipocliente = tipoClienteMap[c.tipocliente];
       if (c.sit_tributaria && sitTribMap[String(c.sit_tributaria)]) c.sit_tributaria = sitTribMap[String(c.sit_tributaria)];

@@ -1091,7 +1091,7 @@ export default function ClientFormModal({
           <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-zinc-800 p-6">
             <FormFooter
               onSubmit={handleFormSubmit}
-              onClear={onClose}
+              onClear={() => reset()}
               isSaving={isSubmitting}
               hasChanges={true}
               submitText={isEditing ? 'Salvar Alterações' : 'Cadastrar'}
