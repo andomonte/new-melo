@@ -235,33 +235,37 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.nrodi}
           />
-          <SelectInput
-            name="trib"
-            label="Tributado"
-            required
-            options={tributadoOptions}
-            value={produto.trib || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, trib: value as string })
-            }
-            error={error?.trib}
-          />
-          <SelectInput searchable
-            name="clasfiscal"
-            label="Classif. Fiscal"
-            required
-            loading={loadingClassFiscal}
-            options={classificaoesFiscaisOptions}
-            value={produto.clasfiscal || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, clasfiscal: value as string })
-            }
-            onInputChange={(value) => {
-              setClassificacaoFiscalSearch(value);
-              handleClassificacaoFiscalSearch();
-            }}
-            error={error?.clasfiscal}
-          />
+          <div className={error?.trib ? 'field-error' : ''}>
+            <SelectInput
+              name="trib"
+              label="Tributado"
+              required
+              options={tributadoOptions}
+              value={produto.trib || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, trib: value as string })
+              }
+              error={error?.trib}
+            />
+          </div>
+          <div className={error?.clasfiscal ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="clasfiscal"
+              label="Classif. Fiscal"
+              required
+              loading={loadingClassFiscal}
+              options={classificaoesFiscaisOptions}
+              value={produto.clasfiscal || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, clasfiscal: value as string })
+              }
+              onInputChange={(value) => {
+                setClassificacaoFiscalSearch(value);
+                handleClassificacaoFiscalSearch();
+              }}
+              error={error?.clasfiscal}
+            />
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <FormInput
@@ -277,7 +281,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.dtdi}
           />
-          <div className="text-gray-700 dark:text-gray-200">
+          <div className={`text-gray-700 dark:text-gray-200 ${error?.strib ? 'field-error' : ''}`}>
             <Label htmlFor="strib">Situação Tributária <span className="text-red-500">*</span></Label>
             <div className="grid grid-cols-2 gap-4">
               <SelectInput
@@ -317,20 +321,22 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           />
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <SelectInput
-            name="isentopiscofins"
-            label="Isento PIS/COFINS?"
-            required
-            options={isentoPisCofinsOptions}
-            value={produto.isentopiscofins || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({
-                ...produto,
-                isentopiscofins: value as string,
-              })
-            }
-            error={error?.isentopiscofins}
-          />
+          <div className={error?.isentopiscofins ? 'field-error' : ''}>
+            <SelectInput
+              name="isentopiscofins"
+              label="Isento PIS/COFINS?"
+              required
+              options={isentoPisCofinsOptions}
+              value={produto.isentopiscofins || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({
+                  ...produto,
+                  isentopiscofins: value as string,
+                })
+              }
+              error={error?.isentopiscofins}
+            />
+          </div>
           <FormInput
             name="pis"
             type="number"
@@ -359,17 +365,19 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           />
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <SelectInput
-            name="isentoipi"
-            label="Situação IPI?"
-            required
-            options={situacaoIpiOptions}
-            value={produto.isentoipi || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, isentoipi: value as IsentoIPI })
-            }
-            error={error?.isentoipi}
-          />
+          <div className={error?.isentoipi ? 'field-error' : ''}>
+            <SelectInput
+              name="isentoipi"
+              label="Situação IPI?"
+              required
+              options={situacaoIpiOptions}
+              value={produto.isentoipi || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, isentoipi: value as IsentoIPI })
+              }
+              error={error?.isentoipi}
+            />
+          </div>
           <FormInput
             name="ipi"
             type="number"
@@ -412,23 +420,25 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.ii}
           />
-          <SelectInput searchable
-            name="cest"
-            label="CEST"
-            loading={loadingCest}
-            options={cestsOptions}
-            value={produto.cest || ''}
-            onValueChange={(value) => {
-              handleProdutoChange({ ...produto, cest: value as string });
-              // Valida passando o valor diretamente
-              handleValidateCest(value as string);
-            }}
-            onInputChange={(value) => {
-              setCestSearch(value);
-              handleCestSearch();
-            }}
-            error={error?.cest}
-          />
+          <div className={error?.cest ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="cest"
+              label="CEST"
+              loading={loadingCest}
+              options={cestsOptions}
+              value={produto.cest || ''}
+              onValueChange={(value) => {
+                handleProdutoChange({ ...produto, cest: value as string });
+                // Valida passando o valor diretamente
+                handleValidateCest(value as string);
+              }}
+              onInputChange={(value) => {
+                setCestSearch(value);
+                handleCestSearch();
+              }}
+              error={error?.cest}
+            />
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <SelectInput

@@ -150,7 +150,7 @@ export default function DadosCadastrais({
           </select>
         </div>
 
-        <div>
+        <div className={error.cpfcgc || cpfCnpjError ? 'field-error' : ''}>
           <label
             htmlFor="cpfcgc"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -183,7 +183,7 @@ export default function DadosCadastrais({
 
       {/* Código e Nome */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
+        <div className={error.codtransp ? 'field-error' : ''}>
           <label
             htmlFor="codtransp"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -206,7 +206,7 @@ export default function DadosCadastrais({
           )}
         </div>
 
-        <div>
+        <div className={error.nome ? 'field-error' : ''}>
           <label
             htmlFor="nome"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -229,7 +229,7 @@ export default function DadosCadastrais({
       </div>
 
       {/* Nome Fantasia */}
-      <div>
+      <div className={error.nomefant ? 'field-error' : ''}>
         <label
           htmlFor="nomefant"
           className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -259,7 +259,7 @@ export default function DadosCadastrais({
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
+          <div className={error.cep ? 'field-error' : ''}>
             <label
               htmlFor="cep"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -287,7 +287,7 @@ export default function DadosCadastrais({
             )}
           </div>
 
-          <div>
+          <div className={error.ender ? 'field-error' : ''}>
             <label
               htmlFor="ender"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -310,7 +310,7 @@ export default function DadosCadastrais({
             )}
           </div>
 
-          <div>
+          <div className={error.numero ? 'field-error' : ''}>
             <label
               htmlFor="numero"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -335,7 +335,7 @@ export default function DadosCadastrais({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
+          <div className={error.uf ? 'field-error' : ''}>
             <label
               htmlFor="uf"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -358,7 +358,7 @@ export default function DadosCadastrais({
             )}
           </div>
 
-          <div>
+          <div className={error.bairro ? 'field-error' : ''}>
             <label
               htmlFor="bairro"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -383,7 +383,7 @@ export default function DadosCadastrais({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
+          <div className={error.cidade ? 'field-error' : ''}>
             <label
               htmlFor="cidade"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -406,7 +406,7 @@ export default function DadosCadastrais({
             )}
           </div>
 
-          <div>
+          <div className={error.codpais ? 'field-error' : ''}>
             <label
               htmlFor="codpais"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"

@@ -80,7 +80,7 @@ export function CommercialTab() {
     register,
     control,
     getValues,
-    formState: { errors: _errors },
+    formState: { errors },
   } = useFormContext();
   const [sellers, setSellers] = useState<Vendedor[]>([]);
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
@@ -188,6 +188,7 @@ export function CommercialTab() {
   return (
     <div className="space-y-6">
       {/* Vendedores por Segmento (Externo e TMK) */}
+      <div className={errors.vendedores_list ? 'field-error' : ''}>
       <div className="flex flex-row items-center justify-between border-b pb-2 mb-4">
         <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
           Vendedores (Externo / TMK) por Segmento<span className="text-red-500"> *</span>
@@ -332,6 +333,12 @@ export function CommercialTab() {
           </div>
         )}
       </div>
+      {errors.vendedores_list && (
+        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+          {errors.vendedores_list.message as string}
+        </p>
+      )}
+      </div>
 
       {/* Configurações Comerciais */}
       <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide mt-4 mb-2 border-b pb-2">
@@ -360,25 +367,32 @@ export function CommercialTab() {
         </div>
 
         {/* Desconto Aplicado (Preço de Venda no Delphi) */}
-        <div>
+        <div className={errors.precoVenda ? 'field-error' : ''}>
           <Label>Desconto Aplicado<span className="text-red-500"> *</span></Label>
           <Controller
             control={control}
             name="precoVenda"
             render={({ field }) => (
-              <SelectPadrao
-                value={field.value || '0'}
-                onValueChange={field.onChange}
-                placeholder="Selecione"
-                required
-                options={[
-                  { value: '0', label: '0 - Balcão' },
-                  { value: '1', label: '1 - Revenda' },
-                  { value: '2', label: '2 - Revenda 2' },
-                  { value: '3', label: '3 - P. Velho' },
-                  { value: '4', label: '4 - B. Vista' },
-                ]}
-              />
+              <>
+                <SelectPadrao
+                  value={field.value || '0'}
+                  onValueChange={field.onChange}
+                  placeholder="Selecione"
+                  required
+                  options={[
+                    { value: '0', label: '0 - Balcão' },
+                    { value: '1', label: '1 - Revenda' },
+                    { value: '2', label: '2 - Revenda 2' },
+                    { value: '3', label: '3 - P. Velho' },
+                    { value: '4', label: '4 - B. Vista' },
+                  ]}
+                />
+                {errors.precoVenda && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {errors.precoVenda.message as string}
+                  </p>
+                )}
+              </>
             )}
           />
         </div>

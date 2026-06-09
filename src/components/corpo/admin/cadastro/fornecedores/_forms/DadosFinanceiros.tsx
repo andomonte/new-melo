@@ -66,17 +66,19 @@ const DadosFinanceiros: React.FC<DadosFinanceirosProps> = ({
             maxLength={5}
           />
         </div>
-        <SelectInput
-          name="regime_tributacao"
-          label="Regime Tributário"
-          required
-          options={regimeTributarioOptions}
-          defaultValue={fornecedor.regime_tributacao || ''}
-          onValueChange={(value) =>
-            handleFornecedorChange('regime_tributacao', value)
-          }
-          error={error?.regime_tributacao}
-        />
+        <div className={error?.regime_tributacao ? 'field-error' : ''}>
+          <SelectInput
+            name="regime_tributacao"
+            label="Regime Tributário"
+            required
+            options={regimeTributarioOptions}
+            defaultValue={fornecedor.regime_tributacao || ''}
+            onValueChange={(value) =>
+              handleFornecedorChange('regime_tributacao', value)
+            }
+            error={error?.regime_tributacao}
+          />
+        </div>
       </div>
     </>
   );

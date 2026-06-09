@@ -260,18 +260,20 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <FormInput
-            name="ref"
-            type="text"
-            label="Referência"
-            value={produto.ref || ''}
-            onChange={(e) =>
-              handleProdutoChange({ ...produto, ref: e.target.value })
-            }
-            onBlur={handleValidateRef}
-            error={error?.ref}
-            required
-          />
+          <div className={error?.ref ? 'field-error' : ''}>
+            <FormInput
+              name="ref"
+              type="text"
+              label="Referência"
+              value={produto.ref || ''}
+              onChange={(e) =>
+                handleProdutoChange({ ...produto, ref: e.target.value })
+              }
+              onBlur={handleValidateRef}
+              error={error?.ref}
+              required
+            />
+          </div>
           <FormInput
             name="reforiginal"
             type="text"
@@ -283,17 +285,19 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             error={error?.reforiginal}
           />
         </div>
-        <FormInput
-          name="descr"
-          type="text"
-          label="Descrição"
-          value={produto.descr || ''}
-          onChange={(e) =>
-            handleProdutoChange({ ...produto, descr: e.target.value })
-          }
-          error={error?.descr}
-          required
-        />
+        <div className={error?.descr ? 'field-error' : ''}>
+          <FormInput
+            name="descr"
+            type="text"
+            label="Descrição"
+            value={produto.descr || ''}
+            onChange={(e) =>
+              handleProdutoChange({ ...produto, descr: e.target.value })
+            }
+            error={error?.descr}
+            required
+          />
+        </div>
         <FormInput
           name="aplic_extendida"
           type="text"
@@ -305,56 +309,62 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           error={error?.aplic_extendida}
         />
         <div className="grid grid-cols-2 gap-4">
-          <SelectInput searchable
-            name="codmarca"
-            label="Marca"
-            required
-            loading={loadingMarcas}
-            options={marcaOptions}
-            value={produto.codmarca || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, codmarca: value as string })
-            }
-            onInputChange={(value) => {
-              setSearchMarcas(value);
-              handleMarcasSearch();
-            }}
-            error={error?.codmarca}
-          />
-          <SelectInput searchable
-            name="codgpf"
-            label="Grupo de Função"
-            required
-            loading={loadingGruposFuncao}
-            options={grupoFuncaoOptions}
-            value={produto.codgpf || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, codgpf: value as string })
-            }
-            onInputChange={(value) => {
-              setSearchGruposFuncao(value);
-              handleGruposFuncaoSearch();
-            }}
-            error={error?.codgpf}
-          />
+          <div className={error?.codmarca ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="codmarca"
+              label="Marca"
+              required
+              loading={loadingMarcas}
+              options={marcaOptions}
+              value={produto.codmarca || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, codmarca: value as string })
+              }
+              onInputChange={(value) => {
+                setSearchMarcas(value);
+                handleMarcasSearch();
+              }}
+              error={error?.codmarca}
+            />
+          </div>
+          <div className={error?.codgpf ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="codgpf"
+              label="Grupo de Função"
+              required
+              loading={loadingGruposFuncao}
+              options={grupoFuncaoOptions}
+              value={produto.codgpf || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, codgpf: value as string })
+              }
+              onInputChange={(value) => {
+                setSearchGruposFuncao(value);
+                handleGruposFuncaoSearch();
+              }}
+              error={error?.codgpf}
+            />
+          </div>
         </div>
         <div className="grid grid-cols-4 gap-4">
-          <SelectInput searchable
-            name="codgpp"
-            label="Grupo de Produto"
-            required
-            loading={loadingGruposProduto}
-            options={grupoProdutoOptions}
-            value={produto.codgpp || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, codgpp: value as string })
-            }
-            onInputChange={(value) => {
-              setSearchGruposProduto(value);
-              handleGruposProdutoSearch();
-            }}
-            error={error?.codgpp}
-          />
+          <div className={error?.codgpp ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="codgpp"
+              label="Grupo de Produto"
+              required
+              loading={loadingGruposProduto}
+              options={grupoProdutoOptions}
+              value={produto.codgpp || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, codgpp: value as string })
+              }
+              onInputChange={(value) => {
+                setSearchGruposProduto(value);
+                handleGruposProdutoSearch();
+              }}
+              error={error?.codgpp}
+            />
+          </div>
           <SelectInput
             name="curva"
             label="Class. Curva ABC"
@@ -403,17 +413,19 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           error={error?.obs}
         />
         <div className="grid grid-cols-4 gap-4">
-          <SelectInput
-            name="inf"
-            label="Informativo"
-            options={informativoOptions}
-            value={produto.inf || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, inf: value as Informativo })
-            }
-            error={error?.inf}
-            required
-          />
+          <div className={error?.inf ? 'field-error' : ''}>
+            <SelectInput
+              name="inf"
+              label="Informativo"
+              options={informativoOptions}
+              value={produto.inf || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({ ...produto, inf: value as Informativo })
+              }
+              error={error?.inf}
+              required
+            />
+          </div>
           <FormInput
             name="pesoliq"
             type="number"
@@ -440,36 +452,40 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             }
             error={error?.qtembal}
           />
-          <SelectInput
-            name="unimed"
-            label="Unidade de Medida"
-            options={unidadeMedidaOptions}
-            value={produto.unimed || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({
-                ...produto,
-                unimed: value as UnidadeMedida,
-              })
-            }
-            error={error?.unimed}
-            required
-          />
+          <div className={error?.unimed ? 'field-error' : ''}>
+            <SelectInput
+              name="unimed"
+              label="Unidade de Medida"
+              options={unidadeMedidaOptions}
+              value={produto.unimed || ''}
+              onValueChange={(value) =>
+                handleProdutoChange({
+                  ...produto,
+                  unimed: value as UnidadeMedida,
+                })
+              }
+              error={error?.unimed}
+              required
+            />
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <FormInput
-            name="multiplo"
-            type="number"
-            label="Múltiplo Venda"
-            required
-            value={displayNumberValue(produto.multiplo)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                multiplo: handleRequiredNumberChange(e.target.value, 1),
-              })
-            }
-            error={error?.multiplo}
-          />
+          <div className={error?.multiplo ? 'field-error' : ''}>
+            <FormInput
+              name="multiplo"
+              type="number"
+              label="Múltiplo Venda"
+              required
+              value={displayNumberValue(produto.multiplo)}
+              onChange={(e) =>
+                handleProdutoChange({
+                  ...produto,
+                  multiplo: handleRequiredNumberChange(e.target.value, 1),
+                })
+              }
+              error={error?.multiplo}
+            />
+          </div>
           <FormInput
             name="coddesc"
             type="number"
@@ -520,20 +536,22 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <FormInput
-            name="multiplocompra"
-            type="number"
-            label="Múltiplo Compra"
-            required
-            value={displayNumberValue(produto.multiplocompra)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                multiplocompra: handleRequiredNumberChange(e.target.value, 1),
-              })
-            }
-            error={error?.multiplocompra}
-          />
+          <div className={error?.multiplocompra ? 'field-error' : ''}>
+            <FormInput
+              name="multiplocompra"
+              type="number"
+              label="Múltiplo Compra"
+              required
+              value={displayNumberValue(produto.multiplocompra)}
+              onChange={(e) =>
+                handleProdutoChange({
+                  ...produto,
+                  multiplocompra: handleRequiredNumberChange(e.target.value, 1),
+                })
+              }
+              error={error?.multiplocompra}
+            />
+          </div>
           <SelectInput
             name="tipo"
             label="Tipo Produto"

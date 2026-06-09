@@ -162,74 +162,87 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
     <>
       <div className="grid grid-cols-1 gap-4">
         <div className="grid grid-cols-4 gap-4">
-          <SelectInput
-            name="tipo"
-            label="Tipo"
-            options={tipoPessoaOptions}
-            defaultValue={fornecedor.tipo || ''}
-            required
-            onValueChange={(value) => {
-              handleFornecedorChange('tipo', value);
-              // Exterior: seta CPF como "EXTERIOR" e limpa tipo fornecedor
-              if (value === 'X') {
-                handleFornecedorChange('cpf_cgc', 'EXTERIOR');
-                handleFornecedorChange('tipofornecedor', '');
-              } else if (fornecedor.cpf_cgc === 'EXTERIOR') {
-                handleFornecedorChange('cpf_cgc', '');
+          <div className={error?.tipo ? 'field-error' : ''}>
+            <SelectInput
+              name="tipo"
+              label="Tipo"
+              options={tipoPessoaOptions}
+              defaultValue={fornecedor.tipo || ''}
+              required
+              onValueChange={(value) => {
+                handleFornecedorChange('tipo', value);
+                // Exterior: seta CPF como "EXTERIOR" e limpa tipo fornecedor
+                if (value === 'X') {
+                  handleFornecedorChange('cpf_cgc', 'EXTERIOR');
+                  handleFornecedorChange('tipofornecedor', '');
+                } else if (fornecedor.cpf_cgc === 'EXTERIOR') {
+                  handleFornecedorChange('cpf_cgc', '');
+                }
+              }}
+              error={error?.tipo}
+            />
+          </div>
+          <div className={error?.cpf_cgc || cnpjCpfError ? 'field-error' : ''}>
+            <FormInput
+              name="cpf_cgc"
+              type="text"
+              label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
+              defaultValue={fornecedor.cpf_cgc || ''}
+              onChange={(e) => handleFornecedorChange('cpf_cgc', e.target.value)}
+              onBlur={(e) => fornecedor.tipo !== 'X' ? validarCnpjCpf(e.target.value) : undefined}
+              error={fornecedor.tipo !== 'X' ? (cnpjCpfError || error?.cpf_cgc) : undefined}
+              required
+              disabled={fornecedor.tipo === 'X'}
+            />
+          </div>
+          <div className={error?.tipoemp ? 'field-error' : ''}>
+            <SelectInput
+              name="tipoemp"
+              label="Tipo Empresa"
+              options={tipoEmpresaOptions}
+              defaultValue={fornecedor.tipoemp || ''}
+              onValueChange={(value) => handleFornecedorChange('tipoemp', value)}
+              error={error?.tipoemp}
+              required
+            />
+          </div>
+          <div className={error?.codcf ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="classefornecedor"
+              label="Classe de Fornecedor"
+              options={classesFornecedorOptions}
+              defaultValue={fornecedor.codcf || ''}
+              onValueChange={(value) => handleFornecedorChange('codcf', value)}
+              onInputChange={(value) =>
+                handleSearchOptionsChange('classeFornecedor', value)
               }
-            }}
-            error={error?.tipo}
-          />
+              error={error?.codcf}
+              required
+            />
+          </div>
+        </div>
+        <div className={error?.nome ? 'field-error' : ''}>
           <FormInput
-            name="cpf_cgc"
+            name="nome"
             type="text"
-            label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
-            defaultValue={fornecedor.cpf_cgc || ''}
-            onChange={(e) => handleFornecedorChange('cpf_cgc', e.target.value)}
-            onBlur={(e) => fornecedor.tipo !== 'X' ? validarCnpjCpf(e.target.value) : undefined}
-            error={fornecedor.tipo !== 'X' ? (cnpjCpfError || error?.cpf_cgc) : undefined}
-            required
-            disabled={fornecedor.tipo === 'X'}
-          />
-          <SelectInput
-            name="tipoemp"
-            label="Tipo Empresa"
-            options={tipoEmpresaOptions}
-            defaultValue={fornecedor.tipoemp || ''}
-            onValueChange={(value) => handleFornecedorChange('tipoemp', value)}
-            error={error?.tipoemp}
-            required
-          />
-          <SelectInput searchable
-            name="classefornecedor"
-            label="Classe de Fornecedor"
-            options={classesFornecedorOptions}
-            defaultValue={fornecedor.codcf || ''}
-            onValueChange={(value) => handleFornecedorChange('codcf', value)}
-            onInputChange={(value) =>
-              handleSearchOptionsChange('classeFornecedor', value)
-            }
+            label="Nome"
+            defaultValue={fornecedor.nome || ''}
+            onChange={(e) => handleFornecedorChange('nome', e.target.value)}
+            error={error?.nome}
             required
           />
         </div>
-        <FormInput
-          name="nome"
-          type="text"
-          label="Nome"
-          defaultValue={fornecedor.nome || ''}
-          onChange={(e) => handleFornecedorChange('nome', e.target.value)}
-          error={error?.nome}
-          required
-        />
-        <FormInput
-          name="nome_fant"
-          type="text"
-          label="Nome Fantasia"
-          defaultValue={fornecedor.nome_fant || ''}
-          onChange={(e) => handleFornecedorChange('nome_fant', e.target.value)}
-          error={error?.nome_fant}
-          required
-        />
+        <div className={error?.nome_fant ? 'field-error' : ''}>
+          <FormInput
+            name="nome_fant"
+            type="text"
+            label="Nome Fantasia"
+            defaultValue={fornecedor.nome_fant || ''}
+            onChange={(e) => handleFornecedorChange('nome_fant', e.target.value)}
+            error={error?.nome_fant}
+            required
+          />
+        </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -247,76 +260,90 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           </p>
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <FormInput
-            name="cep"
-            type="text"
-            label="CEP"
-            defaultValue={fornecedor.cep || ''}
-            onChange={(e) => {
-              handleFornecedorChange('cep', e.target.value);
-              handleCepSearch();
-            }}
-            error={error?.cep}
-            maxLength={8}
-            required
-          />
-          <FormInput
-            name="endereco"
-            type="text"
-            label="Logradouro"
-            defaultValue={fornecedor.endereco || ''}
-            onChange={(e) => handleFornecedorChange('endereco', e.target.value)}
-            error={error?.ender}
-            required
-          />
-          <FormInput
-            name="numero"
-            type="text"
-            label="Número"
-            defaultValue={fornecedor.numero || ''}
-            onChange={(e) => handleFornecedorChange('numero', e.target.value)}
-            error={error?.numero}
-            required
-          />
+          <div className={error?.cep ? 'field-error' : ''}>
+            <FormInput
+              name="cep"
+              type="text"
+              label="CEP"
+              defaultValue={fornecedor.cep || ''}
+              onChange={(e) => {
+                handleFornecedorChange('cep', e.target.value);
+                handleCepSearch();
+              }}
+              error={error?.cep}
+              maxLength={8}
+              required
+            />
+          </div>
+          <div className={error?.ender ? 'field-error' : ''}>
+            <FormInput
+              name="endereco"
+              type="text"
+              label="Logradouro"
+              defaultValue={fornecedor.endereco || ''}
+              onChange={(e) => handleFornecedorChange('endereco', e.target.value)}
+              error={error?.ender}
+              required
+            />
+          </div>
+          <div className={error?.numero ? 'field-error' : ''}>
+            <FormInput
+              name="numero"
+              type="text"
+              label="Número"
+              defaultValue={fornecedor.numero || ''}
+              onChange={(e) => handleFornecedorChange('numero', e.target.value)}
+              error={error?.numero}
+              required
+            />
+          </div>
         </div>
         <div className="grid grid-cols-4 gap-4">
-          <FormInput
-            name="bairro"
-            type="text"
-            label="Bairro"
-            defaultValue={fornecedor.bairro || ''}
-            onChange={(e) => handleFornecedorChange('bairro', e.target.value)}
-            error={error?.bairro}
-            required
-          />
-          <FormInput
-            name="cidade"
-            type="text"
-            label="Cidade"
-            defaultValue={fornecedor.cidade || ''}
-            onChange={(e) => handleFornecedorChange('cidade', e.target.value)}
-            error={error?.cidade}
-            required
-          />
-          <FormInput
-            name="uf"
-            type="text"
-            label="UF"
-            defaultValue={fornecedor.uf || ''}
-            onChange={(e) => handleFornecedorChange('uf', e.target.value)}
-            error={error?.uf || municipioUfWarning}
-            required
-          />
-          <SelectInput searchable
-            name="codpais"
-            label="País"
-            options={paisesOptions}
-            defaultValue={Number(fornecedor.codpais) || ''}
-            onValueChange={(value) => handleFornecedorChange('codpais', value)}
-            onInputChange={(value) => handleSearchOptionsChange('pais', value)}
-            error={error?.codpais}
-            required
-          />
+          <div className={error?.bairro ? 'field-error' : ''}>
+            <FormInput
+              name="bairro"
+              type="text"
+              label="Bairro"
+              defaultValue={fornecedor.bairro || ''}
+              onChange={(e) => handleFornecedorChange('bairro', e.target.value)}
+              error={error?.bairro}
+              required
+            />
+          </div>
+          <div className={error?.cidade ? 'field-error' : ''}>
+            <FormInput
+              name="cidade"
+              type="text"
+              label="Cidade"
+              defaultValue={fornecedor.cidade || ''}
+              onChange={(e) => handleFornecedorChange('cidade', e.target.value)}
+              error={error?.cidade}
+              required
+            />
+          </div>
+          <div className={error?.uf ? 'field-error' : ''}>
+            <FormInput
+              name="uf"
+              type="text"
+              label="UF"
+              defaultValue={fornecedor.uf || ''}
+              onChange={(e) => handleFornecedorChange('uf', e.target.value)}
+              error={error?.uf || municipioUfWarning}
+              required
+            />
+          </div>
+          <div className={error?.codpais ? 'field-error' : ''}>
+            <SelectInput searchable
+              name="codpais"
+              label="País"
+              options={paisesOptions}
+              defaultValue={Number(fornecedor.codpais) || ''}
+              onValueChange={(value) => handleFornecedorChange('codpais', value)}
+              onInputChange={(value) => handleSearchOptionsChange('pais', value)}
+              error={error?.codpais}
+              required
+            />
+          </div>
         </div>
         <FormInput
           name="complemento"
@@ -435,18 +462,20 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <SelectInput
-            name="tipofornecedor"
-            label="Tipo Fornecedor"
-            options={tipoFornecedorOptions}
-            defaultValue={fornecedor.tipofornecedor || ''}
-            onValueChange={(value) =>
-              handleFornecedorChange('tipofornecedor', value)
-            }
-            error={error?.tipofornecedor}
-            required={fornecedor.tipo !== 'X'}
-            disabled={fornecedor.tipo === 'X'}
-          />
+          <div className={error?.tipofornecedor ? 'field-error' : ''}>
+            <SelectInput
+              name="tipofornecedor"
+              label="Tipo Fornecedor"
+              options={tipoFornecedorOptions}
+              defaultValue={fornecedor.tipofornecedor || ''}
+              onValueChange={(value) =>
+                handleFornecedorChange('tipofornecedor', value)
+              }
+              error={error?.tipofornecedor}
+              required={fornecedor.tipo !== 'X'}
+              disabled={fornecedor.tipo === 'X'}
+            />
+          </div>
           <FormInput
             name="codccontabil"
             type="text"

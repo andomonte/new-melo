@@ -297,7 +297,7 @@ export function FinancialTab() {
             </div>
           </div>
           {watch('aceitaAtraso') && (
-            <div className="flex-1">
+            <div className={`flex-1 ${errors.diasAtraso ? 'field-error' : ''}`}>
               <Label>Dias de Atraso</Label>
               <Input
                 {...register('diasAtraso')}
@@ -322,7 +322,7 @@ export function FinancialTab() {
 
       {/* ICMS, Faixa Financeira, Banco, Forma de Pagamento */}
       <div className="grid grid-cols-4 gap-3">
-        <div>
+        <div className={errors.icms ? 'field-error' : ''}>
           <Label>ICMS<span className="text-red-500"> *</span></Label>
           <Controller
             control={control}
