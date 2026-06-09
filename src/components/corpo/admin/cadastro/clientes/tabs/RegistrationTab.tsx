@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Loader2, AlertTriangle, Phone, Smartphone, Building2, MessageCircle, Mail, User, Briefcase, Cake } from 'lucide-react';
 import InputMask from 'react-input-mask';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { CountryCombobox } from '@/components/common/CountryCombobox';
 import { buscaCep } from '@/data/cep';
 import { buscaCnpj } from '@/data/cnpj';
@@ -395,19 +396,19 @@ export function RegistrationTab({
             control={control}
             name="tipoCliente"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  <SelectItem value="R">R - Revenda</SelectItem>
-                  <SelectItem value="F">F - Cliente Fin</SelectItem>
-                  <SelectItem value="L">L - Prod. Rural</SelectItem>
-                  <SelectItem value="S">S - Solidário</SelectItem>
-                  <SelectItem value="X">X - Exportador</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                required
+                options={[
+                  { value: 'R', label: 'R - Revenda' },
+                  { value: 'F', label: 'F - Cliente Fin' },
+                  { value: 'L', label: 'L - Prod. Rural' },
+                  { value: 'S', label: 'S - Solidário' },
+                  { value: 'X', label: 'X - Exportador' },
+                ]}
+              />
             )}
           />
           {errors.tipoCliente && <p className="text-xs text-red-500 mt-0.5">{errors.tipoCliente.message as string}</p>}
@@ -420,18 +421,18 @@ export function RegistrationTab({
             control={control}
             name="situacaoTributaria"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  <SelectItem value="1">NC - Não Contribuinte</SelectItem>
-                  <SelectItem value="2">LP - Lucro Presumido</SelectItem>
-                  <SelectItem value="3">LR - Lucro Real</SelectItem>
-                  <SelectItem value="4">SN - Simples Nacional</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                required
+                options={[
+                  { value: '1', label: 'NC - Não Contribuinte' },
+                  { value: '2', label: 'LP - Lucro Presumido' },
+                  { value: '3', label: 'LR - Lucro Real' },
+                  { value: '4', label: 'SN - Simples Nacional' },
+                ]}
+              />
             )}
           />
           {errors.situacaoTributaria && <p className="text-xs text-red-500 mt-0.5">{errors.situacaoTributaria.message as string}</p>}
@@ -444,18 +445,18 @@ export function RegistrationTab({
             control={control}
             name="tipoEmpresa"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  <SelectItem value="EPP">EPP - Empresa de Pequeno Porte</SelectItem>
-                  <SelectItem value="ME">ME - Microempresa</SelectItem>
-                  <SelectItem value="NL">NL - Normal</SelectItem>
-                  <SelectItem value="PF">PF - Pessoa Física</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                required
+                options={[
+                  { value: 'EPP', label: 'EPP - Empresa de Pequeno Porte' },
+                  { value: 'ME', label: 'ME - Microempresa' },
+                  { value: 'NL', label: 'NL - Normal' },
+                  { value: 'PF', label: 'PF - Pessoa Física' },
+                ]}
+              />
             )}
           />
           {errors.tipoEmpresa && <p className="text-xs text-red-500 mt-0.5">{errors.tipoEmpresa.message as string}</p>}
@@ -468,27 +469,15 @@ export function RegistrationTab({
             control={control}
             name="classeCliente"
             render={({ field }) => (
-              <Select
-                onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
+              <SelectPadrao
                 value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder={loadingClasses ? 'Carregando...' : 'Selecione'}
                 disabled={loadingClasses}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      loadingClasses ? 'Carregando...' : 'Selecione'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  {classesCliente.map((classe) => (
-                    <SelectItem key={classe.codcc} value={classe.codcc}>
-                      {classe.codcc} - {classe.descr}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                required
+                searchable
+                options={classesCliente.map((c) => ({ value: c.codcc, label: `${c.codcc} - ${c.descr}` }))}
+              />
             )}
           />
           {errors.classeCliente && <p className="text-xs text-red-500 mt-0.5">{errors.classeCliente.message as string}</p>}
@@ -688,47 +677,17 @@ export function RegistrationTab({
             control={control}
             name="uf"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="UF" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  {[
-                    'AC',
-                    'AL',
-                    'AP',
-                    'AM',
-                    'BA',
-                    'CE',
-                    'DF',
-                    'ES',
-                    'GO',
-                    'MA',
-                    'MT',
-                    'MS',
-                    'MG',
-                    'PA',
-                    'PB',
-                    'PR',
-                    'PE',
-                    'PI',
-                    'RJ',
-                    'RN',
-                    'RS',
-                    'RO',
-                    'RR',
-                    'SC',
-                    'SP',
-                    'SE',
-                    'TO',
-                  ].map((uf) => (
-                    <SelectItem key={uf} value={uf}>
-                      {uf}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder="UF"
+                required
+                options={[
+                  'AC','AL','AP','AM','BA','CE','DF','ES','GO',
+                  'MA','MT','MS','MG','PA','PB','PR','PE','PI',
+                  'RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+                ].map((uf) => ({ value: uf, label: uf }))}
+              />
             )}
           />
           {errors.uf && <p className="text-xs text-red-500 mt-0.5">{errors.uf.message as string}</p>}
@@ -819,23 +778,17 @@ export function RegistrationTab({
               control={control}
               name="ufcobr"
               render={({ field }) => (
-                <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="UF" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                    {[
-                      'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
-                      'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
-                      'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
-                    ].map((uf) => (
-                      <SelectItem key={uf} value={uf}>
-                        {uf}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectPadrao
+                  value={field.value || ''}
+                  onValueChange={field.onChange}
+                  placeholder="UF"
+                  required
+                  options={[
+                    'AC','AL','AP','AM','BA','CE','DF','ES','GO',
+                    'MA','MT','MS','MG','PA','PB','PR','PE','PI',
+                    'RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+                  ].map((uf) => ({ value: uf, label: uf }))}
+                />
               )}
             />
           </div>

@@ -2,13 +2,7 @@ import React, { useState } from 'react';
 import { useFormContext, Controller } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import InputMask from 'react-input-mask';
 import { buscaCep } from '@/data/cep';
 import { toast } from 'sonner';
@@ -55,16 +49,15 @@ export function DeliveryTab() {
             control={control}
             name="tipoPessoaEntrega"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || 'F'}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  <SelectItem value="F">Pessoa Física</SelectItem>
-                  <SelectItem value="J">Pessoa Jurídica</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || 'F'}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                options={[
+                  { value: 'F', label: 'Pessoa Física' },
+                  { value: 'J', label: 'Pessoa Jurídica' },
+                ]}
+              />
             )}
           />
         </div>
@@ -138,17 +131,12 @@ export function DeliveryTab() {
             control={control}
             name="ufEntrega"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="UF" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  {UFS.map((uf) => (
-                    <SelectItem key={uf} value={uf}>{uf}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder="UF"
+                options={UFS.map((uf) => ({ value: uf, label: uf }))}
+              />
             )}
           />
         </div>

@@ -4,13 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -309,24 +303,16 @@ export function CommercialTab() {
                     control={control}
                     name={`vendedores_list.${index}.segmentoId`}
                     render={({ field }) => (
-                      <Select
-                        onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
+                      <SelectPadrao
                         value={field.value || ''}
+                        onValueChange={field.onChange}
+                        placeholder={loadingSegmentos ? 'Carregando...' : 'Segmento (opcional)'}
                         disabled={loadingSegmentos}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder={loadingSegmentos ? 'Carregando...' : 'Segmento (opcional)'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                          <SelectItem value="__todos__">Todos os segmentos</SelectItem>
-                          {segmentos.map((seg) => (
-                            <SelectItem key={seg.codsegmento} value={seg.codsegmento}>
-                              {seg.codsegmento} - {seg.descricao}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        options={[
+                          { value: '__todos__', label: 'Todos os segmentos' },
+                          ...segmentos.map((seg) => ({ value: seg.codsegmento, label: `${seg.codsegmento} - ${seg.descricao}` })),
+                        ]}
+                      />
                     )}
                   />
                 </div>
@@ -380,19 +366,19 @@ export function CommercialTab() {
             control={control}
             name="precoVenda"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || '0'}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  <SelectItem value="0">0 - Balcão</SelectItem>
-                  <SelectItem value="1">1 - Revenda</SelectItem>
-                  <SelectItem value="2">2 - Revenda 2</SelectItem>
-                  <SelectItem value="3">3 - P. Velho</SelectItem>
-                  <SelectItem value="4">4 - B. Vista</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || '0'}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                required
+                options={[
+                  { value: '0', label: '0 - Balcão' },
+                  { value: '1', label: '1 - Revenda' },
+                  { value: '2', label: '2 - Revenda 2' },
+                  { value: '3', label: '3 - P. Velho' },
+                  { value: '4', label: '4 - B. Vista' },
+                ]}
+              />
             )}
           />
         </div>
@@ -424,16 +410,15 @@ export function CommercialTab() {
             control={control}
             name="descontoAplicado"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || 'N'}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  <SelectItem value="S">Sim</SelectItem>
-                  <SelectItem value="N">Não</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || 'N'}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                options={[
+                  { value: 'S', label: 'Sim' },
+                  { value: 'N', label: 'Não' },
+                ]}
+              />
             )}
           />
         </div>

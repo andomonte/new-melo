@@ -3,13 +3,6 @@ import { useFormContext, Controller } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -224,25 +217,15 @@ export function FinancialTab() {
             name="credito"
             render={({ field }) => (
               <>
-                <Select
-                  onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
+                <SelectPadrao
                   value={field.value || 'S'}
-                >
-                  <SelectTrigger
-                    className={
-                      errors.credito
-                        ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
-                        : ''
-                    }
-                  >
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                    <SelectItem value="S">S - Sim</SelectItem>
-                    <SelectItem value="N">N - Não</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onValueChange={field.onChange}
+                  placeholder="Selecione"
+                  options={[
+                    { value: 'S', label: 'S - Sim' },
+                    { value: 'N', label: 'N - Não' },
+                  ]}
+                />
                 {errors.credito && (
                   <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
@@ -262,35 +245,25 @@ export function FinancialTab() {
             name="classePagamento"
             render={({ field }) => (
               <>
-                <Select
-                  onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
+                <SelectPadrao
                   value={field.value || 'A'}
-                >
-                  <SelectTrigger
-                    className={
-                      errors.classePagamento
-                        ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
-                        : ''
-                    }
-                  >
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                    <SelectItem value="A">A - Em Dia</SelectItem>
-                    <SelectItem value="B">B - Pgto Cobrança</SelectItem>
-                    <SelectItem value="C">C - Difícil Receber</SelectItem>
-                    <SelectItem value="D">D - Não Receber</SelectItem>
-                    <SelectItem value="E">E - Estratégico</SelectItem>
-                    <SelectItem value="V">V - À Vista</SelectItem>
-                    <SelectItem value="I">I - Inativo</SelectItem>
-                    <SelectItem value="F">F - Funcionário</SelectItem>
-                    <SelectItem value="N">N - Novação Dívida</SelectItem>
-                    <SelectItem value="O">O - Órgão Público</SelectItem>
-                    <SelectItem value="P">P - Perda</SelectItem>
-                    <SelectItem value="Z">Z - Cobrança Judicial</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onValueChange={field.onChange}
+                  placeholder="Selecione"
+                  options={[
+                    { value: 'A', label: 'A - Em Dia' },
+                    { value: 'B', label: 'B - Pgto Cobrança' },
+                    { value: 'C', label: 'C - Difícil Receber' },
+                    { value: 'D', label: 'D - Não Receber' },
+                    { value: 'E', label: 'E - Estratégico' },
+                    { value: 'V', label: 'V - À Vista' },
+                    { value: 'I', label: 'I - Inativo' },
+                    { value: 'F', label: 'F - Funcionário' },
+                    { value: 'N', label: 'N - Novação Dívida' },
+                    { value: 'O', label: 'O - Órgão Público' },
+                    { value: 'P', label: 'P - Perda' },
+                    { value: 'Z', label: 'Z - Cobrança Judicial' },
+                  ]}
+                />
                 {errors.classePagamento && (
                   <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
@@ -356,25 +329,16 @@ export function FinancialTab() {
             name="icms"
             render={({ field }) => (
               <>
-                <Select
-                  onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)}
+                <SelectPadrao
                   value={field.value || 'N'}
-                >
-                  <SelectTrigger
-                    className={
-                      errors.icms
-                        ? 'border-red-500 border-2 bg-red-50 dark:bg-red-950/20'
-                        : ''
-                    }
-                  >
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                    <SelectItem value="N">N - Não</SelectItem>
-                    <SelectItem value="S">S - Sim</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onValueChange={field.onChange}
+                  placeholder="Selecione"
+                  required
+                  options={[
+                    { value: 'N', label: 'N - Não' },
+                    { value: 'S', label: 'S - Sim' },
+                  ]}
+                />
                 {errors.icms && (
                   <p className="text-sm text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
@@ -392,22 +356,15 @@ export function FinancialTab() {
             control={control}
             name="faixaFinanceira"
             render={({ field }) => (
-              <Select onValueChange={(val) => field.onChange(val === '__CLEAR__' ? '' : val)} value={field.value || ''}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__CLEAR__" className="text-gray-400 dark:text-gray-500">— Limpar seleção —</SelectItem>
-                  {Array.from({ length: 10 }, (_, i) => {
-                    const val = String(i + 1).padStart(2, '0');
-                    return (
-                      <SelectItem key={val} value={val}>
-                        {val}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              <SelectPadrao
+                value={field.value || ''}
+                onValueChange={field.onChange}
+                placeholder="Selecione"
+                options={Array.from({ length: 10 }, (_, i) => {
+                  const val = String(i + 1).padStart(2, '0');
+                  return { value: val, label: val };
+                })}
+              />
             )}
           />
         </div>
