@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { CaretSortIcon, CheckIcon } from '@radix-ui/react-icons';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import React from 'react';
 
 interface Option {
@@ -119,34 +119,27 @@ export default function SelectPadrao({
           {required && <span className="text-red-500"> *</span>}
         </Label>
       )}
-      <Select
-        {...(value !== undefined ? { value } : defaultValue ? { defaultValue } : {})}
-        name={name}
-        onValueChange={handleChange}
-        required={required}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          id={name}
+      <div className="relative">
+        <Select
+          {...(value !== undefined ? { value } : defaultValue ? { defaultValue } : {})}
+          name={name}
+          onValueChange={handleChange}
+          required={required}
           disabled={disabled}
-          className={cn(
-            compact
-              ? 'w-56 h-9 pr-2 px-3 py-1 text-sm truncate'
-              : 'flex h-9 w-full items-center justify-between px-3 py-1 text-sm',
-            uppercase && 'uppercase',
-          )}
         >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {!required && (
-            <SelectItem
-              value="__CLEAR__"
-              className="text-gray-400 dark:text-gray-500"
-            >
-              — Limpar seleção —
-            </SelectItem>
-          )}
+          <SelectTrigger
+            id={name}
+            disabled={disabled}
+            className={cn(
+              compact
+                ? 'w-56 h-9 pr-7 px-3 py-1 text-sm truncate'
+                : 'flex h-9 w-full items-center justify-between pr-7 px-3 py-1 text-sm',
+              uppercase && 'uppercase',
+            )}
+          >
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
           {options?.filter((item, index, arr) => arr.findIndex(o => o.value === item.value) === index).map((item, index) => (
             <SelectItem
               key={`${item.value}-${index}`}
@@ -158,6 +151,17 @@ export default function SelectPadrao({
           ))}
         </SelectContent>
       </Select>
+      {!required && value && !disabled && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); handleChange('__CLEAR__'); }}
+          className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 z-10"
+          tabIndex={-1}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+      </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );
@@ -295,7 +299,17 @@ function SearchableDropdown({
         <span className={cn('truncate', !selectedLabel && 'text-muted-foreground')}>
           {selectedLabel || placeholder}
         </span>
-        <CaretSortIcon className="h-4 w-4 text-gray-400 dark:text-gray-300 shrink-0" />
+        <div className="flex items-center gap-1 shrink-0">
+          {!required && value && (
+            <span
+              onClick={(e) => { e.stopPropagation(); handleSelect(''); setOpen(false); }}
+              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 cursor-pointer"
+            >
+              <X className="h-3 w-3" />
+            </span>
+          )}
+          <CaretSortIcon className="h-4 w-4 text-gray-400 dark:text-gray-300" />
+        </div>
       </button>
 
       {open && (
@@ -329,15 +343,6 @@ function SearchableDropdown({
 
           {/* Lista de opções */}
           <div className="max-h-36 overflow-y-auto p-1">
-            {/* Limpar seleção */}
-            {value && !required && (
-              <div
-                onClick={() => handleSelect('')}
-                className="relative flex items-center rounded-sm py-1.5 pl-2 pr-8 text-sm cursor-pointer text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-700"
-              >
-                <span>— Limpar seleção —</span>
-              </div>
-            )}
             {loading ? (
               <div className="px-2 py-3 text-xs text-center text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
