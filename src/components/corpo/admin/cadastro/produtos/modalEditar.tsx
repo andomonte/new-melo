@@ -193,12 +193,30 @@ export default function CustomModal({
       }
 
       // Validação Informativo: na edição, 'E' e 'S' são sempre inválidos;
-      // 'D' idealmente exige checagem de estoque > 0, mas por ora apenas avisa sobre E/S (conforme Delphi)
+      // 'D' exige checagem de estoque > 0 (conforme Delphi)
       const infVal = (produtoFinal.inf || '').toUpperCase();
       if (infVal === 'E' || infVal === 'S') {
         toast({ description: `Informativo "${infVal}" não é permitido para edição de produto.`, variant: 'destructive' });
         setActiveTab('dadosCadastrais');
         return;
+      }
+
+      // Verificar estoque antes de permitir desativar produto (inf='D')
+      if (infVal === 'D' && produtoFinal.codprod) {
+        try {
+          const estoqueResp = await fetch(`/api/produtos/verificar-estoque?codprod=${encodeURIComponent(produtoFinal.codprod)}`);
+          const estoqueData = await estoqueResp.json();
+          if (estoqueData.temEstoque) {
+            toast({
+              description: `Não é possível desativar produto com estoque (quantidade: ${estoqueData.quantidade}).`,
+              variant: 'destructive',
+            });
+            setActiveTab('dadosCadastrais');
+            return;
+          }
+        } catch (estoqueError) {
+          console.error('Erro ao verificar estoque:', estoqueError);
+        }
       }
 
       cadastroProdutoSchema.parse(produtoFinal);

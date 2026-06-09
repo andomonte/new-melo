@@ -96,6 +96,23 @@ export default function CustomModal({
 
   const handleSubmit = async () => {
     try {
+      // Verificar duplicidade de CPF/CNPJ antes de salvar (conforme Delphi)
+      if (transportadora.cpfcgc) {
+        try {
+          const dupResp = await fetch(`/api/transportadoras/verificar-duplicidade?cpfcgc=${encodeURIComponent(transportadora.cpfcgc)}&codtransp=${encodeURIComponent(transportadora.codtransp || '')}`);
+          const dupData = await dupResp.json();
+          if (dupData.existe) {
+            toast({
+              description: `CPF/CNPJ já cadastrado para a transportadora "${dupData.transportadora.nome}" (código: ${dupData.transportadora.codtransp}).`,
+              variant: 'destructive',
+            });
+            return;
+          }
+        } catch (dupError) {
+          console.error('Erro ao verificar duplicidade:', dupError);
+        }
+      }
+
       await updateTransportadora(transportadora);
 
       setErrors({});

@@ -12,6 +12,16 @@ import { useDebouncedCallback } from 'use-debounce';
 import { CadFornecedorSearchOptions } from '../modalCadastrar';
 import { Paises } from '@/data/paises/paises';
 import { isValidCpfCnpj } from '@/utils/validacoes';
+import { useToast } from '@/hooks/use-toast';
+
+// Mapeamento UF -> código IBGE (primeiros 2 dígitos do código de município)
+const UF_IBGE: Record<string, string> = {
+  AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23',
+  DF: '53', ES: '32', GO: '52', MA: '21', MT: '51', MS: '50',
+  MG: '31', PA: '15', PB: '25', PR: '41', PE: '26', PI: '22',
+  RJ: '33', RN: '24', RS: '43', RO: '11', RR: '14', SC: '42',
+  SP: '35', SE: '28', TO: '17',
+};
 
 const tipoPessoaOptions = [
   { value: 'J', label: 'Jurídica' },
@@ -72,6 +82,29 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
     {} as ViaCepResponse,
   );
   const [cnpjCpfError, setCnpjCpfError] = useState<string>('');
+  const [municipioUfWarning, setMunicipioUfWarning] = useState<string>('');
+  const { toast } = useToast();
+
+  // Validar município x UF usando mapeamento IBGE
+  const validarMunicipioUf = (codmunicipio: string, uf: string) => {
+    if (!codmunicipio || !uf || uf.toUpperCase() === 'EX') {
+      setMunicipioUfWarning('');
+      return;
+    }
+    const prefixoEsperado = UF_IBGE[uf.toUpperCase()];
+    if (!prefixoEsperado) {
+      setMunicipioUfWarning('');
+      return;
+    }
+    const prefixoMunicipio = codmunicipio.substring(0, 2);
+    if (prefixoMunicipio !== prefixoEsperado) {
+      const msg = `Atenção: Código do município (${codmunicipio}) não corresponde à UF ${uf.toUpperCase()}.`;
+      setMunicipioUfWarning(msg);
+      toast({ description: msg, variant: 'destructive' });
+    } else {
+      setMunicipioUfWarning('');
+    }
+  };
 
   const handleCepSearch = useDebouncedCallback(() => {
     getResultCep();
@@ -116,6 +149,14 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
       handleFornecedorChange('cidade', resultCep.localidade);
     if (resultCep.uf) handleFornecedorChange('uf', resultCep.uf);
   }, [resultCep, handleFornecedorChange]);
+
+  // Validar município x UF sempre que um deles mudar
+  useEffect(() => {
+    if (fornecedor.codmunicipio && fornecedor.uf) {
+      validarMunicipioUf(String(fornecedor.codmunicipio), fornecedor.uf);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fornecedor.codmunicipio, fornecedor.uf]);
 
   return (
     <>
@@ -263,7 +304,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             label="UF"
             defaultValue={fornecedor.uf || ''}
             onChange={(e) => handleFornecedorChange('uf', e.target.value)}
-            error={error?.uf}
+            error={error?.uf || municipioUfWarning}
             required
           />
           <SelectInput searchable

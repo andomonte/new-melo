@@ -346,6 +346,24 @@ export default function CustomModal({
         throw validationError; // Re-throw para ser capturado pelo catch principal
       }
 
+      // Verificar duplicidade de CPF/CNPJ antes de salvar (conforme Delphi)
+      if (fornecedorAtualizado.cpf_cgc && fornecedorAtualizado.cpf_cgc !== 'EXTERIOR') {
+        try {
+          const dupResp = await fetch(`/api/fornecedores/verificar-duplicidade?cpf_cgc=${encodeURIComponent(fornecedorAtualizado.cpf_cgc)}&cod_credor=${encodeURIComponent(fornecedorAtualizado.cod_credor || '')}`);
+          const dupData = await dupResp.json();
+          if (dupData.existe) {
+            toast({
+              description: `CPF/CNPJ já cadastrado para o fornecedor "${dupData.fornecedor.nome}" (código: ${dupData.fornecedor.cod_credor}).`,
+              variant: 'destructive',
+            });
+            setActiveTab('dadosCadastrais');
+            return;
+          }
+        } catch (dupError) {
+          console.error('Erro ao verificar duplicidade:', dupError);
+        }
+      }
+
       console.log('🏠 Processando dados do bairro...');
       await handleBairroAndUpdateFornecedor();
 
