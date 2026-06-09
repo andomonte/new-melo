@@ -73,6 +73,7 @@ export default function CustomModal({
   footer,
 }: ModalProps) {
   const [produto, setProduto] = useState<Produto>({} as Produto);
+  const [dadosOriginais, setDadosOriginais] = useState<Produto>({} as Produto);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
@@ -85,7 +86,8 @@ export default function CustomModal({
   };
 
   const handleClear = () => {
-    setProduto({} as Produto);
+    setProduto({ ...dadosOriginais });
+    setErrors({});
   };
 
   const [modalConfirmAba, setModalConfirmAba] = useState(false);
@@ -279,6 +281,7 @@ export default function CustomModal({
           };
 
           setProduto(produtoNormalizado);
+          setDadosOriginais(produtoNormalizado);
           setLoading(false);
 
           // Verifica se produto está em promoção ativa

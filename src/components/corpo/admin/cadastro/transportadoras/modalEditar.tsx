@@ -78,13 +78,16 @@ export default function CustomModal({
     [],
   );
 
-  const handleClear = () => setTransportadora({} as Transportadora);
+  const [dadosOriginais, setDadosOriginais] = useState<Transportadora>({} as Transportadora);
+
+  const handleClear = () => setTransportadora({ ...dadosOriginais });
 
   useEffect(() => {
     if (transportadoraId) {
       const fetchTransportadora = async () => {
         const transportadoraData = await getTransportadora(transportadoraId);
         setTransportadora(transportadoraData);
+        setDadosOriginais(transportadoraData);
         setLoading(false);
       };
       fetchTransportadora();
