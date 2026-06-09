@@ -34,10 +34,14 @@ export default async function handle(
       SELECT
         c.*,
         COALESCE(cc.descr, '') as classe_nome,
-        COALESCE(p.descricao, '') as pais_nome
+        COALESCE(p.descricao, '') as pais_nome,
+        COALESCE(v.nome, '') as vendedor_nome,
+        COALESCE(bc.nome, '') as banco_nome
       FROM dbclien c
       LEFT JOIN dbcclien cc ON cc.codcc = c.codcc
       LEFT JOIN dbpais p ON c.codpais = p.codpais
+      LEFT JOIN dbvendedor v ON v.codvend = c.codvend
+      LEFT JOIN dbbanco_cobranca bc ON bc.banco = c.banco
       WHERE
         c.codcli ILIKE $1 OR
         c.nome ILIKE $1 OR
@@ -82,8 +86,20 @@ export default async function handle(
     const clientes = result.rows.map((c: any) => {
       if (c.classe_nome && c.codcc) c.codcc = `${c.codcc} - ${c.classe_nome}`;
       if (c.pais_nome && c.codpais) c.codpais = `${c.codpais} - ${c.pais_nome}`;
+      if (c.vendedor_nome && c.codvend) c.codvend = `${c.codvend} - ${c.vendedor_nome}`;
+      if (c.banco_nome && c.banco) c.banco = `${c.banco} - ${c.banco_nome}`;
       delete c.classe_nome;
       delete c.pais_nome;
+      delete c.vendedor_nome;
+      delete c.banco_nome;
+
+      // Mapear códigos para descrições legíveis
+      const tipoClienteMap: Record<string, string> = { R: 'R - REVENDA', F: 'F - CLIENTE FINAL', L: 'L - PROD. RURAL', S: 'S - SOLIDÁRIO', X: 'X - EXPORTAÇÃO' };
+      const sitTribMap: Record<string, string> = { '1': '1 - NÃO CONTRIBUINTE', '2': '2 - LUCRO PRESUMIDO', '3': '3 - LUCRO REAL', '4': '4 - SIMPLES NACIONAL' };
+
+      if (c.tipocliente && tipoClienteMap[c.tipocliente]) c.tipocliente = tipoClienteMap[c.tipocliente];
+      if (c.sit_tributaria && sitTribMap[String(c.sit_tributaria)]) c.sit_tributaria = sitTribMap[String(c.sit_tributaria)];
+
       return c;
     });
 

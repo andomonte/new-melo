@@ -32,11 +32,11 @@ const curvaOptions = [
 ];
 
 const informativoOptions = [
-  { value: '*', label: '*' },
-  { value: 'A', label: 'A' },
-  { value: 'B', label: 'B' },
-  { value: 'C', label: 'C' },
-  { value: 'D', label: 'D' },
+  { value: '*', label: '* - TODOS' },
+  { value: 'A', label: 'A - ATIVO' },
+  { value: 'B', label: 'B - BLOQUEADO' },
+  { value: 'C', label: 'C - COMPRAR' },
+  { value: 'D', label: 'D - DESATIVADO' },
 ];
 
 const unidadeMedidaOptions = [
@@ -218,17 +218,17 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
 
   const marcaOptions = marcas.map((marca) => ({
     value: marca.codmarca.toString(),
-    label: marca.descr,
+    label: `${marca.codmarca} - ${marca.descr}`,
   }));
 
   const grupoFuncaoOptions = gruposFuncao.map((grupoFuncao) => ({
     value: grupoFuncao.codgpf.toString(),
-    label: grupoFuncao.descr,
+    label: `${grupoFuncao.codgpf} - ${grupoFuncao.descr}`,
   }));
 
   const grupoProdutoOptions = gruposProduto.map((grupoProduto) => ({
     value: grupoProduto.codgpp.toString(),
-    label: grupoProduto.descr,
+    label: `${grupoProduto.codgpp} - ${grupoProduto.descr}`,
   }));
 
   return (

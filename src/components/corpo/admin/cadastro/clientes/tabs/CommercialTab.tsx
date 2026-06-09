@@ -380,11 +380,14 @@ export function CommercialTab() {
                   placeholder="Selecione"
                   required
                   options={[
-                    { value: '0', label: '0 - Balcão' },
-                    { value: '1', label: '1 - Revenda' },
-                    { value: '2', label: '2 - Revenda 2' },
-                    { value: '3', label: '3 - P. Velho' },
-                    { value: '4', label: '4 - B. Vista' },
+                    { value: '0', label: '0 - BALCÃO' },
+                    { value: '1', label: '1 - ZFM' },
+                    { value: '2', label: '2 - INTERIOR' },
+                    { value: '3', label: '3 - ALC' },
+                    { value: '4', label: '4 - AMAZ. OCIDENTAL' },
+                    { value: '5', label: '5 - FORA ESTADO' },
+                    { value: '6', label: '6 - FORA ESTADO BALCÃO' },
+                    { value: '7', label: '7 - BOA VISTA' },
                   ]}
                 />
                 {errors.precoVenda && (

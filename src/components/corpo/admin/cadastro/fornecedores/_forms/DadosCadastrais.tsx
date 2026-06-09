@@ -41,10 +41,10 @@ const tipoEmpresaOptions = [
 ];
 
 const tipoFornecedorOptions = [
-  { value: 'TF', label: 'TF' },
-  { value: 'OS', label: 'OS' },
-  { value: 'PF', label: 'PF' },
-  { value: 'CI', label: 'CI' },
+  { value: 'CI', label: 'CI - COMÉRCIO/INDÚSTRIA' },
+  { value: 'PF', label: 'PF - PRESTAÇÃO SERVIÇO PF' },
+  { value: 'OS', label: 'OS - PRESTAÇÃO SERVIÇO PJ' },
+  { value: 'TF', label: 'TF - TRANSPORTES/FRETES' },
 ];
 
 interface DadosCadastraisProps {
