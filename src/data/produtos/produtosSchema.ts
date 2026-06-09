@@ -187,31 +187,31 @@ export const cadastroProdutoSchema = z.object({
 })
 .refine(
   (data) => {
-    // Validação: Grupo de Produto vs Tipo
-    // MC (Mercadoria Comercial) NÃO pode começar com 'Z'
-    // ME (Mercadoria Especial) DEVE começar com 'Z'
+    // Validação: Grupo de Produto vs Tipo (conforme Delphi)
+    // MC (Material de Consumo): grupo DEVE começar com 'Z'
+    // ME (Mercadoria de Revenda): grupo NÃO pode começar com 'Z'
 
     const tipo = data.tipo?.toUpperCase();
     const codgpp = data.codgpp?.toUpperCase();
 
     if (!tipo || !codgpp || codgpp === '00000') {
-      return true; // Pula validação se campos vazios ou padrão
+      return true;
     }
 
     const comecaComZ = codgpp.startsWith('Z');
 
-    if (tipo === 'MC' && comecaComZ) {
-      return false; // MC não pode começar com Z
+    if (tipo === 'MC' && !comecaComZ) {
+      return false; // MC (Material de Consumo) deve começar com Z
     }
 
-    if (tipo === 'ME' && !comecaComZ) {
-      return false; // ME deve começar com Z
+    if (tipo === 'ME' && comecaComZ) {
+      return false; // ME (Mercadoria de Revenda) não pode começar com Z
     }
 
     return true;
   },
   {
-    message: 'Grupo de Produto inválido: Mercadoria Comercial (MC) não pode começar com "Z" e Mercadoria Especial (ME) deve começar com "Z"',
+    message: 'Grupo de Produto inválido: Material de Consumo (MC) deve começar com "Z" e Mercadoria de Revenda (ME) não pode começar com "Z"',
     path: ['codgpp'],
   }
 )
