@@ -169,7 +169,7 @@ export const clientSchema = z.object({
   // Se o backend usa ALLOWED_COLUMNS, podemos ser mais permissivos aqui ou strict.
   // Vamos manter permissive para UI fields.
 
-  obs: z.string().max(500).optional().nullable(),
+  obs: z.string().max(100, 'Observações: máximo 100 caracteres (limite do banco)').optional().nullable(),
 
   // Campos de Cobrança (obrigatórios no Delphi quando endereço diferente)
   enderecoCobrancaIgual: z.boolean().default(true),
