@@ -131,13 +131,20 @@ export default function CustomModal({
         });
         setErrors(fieldErrors);
 
-        const firstField = String(error.errors[0]?.path[0] || '');
         const campoParaAba: Record<string, string> = {
           nome: 'dadosCadastrais', nomefant: 'dadosCadastrais', cpfcgc: 'dadosCadastrais',
           codtransp: 'dadosCadastrais', cep: 'dadosCadastrais', ender: 'dadosCadastrais',
           numero: 'dadosCadastrais', bairro: 'dadosCadastrais', cidade: 'dadosCadastrais',
           uf: 'dadosCadastrais', codpais: 'dadosCadastrais',
         };
+        // Ordenar erros pela sequência das abas
+        const tabOrder = ['dadosCadastrais', 'dadosFinanceiros', 'calculoFrete'];
+        const sortedErrors = [...error.errors].sort((a, b) => {
+          const tabA = tabOrder.indexOf(campoParaAba[String(a.path[0])] || '');
+          const tabB = tabOrder.indexOf(campoParaAba[String(b.path[0])] || '');
+          return tabA - tabB;
+        });
+        const firstField = String(sortedErrors[0]?.path[0] || '');
         if (campoParaAba[firstField]) setActiveTab(campoParaAba[firstField]);
       } else {
         toast({

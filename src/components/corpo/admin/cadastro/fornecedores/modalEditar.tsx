@@ -404,9 +404,16 @@ export default function CustomModal({
           }
         });
 
-        const firstError = error.errors[0];
+        // Ordenar erros pela sequência das abas
+        const tabOrder = ['dadosCadastrais', 'dadosFinanceiros', 'regrasFaturamento'];
+        const sortedErrors = [...error.errors].sort((a, b) => {
+          const tabA = tabOrder.indexOf(campoParaAba[String(a.path[0])] || '');
+          const tabB = tabOrder.indexOf(campoParaAba[String(b.path[0])] || '');
+          return tabA - tabB;
+        });
+        const firstError = sortedErrors[0];
         const fieldWithError = firstError.path[0];
-        const abaDoErro = campoParaAba[fieldWithError];
+        const abaDoErro = campoParaAba[fieldWithError as string];
 
         if (abaDoErro) {
           console.log(
