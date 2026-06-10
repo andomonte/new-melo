@@ -486,14 +486,7 @@ export function CommercialTab() {
           </Label>
         </div>
 
-        {/* Observações Comerciais */}
-        <div className="md:col-span-2">
-          <Label>Observações Comerciais</Label>
-          <Input
-            {...register('obs')}
-            placeholder="Notas internas sobre o cliente..."
-          />
-        </div>
+        {/* Observações removida — campo obs fica apenas em Dados Cadastrais (conforme Delphi) */}
       </div>
 
       {/* Grid de Dados Financeiros - Replicado da aba Financeira */}

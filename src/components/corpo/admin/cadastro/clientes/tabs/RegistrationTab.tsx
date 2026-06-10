@@ -452,6 +452,8 @@ export function RegistrationTab({
                 required
                 options={[
                   { value: 'EPP', label: 'EPP - Empresa de Pequeno Porte' },
+                  { value: 'EP', label: 'EP - Empresa de Pequeno Porte' },
+                  { value: 'EF', label: 'EF - Empresa Filial' },
                   { value: 'ME', label: 'ME - Microempresa' },
                   { value: 'NL', label: 'NL - Normal' },
                   { value: 'PF', label: 'PF - Pessoa Física' },

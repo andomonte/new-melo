@@ -50,7 +50,7 @@ export const clientSchema = z.object({
   ),
   tipoEmpresa: z.preprocess(
     (val) => (val === null || val === '' ? undefined : val),
-    z.enum(['EPP', 'ME', 'NL', 'PF'], {
+    z.enum(['EPP', 'EP', 'ME', 'NL', 'PF', 'EF'], {
       required_error: 'Tipo de empresa é obrigatório',
       invalid_type_error: 'Tipo de empresa é obrigatório',
     }),
@@ -242,14 +242,7 @@ export const clientSchema = z.object({
     }
   }
 
-  // Dias de atraso: obrigatório quando "Permitir atraso" NÃO está marcado
-  // No Delphi: se checkbox NOT checked AND (diasAtraso vazio OU <= 0), erro
-  if (!data.aceitaAtraso) {
-    const dias = data.diasAtraso;
-    if (dias === null || dias === undefined || dias === '' || Number(dias) <= 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o nº de dias de atraso ou marque "Permitir atraso"', path: ['diasAtraso'] });
-    }
-  }
+  // Dias de atraso: campo opcional — validação removida pois o Delphi aceita 0 ou vazio
 });
 
 export type ClientFormValues = z.infer<typeof clientSchema>;

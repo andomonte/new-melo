@@ -14,7 +14,7 @@ import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { campoParaAba } from './_forms/campoParaAba';
 import { z } from 'zod';
-import { transportadoraSchema } from './_forms/transportadoraSchema';
+import { cadastroTransportadoraSchema } from './_forms/transportadoraSchema';
 
 interface ModalProps {
   isOpen: boolean;
@@ -100,7 +100,7 @@ export default function CustomModal({
       }
 
       // Validar campos obrigatórios antes de enviar
-      transportadoraSchema.parse(transportadora);
+      cadastroTransportadoraSchema.parse(transportadora);
 
       await insertTransportadora(transportadora);
       setErrors({});
