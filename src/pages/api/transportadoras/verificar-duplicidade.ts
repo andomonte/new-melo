@@ -34,14 +34,17 @@ export default async function handle(
     let query: string;
     let params: string[];
 
+    // Limpa formatação para comparar apenas dígitos
+    const cpfcgcDigits = cpfcgc.trim().replace(/\D/g, '');
+
     if (codtransp && typeof codtransp === 'string' && codtransp.trim()) {
       // Edição: excluir o registro atual da verificação
-      query = `SELECT codtransp, nome FROM dbtransp WHERE cpfcgc = $1 AND codtransp != $2 LIMIT 1`;
-      params = [cpfcgc.trim(), codtransp.trim()];
+      query = `SELECT codtransp, nome FROM dbtransp WHERE REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') = $1 AND TRIM(codtransp) != TRIM($2) LIMIT 1`;
+      params = [cpfcgcDigits, codtransp.trim()];
     } else {
       // Cadastro: verificar qualquer registro com o mesmo CPF/CNPJ
-      query = `SELECT codtransp, nome FROM dbtransp WHERE cpfcgc = $1 LIMIT 1`;
-      params = [cpfcgc.trim()];
+      query = `SELECT codtransp, nome FROM dbtransp WHERE REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') = $1 LIMIT 1`;
+      params = [cpfcgcDigits];
     }
 
     const result = await client.query(query, params);

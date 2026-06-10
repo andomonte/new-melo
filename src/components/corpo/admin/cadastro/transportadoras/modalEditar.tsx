@@ -14,6 +14,8 @@ import { Toaster } from '@/components/ui/toaster';
 import Carregamento from '@/utils/carregamento';
 import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { z } from 'zod';
+import { transportadoraSchema } from './_forms/transportadoraSchema';
 
 interface ModalProps {
   isOpen: boolean;
@@ -113,16 +115,36 @@ export default function CustomModal({
         }
       }
 
+      // Validar campos obrigatórios antes de enviar
+      transportadoraSchema.parse(transportadora);
+
       await updateTransportadora(transportadora);
 
       setErrors({});
       setMensagemInfo('Transportadora atualizada com sucesso!');
-      setOpenInfo(true); // abre o modal de info
-    } catch (_error) {
-      toast({
-        description: 'Falha ao atualizar transportadora.',
-        variant: 'destructive',
-      });
+      setOpenInfo(true);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const fieldErrors: { [key: string]: string } = {};
+        error.errors.forEach((err) => {
+          if (err.path.length > 0) fieldErrors[String(err.path[0])] = err.message;
+        });
+        setErrors(fieldErrors);
+
+        const firstField = String(error.errors[0]?.path[0] || '');
+        const campoParaAba: Record<string, string> = {
+          nome: 'dadosCadastrais', nomefant: 'dadosCadastrais', cpfcgc: 'dadosCadastrais',
+          codtransp: 'dadosCadastrais', cep: 'dadosCadastrais', ender: 'dadosCadastrais',
+          numero: 'dadosCadastrais', bairro: 'dadosCadastrais', cidade: 'dadosCadastrais',
+          uf: 'dadosCadastrais', codpais: 'dadosCadastrais',
+        };
+        if (campoParaAba[firstField]) setActiveTab(campoParaAba[firstField]);
+      } else {
+        toast({
+          description: 'Falha ao atualizar transportadora.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 

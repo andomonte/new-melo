@@ -14,6 +14,7 @@ import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { campoParaAba } from './_forms/campoParaAba';
 import { z } from 'zod';
+import { transportadoraSchema } from './_forms/transportadoraSchema';
 
 interface ModalProps {
   isOpen: boolean;
@@ -98,15 +99,20 @@ export default function CustomModal({
         }
       }
 
+      // Validar campos obrigatórios antes de enviar
+      transportadoraSchema.parse(transportadora);
+
       await insertTransportadora(transportadora);
       setErrors({});
       setMensagemInfo('Transportadora cadastrada com sucesso!');
-      setOpenInfo(true); // <-- ativa InfoModal
+      setOpenInfo(true);
     } catch (error) {
-      toast({
-        description: 'Falha ao cadastrar transportadora.',
-        variant: 'destructive',
-      });
+      if (!(error instanceof z.ZodError)) {
+        toast({
+          description: 'Falha ao cadastrar transportadora.',
+          variant: 'destructive',
+        });
+      }
 
       if (error instanceof z.ZodError) {
         const fieldErrors: { [key: string]: string } = {};

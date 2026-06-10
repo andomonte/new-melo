@@ -644,10 +644,10 @@ export default function ClientFormModal({
       'faixaFinanceira',
       'banco',
       'formaPagamento',
-      'vendedores_list',
     ];
 
     const commercialFields = [
+      'vendedores_list',
       'acrescimo',
       'desconto',
       'precoVenda',
@@ -681,8 +681,8 @@ export default function ClientFormModal({
       'inscricaoEstadual', 'inscricaoMunicipal', 'suframa',
       'endercobr', 'numerocobr', 'bairrocobr', 'cidadecobr', 'ufcobr',
     ];
-    const financialFields = ['banco', 'icms', 'precoVenda', 'aceitaAtraso', 'diasAtraso'];
-    const commercialFields = ['vendedores_list'];
+    const financialFields = ['banco', 'icms', 'aceitaAtraso', 'diasAtraso'];
+    const commercialFields = ['vendedores_list', 'precoVenda'];
     if (tab === 'registration') return registrationFields;
     if (tab === 'financial') return financialFields;
     if (tab === 'commercial') return commercialFields;
