@@ -556,8 +556,14 @@ export default function ClientFormModal({
           onSubmit(data);
         },
         (errors) => {
-          // Navegar para a aba do primeiro erro e focar no campo
-          const firstErrorField = Object.keys(errors)[0];
+          // Navegar para a aba do primeiro erro na ORDEM das abas (cadastrais → financeiros → comerciais → entrega)
+          const tabOrder = ['registration', 'financial', 'commercial', 'delivery'];
+          const errorFields = Object.keys(errors);
+          const firstErrorField = errorFields.sort((a, b) => {
+            const tabA = tabOrder.indexOf(getTabForField(a));
+            const tabB = tabOrder.indexOf(getTabForField(b));
+            return tabA - tabB;
+          })[0];
           const errorTab = getTabForField(firstErrorField);
 
           if (errorTab && errorTab !== activeTab) {
