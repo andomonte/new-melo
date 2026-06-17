@@ -10,23 +10,24 @@ export default async function handler(
   }
 
   try {
-    const { busca } = req.query;
+    // O componente Autocomplete envia "search"; aceitamos também "busca" por compatibilidade.
+    const termo = (req.query.search ?? req.query.busca) as string | undefined;
     const pool = getPgPool();
 
     let query = `
       SELECT cod_credor, nome, nome_fant, codpais
       FROM dbcredor
     `;
-    
+
     const params: any[] = [];
-    
-    if (busca && typeof busca === 'string') {
-      query += ` WHERE 
-        cod_credor ILIKE $1 OR 
-        nome ILIKE $1 OR 
+
+    if (termo && typeof termo === 'string' && termo.trim() !== '') {
+      query += ` WHERE
+        cod_credor ILIKE $1 OR
+        nome ILIKE $1 OR
         nome_fant ILIKE $1
       `;
-      params.push(`%${busca}%`);
+      params.push(`%${termo.trim()}%`);
     }
     
     query += ` ORDER BY nome LIMIT 50`;
