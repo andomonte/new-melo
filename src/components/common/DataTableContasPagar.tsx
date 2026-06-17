@@ -63,6 +63,9 @@ interface DataTableContasPagarProps {
   initialFilters?: Record<string, { tipo: string; valor: string }>;
   /** Opções do filtro rápido de Status (padrão: Todos, Pendente/Parcial, Pago, Cancelado) */
   statusFilterOptions?: { value: string; label: string }[];
+  /** Quando true, o filtro rápido por coluna filtra LOCALMENTE os registros já carregados
+   *  (instantâneo, sem consultar o servidor). Datas e demais colunas são casadas pelo texto exibido. */
+  filtroLocal?: boolean;
 }
 
 export default function DataTableContasPagar({
@@ -88,6 +91,7 @@ export default function DataTableContasPagar({
   userName,
   initialFilters,
   statusFilterOptions,
+  filtroLocal = false,
 }: DataTableContasPagarProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -230,7 +234,10 @@ export default function DataTableContasPagar({
     }));
     
     if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
-    
+
+    // Modo local: o filtro é aplicado na renderização, sem consultar o servidor.
+    if (filtroLocal) return;
+
     // Debounce the filter application
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -316,6 +323,43 @@ export default function DataTableContasPagar({
     window.addEventListener('resize', calcularLargura);
     return () => window.removeEventListener('resize', calcularLargura);
   }, []);
+
+  // Extrai o texto puro de uma célula (string, número ou elemento React aninhado)
+  const extractText = (v: any): string => {
+    if (v == null) return '';
+    if (typeof v === 'boolean') return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'object' && v?.props) {
+      const c = v.props?.children;
+      if (typeof c === 'string') return c;
+      if (typeof c === 'number') return String(c);
+      if (Array.isArray(c)) return c.map(extractText).join(' ');
+      if (c?.props) return extractText(c);
+    }
+    return String(v);
+  };
+
+  // Filtra localmente as linhas já carregadas, casando o texto exibido em cada coluna.
+  // Status e ☑️ não entram aqui: Status é resolvido no servidor e ☑️ tem filtro próprio.
+  const aplicarFiltroLocal = (linhas: any[]): any[] => {
+    const ativos = Object.entries(filtrosColuna).filter(
+      ([key, f]) => key !== 'check' && key !== 'status' && (f?.valor ?? '').trim() !== ''
+    );
+    if (ativos.length === 0) return linhas;
+
+    return linhas.filter((row) =>
+      ativos.every(([key, { valor }]) => {
+        const termo = valor.trim().toLowerCase();
+        const headerCol = headers.find((h) => h.toLowerCase() === key);
+        if (!headerCol) return true; // coluna desconhecida — não filtra
+        const idx = headers.indexOf(headerCol);
+        if (idx === -1) return true;
+        const texto = extractText(row[idx]).toLowerCase();
+        return texto.includes(termo);
+      })
+    );
+  };
 
   return (
     <div className="flex flex-col w-full gap-2 flex-1 min-h-0">
@@ -520,9 +564,11 @@ export default function DataTableContasPagar({
                               delete novosFiltros.status;
                             }
                             setFiltrosColuna(novosFiltros);
+                            // Em modo local, só status/☑️ vão ao servidor; filtros de texto ficam locais.
                             onFiltroChange?.(
                               Object.entries(novosFiltros)
-                                .filter(([, { valor: v }]) => v !== '')
+                                .filter(([campo, { valor: v }]) =>
+                                  v !== '' && (!filtroLocal || campo === 'status' || campo === 'check'))
                                 .map(([campo, { tipo, valor: v }]) => ({ campo, tipo, valor: v }))
                             );
                           }}
@@ -550,6 +596,7 @@ export default function DataTableContasPagar({
                               ...prev,
                               check: { tipo: 'igual', valor }
                             }));
+                            if (filtroLocal) return;
                             onFiltroChange?.([
                               ...Object.entries(filtrosColuna)
                                 .filter(([key]) => key !== 'check')
@@ -608,8 +655,9 @@ export default function DataTableContasPagar({
                 </tr>
               ) : (
                 (() => {
+                  // Filtro rápido local por coluna (instantâneo, modo filtroLocal)
+                  let filteredRows = filtroLocal ? aplicarFiltroLocal(rows) : rows;
                   // Filtro local do ☑️
-                  let filteredRows = rows;
                   const checkFilter = filtrosColuna['check']?.valor;
                   if (checkFilter && checkFilter !== '') {
                     const checkColIndex = headers.indexOf('☑️');
@@ -631,22 +679,6 @@ export default function DataTableContasPagar({
                       sortedRows = [...filteredRows].sort((a, b) => {
                         let valA = a[colIndex];
                         let valB = b[colIndex];
-
-                        // Extrai texto de elementos React
-                        const extractText = (v: any): string => {
-                          if (v == null) return '';
-                          if (typeof v === 'string') return v;
-                          if (typeof v === 'number') return String(v);
-                          if (typeof v === 'object' && v?.props) {
-                            // React element — tenta children
-                            const c = v.props?.children;
-                            if (typeof c === 'string') return c;
-                            if (typeof c === 'number') return String(c);
-                            if (Array.isArray(c)) return c.map(extractText).join('');
-                            if (c?.props) return extractText(c);
-                          }
-                          return String(v);
-                        };
 
                         const textA = extractText(valA).trim();
                         const textB = extractText(valB).trim();

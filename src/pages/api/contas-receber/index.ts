@@ -22,10 +22,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       tipo,
       com_atraso,
       cod_receb,
+      nro_doc,
       nro_nf,
       nro_dup,
       banco,
       codfat,
+      cod_fat,
       valor_min,
       valor_max,
       search
@@ -82,10 +84,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paramIndex++;
     }
 
-    // Filtro por código do recebimento
+    // Filtro por código do recebimento (busca parcial — ignora zeros à esquerda)
     if (cod_receb) {
-      whereClause += ` AND r.cod_receb = $${paramIndex}`;
-      params.push(cod_receb);
+      whereClause += ` AND CAST(r.cod_receb AS TEXT) LIKE $${paramIndex}`;
+      params.push(`%${cod_receb}%`);
+      paramIndex++;
+    }
+
+    // Filtro por número do documento
+    if (nro_doc) {
+      whereClause += ` AND r.nro_doc LIKE $${paramIndex}`;
+      params.push(`%${nro_doc}%`);
       paramIndex++;
     }
 
@@ -110,10 +119,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paramIndex++;
     }
 
-    // Filtro por código de fatura
-    if (codfat) {
+    // Filtro por código de fatura (aceita 'codfat' ou 'cod_fat')
+    const filtroFatura = codfat || cod_fat;
+    if (filtroFatura) {
       whereClause += ` AND r.cod_fat LIKE $${paramIndex}`;
-      params.push(`%${codfat}%`);
+      params.push(`%${filtroFatura}%`);
       paramIndex++;
     }
 

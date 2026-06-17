@@ -952,41 +952,55 @@ export default function ContasAReceber() {
     setPaginaAtual(1);
   };
 
-  // Handler de filtros avançados
+  // Handler de filtros avançados / filtro rápido por coluna.
+  // O DataTable envia o nome da coluna em minúsculas (ex.: "número título", "nº documento").
+  // Aqui traduzimos esses nomes para os campos aceitos pela API (FiltrosContasReceber).
   const handleFiltroAvancado = (filtrosDinamicos: { campo: string; tipo: string; valor: string }[]) => {
-    const novosFiltros: FiltrosContasReceber = {};
+    // Campos controlados pelo filtro rápido — recalculados a cada chamada
+    const camposGerenciados: (keyof FiltrosContasReceber)[] = [
+      'cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'status',
+    ];
 
-    filtrosDinamicos.forEach((filtro) => {
-      if (filtro.campo === 'codcli' || filtro.campo === 'nome_cliente') {
-        novosFiltros.cliente = filtro.valor;
-      }
-      if (filtro.campo === 'status') {
-        if (filtro.valor) novosFiltros.status = filtro.valor as any;
-      }
-      if (filtro.campo === 'rec') {
-        if (filtro.valor === 'S') novosFiltros.status = 'recebido';
-        else if (filtro.valor === 'N') novosFiltros.status = 'pendente';
-      }
-      if (filtro.campo === 'cancel' && filtro.valor === 'S') {
-        novosFiltros.status = 'cancelado';
-      }
-    });
-
-    // Mesclar com filtros existentes (manter período/data)
+    // Parte dos filtros atuais (mantém período/data) e zera os campos gerenciados,
+    // para que valores apagados sejam removidos corretamente.
     const filtrosMesclados = { ...filtros };
+    camposGerenciados.forEach((c) => { delete filtrosMesclados[c]; });
 
-    // Limpar status se não veio nos filtros
-    if (!novosFiltros.status) {
-      delete filtrosMesclados.status;
-    }
+    filtrosDinamicos.forEach(({ campo, valor }) => {
+      const v = (valor ?? '').trim();
+      if (!v) return; // vazio = filtro removido (já apagado acima)
 
-    // Aplicar novos filtros sobre os existentes
-    Object.keys(novosFiltros).forEach(key => {
-      const valor = novosFiltros[key as keyof FiltrosContasReceber];
-      if (valor === '' || valor === undefined || valor === null) {
-        delete filtrosMesclados[key as keyof FiltrosContasReceber];
-      } else {
-        (filtrosMesclados as any)[key] = valor;
+      switch (campo) {
+        case 'número título':
+        case 'cod_receb':
+          filtrosMesclados.cod_receb = v;
+          break;
+        case 'cliente':
+        case 'codcli':
+        case 'nome_cliente':
+          filtrosMesclados.cliente = v;
+          break;
+        case 'nº documento':
+        case 'nro_doc':
+          filtrosMesclados.nro_doc = v;
+          break;
+        case 'fatura':
+        case 'cod_fat':
+          filtrosMesclados.cod_fat = v;
+          break;
+        case 'banco':
+          filtrosMesclados.banco = v;
+          break;
+        case 'status':
+          filtrosMesclados.status = v as any;
+          break;
+        case 'rec':
+          if (v === 'S') filtrosMesclados.status = 'recebido';
+          else if (v === 'N') filtrosMesclados.status = 'pendente';
+          break;
+        case 'cancel':
+          if (v === 'S') filtrosMesclados.status = 'cancelado';
+          break;
       }
     });
 
@@ -1204,6 +1218,7 @@ export default function ContasAReceber() {
           <DataTableContasPagar
             screenKey="contas-a-receber"
             userName={user?.usuario}
+            filtroLocal
             initialFilters={{}}
             statusFilterOptions={[
               { value: 'pendente', label: 'Pendente' },
@@ -1638,7 +1653,7 @@ export default function ContasAReceber() {
               <Label>Cliente</Label>
               <Autocomplete
                 placeholder="Buscar cliente..."
-                apiUrl="/api/clientes/buscar"
+                apiUrl="/api/contas-receber/clientes"
                 value={dadosEdicao.codcli}
                 initialLabel={contaSelecionada?.nome_cliente || (contaSelecionada?.codcli ? `Cód: ${contaSelecionada.codcli}` : undefined)}
                 onChange={(value) => setDadosEdicao(prev => ({ ...prev, codcli: value }))}

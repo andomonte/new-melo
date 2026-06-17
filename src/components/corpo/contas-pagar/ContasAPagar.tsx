@@ -2597,6 +2597,7 @@ export function ContasAPagar() {
           <DataTableContasPagar
             screenKey="contas-a-pagar"
             userName={user?.usuario}
+            filtroLocal
             initialFilters={{ status: { tipo: 'igual', valor: 'pendente_parcial' } }}
             headers={headers}
             rows={prepararDadosTabela()}
