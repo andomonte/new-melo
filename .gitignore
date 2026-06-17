@@ -38,6 +38,12 @@ next-env.d.ts
 
 .idea
 
+# Visual Studio (cache/índices da IDE, específico da máquina)
+.vs/
+
+# Material de referência do sistema Delphi legado (não faz parte do app)
+/Desenvolvimento/
+
 # claude code
 .claude/
 
