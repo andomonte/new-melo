@@ -44,6 +44,7 @@ function buildQuery(
   data_inicio?: string,
   data_fim?: string,
   status?: string,
+  colFiltros: { cod_receb?: string; cliente?: string; nro_doc?: string; cod_fat?: string } = {},
 ): { sql: string; params: any[] } {
   const params: any[] = [];
   let idx = 1;
@@ -56,6 +57,24 @@ function buildQuery(
   if (data_fim) {
     whereClause += ` AND r.dt_venc <= $${idx++}`;
     params.push(data_fim);
+  }
+
+  // Filtros de coluna vindos da tela (refletem o filtro rápido)
+  if (colFiltros.cod_receb) {
+    whereClause += ` AND CAST(r.cod_receb AS TEXT) ILIKE $${idx}`;
+    params.push(`%${colFiltros.cod_receb}%`); idx++;
+  }
+  if (colFiltros.nro_doc) {
+    whereClause += ` AND r.nro_doc ILIKE $${idx}`;
+    params.push(`%${colFiltros.nro_doc}%`); idx++;
+  }
+  if (colFiltros.cliente) {
+    whereClause += ` AND (c.nome ILIKE $${idx} OR CAST(c.codcli AS TEXT) ILIKE $${idx})`;
+    params.push(`%${colFiltros.cliente}%`); idx++;
+  }
+  if (colFiltros.cod_fat) {
+    whereClause += ` AND r.cod_fat ILIKE $${idx}`;
+    params.push(`%${colFiltros.cod_fat}%`); idx++;
   }
 
   // Determinar filtro de status após CTE
@@ -108,7 +127,15 @@ function buildQuery(
     ORDER BY ${orderBy}
   `;
 
-  return { sql, params };
+  // Contagem leve para a trava de segurança
+  const countSql = `
+    SELECT COUNT(*) AS total
+    FROM db_manaus.dbreceb r
+    LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+    WHERE 1=1 ${whereClause}
+  `;
+
+  return { sql, params, countSql };
 }
 
 // ─── PDF generator ──────────────────────────────────────────────────────────
@@ -552,7 +579,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, tipo, data_inicio, data_fim, status } = req.query;
+  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat } = req.query;
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel')) {
     return res.status(400).json({
@@ -568,22 +595,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { sql, params } = buildQuery(
+    const { sql, params, countSql } = buildQuery(
       tipoVal,
       data_inicio as string | undefined,
       data_fim as string | undefined,
       status as string | undefined,
+      {
+        cod_receb: cod_receb as string | undefined,
+        cliente: cliente as string | undefined,
+        nro_doc: nro_doc as string | undefined,
+        cod_fat: cod_fat as string | undefined,
+      },
     );
 
     console.log('📊 Relatório Contas a Receber:', { tipoVal, data_inicio, data_fim, status, paramsCount: params.length });
 
+    // Trava de segurança: evita gerar relatórios gigantes que travariam o servidor
+    const MAX_LINHAS = 25000;
     const client = await pool.connect();
-    let rows: any[];
+    let rows: any[] = [];
+    let totalLinhas = 0;
+    let excedeuLimite = false;
     try {
-      const result = await client.query(sql, params);
-      rows = result.rows;
+      const countResult = await client.query(countSql, params);
+      totalLinhas = parseInt(countResult.rows[0]?.total ?? '0', 10);
+      if (totalLinhas > MAX_LINHAS) {
+        excedeuLimite = true;
+      } else {
+        const result = await client.query(sql, params);
+        rows = result.rows;
+      }
     } finally {
       client.release();
+    }
+
+    if (excedeuLimite) {
+      const msg = `O relatório resultaria em ${totalLinhas.toLocaleString('pt-BR')} registros, acima do limite de ${MAX_LINHAS.toLocaleString('pt-BR')}. Selecione um período (Semana/Mês/Personalizado) ou aplique um filtro de coluna (ex.: Cliente) e tente novamente.`;
+      return res.status(413).json({ error: msg, erro: msg });
     }
 
     console.log(`📊 Registros encontrados: ${rows.length}`);

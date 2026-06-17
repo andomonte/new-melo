@@ -66,6 +66,9 @@ interface DataTableContasPagarProps {
   /** Quando true, o filtro rápido por coluna filtra LOCALMENTE os registros já carregados
    *  (instantâneo, sem consultar o servidor). Datas e demais colunas são casadas pelo texto exibido. */
   filtroLocal?: boolean;
+  /** Notifica o componente pai dos filtros de texto ativos no modo local — usado para que o
+   *  relatório/exportação reflitam exatamente o que está filtrado na tela. */
+  onFiltrosLocaisChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
 }
 
 export default function DataTableContasPagar({
@@ -92,6 +95,7 @@ export default function DataTableContasPagar({
   initialFilters,
   statusFilterOptions,
   filtroLocal = false,
+  onFiltrosLocaisChange,
 }: DataTableContasPagarProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -227,16 +231,19 @@ export default function DataTableContasPagar({
   };
 
   const handleInputChange = (key: string, value: string) => {
-    console.log(`🔍 Filtro rápido alterado - Campo: ${key}, Valor: ${value}`);
-    setFiltrosColuna((prev) => ({
-      ...prev,
-      [key]: { tipo: prev[key]?.tipo || 'contém', valor: value },
-    }));
-    
+    const novoMapa = {
+      ...filtrosColuna,
+      [key]: { tipo: filtrosColuna[key]?.tipo || 'contém', valor: value },
+    };
+    setFiltrosColuna(novoMapa);
+
     if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
 
     // Modo local: o filtro é aplicado na renderização, sem consultar o servidor.
-    if (filtroLocal) return;
+    if (filtroLocal) {
+      notificarFiltrosLocais(novoMapa);
+      return;
+    }
 
     // Debounce the filter application
     if (debounceRef.current) {
@@ -340,6 +347,15 @@ export default function DataTableContasPagar({
     return String(v);
   };
 
+  // Notifica o pai dos filtros de texto ativos (para o relatório refletir a tela)
+  const notificarFiltrosLocais = (mapa: Record<string, { tipo: string; valor: string }>) => {
+    if (!filtroLocal || !onFiltrosLocaisChange) return;
+    const ativos = Object.entries(mapa)
+      .filter(([campo, f]) => campo !== 'check' && campo !== 'status' && (f?.valor ?? '').trim() !== '')
+      .map(([campo, { tipo, valor }]) => ({ campo, tipo, valor }));
+    onFiltrosLocaisChange(ativos);
+  };
+
   // Filtra localmente as linhas já carregadas, casando o texto exibido em cada coluna.
   // Status e ☑️ não entram aqui: Status é resolvido no servidor e ☑️ tem filtro próprio.
   const aplicarFiltroLocal = (linhas: any[]): any[] => {
@@ -380,6 +396,7 @@ export default function DataTableContasPagar({
                 console.log('🔍 Limpando filtros de coluna para busca global');
                 setFiltrosColuna({});
                 onFiltroChange?.([]);
+                onFiltrosLocaisChange?.([]);
               }
               
               onSearch?.(e);
@@ -427,6 +444,7 @@ export default function DataTableContasPagar({
                         console.log('🔍 Limpando todos os filtros rápidos');
                         setFiltrosColuna({});
                         onFiltroChange?.([]);
+                        onFiltrosLocaisChange?.([]);
                       }
                       return novoEstado;
                     });

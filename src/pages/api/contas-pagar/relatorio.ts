@@ -45,6 +45,7 @@ function buildQuery(
   data_inicio?: string,
   data_fim?: string,
   status?: string,
+  colFiltros: { cod_pgto?: string; credor?: string; nro_nf?: string; nro_dup?: string } = {},
 ): { sql: string; params: any[] } {
   const params: any[] = [];
   let idx = 1;
@@ -57,6 +58,24 @@ function buildQuery(
   if (data_fim) {
     whereClause += ` AND p.dt_venc <= $${idx++}`;
     params.push(data_fim);
+  }
+
+  // Filtros de coluna vindos da tela (refletem o filtro rápido)
+  if (colFiltros.cod_pgto) {
+    whereClause += ` AND p.cod_pgto ILIKE $${idx}`;
+    params.push(`%${colFiltros.cod_pgto}%`); idx++;
+  }
+  if (colFiltros.credor) {
+    whereClause += ` AND (c.nome ILIKE $${idx} OR t.nome ILIKE $${idx} OR CAST(p.cod_credor AS TEXT) ILIKE $${idx})`;
+    params.push(`%${colFiltros.credor}%`); idx++;
+  }
+  if (colFiltros.nro_nf) {
+    whereClause += ` AND p.nro_nf ILIKE $${idx}`;
+    params.push(`%${colFiltros.nro_nf}%`); idx++;
+  }
+  if (colFiltros.nro_dup) {
+    whereClause += ` AND p.nro_dup ILIKE $${idx}`;
+    params.push(`%${colFiltros.nro_dup}%`); idx++;
   }
 
   // Determinar filtro de status após CTE
@@ -129,7 +148,16 @@ function buildQuery(
     ORDER BY dt_venc ASC, cod_pgto ASC
   `;
 
-  return { sql, params };
+  // Contagem leve (sem os subselects de status) para a trava de segurança
+  const countSql = `
+    SELECT COUNT(*) AS total
+    FROM db_manaus.dbpgto p
+    LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
+    LEFT JOIN db_manaus.dbtransp t ON t.codtransp = p.cod_transp
+    WHERE 1=1 ${whereClause}
+  `;
+
+  return { sql, params, countSql };
 }
 
 // ─── PDF generator ──────────────────────────────────────────────────────────
@@ -516,7 +544,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, data_inicio, data_fim, status } = req.query;
+  const { formato, data_inicio, data_fim, status, cod_pgto, credor, nro_nf, nro_dup } = req.query;
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel')) {
     return res.status(400).json({
@@ -525,19 +553,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { sql, params } = buildQuery(
+    const { sql, params, countSql } = buildQuery(
       data_inicio as string | undefined,
       data_fim as string | undefined,
       status as string | undefined,
+      {
+        cod_pgto: cod_pgto as string | undefined,
+        credor: credor as string | undefined,
+        nro_nf: nro_nf as string | undefined,
+        nro_dup: nro_dup as string | undefined,
+      },
     );
 
+    // Trava de segurança: evita gerar relatórios gigantes que travariam o servidor
+    const MAX_LINHAS = 25000;
     const client = await pool.connect();
-    let rows: any[];
+    let rows: any[] = [];
+    let totalLinhas = 0;
+    let excedeuLimite = false;
     try {
-      const result = await client.query(sql, params);
-      rows = result.rows;
+      const countResult = await client.query(countSql, params);
+      totalLinhas = parseInt(countResult.rows[0]?.total ?? '0', 10);
+      if (totalLinhas > MAX_LINHAS) {
+        excedeuLimite = true;
+      } else {
+        const result = await client.query(sql, params);
+        rows = result.rows;
+      }
     } finally {
       client.release();
+    }
+
+    if (excedeuLimite) {
+      const msg = `O relatório resultaria em ${totalLinhas.toLocaleString('pt-BR')} registros, acima do limite de ${MAX_LINHAS.toLocaleString('pt-BR')}. Selecione um período (Semana/Mês/Personalizado) ou aplique um filtro de coluna (ex.: Fornecedor) e tente novamente.`;
+      return res.status(413).json({ error: msg, erro: msg });
     }
 
     const periodoStr =

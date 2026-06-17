@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2 } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search } from 'lucide-react';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
@@ -61,6 +61,8 @@ export default function ContasAReceber() {
     data_fim: semanaAtual.dataFim,
   });
   const [termoBusca, setTermoBusca] = useState('');
+  // Filtros de coluna ativos na tela (modo local) — usados para o relatório refletir o filtrado
+  const [filtrosColunaRelatorio, setFiltrosColunaRelatorio] = useState<{ campo: string; tipo: string; valor: string }[]>([]);
   const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
   const rangeInteracaoRef = useRef(false);
   const [prefsProntas, setPrefsProntas] = useState(false);
@@ -766,6 +768,25 @@ export default function ContasAReceber() {
       }
       if (filtros.status && filtros.status !== 'todos') params.append('status', filtros.status as string);
 
+      // Aplica os filtros de coluna ativos na tela (para o relatório refletir o filtrado)
+      filtrosColunaRelatorio.forEach(({ campo, valor }) => {
+        const v = (valor ?? '').trim();
+        if (!v) return;
+        switch (campo) {
+          case 'número título':
+          case 'cod_receb':
+            params.set('cod_receb', v); break;
+          case 'cliente':
+            params.set('cliente', v); break;
+          case 'nº documento':
+          case 'nro_doc':
+            params.set('nro_doc', v); break;
+          case 'fatura':
+          case 'cod_fat':
+            params.set('cod_fat', v); break;
+        }
+      });
+
       const response = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -1090,6 +1111,24 @@ export default function ContasAReceber() {
     }
   };
 
+  // Pesquisar: aplica o período/datas selecionados e dispara a consulta.
+  // Útil principalmente em "Todos" e "Personalizado" (busca só ao clicar).
+  const handlePesquisar = () => {
+    rangeInteracaoRef.current = true;
+    const novosFiltros: FiltrosContasReceber = { ...filtros };
+    if (rangeDataAtivo === 'personalizado') {
+      if (dataInicioPersonalizada) novosFiltros.data_inicio = dataInicioPersonalizada;
+      else delete (novosFiltros as any).data_inicio;
+      if (dataFimPersonalizada) novosFiltros.data_fim = dataFimPersonalizada;
+      else delete (novosFiltros as any).data_fim;
+    } else if (rangeDataAtivo === 'todos') {
+      delete (novosFiltros as any).data_inicio;
+      delete (novosFiltros as any).data_fim;
+    }
+    setFiltros(novosFiltros); // objeto novo → dispara a consulta via useEffect
+    setPaginaAtual(1);
+  };
+
   // Meta para o DataTable
   const meta: Meta = {
     currentPage: paginacao?.pagina || 1,
@@ -1183,6 +1222,13 @@ export default function ContasAReceber() {
               </div>
             )}
 
+            <DefaultButton
+              variant="primary"
+              size="default"
+              onClick={handlePesquisar}
+              icon={<Search className="w-4 h-4" />}
+              text="Pesquisar"
+            />
             <AuxButton
               variant="secondary"
               size="default"
@@ -1219,6 +1265,7 @@ export default function ContasAReceber() {
             screenKey="contas-a-receber"
             userName={user?.usuario}
             filtroLocal
+            onFiltrosLocaisChange={setFiltrosColunaRelatorio}
             initialFilters={{}}
             statusFilterOptions={[
               { value: 'pendente', label: 'Pendente' },

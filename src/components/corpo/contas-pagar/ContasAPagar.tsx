@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { toast } from 'sonner';
-import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2 } from 'lucide-react';
+import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2, Search } from 'lucide-react';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import DropdownContasPagar from '@/components/common/DropdownContasPagar';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
@@ -141,6 +141,8 @@ export function ContasAPagar() {
     data_fim: semanaAtual.dataFim,
     status: 'pendente_parcial'
   });
+  // Filtros de coluna ativos na tela (modo local) — usados para o relatório refletir o filtrado
+  const [filtrosColunaRelatorio, setFiltrosColunaRelatorio] = useState<{ campo: string; tipo: string; valor: string }[]>([]);
 
   // Colunas disponíveis para filtro dinâmico
   const colunasDisponiveis = [
@@ -556,6 +558,27 @@ export function ContasAPagar() {
     setFiltros(novosFiltros);
     setPaginaAtual(1);
   }, [rangeDataAtivo, dataInicioPersonalizada, dataFimPersonalizada]);
+
+  // Pesquisar: aplica o período/datas selecionados e dispara a consulta.
+  // Útil principalmente em "Todos" e "Personalizado" (busca só ao clicar).
+  const handlePesquisar = () => {
+    rangeInteracaoRef.current = true;
+    const novosFiltros = { ...filtros };
+    if (rangeDataAtivo === 'personalizado') {
+      if (dataInicioPersonalizada && dataFimPersonalizada) {
+        novosFiltros.data_inicio = dataInicioPersonalizada;
+        novosFiltros.data_fim = dataFimPersonalizada;
+      } else {
+        delete novosFiltros.data_inicio;
+        delete novosFiltros.data_fim;
+      }
+    } else if (rangeDataAtivo === 'todos') {
+      delete novosFiltros.data_inicio;
+      delete novosFiltros.data_fim;
+    }
+    setFiltros(novosFiltros); // objeto novo → dispara a consulta via useEffect
+    setPaginaAtual(1);
+  };
 
   // Buscar bancos disponíveis da API
   useEffect(() => {
@@ -2185,6 +2208,28 @@ export function ContasAPagar() {
         params.append('status', filtros.status);
       }
 
+      // Aplica os filtros de coluna ativos na tela (para o relatório refletir o filtrado)
+      filtrosColunaRelatorio.forEach(({ campo, valor }) => {
+        const v = (valor ?? '').trim();
+        if (!v) return;
+        switch (campo) {
+          case 'id':
+          case 'cod_pgto':
+            params.set('cod_pgto', v); break;
+          case 'fornecedor':
+          case 'credor':
+          case 'cod_credor':
+          case 'nome_credor':
+            params.set('credor', v); break;
+          case 'nº nf':
+          case 'nro_nf':
+            params.set('nro_nf', v); break;
+          case 'nº duplicata':
+          case 'nro_dup':
+            params.set('nro_dup', v); break;
+        }
+      });
+
       const response = await fetch(`/api/contas-pagar/relatorio?${params.toString()}`);
 
       if (!response.ok) {
@@ -2574,6 +2619,13 @@ export function ContasAPagar() {
               />
             )}
             <DefaultButton
+              variant="primary"
+              size="default"
+              onClick={handlePesquisar}
+              icon={<Search className="w-4 h-4" />}
+              text="Pesquisar"
+            />
+            <DefaultButton
               variant="secondary"
               size="default"
               onClick={() => setModalRelatorioAberto(true)}
@@ -2598,6 +2650,7 @@ export function ContasAPagar() {
             screenKey="contas-a-pagar"
             userName={user?.usuario}
             filtroLocal
+            onFiltrosLocaisChange={setFiltrosColunaRelatorio}
             initialFilters={{ status: { tipo: 'igual', valor: 'pendente_parcial' } }}
             headers={headers}
             rows={prepararDadosTabela()}
