@@ -523,7 +523,8 @@ export function ContasAPagar() {
   useEffect(() => {
     if (!rangeInteracaoRef.current) return;
     const hoje = new Date();
-    let novosFiltros = { ...filtros };
+    setFiltros(prev => {
+    let novosFiltros = { ...prev };
 
     if (rangeDataAtivo === 'semana') {
       const inicioSemana = new Date(hoje);
@@ -555,7 +556,8 @@ export function ContasAPagar() {
       delete novosFiltros.data_fim;
     }
 
-    setFiltros(novosFiltros);
+    return novosFiltros;
+    });
     setPaginaAtual(1);
   }, [rangeDataAtivo, dataInicioPersonalizada, dataFimPersonalizada]);
 
@@ -952,32 +954,46 @@ export function ContasAPagar() {
     console.log('🔍 Filtros convertidos para API:', novosFiltros);
     console.log('📋 Filtros existentes antes de mesclar:', filtros);
     
-    // Mesclar novos filtros com os existentes (mantém período, semana, etc.)
-    const filtrosMesclados = { ...filtros };
+    // Mesclar com os filtros atuais usando a forma FUNCIONAL do setState,
+    // garantindo o estado mais recente (evita corrida com a troca de período).
+    setFiltros(prev => {
+      const filtrosMesclados = { ...prev };
 
-    // Limpar status se não veio nos filtros (usuário selecionou "Todos")
-    if (!novosFiltros.status) {
-      delete filtrosMesclados.status;
-    }
-
-    // Aplicar novos filtros sobre os existentes
-    Object.keys(novosFiltros).forEach(key => {
-      const valor = novosFiltros[key as keyof FiltrosContasPagar];
-      if (valor === '' || valor === undefined || valor === null) {
-        delete filtrosMesclados[key as keyof FiltrosContasPagar];
-      } else {
-        (filtrosMesclados as any)[key] = valor;
+      // Limpar status se não veio nos filtros (usuário selecionou "Todos")
+      if (!novosFiltros.status) {
+        delete filtrosMesclados.status;
       }
+
+      // Aplicar novos filtros sobre os existentes
+      Object.keys(novosFiltros).forEach(key => {
+        const valor = novosFiltros[key as keyof FiltrosContasPagar];
+        if (valor === '' || valor === undefined || valor === null) {
+          delete filtrosMesclados[key as keyof FiltrosContasPagar];
+        } else {
+          (filtrosMesclados as any)[key] = valor;
+        }
+      });
+
+      return filtrosMesclados;
     });
-    
-    console.log('✅ Filtros mesclados final:', filtrosMesclados);
-    
-    setFiltros(filtrosMesclados);
     setPaginaAtual(1);
-    
+
     toast.success('Filtros aplicados!', {
       position: 'top-right',
     });
+  };
+
+  // Limpa todos os filtros (colunas, busca e status), mantendo o período selecionado
+  const handleLimparFiltros = () => {
+    setTermoBusca('');
+    setFiltros(prev => {
+      const novos = { ...prev } as any;
+      ['cod_pgto', 'credor', 'nro_nf', 'nro_dup', 'banco', 'ordem_compra', 'cod_ccusto',
+       'codcomprador', 'conta', 'tipo', 'valor_min', 'valor_max', 'status', 'search'
+      ].forEach(k => delete novos[k]);
+      return novos; // mantém data_inicio/data_fim (período)
+    });
+    setPaginaAtual(1);
   };
 
   // Formatar taxa de conversão: 626 -> "6,26" (display)
@@ -2230,6 +2246,11 @@ export function ContasAPagar() {
         }
       });
 
+      // Busca geral (caixa do topo) também reflete no relatório
+      if (termoBusca && termoBusca.trim()) {
+        params.set('search', termoBusca.trim());
+      }
+
       const response = await fetch(`/api/contas-pagar/relatorio?${params.toString()}`);
 
       if (!response.ok) {
@@ -2651,7 +2672,15 @@ export function ContasAPagar() {
             userName={user?.usuario}
             filtroLocal
             onFiltrosLocaisChange={setFiltrosColunaRelatorio}
+            onLimparFiltros={handleLimparFiltros}
             initialFilters={{ status: { tipo: 'igual', valor: 'pendente_parcial' } }}
+            statusFilterOptions={[
+              { value: 'pendente_parcial', label: 'Pendente/Parcial' },
+              { value: 'pendente', label: 'Pendente' },
+              { value: 'pago_parcial', label: 'Pago Parcial' },
+              { value: 'pago', label: 'Pago' },
+              { value: 'cancelado', label: 'Cancelado' },
+            ]}
             headers={headers}
             rows={prepararDadosTabela()}
             meta={meta}

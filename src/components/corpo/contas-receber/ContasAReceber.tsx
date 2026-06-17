@@ -61,8 +61,6 @@ export default function ContasAReceber() {
     data_fim: semanaAtual.dataFim,
   });
   const [termoBusca, setTermoBusca] = useState('');
-  // Filtros de coluna ativos na tela (modo local) — usados para o relatório refletir o filtrado
-  const [filtrosColunaRelatorio, setFiltrosColunaRelatorio] = useState<{ campo: string; tipo: string; valor: string }[]>([]);
   const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
   const rangeInteracaoRef = useRef(false);
   const [prefsProntas, setPrefsProntas] = useState(false);
@@ -768,24 +766,13 @@ export default function ContasAReceber() {
       }
       if (filtros.status && filtros.status !== 'todos') params.append('status', filtros.status as string);
 
-      // Aplica os filtros de coluna ativos na tela (para o relatório refletir o filtrado)
-      filtrosColunaRelatorio.forEach(({ campo, valor }) => {
-        const v = (valor ?? '').trim();
-        if (!v) return;
-        switch (campo) {
-          case 'número título':
-          case 'cod_receb':
-            params.set('cod_receb', v); break;
-          case 'cliente':
-            params.set('cliente', v); break;
-          case 'nº documento':
-          case 'nro_doc':
-            params.set('nro_doc', v); break;
-          case 'fatura':
-          case 'cod_fat':
-            params.set('cod_fat', v); break;
-        }
-      });
+      // Filtros de coluna/busca ativos (agora server-side) — refletem exatamente a tela
+      const f = filtros as any;
+      if (f.cod_receb) params.set('cod_receb', f.cod_receb);
+      if (f.cliente) params.set('cliente', f.cliente);
+      if (f.nro_doc) params.set('nro_doc', f.nro_doc);
+      if (f.cod_fat) params.set('cod_fat', f.cod_fat);
+      if (f.search) params.set('search', f.search);
 
       const response = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);
       if (!response.ok) {
@@ -954,9 +941,9 @@ export default function ContasAReceber() {
     if (e.key === 'Enter') {
       const novosFiltros = { ...filtros };
       if (termoBusca) {
-        novosFiltros.cliente = termoBusca;
+        novosFiltros.search = termoBusca;
       } else {
-        delete novosFiltros.cliente;
+        delete novosFiltros.search;
       }
       setFiltros(novosFiltros);
       setPaginaAtual(1);
@@ -970,6 +957,19 @@ export default function ContasAReceber() {
 
   const handlePerPageChange = (perPage: number) => {
     setItensPorPagina(perPage);
+    setPaginaAtual(1);
+  };
+
+  // Limpa todos os filtros (colunas, busca e status), mantendo o período selecionado
+  const handleLimparFiltros = () => {
+    setTermoBusca('');
+    setFiltros(prev => {
+      const novos = { ...prev } as any;
+      ['cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'search', 'status',
+       'vendedor', 'operadora', 'conta', 'tipo', 'com_atraso'
+      ].forEach(k => delete novos[k]);
+      return novos; // mantém data_inicio/data_fim (período)
+    });
     setPaginaAtual(1);
   };
 
@@ -1264,8 +1264,7 @@ export default function ContasAReceber() {
           <DataTableContasPagar
             screenKey="contas-a-receber"
             userName={user?.usuario}
-            filtroLocal
-            onFiltrosLocaisChange={setFiltrosColunaRelatorio}
+            onLimparFiltros={handleLimparFiltros}
             initialFilters={{}}
             statusFilterOptions={[
               { value: 'pendente', label: 'Pendente' },

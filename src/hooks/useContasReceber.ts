@@ -71,6 +71,7 @@ export interface FiltrosContasReceber {
   cod_fat?: string;
   cod_venda?: string;
   banco?: string;
+  search?: string; // busca geral (cod_receb / cliente / nro_doc)
 }
 
 export interface Paginacao {

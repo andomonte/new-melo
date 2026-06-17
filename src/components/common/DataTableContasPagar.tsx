@@ -69,6 +69,8 @@ interface DataTableContasPagarProps {
   /** Notifica o componente pai dos filtros de texto ativos no modo local — usado para que o
    *  relatório/exportação reflitam exatamente o que está filtrado na tela. */
   onFiltrosLocaisChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
+  /** Chamado ao clicar em "Limpar filtros" — o pai deve resetar o estado de filtros (mantendo o período). */
+  onLimparFiltros?: () => void;
 }
 
 export default function DataTableContasPagar({
@@ -96,6 +98,7 @@ export default function DataTableContasPagar({
   statusFilterOptions,
   filtroLocal = false,
   onFiltrosLocaisChange,
+  onLimparFiltros,
 }: DataTableContasPagarProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -356,6 +359,15 @@ export default function DataTableContasPagar({
     onFiltrosLocaisChange(ativos);
   };
 
+  // Busca geral local: casa o termo digitado contra QUALQUER coluna exibida (instantâneo).
+  const aplicarBuscaGlobalLocal = (linhas: any[]): any[] => {
+    const termo = termoBuscaGlobal.trim().toLowerCase();
+    if (!termo) return linhas;
+    return linhas.filter((row) =>
+      headers.some((_, idx) => extractText(row[idx]).toLowerCase().includes(termo))
+    );
+  };
+
   // Filtra localmente as linhas já carregadas, casando o texto exibido em cada coluna.
   // Status e ☑️ não entram aqui: Status é resolvido no servidor e ☑️ tem filtro próprio.
   const aplicarFiltroLocal = (linhas: any[]): any[] => {
@@ -405,6 +417,23 @@ export default function DataTableContasPagar({
           />
           
           <div className="flex items-center gap-2">
+            {/* Botão Limpar filtros — só aparece quando há algum filtro ativo */}
+            {(Object.values(filtrosColuna).some((f) => (f?.valor ?? '') !== '') || termoBuscaGlobal.trim() !== '') && (
+              <button
+                onClick={() => {
+                  setFiltrosColuna({});
+                  setTermoBuscaGlobal('');
+                  onFiltrosLocaisChange?.([]);
+                  if (onLimparFiltros) onLimparFiltros();
+                  else onFiltroChange?.([]);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 border rounded-md bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 whitespace-nowrap"
+                title="Limpar todos os filtros"
+              >
+                <FilterX size={14} /> Limpar filtros
+              </button>
+            )}
+
             {/* Dialog para Filtros Avançados */}
             <Dialog
               open={mostrarModalFiltroAvancado}
@@ -673,8 +702,8 @@ export default function DataTableContasPagar({
                 </tr>
               ) : (
                 (() => {
-                  // Filtro rápido local por coluna (instantâneo, modo filtroLocal)
-                  let filteredRows = filtroLocal ? aplicarFiltroLocal(rows) : rows;
+                  // Filtro rápido local por coluna + busca geral (instantâneo, modo filtroLocal)
+                  let filteredRows = filtroLocal ? aplicarBuscaGlobalLocal(aplicarFiltroLocal(rows)) : rows;
                   // Filtro local do ☑️
                   const checkFilter = filtrosColuna['check']?.valor;
                   if (checkFilter && checkFilter !== '') {
