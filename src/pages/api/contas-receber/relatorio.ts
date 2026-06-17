@@ -44,8 +44,8 @@ function buildQuery(
   data_inicio?: string,
   data_fim?: string,
   status?: string,
-  colFiltros: { cod_receb?: string; cliente?: string; nro_doc?: string; cod_fat?: string } = {},
-): { sql: string; params: any[] } {
+  colFiltros: { cod_receb?: string; cliente?: string; nro_doc?: string; cod_fat?: string; search?: string } = {},
+): { sql: string; params: any[]; countSql: string } {
   const params: any[] = [];
   let idx = 1;
   let whereClause = '';
@@ -76,6 +76,11 @@ function buildQuery(
     whereClause += ` AND r.cod_fat ILIKE $${idx}`;
     params.push(`%${colFiltros.cod_fat}%`); idx++;
   }
+  // Busca geral (mesmos campos da listagem)
+  if (colFiltros.search) {
+    whereClause += ` AND (CAST(r.cod_receb AS TEXT) ILIKE $${idx} OR c.nome ILIKE $${idx} OR r.nro_doc ILIKE $${idx})`;
+    params.push(`%${colFiltros.search}%`); idx++;
+  }
 
   // Determinar filtro de status após CTE
   let statusFilter = '';
@@ -100,6 +105,12 @@ function buildQuery(
       SELECT
         r.cod_receb,
         r.nro_doc,
+        CASE
+          WHEN r.nro_doc LIKE '%/%' AND split_part(r.nro_doc, '/', 2) ~ '^[0-9]+$' THEN
+            (split_part(r.nro_doc, '/', 2)::int)::text || ' de ' ||
+            (SELECT COUNT(*) FROM db_manaus.dbreceb rr WHERE rr.nro_doc LIKE split_part(r.nro_doc, '/', 1) || '/%')::text
+          ELSE ''
+        END AS parcela,
         GREATEST(0, CAST(CURRENT_DATE AS DATE) - CAST(r.dt_venc AS DATE)) AS dias,
         COALESCE(c.codcli::text, '') || ' ' || COALESCE(c.nome, '') AS cliente,
         r.cod_conta,
@@ -113,8 +124,9 @@ function buildQuery(
         r.dt_pgto,
         CASE
           WHEN r.cancel = 'S' THEN 'cancelado'
-          WHEN COALESCE(r.valor_rec, 0) >= r.valor_pgto THEN 'recebido'
-          WHEN COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
+          WHEN r.rec = 'S' AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0) THEN 'recebido'
+          WHEN r.rec = 'S' AND COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
+          WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
           ELSE 'pendente'
         END AS calc_status
       FROM db_manaus.dbreceb r
@@ -173,7 +185,7 @@ function gerarPDF(
   const headers = [
     'NRO_DOC', 'DIAS', 'CLIENTE', 'COD_CONTA',
     'VALOR_PGTO', 'VALOR_JUROS', 'VALOR_REC', 'VALOR_ABERTO',
-    'DT_EMISSAO', 'DT_VENC', 'TARIFA', 'DT_PGTO',
+    'DT_EMISSAO', 'DT_VENC', 'PARCELA', 'TARIFA', 'DT_PGTO',
   ];
 
   const allBody: any[] = [];
@@ -226,6 +238,7 @@ function gerarPDF(
           fmtMoney(valorAberto),
           fmtDate(r.dt_emissao),
           fmtDate(r.dt_venc),
+          r.parcela ?? '',
           fmtMoney(r.tarifa ?? 0),
           fmtDate(r.dt_pgto),
         ]);
@@ -242,7 +255,7 @@ function gerarPDF(
         { content: fmtMoney(subValorJuros), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
         { content: fmtMoney(subValorRec), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
         { content: fmtMoney(subValorAberto), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
-        '', '', '', '',
+        '', '', '', '', '',
       ]);
     }
   } else {
@@ -259,6 +272,7 @@ function gerarPDF(
         fmtMoney(fmtMoneyNum(r.valor_aberto)),
         fmtDate(r.dt_emissao),
         fmtDate(r.dt_venc),
+        r.parcela ?? '',
         fmtMoney(r.tarifa ?? 0),
         fmtDate(r.dt_pgto),
       ]);
@@ -313,7 +327,7 @@ function gerarPDF(
         halign: 'right' as const,
       },
     },
-    '', '', '', '',
+    '', '', '', '', '',
   ]);
 
   autoTable(doc, {
@@ -333,7 +347,7 @@ function gerarPDF(
       5:  { halign: 'right' },  // VALOR_JUROS
       6:  { halign: 'right' },  // VALOR_REC
       7:  { halign: 'right' },  // VALOR_ABERTO
-      10: { halign: 'right' },  // TARIFA
+      11: { halign: 'right' },  // TARIFA (deslocada por PARCELA)
     },
     tableWidth: 'auto',
     theme: 'grid',
@@ -374,8 +388,8 @@ async function gerarExcel(
   });
 
   // ── Title rows ──────────────────────────────────────────────────────────
-  const NUM_COLS = 12;
-  const lastCol = 'L'; // column 12
+  const NUM_COLS = 13;
+  const lastCol = 'M'; // column 13
 
   const titleText =
     tipo === 'por_cliente'
@@ -402,7 +416,7 @@ async function gerarExcel(
   const headerLabels = [
     'NRO_DOC', 'DIAS', 'CLIENTE', 'COD_CONTA',
     'VALOR_PGTO', 'VALOR_JUROS', 'VALOR_REC', 'VALOR_ABERTO',
-    'DT_EMISSAO', 'DT_VENC', 'TARIFA', 'DT_PGTO',
+    'DT_EMISSAO', 'DT_VENC', 'PARCELA', 'TARIFA', 'DT_PGTO',
   ];
   const headerRow = ws.addRow(headerLabels);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
@@ -426,14 +440,15 @@ async function gerarExcel(
     { key: 'valor_aberto', width: 18 },
     { key: 'dt_emissao',   width: 14 },
     { key: 'dt_venc',      width: 14 },
+    { key: 'parcela',      width: 12 },
     { key: 'tarifa',       width: 14 },
     { key: 'dt_pgto',      width: 14 },
   ];
 
-  // Money columns: E, F, G, H, K (indices 5,6,7,8,11)
-  const moneyCols = ['E', 'F', 'G', 'H', 'K'];
-  // Date columns: I, J, L
-  const dateCols = ['I', 'J', 'L'];
+  // Money columns: E, F, G, H, L (TARIFA deslocada por PARCELA)
+  const moneyCols = ['E', 'F', 'G', 'H', 'L'];
+  // Date columns: I, J, M
+  const dateCols = ['I', 'J', 'M'];
 
   let grandValorPgto = 0;
   let grandValorJuros = 0;
@@ -461,6 +476,7 @@ async function gerarExcel(
       valor_aberto: valorAberto,
       dt_emissao:   r.dt_emissao ? new Date(r.dt_emissao) : '',
       dt_venc:      r.dt_venc ? new Date(r.dt_venc) : '',
+      parcela:      r.parcela ?? '',
       tarifa:       fmtMoneyNum(r.tarifa ?? 0),
       dt_pgto:      r.dt_pgto ? new Date(r.dt_pgto) : '',
     });
@@ -517,7 +533,7 @@ async function gerarExcel(
       const subRow2 = ws.addRow([
         `Subtotal ${clienteKey}`, '', '', '',
         subValorPgto, subValorJuros, subValorRec, subValorAberto,
-        '', '', '', '',
+        '', '', '', '', '',
       ]);
       subRow2.font = { bold: true, size: 8 };
       subRow2.fill = {
@@ -543,7 +559,7 @@ async function gerarExcel(
     `TOTAL GERAL (${rows.length} registro${rows.length !== 1 ? 's' : ''})`,
     '', '', '',
     grandValorPgto, grandValorJuros, grandValorRec, grandValorAberto,
-    '', '', '', '',
+    '', '', '', '', '',
   ]);
   totalRow.font = { bold: true, size: 9, color: { argb: 'FF000000' } };
   totalRow.fill = {
@@ -579,7 +595,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat } = req.query;
+  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search } = req.query;
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel')) {
     return res.status(400).json({
@@ -605,6 +621,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cliente: cliente as string | undefined,
         nro_doc: nro_doc as string | undefined,
         cod_fat: cod_fat as string | undefined,
+        search: search as string | undefined,
       },
     );
 
