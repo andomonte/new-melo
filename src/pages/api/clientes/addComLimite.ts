@@ -23,7 +23,7 @@ const FIELD_LIMITS: Record<string, { limit: number; label: string }> = {
   isuframa: { limit: 20, label: 'Inscrição Suframa' },
   imun: { limit: 20, label: 'Inscrição Municipal' },
   status: { limit: 1, label: 'Status' },
-  obs: { limit: 100, label: 'Observação' },
+  obs: { limit: 500, label: 'Observação' },
   tipoemp: { limit: 3, label: 'Tipo Empresa' },
   contato: { limit: 20, label: 'Contato' },
   socios: { limit: 50, label: 'Sócios' },

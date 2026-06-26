@@ -23,10 +23,13 @@ export function useGatekeeper(
   const [matches, setMatches] = useState<Match[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const debouncedDoc = useDebounce(docValue, 2000);
+  const debouncedDoc = useDebounce(docValue, 700);
 
   useEffect(() => {
-    if (!isEnabled || !debouncedDoc || debouncedDoc.length < 6) {
+    // Compara sempre por dígitos (o documento na tela vem mascarado com pontos/traços)
+    const docLimpo = (debouncedDoc || '').replace(/\D/g, '');
+    // Só verifica quando o CPF (11) ou CNPJ (14) está completo
+    if (!isEnabled || (docLimpo.length !== 11 && docLimpo.length !== 14)) {
       setMatches([]);
       return;
     }
@@ -36,7 +39,7 @@ export function useGatekeeper(
       setError(null);
       try {
         const res = await fetch(
-          `/api/global/check-document?doc=${encodeURIComponent(debouncedDoc)}`,
+          `/api/global/check-document?doc=${encodeURIComponent(docLimpo)}`,
         );
         if (!res.ok) throw new Error('Failed to check document');
         const data = await res.json();

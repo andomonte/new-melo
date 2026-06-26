@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useFormContext, Controller, useFieldArray } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -489,10 +490,14 @@ export function RegistrationTab({
       {/* Observações */}
       <div className="mt-4">
         <Label>Observações</Label>
-        <Input
+        <Textarea
           {...register('obs')}
           placeholder="Observações gerais sobre o cliente"
+          maxLength={500}
+          rows={3}
+          className="resize-y min-h-[60px]"
         />
+        <p className="text-[11px] text-gray-400 mt-1">{(watch('obs') || '').length}/500</p>
       </div>
 
       {/* Fiscal Info Section Title */}

@@ -131,7 +131,7 @@ export default async function handle(
     const FIELD_MAX_LENGTH: Record<string, number> = {
       nome: 40, nomefant: 30, cpfcgc: 20, tipo: 1, codcc: 5, codvend: 5,
       ender: 100, bairro: 20, cidade: 20, uf: 2, cep: 9,
-      iest: 20, isuframa: 20, imun: 20, status: 1, obs: 100,
+      iest: 20, isuframa: 20, imun: 20, status: 1, obs: 500,
       tipoemp: 2, icms: 1, endercobr: 100, cidadecobr: 20, bairrocobr: 20,
       ufcobr: 2, cepcobr: 9, claspgto: 1, email: 40, ipi: 1, prvenda: 1,
       codbairro: 5, codbairrocobr: 5, banco: 1, tipocliente: 1,

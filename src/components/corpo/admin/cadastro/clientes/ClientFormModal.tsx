@@ -69,6 +69,8 @@ export default function ClientFormModal({
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   const [editandoViaGatekeeper, setEditandoViaGatekeeper] = useState(false);
+  // Guarda o código/nome do cliente sendo editado via modal de duplicado (para o título)
+  const [gatekeeperEditInfo, setGatekeeperEditInfo] = useState<{ id: string; nome: string } | null>(null);
   const isEditing = !!clientToEdit || editandoViaGatekeeper;
 
   const methods = useForm<ClientFormValues>({
@@ -134,6 +136,9 @@ export default function ClientFormModal({
         prevMatchesRef.current = 0;
         setShowGatekeeperModal(false);
         setEditandoViaGatekeeper(false);
+        setGatekeeperEditInfo(null);
+        setActiveTab('registration'); // sempre abre na 1ª aba (Dados Cadastrais)
+        setAbaPendente(null);
         if (clientToEdit) {
           setIsLoadingData(true);
           try {
@@ -250,7 +255,7 @@ export default function ClientFormModal({
               suframaEntrega: fullCliente.suframaEntrega || '',
               acrescimo: String(fullCliente.acrescimo || 0),
               desconto: String(fullCliente.desconto || 0),
-              obs: (fullCliente.obs || '').substring(0, 100),
+              obs: (fullCliente.obs || '').substring(0, 500),
               // Mapear local_entrega do banco para habilitarLocalEntrega do frontend
               habilitarLocalEntrega: fullCliente.local_entrega === 'S' || fullCliente.local_entrega === '1' ? '1' : '0',
               contatos: contatosParsed,
@@ -339,7 +344,7 @@ export default function ClientFormModal({
               enderecoCobrancaIgual: true,
               acrescimo: String(clientToEdit.acrescimo || 0),
               desconto: String(clientToEdit.desconto || 0),
-              obs: (clientToEdit.obs || '').substring(0, 100),
+              obs: (clientToEdit.obs || '').substring(0, 500),
               // Mapear local_entrega do banco para habilitarLocalEntrega do frontend
               habilitarLocalEntrega: clientToEdit.local_entrega === 'S' || clientToEdit.local_entrega === '1' ? '1' : '0',
               contatos: contatosParsedFallback,
@@ -401,10 +406,12 @@ export default function ClientFormModal({
   const onSubmit = async (data: ClientFormValues) => {
     setIsSubmitting(true);
     try {
-      if (isEditing && clientToEdit) {
-        // updateCliente espera apenas Cliente, não (id, data)
+      if (isEditing && (clientToEdit || gatekeeperEditInfo)) {
+        // updateCliente espera apenas Cliente, não (id, data).
+        // Em edição via modal de duplicado, clientToEdit é null — usa o código do gatekeeper.
+        const codcliEdicao = clientToEdit?.codcli ?? gatekeeperEditInfo!.id;
         const clienteToUpdate: Cliente = {
-          codcli: clientToEdit.codcli,
+          codcli: codcliEdicao,
           cpfcgc: String(data.documento || '').replace(/\D/g, ''),
           nome: toUpper(data.nome),
           nomefant: toUpper(data.nomeFantasia),
@@ -413,11 +420,11 @@ export default function ClientFormModal({
           sit_tributaria: data.situacaoTributaria ? Number(data.situacaoTributaria) : null,
           tipoemp: data.tipoEmpresa || '',
           email: toLower(data.email),
-          debito: clientToEdit.debito || 0,
+          debito: clientToEdit?.debito || 0,
           limite: desmascarar(String(data.limiteCredito || '')) || 0,
           claspgto: data.classePagamento || 'A',
           codcc: data.classeCliente || '',
-          codigo_filial: clientToEdit.codigo_filial || 1,
+          codigo_filial: clientToEdit?.codigo_filial || 1,
           bairro: toUpper(data.bairro),
           banco: String(data.banco || '').substring(0, 1),
           ender: toUpper(data.endereco),
@@ -792,7 +799,7 @@ export default function ClientFormModal({
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-zinc-800">
               <h4 className="text-lg font-bold text-blue-600 dark:text-blue-300">
                 {isEditing
-                  ? `Editar Cliente: ${clientToEdit?.codcli}`
+                  ? `Editar Cliente: ${clientToEdit?.codcli ?? gatekeeperEditInfo?.id ?? ''}`
                   : 'Cadastrar Novo Cliente'}
               </h4>
               <button
@@ -957,22 +964,52 @@ export default function ClientFormModal({
                                   numero: fullCliente.numero || '',
                                   complemento: fullCliente.complemento || '',
                                   pais: Number(fullCliente.codpais) || 1058, // ✅ CORRIGIDO: Number()
-                                  limiteCredito: String(
-                                    fullCliente.limite || 0,
-                                  ),
+                                  limiteCredito: String(fullCliente.limite || '0'),
                                   classeCliente: String(fullCliente.codcc || '').trim(),
                                   classePagamento:
-                                    (fullCliente.claspgto as
-                                      | 'A'
-                                      | 'B'
-                                      | 'C'
-                                      | 'X') || 'A',
-                                  enderecoCobrancaIgual: true,
+                                    (fullCliente.claspgto as 'A' | 'B' | 'C' | 'X') || 'A',
+                                  // Dados Financeiros
+                                  credito: fullCliente.status === '1' || fullCliente.status === 'S' ? 'S' : 'N',
+                                  aceitaAtraso: (fullCliente.atraso || 0) > 0,
+                                  diasAtraso: String(fullCliente.atraso || '0'),
+                                  icms: (fullCliente.icms as 'S' | 'N') || 'N',
+                                  faixaFinanceira: fullCliente.faixafin || '',
+                                  banco: Number(fullCliente.banco) || undefined,
+                                  formaPagamento: fullCliente.formaPagamento || '',
+                                  // Endereço de cobrança
+                                  enderecoCobrancaIgual:
+                                    fullCliente.ender === fullCliente.endercobr &&
+                                    fullCliente.cep === fullCliente.cepcobr,
+                                  endercobr: fullCliente.endercobr || '',
+                                  numerocobr: fullCliente.numerocobr || '',
+                                  bairrocobr: fullCliente.bairrocobr || '',
+                                  cidadecobr: fullCliente.cidadecobr || '',
+                                  ufcobr: fullCliente.ufcobr || '',
+                                  cepcobr: fullCliente.cepcobr || '',
+                                  complementocobr: fullCliente.complementocobr || '',
+                                  referenciacobr: fullCliente.referenciacobr || '',
+                                  // Dados de entrega
+                                  tipoPessoaEntrega: fullCliente.tipoPessoaEntrega || 'F',
+                                  nomeEntrega: fullCliente.nomeEntrega || '',
+                                  emailEntrega: fullCliente.emailEntrega || '',
+                                  cepEntrega: fullCliente.cepEntrega || '',
+                                  enderecoEntrega: fullCliente.enderecoEntrega || '',
+                                  numeroEntrega: fullCliente.numeroEntrega || '',
+                                  complementoEntrega: fullCliente.complementoEntrega || '',
+                                  referenciaEntrega: fullCliente.referenciaEntrega || '',
+                                  bairroEntrega: fullCliente.bairroEntrega || '',
+                                  cidadeEntrega: fullCliente.cidadeEntrega || '',
+                                  ufEntrega: fullCliente.ufEntrega || '',
+                                  paisEntrega: fullCliente.paisEntrega || '',
+                                  iestEntrega: fullCliente.iestEntrega || '',
+                                  imunEntrega: fullCliente.imunEntrega || '',
+                                  suframaEntrega: fullCliente.suframaEntrega || '',
+                                  habilitarLocalEntrega: fullCliente.local_entrega === 'S' || fullCliente.local_entrega === '1' ? '1' : '0',
                                   acrescimo: String(fullCliente.acrescimo || 0),
                                   desconto: String(fullCliente.desconto || 0),
                                   obs: (fullCliente.obs || '').substring(
                                     0,
-                                    100,
+                                    500,
                                   ),
                                   contatos: contatosParsed,
                                   pessoasContato: pessoasContatoParsed,
@@ -989,6 +1026,7 @@ export default function ClientFormModal({
 
                                 setShowGatekeeperModal(false);
                                 setEditandoViaGatekeeper(true);
+                                setGatekeeperEditInfo({ id: String(fullCliente.codcli ?? match.id), nome: fullCliente.nome || '' });
                                 toast.success(`Editando: ${fullCliente.nome}`);
                               } catch (error) {
                                 console.error('Error loading client:', error);
