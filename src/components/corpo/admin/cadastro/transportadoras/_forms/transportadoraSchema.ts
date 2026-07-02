@@ -44,10 +44,8 @@ export const cadastroTransportadoraSchema = z.object({
         .refine((val) => {
           if (!val) return false;
           return isValidCpfCnpj(val);
-        }, 'CPF ou CNPJ inválido')
-        .refine((val) => val.replace(/\D/g, '') !== '04618302000189', {
-          message: 'Não é permitido cadastrar o CNPJ da própria empresa como transportadora',
-        }),
+        }, 'CPF ou CNPJ inválido'),
+      // Obs.: transportadora PODE usar o CNPJ da própria empresa (ex.: "CLIENTE RETIRA").
     ),
   tipo: optionalStringField(1, 'Tipo').optional(),
   ender: requiredStringField(100, 'Logradouro'),
@@ -68,7 +66,7 @@ export const cadastroTransportadoraSchema = z.object({
       message: 'País é obrigatório',
     }),
   referencia: optionalStringField(200, 'Referência').optional(),
-  tipoemp: optionalStringField(2, 'Tipo de empresa').optional(),
+  tipoemp: optionalStringField(5, 'Tipo de empresa').optional(),
   contatos: optionalStringField(50, 'Contatos').optional(),
   iest: optionalStringField(20, 'Inscrição estadual').optional(),
   isuframa: optionalStringField(20, 'Inscrição SUFRAMA').optional(),
