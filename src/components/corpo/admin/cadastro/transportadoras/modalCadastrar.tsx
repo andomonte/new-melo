@@ -15,11 +15,18 @@ import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { campoParaAba } from './_forms/campoParaAba';
 import { z } from 'zod';
 import { cadastroTransportadoraSchema } from './_forms/transportadoraSchema';
+import { buscaCnpj } from '@/data/cnpj';
+import {
+  DocumentoDuplicadoModal,
+  DocumentoMatch,
+} from '@/components/common/DocumentoDuplicadoModal';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** Quando o documento já existe como transportadora, abre para edição */
+  onEditarTransportadora?: (codtransp: string) => void;
 }
 
 const tabs = [
@@ -32,12 +39,15 @@ export default function CustomModal({
   isOpen,
   onClose,
   onSuccess,
+  onEditarTransportadora,
 }: ModalProps) {
   const [transportadora, setTransportadora] = useState({} as Transportadora);
   const [openInfo, setOpenInfo] = useState(false);
   const [mensagemInfo, setMensagemInfo] = useState('');
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [dupMatches, setDupMatches] = useState<DocumentoMatch[]>([]);
+  const [showDup, setShowDup] = useState(false);
 
   const { toast } = useToast();
 
@@ -79,6 +89,111 @@ export default function CustomModal({
   const handleClear = () => {
     setTransportadora({} as Transportadora);
   };
+
+  const setCampo = useCallback(
+    (field: string, value: any) => {
+      if (value !== undefined && value !== null && String(value) !== '') {
+        handleTransportadoraChange(field, value);
+      }
+    },
+    [handleTransportadoraChange],
+  );
+
+  // Reaproveita dados de um Cliente/Fornecedor existente para a Transportadora
+  const preencherDeOrigem = useCallback(
+    async (tipoOrigem: 'CLIENTE' | 'FORNECEDOR', id: string) => {
+      const url =
+        tipoOrigem === 'CLIENTE'
+          ? `/api/clientes/get/${id}`
+          : `/api/fornecedores/get/${id}`;
+      const r = await fetch(url);
+      if (!r.ok) return;
+      const d = await r.json();
+      setCampo('nome', d.nome);
+      setCampo('nomefant', tipoOrigem === 'CLIENTE' ? d.nomefant : d.nome_fant);
+      setCampo('tipo', d.tipo); // cliente/fornecedor já usam 'J'/'F'
+      setCampo('ender', tipoOrigem === 'CLIENTE' ? d.ender : d.endereco);
+      setCampo('numero', d.numero);
+      setCampo('complemento', d.complemento);
+      setCampo('bairro', d.bairro);
+      setCampo('cidade', d.cidade);
+      setCampo('uf', d.uf);
+      setCampo('cep', d.cep);
+      setCampo('codpais', d.codpais);
+      setCampo('iest', d.iest);
+      setCampo('isuframa', d.isuframa);
+      setCampo('imun', d.imun);
+      setCampo('referencia', d.referencia);
+      setCampo('codmunicipio', d.codmunicipio);
+      setCampo('codbairro', d.codbairro);
+      toast({
+        description: `Dados do ${
+          tipoOrigem === 'CLIENTE' ? 'cliente' : 'fornecedor'
+        } carregados. Revise e salve como transportadora.`,
+      });
+    },
+    [setCampo, toast],
+  );
+
+  // Busca CNPJ na BrasilAPI e preenche (igual ao cliente/fornecedor)
+  const preencherDeCnpj = useCallback(
+    async (digits: string) => {
+      try {
+        const d = await buscaCnpj(digits);
+        setCampo('nome', d.razao_social?.substring(0, 50));
+        setCampo('nomefant', d.nome_fantasia?.substring(0, 40));
+        setCampo('ender', d.logradouro);
+        setCampo('numero', d.numero);
+        setCampo('complemento', d.complemento);
+        setCampo('bairro', d.bairro);
+        setCampo('cidade', d.municipio);
+        setCampo('uf', d.uf);
+        if (d.cep) setCampo('cep', d.cep.replace(/\D/g, ''));
+        handleTransportadoraChange('codpais', 1058);
+        toast({ description: `CNPJ preenchido: ${d.razao_social}` });
+      } catch {
+        /* CNPJ não encontrado — apenas não preenche */
+      }
+    },
+    [setCampo, handleTransportadoraChange, toast],
+  );
+
+  // Ao sair do campo CNPJ/CPF: duplicidade (cliente/fornecedor/transportadora) + auto-preenche
+  const buscarPorDocumento = useCallback(async () => {
+    const tipo = transportadora.tipo || 'J';
+    const digits = String(transportadora.cpfcgc || '').replace(/\D/g, '');
+    if (digits.length !== 11 && digits.length !== 14) return;
+    try {
+      const resp = await fetch(`/api/global/check-document?doc=${digits}`);
+      const data = resp.ok ? await resp.json() : { matches: [] };
+      const matches: DocumentoMatch[] = data.matches || [];
+      if (matches.length > 0) {
+        setDupMatches(matches);
+        setShowDup(true);
+        return;
+      }
+      if (digits.length === 14 && tipo === 'J') {
+        await preencherDeCnpj(digits);
+      }
+    } catch {
+      /* silencioso */
+    }
+  }, [transportadora.tipo, transportadora.cpfcgc, preencherDeCnpj]);
+
+  const handleDupAction = useCallback(
+    async (match: DocumentoMatch) => {
+      setShowDup(false);
+      if (match.type === 'TRANSPORTADORA') {
+        onEditarTransportadora?.(String(match.id).trim());
+      } else {
+        await preencherDeOrigem(
+          match.type as 'CLIENTE' | 'FORNECEDOR',
+          String(match.id).trim(),
+        );
+      }
+    },
+    [onEditarTransportadora, preencherDeOrigem],
+  );
 
   const handleSubmit = async () => {
     try {
@@ -161,6 +276,7 @@ export default function CustomModal({
             transportadora={transportadora}
             handleTransportadoraChange={handleTransportadoraChange}
             error={errors}
+            onDocumentoBlur={buscarPorDocumento}
           />
         );
       case 'dadosFinanceiros':
@@ -216,6 +332,15 @@ export default function CustomModal({
         type="warning"
         confirmText="Prosseguir"
         cancelText="Voltar e corrigir"
+      />
+
+      {/* Documento duplicado (mesmo visual do cadastro de cliente/fornecedor) */}
+      <DocumentoDuplicadoModal
+        open={showDup}
+        matches={dupMatches}
+        onClose={() => setShowDup(false)}
+        onAction={handleDupAction}
+        actionLabel={(m) => (m.type === 'TRANSPORTADORA' ? 'Abrir' : 'Usar dados')}
       />
     </div>
   );

@@ -239,6 +239,11 @@ const TransportadorasPage = () => {
         isOpen={cadastrarOpen}
         onClose={() => setCadastrarOpen(false)}
         onSuccess={() => { setPage(1); fetchData(); }}
+        onEditarTransportadora={(id) => {
+          setCadastrarOpen(false);
+          setIdTransportadora(id);
+          setEditarOpen(true);
+        }}
       />
 
       {editarOpen && (

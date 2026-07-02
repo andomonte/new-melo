@@ -17,12 +17,15 @@ interface DadosCadastraisProps {
   transportadora: any;
   handleTransportadoraChange: (field: string, value: any) => void;
   error: { [key: string]: string };
+  /** Chamado ao sair do campo CNPJ/CPF — busca duplicidade e auto-preenche */
+  onDocumentoBlur?: () => void;
 }
 
 export default function DadosCadastrais({
   transportadora,
   handleTransportadoraChange,
   error,
+  onDocumentoBlur,
 }: DadosCadastraisProps) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [resultCep, setResultCep] = useState<ViaCepResponse>(
@@ -141,12 +144,13 @@ export default function DadosCadastrais({
           </label>
           <select
             id="tipo"
-            value={transportadora.tipo || 'JURIDICA'}
+            value={transportadora.tipo || 'J'}
             onChange={(e) => handleTransportadoraChange('tipo', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           >
-            <option value="JURIDICA">JURÍDICA</option>
-            <option value="FISICA">FÍSICA</option>
+            <option value="J">JURÍDICA</option>
+            <option value="F">FÍSICA</option>
+            <option value="X">X-EXTERIOR</option>
           </select>
         </div>
 
@@ -167,7 +171,10 @@ export default function DadosCadastrais({
               handleTransportadoraChange('cpfcgc', valorFormatado);
               validarCpfCnpj(valor);
             }}
-            onBlur={(e) => validarCpfCnpj(e.target.value)}
+            onBlur={(e) => {
+              validarCpfCnpj(e.target.value);
+              onDocumentoBlur?.();
+            }}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             maxLength={20}
             placeholder="000.000.000-00 ou 00.000.000/0000-00"
@@ -181,51 +188,24 @@ export default function DadosCadastrais({
         </div>
       </div>
 
-      {/* Código e Nome */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className={error.codtransp ? 'field-error' : ''}>
-          <label
-            htmlFor="codtransp"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
-            Código *
-          </label>
-          <input
-            type="text"
-            id="codtransp"
-            value={transportadora.codtransp || ''}
-            onChange={(e) =>
-              handleTransportadoraChange('codtransp', e.target.value)
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            maxLength={5}
-            required
-          />
-          {error.codtransp && (
-            <p className="text-red-500 text-xs mt-1">{error.codtransp}</p>
-          )}
-        </div>
-
-        <div className={error.nome ? 'field-error' : ''}>
-          <label
-            htmlFor="nome"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
-            Nome *
-          </label>
-          <input
-            type="text"
-            id="nome"
-            value={transportadora.nome || ''}
-            onChange={(e) => handleTransportadoraChange('nome', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            maxLength={50}
-            required
-          />
-          {error.nome && (
-            <p className="text-red-500 text-xs mt-1">{error.nome}</p>
-          )}
-        </div>
+      {/* Nome (o Código é gerado automaticamente no banco, invisível ao usuário) */}
+      <div className={error.nome ? 'field-error' : ''}>
+        <label
+          htmlFor="nome"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+        >
+          Nome *
+        </label>
+        <input
+          type="text"
+          id="nome"
+          value={transportadora.nome || ''}
+          onChange={(e) => handleTransportadoraChange('nome', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          maxLength={50}
+          required
+        />
+        {error.nome && <p className="text-red-500 text-xs mt-1">{error.nome}</p>}
       </div>
 
       {/* Nome Fantasia */}
@@ -486,10 +466,19 @@ export default function DadosCadastrais({
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           >
             <option value="">Selecione...</option>
-            <option value="LTDA">LTDA</option>
-            <option value="SA">S/A</option>
-            <option value="EIRELI">EIRELI</option>
-            <option value="MEI">MEI</option>
+            <option value="EPP">EPP - Empresa de Pequeno Porte</option>
+            <option value="EP">EP - Empresa de Pequeno Porte</option>
+            <option value="EF">EF - Empresa Filial</option>
+            <option value="ME">ME - Microempresa</option>
+            <option value="NL">NL - Normal</option>
+            <option value="PF">PF - Pessoa Física</option>
+            <option value="MEI">MEI - Microempreendedor Individual</option>
+            <option value="EI">EI - Empresário Individual</option>
+            <option value="LTDA">LTDA - Sociedade Limitada</option>
+            <option value="SLU">SLU - Sociedade Limitada Unipessoal</option>
+            <option value="S/S">S/S - Sociedade Simples</option>
+            <option value="S/A">S/A - Sociedade Anônima</option>
+            <option value="MGP">MGP - Empresa de Médio e Grande Porte</option>
           </select>
         </div>
 

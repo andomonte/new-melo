@@ -30,7 +30,8 @@ const requiredStringField = (maxLength: number, fieldName: string) =>
     );
 
 export const cadastroTransportadoraSchema = z.object({
-  codtransp: requiredStringField(5, 'Código da transportadora'),
+  // Código é gerado automaticamente no backend (invisível ao usuário)
+  codtransp: z.string().max(5).optional().or(z.literal('')),
   nome: requiredStringField(50, 'Nome da transportadora'),
   nomefant: requiredStringField(40, 'Nome Fantasia'),
   cpfcgc: z
