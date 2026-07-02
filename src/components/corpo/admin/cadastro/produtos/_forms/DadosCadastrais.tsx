@@ -234,7 +234,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   return (
     <>
       <div className="grid grid-cols-1 gap-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <FormInput
             name="codbar"
             type="text"
@@ -262,8 +262,6 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             }
             error={error?.consumo_interno}
           />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
           <div className={error?.ref ? 'field-error' : ''}>
             <FormInput
               name="ref"
@@ -289,29 +287,31 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             error={error?.reforiginal}
           />
         </div>
-        <div className={error?.descr ? 'field-error' : ''}>
+        <div className="grid grid-cols-2 gap-4">
+          <div className={error?.descr ? 'field-error' : ''}>
+            <FormInput
+              name="descr"
+              type="text"
+              label="Descrição"
+              value={produto.descr || ''}
+              onChange={(e) =>
+                handleProdutoChange({ ...produto, descr: e.target.value })
+              }
+              error={error?.descr}
+              required
+            />
+          </div>
           <FormInput
-            name="descr"
+            name="aplic_extendida"
             type="text"
-            label="Descrição"
-            value={produto.descr || ''}
+            label="Aplicação Extendida"
+            value={produto.aplic_extendida || ''}
             onChange={(e) =>
-              handleProdutoChange({ ...produto, descr: e.target.value })
+              handleProdutoChange({ ...produto, aplic_extendida: e.target.value })
             }
-            error={error?.descr}
-            required
+            error={error?.aplic_extendida}
           />
         </div>
-        <FormInput
-          name="aplic_extendida"
-          type="text"
-          label="Aplicação Extendida"
-          value={produto.aplic_extendida || ''}
-          onChange={(e) =>
-            handleProdutoChange({ ...produto, aplic_extendida: e.target.value })
-          }
-          error={error?.aplic_extendida}
-        />
         <div className="grid grid-cols-2 gap-4">
           <div className={error?.codmarca ? 'field-error' : ''}>
             <SelectInput searchable
