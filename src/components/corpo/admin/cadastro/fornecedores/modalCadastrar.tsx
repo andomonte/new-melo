@@ -8,6 +8,10 @@ import ModalFormulario from '@/components/common/modalform';
 import { useDebouncedCallback } from 'use-debounce';
 import { getPaises, Paises } from '@/data/paises/paises';
 import { buscaCnpj } from '@/data/cnpj';
+import {
+  DocumentoDuplicadoModal,
+  DocumentoMatch,
+} from '@/components/common/DocumentoDuplicadoModal';
 import { getBairroByDescricao } from '@/data/bairros/bairros';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -72,6 +76,10 @@ export default function CustomModal({
 
   const [modalConfirmAba, setModalConfirmAba] = useState(false);
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
+
+  // Modal de documento duplicado (mesmo visual do cadastro de cliente)
+  const [dupMatches, setDupMatches] = useState<DocumentoMatch[]>([]);
+  const [showDup, setShowDup] = useState(false);
 
   const camposObrigatoriosPorAba: Record<string, string[]> = {
     dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'codpais', 'tipoemp', 'tipofornecedor', 'tipo'],
@@ -198,36 +206,12 @@ export default function CustomModal({
     try {
       const resp = await fetch(`/api/global/check-document?doc=${digits}`);
       const data = resp.ok ? await resp.json() : { matches: [] };
-      const matches: Array<{ type: string; id: string; name: string }> =
-        data.matches || [];
+      const matches: DocumentoMatch[] = data.matches || [];
 
-      const forn = matches.find((m) => m.type === 'FORNECEDOR');
-      if (forn) {
-        if (
-          window.confirm(
-            `Já cadastrado como fornecedor: ${forn.name} (cód ${forn.id}). Deseja abrir para editar?`,
-          )
-        ) {
-          onEditarFornecedor?.(String(forn.id).trim());
-        }
-        return;
-      }
-
-      const origem =
-        matches.find((m) => m.type === 'CLIENTE') ||
-        matches.find((m) => m.type === 'TRANSPORTADORA');
-      if (origem) {
-        const label = origem.type === 'CLIENTE' ? 'cliente' : 'transportadora';
-        if (
-          window.confirm(
-            `Documento encontrado como ${label}: ${origem.name}. Deseja usar os dados para cadastrar como fornecedor?`,
-          )
-        ) {
-          await preencherDeOrigem(
-            origem.type as 'CLIENTE' | 'TRANSPORTADORA',
-            String(origem.id).trim(),
-          );
-        }
+      // Existe como cliente/fornecedor/transportadora → abre o modal de duplicidade
+      if (matches.length > 0) {
+        setDupMatches(matches);
+        setShowDup(true);
         return;
       }
 
@@ -238,13 +222,25 @@ export default function CustomModal({
     } catch {
       /* silencioso — não bloqueia o cadastro */
     }
-  }, [
-    fornecedor.tipo,
-    fornecedor.cpf_cgc,
-    onEditarFornecedor,
-    preencherDeOrigem,
-    preencherDeCnpj,
-  ]);
+  }, [fornecedor.tipo, fornecedor.cpf_cgc, preencherDeCnpj]);
+
+  // Ação ao clicar em um registro do modal de duplicidade
+  const handleDupAction = useCallback(
+    async (match: DocumentoMatch) => {
+      setShowDup(false);
+      if (match.type === 'FORNECEDOR') {
+        // Já é fornecedor → abre para editar
+        onEditarFornecedor?.(String(match.id).trim());
+      } else {
+        // Cliente ou Transportadora → reaproveita os dados para cadastrar como fornecedor
+        await preencherDeOrigem(
+          match.type as 'CLIENTE' | 'TRANSPORTADORA',
+          String(match.id).trim(),
+        );
+      }
+    },
+    [onEditarFornecedor, preencherDeOrigem],
+  );
 
   const handleClassesFornecedor = useCallback(async () => {
     const classesFornecedor = await getClassesFornecedor({
@@ -623,6 +619,15 @@ export default function CustomModal({
         type="warning"
         confirmText="Prosseguir"
         cancelText="Voltar e corrigir"
+      />
+
+      {/* Documento duplicado (mesmo visual do cadastro de cliente) */}
+      <DocumentoDuplicadoModal
+        open={showDup}
+        matches={dupMatches}
+        onClose={() => setShowDup(false)}
+        onAction={handleDupAction}
+        actionLabel={(m) => (m.type === 'FORNECEDOR' ? 'Abrir' : 'Usar dados')}
       />
     </div>
   );
