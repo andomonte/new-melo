@@ -3,6 +3,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { buscaCep, ViaCepResponse } from '@/data/cep';
 import { useToast } from '@/hooks/use-toast';
 import { isValidCpfCnpj } from '@/utils/validacoes';
+import { formatarDocumento } from '@/utils/mascaraDocumento';
 import { CountryCombobox } from '@/components/common/CountryCombobox';
 
 // Mapeamento UF -> código IBGE (primeiros 2 dígitos do código de município)
@@ -164,25 +165,38 @@ export default function DadosCadastrais({
             htmlFor="cpfcgc"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >
-            CNPJ/CPF *
+            {transportadora.tipo === 'F'
+              ? 'CPF'
+              : transportadora.tipo === 'X'
+              ? 'Documento'
+              : 'CNPJ'}{' '}
+            *
           </label>
           <input
             type="text"
             id="cpfcgc"
             value={transportadora.cpfcgc || ''}
             onChange={(e) => {
-              const valor = e.target.value;
-              const valorFormatado = formatarCpfCnpj(valor);
+              const valorFormatado = formatarDocumento(
+                e.target.value,
+                transportadora.tipo,
+              );
               handleTransportadoraChange('cpfcgc', valorFormatado);
-              validarCpfCnpj(valor);
+              if (transportadora.tipo !== 'X') validarCpfCnpj(valorFormatado);
             }}
             onBlur={(e) => {
-              validarCpfCnpj(e.target.value);
+              if (transportadora.tipo !== 'X') validarCpfCnpj(e.target.value);
               onDocumentoBlur?.();
             }}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             maxLength={20}
-            placeholder="000.000.000-00 ou 00.000.000/0000-00"
+            placeholder={
+              transportadora.tipo === 'F'
+                ? '000.000.000-00'
+                : transportadora.tipo === 'X'
+                ? 'Documento'
+                : '00.000.000/0000-00'
+            }
             required
           />
           {(error.cpfcgc || cpfCnpjError) && (

@@ -12,6 +12,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { CadFornecedorSearchOptions } from '../modalCadastrar';
 import { Paises } from '@/data/paises/paises';
 import { isValidCpfCnpj } from '@/utils/validacoes';
+import { formatarDocumento } from '@/utils/mascaraDocumento';
 import { useToast } from '@/hooks/use-toast';
 
 // Mapeamento UF -> código IBGE (primeiros 2 dígitos do código de município)
@@ -200,7 +201,14 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               type="text"
               label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
               defaultValue={fornecedor.cpf_cgc || ''}
-              onChange={(e) => handleFornecedorChange('cpf_cgc', e.target.value)}
+              value={fornecedor.cpf_cgc || ''}
+              placeholder={fornecedor.tipo === 'F' ? '000.000.000-00' : fornecedor.tipo === 'X' ? 'Documento' : '00.000.000/0000-00'}
+              onChange={(e) =>
+                handleFornecedorChange(
+                  'cpf_cgc',
+                  formatarDocumento(e.target.value, fornecedor.tipo),
+                )
+              }
               onBlur={(e) => {
                 if (fornecedor.tipo !== 'X') validarCnpjCpf(e.target.value);
                 onDocumentoBlur?.();
