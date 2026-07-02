@@ -60,26 +60,15 @@ const ModalFormCadastrarGrupoProduto: React.FC<
         {loading ? (
           <Carregamento />
         ) : (
-          <div className="bg-white dark:bg-zinc-700 rounded-lg p-6 shadow space-y-6 max-w-4xl mx-auto">
+          <div className="bg-white dark:bg-zinc-700 rounded-lg p-6 shadow space-y-6 w-full">
             {/* Informações Principais */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
                 Informações Principais
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Código Grupo de Produto */}
-                <FormInput
-                  label="Código Grupo de Produto"
-                  type="text"
-                  id="codgpp"
-                  {...register('codgpp')}
-                  error={errors.codgpp?.message}
-                  required
-                  maxLength={5}
-                />
-
-                {/* Descrição */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* Descrição (o Código é gerado automaticamente no banco, igual ao Delphi) */}
                 <FormInput
                   label="Descrição"
                   type="text"

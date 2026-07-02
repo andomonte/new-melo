@@ -27,16 +27,8 @@ export default async function handle(
   const { codgpp: codgppRaw, descr: descrRaw } = req.body;
 
   // Normalização conforme schema: uppercase para codgpp e descr
-  const codgpp = codgppRaw?.toString().trim().toUpperCase();
+  let codgpp = codgppRaw?.toString().trim().toUpperCase() || '';
   const descr = descrRaw?.toString().trim().toUpperCase();
-
-  // Validação básica dos dados recebidos
-  if (!codgpp || codgpp === '') {
-    return res.status(400).json({
-      error: 'O código do grupo de produtos (codgpp) é obrigatório.',
-      field: 'codgpp',
-    });
-  }
 
   if (!descr || descr === '') {
     return res.status(400).json({
@@ -45,8 +37,9 @@ export default async function handle(
     });
   }
 
-  // Validação de formato do codgpp (letras maiúsculas e números apenas)
-  if (!/^[A-Z0-9]+$/.test(codgpp)) {
+  // Código é gerado automaticamente quando não informado (igual ao Delphi).
+  // Se informado, valida o formato.
+  if (codgpp && !/^[A-Z0-9]+$/.test(codgpp)) {
     return res.status(400).json({
       error:
         'Código deve conter apenas letras maiúsculas e números, sem espaços.',
@@ -60,6 +53,18 @@ export default async function handle(
 
     // Inicia a transação
     await client.query('BEGIN');
+
+    // Gera o próximo código numérico (zero-padded a 5) quando não informado
+    if (!codgpp) {
+      const maxRes = await client.query(
+        `SELECT codgpp FROM dbgpprod WHERE codgpp ~ '^[0-9]+$'
+         ORDER BY CAST(codgpp AS INTEGER) DESC LIMIT 1`,
+      );
+      const maxNum = maxRes.rows[0]?.codgpp
+        ? parseInt(maxRes.rows[0].codgpp, 10)
+        : 0;
+      codgpp = String(maxNum + 1).padStart(5, '0');
+    }
 
     // Verifica duplicatas ANTES de inserir (prevenção mais robusta)
     const checkDuplicate = await client.query(
