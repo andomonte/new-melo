@@ -32,11 +32,13 @@ const curvaOptions = [
 ];
 
 const informativoOptions = [
-  { value: '*', label: '* - TODOS' },
-  { value: 'A', label: 'A - ATIVO' },
-  { value: 'B', label: 'B - BLOQUEADO' },
-  { value: 'C', label: 'C - COMPRAR' },
+  { value: '*', label: '* - PAMB' },
+  { value: '-', label: '- - SEM INFORMATIVO' },
   { value: 'D', label: 'D - DESATIVADO' },
+  { value: 'E', label: 'E - EXCLUIDO' },
+  { value: 'L', label: 'L - LOTE' },
+  { value: 'N', label: 'N - LIQ.S/GIRO N.CO' },
+  { value: 'S', label: 'S - NR.SUBSTITUIDO' },
 ];
 
 const unidadeMedidaOptions = [
@@ -473,7 +475,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div className={error?.multiplo ? 'field-error' : ''}>
             <FormInput
               name="multiplo"
@@ -502,6 +504,32 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               })
             }
             error={error?.coddesc}
+          />
+          <div className={error?.multiplocompra ? 'field-error' : ''}>
+            <FormInput
+              name="multiplocompra"
+              type="number"
+              label="Múltiplo Compra"
+              required
+              value={displayNumberValue(produto.multiplocompra)}
+              onChange={(e) =>
+                handleProdutoChange({
+                  ...produto,
+                  multiplocompra: handleRequiredNumberChange(e.target.value, 1),
+                })
+              }
+              error={error?.multiplocompra}
+            />
+          </div>
+          <SelectInput
+            name="tipo"
+            label="Tipo Produto"
+            options={tipoProdutoOptions}
+            value={produto.tipo || ''}
+            onValueChange={(value) =>
+              handleProdutoChange({ ...produto, tipo: value as TipoProduto })
+            }
+            error={error?.tipo}
           />
         </div>
         <div className="grid grid-cols-3 gap-4">
@@ -539,32 +567,21 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             error={error?.dolar}
           />
         </div>
+        {/* Campos calculados automaticamente (somente leitura) — dbprod.qtestmin_sugerido / curva_sugerido */}
         <div className="grid grid-cols-2 gap-4">
-          <div className={error?.multiplocompra ? 'field-error' : ''}>
-            <FormInput
-              name="multiplocompra"
-              type="number"
-              label="Múltiplo Compra"
-              required
-              value={displayNumberValue(produto.multiplocompra)}
-              onChange={(e) =>
-                handleProdutoChange({
-                  ...produto,
-                  multiplocompra: handleRequiredNumberChange(e.target.value, 1),
-                })
-              }
-              error={error?.multiplocompra}
-            />
-          </div>
-          <SelectInput
-            name="tipo"
-            label="Tipo Produto"
-            options={tipoProdutoOptions}
-            value={produto.tipo || ''}
-            onValueChange={(value) =>
-              handleProdutoChange({ ...produto, tipo: value as TipoProduto })
-            }
-            error={error?.tipo}
+          <FormInput
+            name="qtestmin_sugerido"
+            type="text"
+            label="Est. Mínimo Auto"
+            value={String((produto as any).qtestmin_sugerido ?? '')}
+            disabled
+          />
+          <FormInput
+            name="curva_sugerido"
+            type="text"
+            label="Class. Curva ABC Auto"
+            value={String((produto as any).curva_sugerido ?? '')}
+            disabled
           />
         </div>
         <FormInput
