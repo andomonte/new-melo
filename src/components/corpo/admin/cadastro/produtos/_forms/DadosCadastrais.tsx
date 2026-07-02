@@ -240,8 +240,12 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             type="text"
             label="Código de Barras"
             value={produto.codbar || ''}
+            maxLength={15}
             onChange={(e) =>
-              handleProdutoChange({ ...produto, codbar: e.target.value })
+              handleProdutoChange({
+                ...produto,
+                codbar: e.target.value.slice(0, 15),
+              })
             }
             error={error?.codbar}
           />
