@@ -3,6 +3,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { buscaCep, ViaCepResponse } from '@/data/cep';
 import { useToast } from '@/hooks/use-toast';
 import { isValidCpfCnpj } from '@/utils/validacoes';
+import { CountryCombobox } from '@/components/common/CountryCombobox';
 
 // Mapeamento UF -> código IBGE (primeiros 2 dígitos do código de município)
 const UF_IBGE: Record<string, string> = {
@@ -91,6 +92,10 @@ export default function DadosCadastrais({
         }
         if (resultado.uf) {
           handleTransportadoraChange('uf', resultado.uf);
+        }
+        // CEP válido = endereço no Brasil → preenche o País (igual cliente/fornecedor)
+        if (resultado.uf || resultado.localidade) {
+          handleTransportadoraChange('codpais', 1058);
         }
       } catch (error) {
         toast({
@@ -393,15 +398,11 @@ export default function DadosCadastrais({
             >
               País<span className="text-red-500"> *</span>
             </label>
-            <input
-              type="number"
-              id="codpais"
-              value={transportadora.codpais || ''}
-              onChange={(e) =>
-                handleTransportadoraChange('codpais', Number(e.target.value))
+            <CountryCombobox
+              value={transportadora.codpais || undefined}
+              onChange={(v) =>
+                handleTransportadoraChange('codpais', Number(v))
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              required
             />
             {error.codpais && (
               <p className="text-red-500 text-xs mt-1">{error.codpais}</p>

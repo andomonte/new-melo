@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import DadosCadastrais from './_forms/DadosCadastrais';
 import DadosFinanceiros from './_forms/DadosFinanceiros';
 import CalculoFrete from './_forms/CalculoFrete';
@@ -50,6 +50,17 @@ export default function CustomModal({
   const [showDup, setShowDup] = useState(false);
 
   const { toast } = useToast();
+
+  // Sempre abrir o cadastro em branco (evita trazer dados de uma abertura anterior)
+  useEffect(() => {
+    if (isOpen) {
+      setTransportadora({} as Transportadora);
+      setErrors({});
+      setActiveTab('dadosCadastrais');
+      setShowDup(false);
+      setDupMatches([]);
+    }
+  }, [isOpen]);
 
   const [modalConfirmAba, setModalConfirmAba] = useState(false);
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
