@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import FormInput from '@/components/common/FormInput';
 import { Produto } from '@/data/produtos/produtos';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
 
 interface DadosCustosProps {
   produto: Produto;
@@ -39,9 +37,6 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
   handleProdutoChange,
   error,
 }) => {
-  const [comissaoHabilitada, setComissaoHabilitada] = useState(
-    !!(produto.comdifeext || produto.comdifeext_int || produto.comdifint)
-  );
   const moeda = produto.dolar === 'S' ? 'US$' : 'R$';
 
   return (
@@ -250,66 +245,6 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
             }
             error={error?.txdolarvenda}
           />
-        </div>
-
-        {/* Seção de Comissões */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
-          <div className="col-span-2 flex items-center gap-2">
-            <Checkbox
-              checked={comissaoHabilitada}
-              onCheckedChange={(checked) => {
-                setComissaoHabilitada(!!checked);
-                if (!checked) {
-                  handleProdutoChange({ ...produto, comdifeext: undefined, comdifeext_int: undefined, comdifint: undefined });
-                }
-              }}
-              id="chk-comissao"
-            />
-            <Label htmlFor="chk-comissao" className="font-bold text-gray-700 dark:text-gray-200 cursor-pointer">
-              Comissões Diferenciadas (%)
-            </Label>
-          </div>
-          {comissaoHabilitada && (<>
-          <FormInput
-            name="comdifeext"
-            type="number"
-            label="Comissão Externa (%)"
-            value={displayNumberValue(produto.comdifeext)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                comdifeext: handleOptionalNumberChange(e.target.value),
-              })
-            }
-            error={error?.comdifeext}
-          />
-          <FormInput
-            name="comdifeext_int"
-            type="number"
-            label="Comissão Externa Internacional (%)"
-            value={displayNumberValue(produto.comdifeext_int)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                comdifeext_int: handleOptionalNumberChange(e.target.value),
-              })
-            }
-            error={error?.comdifeext_int}
-          />
-          <FormInput
-            name="comdifint"
-            type="number"
-            label="Comissão Interna (%)"
-            value={displayNumberValue(produto.comdifint)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                comdifint: handleOptionalNumberChange(e.target.value),
-              })
-            }
-            error={error?.comdifint}
-          />
-          </>)}
         </div>
 
         {/* Seção de Taxas de Câmbio Adicionais */}

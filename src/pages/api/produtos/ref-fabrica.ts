@@ -24,7 +24,7 @@ export default async function handle(
               m.descr as marca_nome
        FROM dbprod_ref_fabrica prf
        JOIN dbref_fabrica rf ON rf.cod_id = prf.cod_id
-       LEFT JOIN dbmarca m ON m.codmarca = rf.codmarca
+       LEFT JOIN dbmarcas m ON m.codmarca = rf.codmarca
        WHERE prf.codprod = $1
        ORDER BY rf.referencia`,
       [codprod]

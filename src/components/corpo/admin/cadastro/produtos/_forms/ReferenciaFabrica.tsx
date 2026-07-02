@@ -1,8 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Produto } from '@/data/produtos/produtos';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trash2, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { useDebounce } from 'use-debounce';
+import { Trash2, Plus, ChevronsUpDown, Loader2 } from 'lucide-react';
 
 export interface ReferenciaItem {
   id?: string;
@@ -25,8 +39,33 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
   error,
 }) => {
   const [referencias, setReferencias] = useState<ReferenciaItem[]>([]);
-  const [novaReferencia, setNovaReferencia] = useState('');
   const [carregando, setCarregando] = useState(false);
+
+  // Busca de referências (igual ao popup do Delphi)
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery] = useDebounce(query, 300);
+  const [resultados, setResultados] = useState<ReferenciaItem[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [refSelecionada, setRefSelecionada] = useState<ReferenciaItem | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    let ativo = true;
+    setBuscando(true);
+    fetch(`/api/produtos/ref-fabrica-search?q=${encodeURIComponent(debouncedQuery)}`)
+      .then((r) => (r.ok ? r.json() : { referencias: [] }))
+      .then((data) => {
+        if (ativo) setResultados(data.referencias || []);
+      })
+      .catch(() => ativo && setResultados([]))
+      .finally(() => ativo && setBuscando(false));
+    return () => {
+      ativo = false;
+    };
+  }, [debouncedQuery, open]);
 
   // Carregar referências do banco ao editar produto existente
   useEffect(() => {
@@ -56,19 +95,25 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
   }, [produto.codprod]);
 
   const adicionarReferencia = () => {
-    if (!novaReferencia.trim()) return;
-
+    if (!refSelecionada) return;
+    // não duplica a mesma referência
+    if (referencias.some((r) => r.cod_id === refSelecionada.cod_id)) {
+      setRefSelecionada(null);
+      return;
+    }
     const novaRef: ReferenciaItem = {
       id: Date.now().toString(),
-      referencia: novaReferencia.toUpperCase().trim(),
-      codmarca: produto.codmarca || '',
-      codcredor: '',
+      cod_id: refSelecionada.cod_id,
+      referencia: refSelecionada.referencia,
+      codmarca: refSelecionada.codmarca || '',
+      codcredor: refSelecionada.codcredor || '',
+      marca_nome: refSelecionada.marca_nome || '',
     };
-
     const novasRefs = [...referencias, novaRef];
     setReferencias(novasRefs);
     handleProdutoChange({ ...produto, referenciasFabrica: novasRefs });
-    setNovaReferencia('');
+    setRefSelecionada(null);
+    setQuery('');
   };
 
   const removerReferencia = (index: number) => {
@@ -87,25 +132,78 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
       <div className="grid grid-cols-4 gap-3 items-end">
         <div className="col-span-3">
           <Label>Referência</Label>
-          <Input
-            type="text"
-            placeholder="Digite a referência de fábrica"
-            value={novaReferencia}
-            onChange={(e) => setNovaReferencia(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                adicionarReferencia();
-              }
-            }}
-          />
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className="w-full justify-between font-normal"
+              >
+                {refSelecionada
+                  ? `${refSelecionada.referencia}${
+                      refSelecionada.codmarca
+                        ? ' — ' +
+                          refSelecionada.codmarca +
+                          (refSelecionada.marca_nome
+                            ? ' ' + refSelecionada.marca_nome
+                            : '')
+                        : ''
+                    }`
+                  : 'Buscar referência...'}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[420px] p-0" align="start">
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Digite a referência..."
+                  value={query}
+                  onValueChange={setQuery}
+                />
+                <CommandList>
+                  {buscando && (
+                    <div className="p-4 text-sm text-center text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                      Buscando...
+                    </div>
+                  )}
+                  {!buscando && resultados.length === 0 && (
+                    <CommandEmpty>Nenhuma referência encontrada.</CommandEmpty>
+                  )}
+                  {!buscando && (
+                    <CommandGroup>
+                      {resultados.map((r) => (
+                        <CommandItem
+                          key={r.cod_id}
+                          value={String(r.cod_id)}
+                          onSelect={() => {
+                            setRefSelecionada(r);
+                            setOpen(false);
+                          }}
+                        >
+                          <span className="font-medium">{r.referencia}</span>
+                          {r.codmarca && (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {r.codmarca}
+                              {r.marca_nome ? ` - ${r.marca_nome}` : ''}
+                            </span>
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
         <div>
           <button
             type="button"
             onClick={adicionarReferencia}
-            disabled={!novaReferencia.trim()}
-            className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-xs rounded transition-colors h-[30px]"
+            disabled={!refSelecionada}
+            className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-xs rounded transition-colors h-[38px]"
           >
             <Plus size={14} />
             Adicionar

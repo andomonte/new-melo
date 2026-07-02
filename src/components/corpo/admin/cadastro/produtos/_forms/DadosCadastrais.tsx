@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
 import SelectInput from '@/components/common/SelectPadrao';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   CompraDireta,
   Curva,
@@ -128,6 +130,9 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   const [loadingMarcas, setLoadingMarcas] = useState<boolean>(false);
   const [loadingGruposFuncao, setLoadingGruposFuncao] = useState<boolean>(false);
   const [loadingGruposProduto, setLoadingGruposProduto] = useState<boolean>(false);
+  const [comissaoHabilitada, setComissaoHabilitada] = useState<boolean>(
+    !!(produto.comdifeext || produto.comdifeext_int || produto.comdifint),
+  );
 
   // Carrega as opções assim que o componente montar
   useEffect(() => {
@@ -597,6 +602,76 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           }
           error={error?.descr_importacao}
         />
+
+        {/* Comissões Diferenciadas (igual ao Delphi — fim dos Dados Cadastrais) */}
+        <div className="border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Checkbox
+              checked={comissaoHabilitada}
+              onCheckedChange={(checked) => {
+                setComissaoHabilitada(!!checked);
+                if (!checked) {
+                  handleProdutoChange({
+                    ...produto,
+                    comdifeext: undefined,
+                    comdifeext_int: undefined,
+                    comdifint: undefined,
+                  });
+                }
+              }}
+              id="chk-comissao"
+            />
+            <Label
+              htmlFor="chk-comissao"
+              className="font-bold text-gray-700 dark:text-gray-200 cursor-pointer"
+            >
+              Comissões Diferenciadas (%)
+            </Label>
+          </div>
+          {comissaoHabilitada && (
+            <div className="grid grid-cols-3 gap-4">
+              <FormInput
+                name="comdifeext"
+                type="number"
+                label="Comissão Externa (%)"
+                value={displayNumberValue(produto.comdifeext)}
+                onChange={(e) =>
+                  handleProdutoChange({
+                    ...produto,
+                    comdifeext: handleOptionalNumberChange(e.target.value),
+                  })
+                }
+                error={error?.comdifeext}
+              />
+              <FormInput
+                name="comdifeext_int"
+                type="number"
+                label="Comissão Externa Internacional (%)"
+                value={displayNumberValue(produto.comdifeext_int)}
+                onChange={(e) =>
+                  handleProdutoChange({
+                    ...produto,
+                    comdifeext_int: handleOptionalNumberChange(e.target.value),
+                  })
+                }
+                error={error?.comdifeext_int}
+              />
+              <FormInput
+                name="comdifint"
+                type="number"
+                label="Comissão Interna (%)"
+                value={displayNumberValue(produto.comdifint)}
+                onChange={(e) =>
+                  handleProdutoChange({
+                    ...produto,
+                    comdifint: handleOptionalNumberChange(e.target.value),
+                  })
+                }
+                error={error?.comdifint}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
