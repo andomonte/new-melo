@@ -729,9 +729,25 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
         })
         .filter(Boolean) as MenuItem[];
 
-      // 2) Ordenar subitems A-Z
+      // 2) Ordenar subitems A-Z (no Cadastro, prioriza Cliente/Fornecedor/Transportadora/Produto)
+      const PRIORIDADE_CADASTRO = [
+        'Clientes',
+        'Fornecedores',
+        'Transportadoras',
+        'Produtos',
+      ];
       itensFiltrados.forEach((it) => {
-        if (it.subItems?.length) {
+        if (!it.subItems?.length) return;
+        if (it.name === 'Cadastro') {
+          it.subItems.sort((a, b) => {
+            const ia = PRIORIDADE_CADASTRO.indexOf(a.name || '');
+            const ib = PRIORIDADE_CADASTRO.indexOf(b.name || '');
+            if (ia !== -1 || ib !== -1) {
+              return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+            }
+            return (a.name || '').localeCompare(b.name || '');
+          });
+        } else {
           it.subItems.sort((a, b) =>
             (a.name || '').localeCompare(b.name || ''),
           );
