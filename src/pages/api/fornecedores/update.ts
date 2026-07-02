@@ -3,6 +3,7 @@ import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import { PoolClient } from 'pg';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
+import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 
 export default async function handle(
   req: NextApiRequest,
@@ -164,6 +165,16 @@ export default async function handle(
     await client.query(upsertQuery, values);
 
     await client.query('COMMIT');
+
+    // Integridade de pessoa: replica nome/inscrições/tipo em cliente/transportadora
+    await syncPessoaIntegridade(filial, 'FORNECEDOR', {
+      doc: (allData as any).cpf_cgc,
+      nome: (allData as any).nome,
+      iest: (allData as any).iest,
+      isuframa: (allData as any).isuframa,
+      imun: (allData as any).imun,
+      tipo: (allData as any).tipo,
+    });
 
     res.status(200).json({ message: 'Fornecedor atualizado com sucesso!' });
   } catch (error: any) {

@@ -5,6 +5,7 @@ import { getPgPool } from '@/lib/pgClient'; // Importe sua função getPgPool
 import { serializeBigInt } from '@/utils/serializeBigInt'; // Mantenha se precisar serializar BigInts
 
 import { Transportadora } from '@/data/transportadoras/transportadoras'; // Mantenha sua interface Transportadora
+import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 
 export default async function handle(
   req: NextApiRequest,
@@ -94,6 +95,15 @@ export default async function handle(
         transportadoraAtualizadaOuCriada = updateResult.rows[0];
 
         await client.query('COMMIT'); // Confirma a transação
+
+        await syncPessoaIntegridade(filial, 'TRANSPORTADORA', {
+          doc: (data as any).cpfcgc,
+          nome: (data as any).nome,
+          iest: (data as any).iest,
+          isuframa: (data as any).isuframa,
+          imun: (data as any).imun,
+          tipo: (data as any).tipo,
+        });
 
         return res
           .status(200)
@@ -197,6 +207,15 @@ export default async function handle(
     transportadoraAtualizadaOuCriada = createResult.rows[0];
 
     await client.query('COMMIT'); // Confirma a transação
+
+    await syncPessoaIntegridade(filial, 'TRANSPORTADORA', {
+      doc: (data as any).cpfcgc,
+      nome: (data as any).nome,
+      iest: (data as any).iest,
+      isuframa: (data as any).isuframa,
+      imun: (data as any).imun,
+      tipo: (data as any).tipo,
+    });
 
     // Toast para "Transportadora Criada"
     res

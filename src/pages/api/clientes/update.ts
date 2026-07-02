@@ -4,6 +4,7 @@ import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import { PoolClient } from 'pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
+import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 
 export interface Cliente {
   codcli: string;
@@ -261,6 +262,16 @@ export default async function handle(
     }
 
     await client.query('COMMIT');
+
+    // Integridade de pessoa: replica nome/inscrições/tipo em fornecedor/transportadora
+    await syncPessoaIntegridade(filial, 'CLIENTE', {
+      doc: cliente.cpfcgc,
+      nome: cliente.nome,
+      iest: cliente.iest,
+      isuframa: cliente.isuframa,
+      imun: cliente.imun,
+      tipo: cliente.tipo,
+    });
 
     const updatedCliente = result.rows[0];
 

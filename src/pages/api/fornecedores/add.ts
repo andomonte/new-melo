@@ -4,6 +4,7 @@ import { getPgPool } from '@/lib/pgClient';
 import { PoolClient } from 'pg';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import { serializeBigInt } from '@/utils/serializeBigInt';
+import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 
 export default async function handle(
   req: NextApiRequest,
@@ -86,6 +87,16 @@ export default async function handle(
     `;
 
     const result = await client.query(insertQuery, values);
+
+    // Integridade de pessoa: replica nome/inscrições/tipo em cliente/transportadora
+    await syncPessoaIntegridade(filial, 'FORNECEDOR', {
+      doc: (fornecedorData as any).cpf_cgc,
+      nome: (fornecedorData as any).nome,
+      iest: (fornecedorData as any).iest,
+      isuframa: (fornecedorData as any).isuframa,
+      imun: (fornecedorData as any).imun,
+      tipo: (fornecedorData as any).tipo,
+    });
 
     res.status(201).json(serializeBigInt(result.rows[0]));
   } catch (error: any) {

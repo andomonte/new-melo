@@ -5,6 +5,7 @@ import { getPgPool } from '@/lib/pgClient';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 import { Cliente } from '@/data/clientes/clientes';
+import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 
 export default async function handle(
   req: NextApiRequest,
@@ -320,6 +321,16 @@ export default async function handle(
 
     await client.query('COMMIT');
     console.log('✅ [add.ts] Cliente salvo com sucesso');
+
+    // Integridade de pessoa: replica nome/inscrições/tipo em fornecedor/transportadora
+    await syncPessoaIntegridade(filial, 'CLIENTE', {
+      doc: data.cpfcgc,
+      nome: data.nome,
+      iest: (data as any).iest,
+      isuframa: (data as any).isuframa,
+      imun: (data as any).imun,
+      tipo: (data as any).tipo,
+    });
   } catch (error: any) {
     await client?.query('ROLLBACK');
     console.error('🚨 [add.ts] Erro ao upsert cliente:', {

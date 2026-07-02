@@ -5,6 +5,7 @@ import { getPgPool } from '@/lib/pgClient';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 import { Transportadora } from '@/data/transportadoras/transportadoras';
+import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 
 export default async function handle(
   req: NextApiRequest,
@@ -105,6 +106,15 @@ export default async function handle(
     const transportadoraAtualizada = result.rows[0];
 
     await client.query('COMMIT'); // Confirma a transação
+
+    await syncPessoaIntegridade(filial, 'TRANSPORTADORA', {
+      doc: (data as any).cpfcgc,
+      nome: (data as any).nome,
+      iest: (data as any).iest,
+      isuframa: (data as any).isuframa,
+      imun: (data as any).imun,
+      tipo: (data as any).tipo,
+    });
 
     res
       .status(200)
