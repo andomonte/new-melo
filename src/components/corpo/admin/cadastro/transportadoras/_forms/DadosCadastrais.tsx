@@ -172,33 +172,45 @@ export default function DadosCadastrais({
               : 'CNPJ'}{' '}
             *
           </label>
-          <input
-            type="text"
-            id="cpfcgc"
-            value={transportadora.cpfcgc || ''}
-            onChange={(e) => {
-              const valorFormatado = formatarDocumento(
-                e.target.value,
-                transportadora.tipo,
-              );
-              handleTransportadoraChange('cpfcgc', valorFormatado);
-              if (transportadora.tipo !== 'X') validarCpfCnpj(valorFormatado);
-            }}
-            onBlur={(e) => {
-              if (transportadora.tipo !== 'X') validarCpfCnpj(e.target.value);
-              onDocumentoBlur?.();
-            }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            maxLength={20}
-            placeholder={
-              transportadora.tipo === 'F'
-                ? '000.000.000-00'
-                : transportadora.tipo === 'X'
-                ? 'Documento'
-                : '00.000.000/0000-00'
-            }
-            required
-          />
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              id="cpfcgc"
+              value={transportadora.cpfcgc || ''}
+              onChange={(e) => {
+                const valorFormatado = formatarDocumento(
+                  e.target.value,
+                  transportadora.tipo,
+                );
+                handleTransportadoraChange('cpfcgc', valorFormatado);
+                if (transportadora.tipo !== 'X') validarCpfCnpj(valorFormatado);
+              }}
+              onBlur={(e) => {
+                if (transportadora.tipo !== 'X') validarCpfCnpj(e.target.value);
+                onDocumentoBlur?.();
+              }}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              maxLength={20}
+              placeholder={
+                transportadora.tipo === 'F'
+                  ? '000.000.000-00'
+                  : transportadora.tipo === 'X'
+                  ? 'Documento'
+                  : '00.000.000/0000-00'
+              }
+              required
+            />
+            {transportadora.tipo !== 'X' && (
+              <button
+                type="button"
+                onClick={() => onDocumentoBlur?.()}
+                className="px-3 py-2 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-md whitespace-nowrap"
+                title="Buscar dados do documento (Receita Federal) e verificar duplicidade"
+              >
+                Buscar
+              </button>
+            )}
+          </div>
           {(error.cpfcgc || cpfCnpjError) && (
             <p className="text-red-500 text-xs mt-1">
               {error.cpfcgc || cpfCnpjError}

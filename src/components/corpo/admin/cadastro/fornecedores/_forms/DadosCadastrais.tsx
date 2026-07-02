@@ -196,27 +196,44 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             />
           </div>
           <div className={error?.cpf_cgc || cnpjCpfError ? 'field-error' : ''}>
-            <FormInput
-              name="cpf_cgc"
-              type="text"
-              label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
-              defaultValue={fornecedor.cpf_cgc || ''}
-              value={fornecedor.cpf_cgc || ''}
-              placeholder={fornecedor.tipo === 'F' ? '000.000.000-00' : fornecedor.tipo === 'X' ? 'Documento' : '00.000.000/0000-00'}
-              onChange={(e) =>
-                handleFornecedorChange(
-                  'cpf_cgc',
-                  formatarDocumento(e.target.value, fornecedor.tipo),
-                )
-              }
-              onBlur={(e) => {
-                if (fornecedor.tipo !== 'X') validarCnpjCpf(e.target.value);
-                onDocumentoBlur?.();
-              }}
-              error={fornecedor.tipo !== 'X' ? (cnpjCpfError || error?.cpf_cgc) : undefined}
-              required
-              disabled={fornecedor.tipo === 'X'}
-            />
+            <div className="flex items-end gap-1">
+              <div className="flex-1">
+                <FormInput
+                  name="cpf_cgc"
+                  type="text"
+                  label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
+                  value={fornecedor.cpf_cgc || ''}
+                  placeholder={fornecedor.tipo === 'F' ? '000.000.000-00' : fornecedor.tipo === 'X' ? 'Documento' : '00.000.000/0000-00'}
+                  onChange={(e) =>
+                    handleFornecedorChange(
+                      'cpf_cgc',
+                      formatarDocumento(e.target.value, fornecedor.tipo),
+                    )
+                  }
+                  onBlur={(e) => {
+                    if (fornecedor.tipo !== 'X') validarCnpjCpf(e.target.value);
+                    onDocumentoBlur?.();
+                  }}
+                  required
+                  disabled={fornecedor.tipo === 'X'}
+                />
+              </div>
+              {fornecedor.tipo !== 'X' && (
+                <button
+                  type="button"
+                  onClick={() => onDocumentoBlur?.()}
+                  className="mb-[1px] h-10 px-3 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-md whitespace-nowrap"
+                  title="Buscar dados do documento (Receita Federal) e verificar duplicidade"
+                >
+                  Buscar
+                </button>
+              )}
+            </div>
+            {(cnpjCpfError || error?.cpf_cgc) && (
+              <p className="text-sm text-red-500 mt-1">
+                {cnpjCpfError || error?.cpf_cgc}
+              </p>
+            )}
           </div>
           <div className={error?.tipoemp ? 'field-error' : ''}>
             <SelectInput
