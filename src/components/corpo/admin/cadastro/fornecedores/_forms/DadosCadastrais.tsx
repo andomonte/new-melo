@@ -29,15 +29,21 @@ const tipoPessoaOptions = [
   { value: 'X', label: 'X-Exterior' },
 ];
 
+// Mesma lista do cadastro de Cliente
 const tipoEmpresaOptions = [
-  { value: 'NL', label: 'NL' },
-  { value: 'EI', label: 'EI' },
-  { value: 'NE', label: 'NE' },
-  { value: 'LT', label: 'LTDA' },
-  { value: 'EF', label: 'EF' },
-  { value: 'ME', label: 'ME' },
-  { value: 'SA', label: 'SA' },
-  { value: 'EP', label: 'EPP' },
+  { value: 'EPP', label: 'EPP - Empresa de Pequeno Porte' },
+  { value: 'EP', label: 'EP - Empresa de Pequeno Porte' },
+  { value: 'EF', label: 'EF - Empresa Filial' },
+  { value: 'ME', label: 'ME - Microempresa' },
+  { value: 'NL', label: 'NL - Normal' },
+  { value: 'PF', label: 'PF - Pessoa Física' },
+  { value: 'MEI', label: 'MEI - Microempreendedor Individual' },
+  { value: 'EI', label: 'EI - Empresário Individual' },
+  { value: 'LTDA', label: 'LTDA - Sociedade Limitada' },
+  { value: 'SLU', label: 'SLU - Sociedade Limitada Unipessoal' },
+  { value: 'S/S', label: 'S/S - Sociedade Simples' },
+  { value: 'S/A', label: 'S/A - Sociedade Anônima' },
+  { value: 'MGP', label: 'MGP - Empresa de Médio e Grande Porte' },
 ];
 
 const tipoFornecedorOptions = [
