@@ -62,15 +62,14 @@ export function AlterarBancoModal({
 
     setLoading(true);
     try {
-      // Campo banco em dbclien é VARCHAR(1), enviar apenas primeiro caractere
-      const bancoCode = selectedBanco.substring(0, 1);
-
+      // Envia o código do banco (dbbanco_cobranca). O offset do Delphi
+      // (dbclien.banco = código - 1) é aplicado no backend após validação.
       const response = await fetch('/api/clientes/bulk-update-banco', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clienteCodes: Array.from(selectedClients),
-          banco: bancoCode,
+          banco: selectedBanco,
         }),
       });
 

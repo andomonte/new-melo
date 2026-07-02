@@ -313,6 +313,11 @@ const FornecedoresPage = () => {
         isOpen={cadastrarOpen}
         onClose={handleCloseCadastrar}
         onSuccess={handleSuccess}
+        onEditarFornecedor={(id) => {
+          setCadastrarOpen(false);
+          setIdFornecedor(id);
+          setEditarOpen(true);
+        }}
       />
       {editarOpen && (
         <ModalEditarFornecedor

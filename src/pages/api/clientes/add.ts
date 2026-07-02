@@ -293,6 +293,7 @@ export default async function handle(
         pessoas: data.pessoasContato || [],
         vendedores: data.vendedores_list || [],
         formasPagamento: data.formaPagamento ? String(data.formaPagamento).split(',').filter(Boolean) : [],
+        cobrancaIgual: typeof data.enderecoCobrancaIgual === 'boolean' ? data.enderecoCobrancaIgual : null,
         entrega: {
           tipoPessoa: data.tipoPessoaEntrega || '',
           nome: data.nomeEntrega || '',

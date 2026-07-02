@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import DashBoard from '@/components/corpo/admin/dashBoard';
 import Clientes from '@/components/corpo/admin/cadastro/clientes';
+import CreditoTemporario from '@/components/corpo/admin/cadastro/clientes/creditoTemporario';
 import Fornecedores from '@/components/corpo/admin/cadastro/fornecedores';
 import Produtos from '@/components/corpo/admin/cadastro/produtos';
 import Vendedores from '@/components/corpo/admin/cadastro/vendedores';
@@ -77,6 +78,12 @@ const menus = [
             href: '/admin/cadastros/clientes',
             icon: HandshakeIcon,
             corpo: Clientes,
+          },
+          {
+            name: 'Crédito Temporário',
+            href: '/admin/cadastros/creditoTemporario',
+            icon: CreditCardIcon,
+            corpo: CreditoTemporario,
           },
           {
             name: 'Fornecedores',

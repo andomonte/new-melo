@@ -7,6 +7,7 @@ import InfoModal from '@/components/common/infoModal';
 import ModalFormulario from '@/components/common/modalform';
 import { useDebouncedCallback } from 'use-debounce';
 import { getPaises, Paises } from '@/data/paises/paises';
+import { buscaCnpj } from '@/data/cnpj';
 import { getBairroByDescricao } from '@/data/bairros/bairros';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -33,12 +34,15 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** Quando o documento já existe como fornecedor, abre esse fornecedor para edição */
+  onEditarFornecedor?: (codCredor: string) => void;
 }
 
 export default function CustomModal({
   isOpen,
   onClose,
   onSuccess,
+  onEditarFornecedor,
 }: ModalProps) {
   const [fornecedor, setFornecedor] = useState({} as Fornecedor);
   const [openInfo, setOpenInfo] = useState(false);
@@ -112,6 +116,135 @@ export default function CustomModal({
     },
     300,
   );
+
+  // Helper para setar campo apenas quando há valor
+  const setCampo = useCallback(
+    (field: string, value: any) => {
+      if (value !== undefined && value !== null && String(value) !== '') {
+        handleFornecedorChange(field as keyof Fornecedor, value);
+      }
+    },
+    [handleFornecedorChange],
+  );
+
+  // Mapeia dados de um Cliente/Transportadora existente para o formulário de Fornecedor
+  const preencherDeOrigem = useCallback(
+    async (tipoOrigem: 'CLIENTE' | 'TRANSPORTADORA', id: string) => {
+      const url =
+        tipoOrigem === 'CLIENTE'
+          ? `/api/clientes/get/${id}`
+          : `/api/transportadoras/get/${id}`;
+      const r = await fetch(url);
+      if (!r.ok) return;
+      const d = await r.json();
+      setCampo('nome', d.nome);
+      setCampo('nome_fant', d.nomefant);
+      setCampo('tipo', d.tipo);
+      setCampo('endereco', d.ender);
+      setCampo('numero', d.numero);
+      setCampo('complemento', d.complemento);
+      setCampo('bairro', d.bairro);
+      setCampo('cidade', d.cidade);
+      setCampo('uf', d.uf);
+      setCampo('cep', d.cep);
+      setCampo('codpais', d.codpais);
+      setCampo('iest', d.iest);
+      setCampo('isuframa', d.isuframa);
+      setCampo('imun', d.imun);
+      setCampo('referencia', d.referencia);
+      setCampo('codmunicipio', d.codmunicipio);
+      setCampo('codbairro', d.codbairro);
+      if (tipoOrigem === 'CLIENTE') setCampo('email', d.email);
+      if (tipoOrigem === 'TRANSPORTADORA') setCampo('contatos', d.contatos);
+      toast({
+        description: `Dados do ${
+          tipoOrigem === 'CLIENTE' ? 'cliente' : 'transportadora'
+        } carregados. Revise e salve como fornecedor.`,
+      });
+    },
+    [setCampo, toast],
+  );
+
+  // Busca CNPJ na BrasilAPI e preenche (igual ao cadastro de cliente)
+  const preencherDeCnpj = useCallback(
+    async (digits: string) => {
+      try {
+        const d = await buscaCnpj(digits);
+        setCampo('nome', d.razao_social?.substring(0, 40));
+        setCampo('nome_fant', d.nome_fantasia?.substring(0, 30));
+        setCampo('email', d.email?.toLowerCase());
+        setCampo('endereco', d.logradouro);
+        setCampo('numero', d.numero);
+        setCampo('complemento', d.complemento);
+        setCampo('bairro', d.bairro);
+        setCampo('cidade', d.municipio);
+        setCampo('uf', d.uf);
+        if (d.cep) setCampo('cep', d.cep.replace(/\D/g, ''));
+        handleFornecedorChange('codpais' as keyof Fornecedor, 1058);
+        toast({ description: `CNPJ preenchido: ${d.razao_social}` });
+      } catch {
+        /* CNPJ não encontrado — apenas não preenche */
+      }
+    },
+    [setCampo, handleFornecedorChange, toast],
+  );
+
+  // Ao sair do campo CNPJ/CPF: verifica duplicidade (fornecedor/cliente/transportadora) e auto-preenche
+  const buscarPorDocumento = useCallback(async () => {
+    const tipo = fornecedor.tipo;
+    const digits = String(fornecedor.cpf_cgc || '').replace(/\D/g, '');
+    if (digits.length !== 11 && digits.length !== 14) return;
+
+    try {
+      const resp = await fetch(`/api/global/check-document?doc=${digits}`);
+      const data = resp.ok ? await resp.json() : { matches: [] };
+      const matches: Array<{ type: string; id: string; name: string }> =
+        data.matches || [];
+
+      const forn = matches.find((m) => m.type === 'FORNECEDOR');
+      if (forn) {
+        if (
+          window.confirm(
+            `Já cadastrado como fornecedor: ${forn.name} (cód ${forn.id}). Deseja abrir para editar?`,
+          )
+        ) {
+          onEditarFornecedor?.(String(forn.id).trim());
+        }
+        return;
+      }
+
+      const origem =
+        matches.find((m) => m.type === 'CLIENTE') ||
+        matches.find((m) => m.type === 'TRANSPORTADORA');
+      if (origem) {
+        const label = origem.type === 'CLIENTE' ? 'cliente' : 'transportadora';
+        if (
+          window.confirm(
+            `Documento encontrado como ${label}: ${origem.name}. Deseja usar os dados para cadastrar como fornecedor?`,
+          )
+        ) {
+          await preencherDeOrigem(
+            origem.type as 'CLIENTE' | 'TRANSPORTADORA',
+            String(origem.id).trim(),
+          );
+        }
+        return;
+      }
+
+      // Não existe em lugar nenhum: se for CNPJ (PJ), busca na BrasilAPI
+      if (digits.length === 14 && tipo === 'J') {
+        await preencherDeCnpj(digits);
+      }
+    } catch {
+      /* silencioso — não bloqueia o cadastro */
+    }
+  }, [
+    fornecedor.tipo,
+    fornecedor.cpf_cgc,
+    onEditarFornecedor,
+    preencherDeOrigem,
+    preencherDeCnpj,
+  ]);
 
   const handleClassesFornecedor = useCallback(async () => {
     const classesFornecedor = await getClassesFornecedor({
@@ -421,6 +554,7 @@ export default function CustomModal({
             disableFields={disableFields}
             options={options}
             handleSearchOptionsChange={handleSearchOptionsChange}
+            onDocumentoBlur={buscarPorDocumento}
           />
         );
       case 'dadosFinanceiros':

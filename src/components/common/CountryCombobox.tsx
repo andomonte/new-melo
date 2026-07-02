@@ -35,6 +35,7 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [debouncedQuery] = useDebounce(query, 300);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   
   // Initial load (Brasil default or selected)
   useEffect(() => {
@@ -65,7 +66,26 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
     }
   }, [debouncedQuery, open]);
 
-  const selectedCountry = countries.find(c => c.codpais.toString() === String(value));
+  // Resolve o nome do país do valor atual, para exibir "código - nome" mesmo com o seletor fechado
+  useEffect(() => {
+    if (value === undefined || value === null || value === '') {
+      setSelectedCountry(null);
+      return;
+    }
+    if (selectedCountry && String(selectedCountry.codpais) === String(value)) return;
+    let active = true;
+    fetch(`/api/global/countries?q=${encodeURIComponent(String(value))}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Country[]) => {
+        const found = data.find((c) => String(c.codpais) === String(value));
+        if (active && found) setSelectedCountry(found);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -77,7 +97,9 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
           disabled={disabled}
           className={cn("w-full justify-between", className)}
         >
-          {selectedCountry ? `${selectedCountry.codpais} - ${selectedCountry.descricao}` : (value ? `${value}` : "Selecione o país...")}
+          {selectedCountry && String(selectedCountry.codpais) === String(value)
+            ? `${selectedCountry.codpais} - ${selectedCountry.descricao}`
+            : (value ? `${value}` : "Selecione o país...")}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -100,6 +122,7 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
                     onSelect={(currentValue) => {
                         // CommandItem usually lowercases the value, so we use the country obj
                         onChange(country.codpais);
+                        setSelectedCountry(country);
                         setOpen(false);
                     }}
                     >

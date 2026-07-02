@@ -196,7 +196,9 @@ export default function ClientFormModal({
                 ? (String(fullCliente.sit_tributaria).trim() as '1' | '2' | '3' | '4')
                 : null,
               tipoEmpresa:
-                (String(fullCliente.tipoemp || '').trim() as 'EPP' | 'ME' | 'NL' | 'PF') || null,
+                (String(fullCliente.tipoemp || '').trim() as
+                  | 'EPP' | 'EP' | 'EF' | 'ME' | 'NL' | 'PF'
+                  | 'MEI' | 'EI' | 'LTDA' | 'SLU' | 'S/S' | 'S/A' | 'MGP') || null,
               classeCliente: String(fullCliente.codcc || '').trim(),
               inscricaoEstadual:
                 fullCliente.iest === 'ISENTO' ? 'ISENTO' : fullCliente.iest,
@@ -225,11 +227,14 @@ export default function ClientFormModal({
               diasAtraso: String(fullCliente.atraso || '0'),
               icms: (fullCliente.icms as 'S' | 'N') || 'N',
               faixaFinanceira: fullCliente.faixafin || '',
-              banco: Number(fullCliente.banco) || undefined,
+              // Banco lido com offset +1 (convenção do Delphi)
+              banco: (fullCliente.banco == null || String(fullCliente.banco).trim() === '') ? undefined : Number(fullCliente.banco) + 1,
               formaPagamento: fullCliente.formaPagamento || '',
               enderecoCobrancaIgual:
-                fullCliente.ender === fullCliente.endercobr &&
-                fullCliente.cep === fullCliente.cepcobr,
+                typeof fullCliente.cobrancaIgual === 'boolean'
+                  ? fullCliente.cobrancaIgual
+                  : (fullCliente.ender === fullCliente.endercobr &&
+                     fullCliente.cep === fullCliente.cepcobr),
               endercobr: fullCliente.endercobr || '',
               numerocobr: fullCliente.numerocobr || '',
               bairrocobr: fullCliente.bairrocobr || '',
@@ -255,6 +260,16 @@ export default function ClientFormModal({
               suframaEntrega: fullCliente.suframaEntrega || '',
               acrescimo: String(fullCliente.acrescimo || 0),
               desconto: String(fullCliente.desconto || 0),
+              // Preço de Venda Kick Back: checkbox derivado da coluna kickback (0/1)
+              precoVendaKickback: (Number(fullCliente.kickback) || 0) >= 1,
+              // Desconto Aplicado (coluna prvenda, códigos 0-7)
+              precoVenda: String(fullCliente.prvenda ?? '0'),
+              // Bloquear Preço de Venda (coluna bloquear_preco 'S'/'N')
+              benmd: fullCliente.bloquear_preco === 'S' ? 'S' : 'N',
+              // Hab. Suframa (coluna habilitasuframa 'S'/'N')
+              habilitasuframa: fullCliente.habilitasuframa === 'S' ? 'S' : 'N',
+              // Ponto de referência principal (coluna referencia)
+              referencia: fullCliente.referencia || '',
               obs: (fullCliente.obs || '').substring(0, 500),
               // Mapear local_entrega do banco para habilitarLocalEntrega do frontend
               habilitarLocalEntrega: fullCliente.local_entrega === 'S' || fullCliente.local_entrega === '1' ? '1' : '0',
@@ -317,7 +332,9 @@ export default function ClientFormModal({
                 ? (String(clientToEdit.sit_tributaria).trim() as '1' | '2' | '3' | '4')
                 : null,
               tipoEmpresa:
-                (String(clientToEdit.tipoemp || '').trim() as 'EPP' | 'ME' | 'NL' | 'PF') || null,
+                (String(clientToEdit.tipoemp || '').trim() as
+                  | 'EPP' | 'EP' | 'EF' | 'ME' | 'NL' | 'PF'
+                  | 'MEI' | 'EI' | 'LTDA' | 'SLU' | 'S/S' | 'S/A' | 'MGP') || null,
               inscricaoEstadual:
                 clientToEdit.iest === 'ISENTO' ? 'ISENTO' : clientToEdit.iest,
               isentoIE: clientToEdit.iest === 'ISENTO',
@@ -344,6 +361,14 @@ export default function ClientFormModal({
               enderecoCobrancaIgual: true,
               acrescimo: String(clientToEdit.acrescimo || 0),
               desconto: String(clientToEdit.desconto || 0),
+              precoVendaKickback: (Number(clientToEdit.kickback) || 0) >= 1,
+              precoVenda: String(clientToEdit.prvenda ?? '0'),
+              // Bloquear Preço de Venda (coluna bloquear_preco 'S'/'N')
+              benmd: clientToEdit.bloquear_preco === 'S' ? 'S' : 'N',
+              // Hab. Suframa (coluna habilitasuframa 'S'/'N')
+              habilitasuframa: clientToEdit.habilitasuframa === 'S' ? 'S' : 'N',
+              // Ponto de referência principal (coluna referencia)
+              referencia: clientToEdit.referencia || '',
               obs: (clientToEdit.obs || '').substring(0, 500),
               // Mapear local_entrega do banco para habilitarLocalEntrega do frontend
               habilitarLocalEntrega: clientToEdit.local_entrega === 'S' || clientToEdit.local_entrega === '1' ? '1' : '0',
@@ -426,7 +451,8 @@ export default function ClientFormModal({
           codcc: data.classeCliente || '',
           codigo_filial: clientToEdit?.codigo_filial || 1,
           bairro: toUpper(data.bairro),
-          banco: String(data.banco || '').substring(0, 1),
+          // Banco gravado com offset -1 (convenção do Delphi: dbclien.banco = código_dbbanco_cobranca - 1)
+          banco: data.banco ? String((Number(data.banco) || 1) - 1) : '',
           ender: toUpper(data.endereco),
           cidade: toUpper(data.cidade),
           uf: toUpper(data.uf),
@@ -439,13 +465,14 @@ export default function ClientFormModal({
           isuframa: toUpper(data.suframa),
           status: data.credito === 'S' ? '1' : '2',
           icms: data.icms || 'N',
-          atraso: Number(data.diasAtraso) || 0,
+          atraso: data.aceitaAtraso ? (Number(data.diasAtraso) || 0) : 0,
           faixafin: toUpper(data.faixaFinanceira),
           obs: toUpper(data.obs),
           contatos: data.contatos || [],
           pessoasContato: data.pessoasContato || [],
           vendedores_list: data.vendedores_list || [],
           // Campos de cobrança
+          enderecoCobrancaIgual: data.enderecoCobrancaIgual,
           endercobr: toUpper(data.enderecoCobrancaIgual
             ? data.endereco
             : data.endercobr),
@@ -469,6 +496,36 @@ export default function ClientFormModal({
           desconto: Number(data.desconto) || 0,
           // Local de Entrega - mapeia habilitarLocalEntrega para local_entrega no banco
           local_entrega: data.habilitarLocalEntrega === '1' ? 'S' : 'N',
+          // Formas de pagamento (IDs separados por vírgula) - salvas no JSON do campo contato
+          formaPagamento: data.formaPagamento || '',
+          // Dados de entrega (também gravados no JSON do campo contato)
+          tipoPessoaEntrega: data.tipoPessoaEntrega,
+          nomeEntrega: data.nomeEntrega,
+          emailEntrega: data.emailEntrega,
+          cepEntrega: data.cepEntrega,
+          enderecoEntrega: data.enderecoEntrega,
+          numeroEntrega: data.numeroEntrega,
+          complementoEntrega: data.complementoEntrega,
+          referenciaEntrega: data.referenciaEntrega,
+          bairroEntrega: data.bairroEntrega,
+          cidadeEntrega: data.cidadeEntrega,
+          ufEntrega: data.ufEntrega,
+          paisEntrega: data.paisEntrega,
+          iestEntrega: data.iestEntrega,
+          imunEntrega: data.imunEntrega,
+          suframaEntrega: data.suframaEntrega,
+          // Preço de Venda Kick Back (checkbox) -> coluna kickback 0/1 (igual ao Delphi)
+          kickback: data.precoVendaKickback ? 1 : 0,
+          // Desconto Aplicado (Preço de Venda no Delphi) -> coluna prvenda (códigos 0-7)
+          prvenda: data.precoVenda || '0',
+          // Bloquear Preço de Venda (checkbox) -> coluna bloquear_preco 'S'/'N' (igual ao Delphi)
+          bloquear_preco: data.benmd === 'S' ? 'S' : 'N',
+          // Hab. Suframa (Sim/Não) -> coluna habilitasuframa 'S'/'N' (igual ao Delphi)
+          habilitasuframa: data.habilitasuframa === 'S' ? 'S' : 'N',
+          // Vendedor principal -> coluna codvend (igual ao Delphi)
+          codvend: data.vendedores_list?.[0]?.sellerId || clientToEdit?.codvend || '',
+          // Ponto de referência -> coluna referencia
+          referencia: toUpper(data.referencia),
         } as Cliente;
 
         await updateCliente(clienteToUpdate);
@@ -491,7 +548,8 @@ export default function ClientFormModal({
           codcc: data.classeCliente || '',
           codigo_filial: 1,
           bairro: toUpper(data.bairro),
-          banco: String(data.banco || '').substring(0, 1),
+          // Banco gravado com offset -1 (convenção do Delphi: dbclien.banco = código_dbbanco_cobranca - 1)
+          banco: data.banco ? String((Number(data.banco) || 1) - 1) : '',
           ender: toUpper(data.endereco),
           cidade: toUpper(data.cidade),
           uf: toUpper(data.uf),
@@ -504,13 +562,14 @@ export default function ClientFormModal({
           isuframa: toUpper(data.suframa),
           status: data.credito === 'S' ? '1' : '2',
           icms: data.icms || 'N',
-          atraso: Number(data.diasAtraso) || 0,
+          atraso: data.aceitaAtraso ? (Number(data.diasAtraso) || 0) : 0,
           faixafin: toUpper(data.faixaFinanceira),
           obs: toUpper(data.obs),
           contatos: data.contatos || [],
           pessoasContato: data.pessoasContato || [],
           vendedores_list: data.vendedores_list || [],
           // Campos de cobrança
+          enderecoCobrancaIgual: data.enderecoCobrancaIgual,
           endercobr: toUpper(data.enderecoCobrancaIgual
             ? data.endereco
             : data.endercobr),
@@ -534,6 +593,36 @@ export default function ClientFormModal({
           desconto: Number(data.desconto) || 0,
           // Local de Entrega - mapeia habilitarLocalEntrega para local_entrega no banco
           local_entrega: data.habilitarLocalEntrega === '1' ? 'S' : 'N',
+          // Formas de pagamento (IDs separados por vírgula) - salvas no JSON do campo contato
+          formaPagamento: data.formaPagamento || '',
+          // Dados de entrega (também gravados no JSON do campo contato)
+          tipoPessoaEntrega: data.tipoPessoaEntrega,
+          nomeEntrega: data.nomeEntrega,
+          emailEntrega: data.emailEntrega,
+          cepEntrega: data.cepEntrega,
+          enderecoEntrega: data.enderecoEntrega,
+          numeroEntrega: data.numeroEntrega,
+          complementoEntrega: data.complementoEntrega,
+          referenciaEntrega: data.referenciaEntrega,
+          bairroEntrega: data.bairroEntrega,
+          cidadeEntrega: data.cidadeEntrega,
+          ufEntrega: data.ufEntrega,
+          paisEntrega: data.paisEntrega,
+          iestEntrega: data.iestEntrega,
+          imunEntrega: data.imunEntrega,
+          suframaEntrega: data.suframaEntrega,
+          // Preço de Venda Kick Back (checkbox) -> coluna kickback 0/1 (igual ao Delphi)
+          kickback: data.precoVendaKickback ? 1 : 0,
+          // Desconto Aplicado (Preço de Venda no Delphi) -> coluna prvenda (códigos 0-7)
+          prvenda: data.precoVenda || '0',
+          // Bloquear Preço de Venda (checkbox) -> coluna bloquear_preco 'S'/'N' (igual ao Delphi)
+          bloquear_preco: data.benmd === 'S' ? 'S' : 'N',
+          // Hab. Suframa (Sim/Não) -> coluna habilitasuframa 'S'/'N' (igual ao Delphi)
+          habilitasuframa: data.habilitasuframa === 'S' ? 'S' : 'N',
+          // Vendedor principal -> coluna codvend (igual ao Delphi)
+          codvend: data.vendedores_list?.[0]?.sellerId || '',
+          // Ponto de referência -> coluna referencia
+          referencia: toUpper(data.referencia),
         } as Cliente;
 
         const resultado = await insertCliente(clienteToInsert);
@@ -939,7 +1028,9 @@ export default function ClientFormModal({
                                     ? (String(fullCliente.sit_tributaria).trim() as '1' | '2' | '3' | '4')
                                     : null,
                                   tipoEmpresa:
-                                    (String(fullCliente.tipoemp || '').trim() as 'EPP' | 'ME' | 'NL' | 'PF') || null,
+                                    (String(fullCliente.tipoemp || '').trim() as
+                  | 'EPP' | 'EP' | 'EF' | 'ME' | 'NL' | 'PF'
+                  | 'MEI' | 'EI' | 'LTDA' | 'SLU' | 'S/S' | 'S/A' | 'MGP') || null,
                                   inscricaoEstadual:
                                     fullCliente.iest === 'ISENTO'
                                       ? 'ISENTO'
@@ -974,12 +1065,15 @@ export default function ClientFormModal({
                                   diasAtraso: String(fullCliente.atraso || '0'),
                                   icms: (fullCliente.icms as 'S' | 'N') || 'N',
                                   faixaFinanceira: fullCliente.faixafin || '',
-                                  banco: Number(fullCliente.banco) || undefined,
+                                  // Banco lido com offset +1 (convenção do Delphi)
+              banco: (fullCliente.banco == null || String(fullCliente.banco).trim() === '') ? undefined : Number(fullCliente.banco) + 1,
                                   formaPagamento: fullCliente.formaPagamento || '',
                                   // Endereço de cobrança
                                   enderecoCobrancaIgual:
-                                    fullCliente.ender === fullCliente.endercobr &&
-                                    fullCliente.cep === fullCliente.cepcobr,
+                                    typeof fullCliente.cobrancaIgual === 'boolean'
+                                      ? fullCliente.cobrancaIgual
+                                      : (fullCliente.ender === fullCliente.endercobr &&
+                                         fullCliente.cep === fullCliente.cepcobr),
                                   endercobr: fullCliente.endercobr || '',
                                   numerocobr: fullCliente.numerocobr || '',
                                   bairrocobr: fullCliente.bairrocobr || '',
@@ -1007,6 +1101,14 @@ export default function ClientFormModal({
                                   habilitarLocalEntrega: fullCliente.local_entrega === 'S' || fullCliente.local_entrega === '1' ? '1' : '0',
                                   acrescimo: String(fullCliente.acrescimo || 0),
                                   desconto: String(fullCliente.desconto || 0),
+                                  precoVendaKickback: (Number(fullCliente.kickback) || 0) >= 1,
+                                  precoVenda: String(fullCliente.prvenda ?? '0'),
+                                  // Bloquear Preço de Venda (coluna bloquear_preco 'S'/'N')
+                                  benmd: fullCliente.bloquear_preco === 'S' ? 'S' : 'N',
+                                  // Hab. Suframa (coluna habilitasuframa 'S'/'N')
+                                  habilitasuframa: fullCliente.habilitasuframa === 'S' ? 'S' : 'N',
+                                  // Ponto de referência principal (coluna referencia)
+                                  referencia: fullCliente.referencia || '',
                                   obs: (fullCliente.obs || '').substring(
                                     0,
                                     500,

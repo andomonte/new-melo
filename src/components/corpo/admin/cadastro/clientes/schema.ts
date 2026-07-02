@@ -50,10 +50,13 @@ export const clientSchema = z.object({
   ),
   tipoEmpresa: z.preprocess(
     (val) => (val === null || val === '' ? undefined : val),
-    z.enum(['EPP', 'EP', 'ME', 'NL', 'PF', 'EF'], {
-      required_error: 'Tipo de empresa é obrigatório',
-      invalid_type_error: 'Tipo de empresa é obrigatório',
-    }),
+    z.enum(
+      ['EPP', 'EP', 'EF', 'ME', 'NL', 'PF', 'MEI', 'EI', 'LTDA', 'SLU', 'S/S', 'S/A', 'MGP'],
+      {
+        required_error: 'Tipo de empresa é obrigatório',
+        invalid_type_error: 'Tipo de empresa é obrigatório',
+      },
+    ),
   ),
   classeCliente: z.string({ required_error: 'Classe de cliente é obrigatória' }).min(1, 'Classe de cliente é obrigatória'),
 
@@ -207,9 +210,10 @@ export const clientSchema = z.object({
     z.string({ required_error: 'Preço de venda é obrigatório' }).min(1, 'Preço de venda é obrigatório'),
   ),
   kickback: z.union([z.string(), z.number()]).optional().nullable(),
-  precoVendaKickback: z.union([z.string(), z.number()]).optional().nullable(),
+  precoVendaKickback: z.union([z.boolean(), z.string(), z.number()]).optional().nullable(),
   descontoAplicado: z.enum(['S', 'N']).optional().nullable(),
   benmd: z.enum(['S', 'N']).optional().nullable(), // Bloqueio de preço de venda
+  habilitasuframa: z.enum(['S', 'N']).optional().nullable(), // Hab. Suframa (Sim/Não no Delphi)
   habilitarLocalEntrega: z.enum(['0', '1']).optional().nullable(),
 }).superRefine((data, ctx) => {
   // Inscrições: obrigatório preencher OU marcar isento

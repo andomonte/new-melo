@@ -1,5 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPool } from '@/lib/pgClient';
+
+// Converte 'MM/YYYY' para 'MMM/AAAA' em português (ex.: '12/2014' -> 'DEZ/2014'), igual ao Delphi.
+const MESES_ABREV = [
+  'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
+  'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ',
+];
+function formatarPeriodo(periodo: string): string {
+  if (!periodo || !periodo.includes('/')) return periodo || '-';
+  const [mm, yyyy] = periodo.split('/');
+  const idx = parseInt(mm, 10) - 1;
+  if (idx < 0 || idx > 11) return periodo;
+  return `${MESES_ABREV[idx]}/${yyyy}`;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -20,7 +33,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Filial não especificada' });
   }
 
-  const pool = getPgPool();
+  const pool = getPgPool(filial);
 
   try {
     // Buscar dados principais do cliente
@@ -72,17 +85,19 @@ export default async function handler(
     }
 
     // Buscar última compra
+    // Fonte: DBFATURA (tipodoc='V'), igual ao Delphi. A NF é o CODFAT e o valor é TOTALNF.
     let ultimaCompra = { nf: '-', data: '-', valor_total: 0 };
     try {
       const ultimaCompraQuery = `
-        SELECT 
-          nronf as nf,
+        SELECT
+          codfat as nf,
           TO_CHAR(data, 'DD/MM/YYYY') as data,
-          COALESCE(total, 0) as valor_total
-        FROM dbvenda
-        WHERE codcli = $1 
+          COALESCE(totalnf, 0) as valor_total
+        FROM dbfatura
+        WHERE codcli = $1
+          AND tipodoc = 'V'
           AND (cancel IS NULL OR cancel = 'N')
-        ORDER BY data DESC
+        ORDER BY data DESC, codfat DESC
         LIMIT 1
       `;
       const ultimaCompraResult = await pool.query(ultimaCompraQuery, [id]);
@@ -91,19 +106,19 @@ export default async function handler(
       console.error('Erro ao buscar última compra:', err);
     }
 
-    // Buscar maior compra em 12 meses
+    // Buscar maior compra (todo o histórico, igual ao Delphi)
     let maiorCompra = { nf: '-', data: '-', valor_total: 0 };
     try {
       const maiorCompraQuery = `
-        SELECT 
-          nronf as nf,
+        SELECT
+          codfat as nf,
           TO_CHAR(data, 'DD/MM/YYYY') as data,
-          COALESCE(total, 0) as valor_total
-        FROM dbvenda
-        WHERE codcli = $1 
+          COALESCE(totalnf, 0) as valor_total
+        FROM dbfatura
+        WHERE codcli = $1
+          AND tipodoc = 'V'
           AND (cancel IS NULL OR cancel = 'N')
-          AND data >= CURRENT_DATE - INTERVAL '12 months'
-        ORDER BY total DESC
+        ORDER BY totalnf DESC, codfat ASC
         LIMIT 1
       `;
       const maiorCompraResult = await pool.query(maiorCompraQuery, [id]);
@@ -112,65 +127,83 @@ export default async function handler(
       console.error('Erro ao buscar maior compra:', err);
     }
 
-    // Buscar maior atraso
+    // Buscar maior acumulado: mês (MM/AAAA) com maior soma faturada.
+    // Igual ao Delphi: agrupa DBFATURA (tipodoc='V') por mês e pega o de maior total.
     let maiorAtraso = { periodo: '-', valor_total_acumulado: 0 };
     try {
       const maiorAtrasoQuery = `
-        SELECT 
-          TO_CHAR(dt_venc, 'MM/YYYY') as periodo,
-          COALESCE(SUM(valor_rec), 0) as valor_total_acumulado
-        FROM dbreceb
-        WHERE codcli = $1 
-          AND (rec IS NULL OR rec = 'N')
-          AND (cancel IS NULL OR cancel = 'N')
-          AND dt_venc < CURRENT_DATE
-        GROUP BY TO_CHAR(dt_venc, 'MM/YYYY')
+        SELECT TO_CHAR(data, 'MM/YYYY') AS periodo,
+               COALESCE(SUM(totalnf), 0) AS valor_total_acumulado
+        FROM (
+          SELECT DISTINCT codfat, data, totalnf
+          FROM dbfatura
+          WHERE codcli = $1 AND tipodoc = 'V'
+        ) s
+        GROUP BY TO_CHAR(data, 'MM/YYYY')
         ORDER BY valor_total_acumulado DESC
         LIMIT 1
       `;
       const maiorAtrasoResult = await pool.query(maiorAtrasoQuery, [id]);
-      maiorAtraso = maiorAtrasoResult.rows[0] || maiorAtraso;
+      if (maiorAtrasoResult.rows[0]) {
+        maiorAtraso = {
+          periodo: formatarPeriodo(maiorAtrasoResult.rows[0].periodo),
+          valor_total_acumulado: maiorAtrasoResult.rows[0].valor_total_acumulado,
+        };
+      }
     } catch (err) {
-      console.error('Erro ao buscar maior atraso:', err);
+      console.error('Erro ao buscar maior acumulado:', err);
     }
 
-    // Buscar todos os títulos em aberto
+    // Buscar todos os títulos em aberto.
+    // Igual ao Delphi: apenas dbreceb com tipo IN ('F','S','G','T'), não cancelado e não recebido.
+    // O saldo em aberto de cada título é (valor_pgto - valor_rec).
     let titulosResult: any = { rows: [] };
-    let valorTotalReceber = 0;
-    let valorTotalVencido = 0;
-
     try {
       const titulosQuery = `
-        SELECT 
+        SELECT
           COALESCE(nro_doc, '') as documento,
           COALESCE(cod_conta, '') as cod_receita,
           TO_CHAR(dt_emissao, 'DD/MM/YYYY') as dt_emissao,
           TO_CHAR(dt_venc, 'DD/MM/YYYY') as dt_venc,
-          COALESCE(valor_rec, 0) as valor,
-          CASE 
+          COALESCE(valor_pgto, 0) - COALESCE(valor_rec, 0) as valor,
+          CASE
             WHEN dt_venc < CURRENT_DATE THEN (CURRENT_DATE - dt_venc)
             ELSE 0
           END as atraso
         FROM dbreceb
-        WHERE codcli = $1 
-          AND (rec IS NULL OR rec = 'N')
-          AND (cancel IS NULL OR cancel = 'N')
+        WHERE codcli = $1
+          AND COALESCE(rec, 'N') = 'N'
+          AND COALESCE(cancel, 'N') = 'N'
+          AND tipo IN ('F', 'S', 'G', 'T')
         ORDER BY dt_venc ASC
       `;
       titulosResult = await pool.query(titulosQuery, [id]);
-
-      // Calcular valor total a receber
-      valorTotalReceber = titulosResult.rows.reduce(
-        (sum: number, t: any) => sum + parseFloat(t.valor || '0'),
-        0,
-      );
-
-      // Calcular valor total vencido
-      valorTotalVencido = titulosResult.rows
-        .filter((t: any) => parseInt(t.atraso || '0') > 0)
-        .reduce((sum: number, t: any) => sum + parseFloat(t.valor || '0'), 0);
     } catch (err) {
       console.error('Erro ao buscar títulos:', err);
+    }
+
+    // Valor total a receber e vencido — fórmula idêntica à SP do Delphi:
+    // SUM(valor_pgto - valor_rec), zerando quando negativo.
+    let valorTotalReceber = 0;
+    let valorTotalVencido = 0;
+    try {
+      const totaisQuery = `
+        SELECT
+          GREATEST(COALESCE(SUM(valor_pgto - valor_rec), 0), 0) AS receber,
+          GREATEST(COALESCE(SUM(
+            CASE WHEN dt_venc < CURRENT_DATE THEN (valor_pgto - valor_rec) ELSE 0 END
+          ), 0), 0) AS vencido
+        FROM dbreceb
+        WHERE codcli = $1
+          AND COALESCE(rec, 'N') = 'N'
+          AND COALESCE(cancel, 'N') = 'N'
+          AND tipo IN ('F', 'S', 'G', 'T')
+      `;
+      const totais = await pool.query(totaisQuery, [id]);
+      valorTotalReceber = parseFloat(totais.rows[0]?.receber || 0);
+      valorTotalVencido = parseFloat(totais.rows[0]?.vencido || 0);
+    } catch (err) {
+      console.error('Erro ao calcular totais a receber/vencido:', err);
     }
 
     // Calcular saldo disponível
@@ -191,7 +224,11 @@ export default async function handler(
       dataCadastro,
       classe: cliente.codcc || '-',
       banco: cliente.banco || '-',
-      status: cliente.status === 'S' ? 'CRÉDITO AUTORIZADO' : 'SEM CRÉDITO',
+      // Status de crédito: coluna status '1' = autorizado, '2' = não autorizado (igual ao Delphi)
+      status:
+        String(cliente.status).trim() === '1'
+          ? 'CRÉDITO AUTORIZADO'
+          : 'CRÉDITO NÃO AUTORIZADO',
 
       acrescimo: parseFloat(cliente.acrescimo || 0),
       desconto: parseFloat(cliente.desconto || 0),

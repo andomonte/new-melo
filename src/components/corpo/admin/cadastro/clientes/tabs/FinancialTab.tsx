@@ -21,7 +21,10 @@ import {
   FileText,
   AlertTriangle,
   TrendingUp,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ComprasMes {
   data: string;
@@ -413,26 +416,55 @@ export function FinancialTab() {
                   : [...selecionadas, id];
                 field.onChange(novas.join(','));
               };
+              const labelsSelecionados = formasPagamento
+                .filter((fp) => selecionadas.includes(fp.id))
+                .map((fp) => fp.descricao)
+                .join(', ');
               return (
-                <div className="max-h-24 overflow-y-auto border border-gray-300 dark:border-zinc-600 rounded p-1.5 space-y-0.5">
-                  {loadingFormasPgto ? (
-                    <p className="text-[10px] text-gray-400">Carregando...</p>
-                  ) : formasPagamento.length === 0 ? (
-                    <p className="text-[10px] text-gray-400">Nenhuma forma encontrada</p>
-                  ) : (
-                    formasPagamento.map((fp) => (
-                      <label key={fp.id} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 rounded px-1 py-0.5">
-                        <input
-                          type="checkbox"
-                          checked={selecionadas.includes(fp.id)}
-                          onChange={() => toggleForma(fp.id)}
-                          className="w-3 h-3 text-blue-600 border-gray-300 rounded"
-                        />
-                        <span className="text-[11px] text-gray-700 dark:text-gray-200">{fp.id} - {fp.descricao}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between gap-2 border border-gray-300 dark:border-zinc-600 rounded px-2 py-2 text-left text-xs bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                    >
+                      <span className={`truncate ${selecionadas.length ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400'}`}>
+                        {selecionadas.length === 0 ? 'Selecione as formas de pagamento' : labelsSelecionados}
+                      </span>
+                      <span className="flex items-center gap-1 shrink-0">
+                        {selecionadas.length > 0 && (
+                          <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5">
+                            {selecionadas.length}
+                          </span>
+                        )}
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-1 max-h-60 overflow-y-auto">
+                    {loadingFormasPgto ? (
+                      <p className="text-xs text-gray-400 p-2">Carregando...</p>
+                    ) : formasPagamento.length === 0 ? (
+                      <p className="text-xs text-gray-400 p-2">Nenhuma forma encontrada</p>
+                    ) : (
+                      formasPagamento.map((fp) => {
+                        const marcado = selecionadas.includes(fp.id);
+                        return (
+                          <button
+                            key={fp.id}
+                            type="button"
+                            onClick={() => toggleForma(fp.id)}
+                            className="w-full flex items-center gap-2 text-left rounded px-2 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-zinc-700"
+                          >
+                            <span className={`flex items-center justify-center w-4 h-4 rounded border ${marcado ? 'bg-blue-600 border-blue-600' : 'border-gray-300 dark:border-zinc-500'}`}>
+                              {marcado && <Check className="w-3 h-3 text-white" />}
+                            </span>
+                            <span className="text-gray-700 dark:text-gray-200">{fp.id} - {fp.descricao}</span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </PopoverContent>
+                </Popover>
               );
             }}
           />

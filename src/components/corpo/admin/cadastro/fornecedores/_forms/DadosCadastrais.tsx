@@ -67,6 +67,8 @@ interface DadosCadastraisProps {
     option: CadFornecedorSearchOptions,
     value: string,
   ) => void;
+  /** Chamado ao sair do campo CNPJ/CPF — busca duplicidade e auto-preenche */
+  onDocumentoBlur?: () => void;
 }
 
 const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
@@ -77,6 +79,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   disableFields,
   options,
   handleSearchOptionsChange,
+  onDocumentoBlur,
 }) => {
   const [resultCep, setResultCep] = useState<ViaCepResponse>(
     {} as ViaCepResponse,
@@ -138,7 +141,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
 
   const paisesOptions = options.paises?.data?.map((pais) => ({
     value: pais.codpais,
-    label: pais.descricao,
+    label: `${pais.codpais} - ${pais.descricao}`,
   }));
 
   useEffect(() => {
@@ -148,6 +151,9 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
     if (resultCep.localidade)
       handleFornecedorChange('cidade', resultCep.localidade);
     if (resultCep.uf) handleFornecedorChange('uf', resultCep.uf);
+    // CEP válido = endereço no Brasil → preenche o País (Brasil = 1058), igual ao cliente
+    if (resultCep.uf || resultCep.localidade)
+      handleFornecedorChange('codpais', 1058);
   }, [resultCep, handleFornecedorChange]);
 
   // Validar município x UF sempre que um deles mudar
@@ -189,7 +195,10 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
               defaultValue={fornecedor.cpf_cgc || ''}
               onChange={(e) => handleFornecedorChange('cpf_cgc', e.target.value)}
-              onBlur={(e) => fornecedor.tipo !== 'X' ? validarCnpjCpf(e.target.value) : undefined}
+              onBlur={(e) => {
+                if (fornecedor.tipo !== 'X') validarCnpjCpf(e.target.value);
+                onDocumentoBlur?.();
+              }}
               error={fornecedor.tipo !== 'X' ? (cnpjCpfError || error?.cpf_cgc) : undefined}
               required
               disabled={fornecedor.tipo === 'X'}

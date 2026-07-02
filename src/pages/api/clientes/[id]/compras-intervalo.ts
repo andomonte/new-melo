@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { parseCookies } from 'nookies';
+import { getPgPool } from '@/lib/pgClient';
 
+/**
+ * Consulta de compras por período (igual ao Delphi "Consulta Intervalo de Comprar").
+ * Lê de dbvenda, apenas não canceladas, no intervalo de datas.
+ * Mostra codvenda, total, data e status/tipo decodificados.
+ */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -9,47 +15,54 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { id } = req.query;
-  const { dataInicio, dataFim } = req.query;
+  const { id, dataInicio, dataFim } = req.query;
+  const cookies = parseCookies({ req });
+  const filial = cookies.filial_melo;
 
+  if (!filial) {
+    return res.status(400).json({ error: 'Filial não informada no cookie' });
+  }
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'ID do cliente é obrigatório' });
   }
-
   if (!dataInicio || !dataFim) {
     return res
       .status(400)
       .json({ error: 'Data início e data fim são obrigatórias' });
   }
 
-  const pool = getPgPool();
+  const pool = getPgPool(filial);
 
   try {
-    // Buscar compras do cliente no período
+    // Igual ao Delphi: dbvenda, cancel='N', no intervalo (comparando só a data).
+    // Sem filtro por tipo (as vendas usam tipo 'P'/'1'/'C', não 'V'/'O').
     const query = `
-      SELECT 
-        nronf as nf,
+      SELECT
+        codvenda,
+        nronf,
         data,
-        total as "valorTotal",
-        CASE 
-          WHEN cancel = 'S' THEN 'Cancelada'
-          ELSE 'Concluída'
-        END as status
+        COALESCE(total, 0) AS "valorTotal",
+        CASE status
+          WHEN 'F' THEN 'Faturado'
+          WHEN 'B' THEN 'Bloqueado'
+          WHEN 'L' THEN 'Liberado'
+          ELSE status
+        END AS status
       FROM dbvenda
       WHERE codcli = $1
-        AND data >= $2
-        AND data <= $3
-        AND tipo IN ('V', 'O')
+        AND COALESCE(cancel, 'N') = 'N'
+        AND data::date BETWEEN $2::date AND $3::date
       ORDER BY data DESC
     `;
 
     const result = await pool.query(query, [id, dataInicio, dataFim]);
 
     const compras = result.rows.map((row) => ({
-      nf: row.nf || 'S/N',
+      // No Delphi esta tela identifica a venda pelo codvenda (nronf normalmente é nulo)
+      nf: row.nronf || row.codvenda || 'S/N',
       data: row.data ? new Date(row.data).toLocaleDateString('pt-BR') : '-',
       valorTotal: parseFloat(row.valorTotal || 0),
-      status: row.status,
+      status: row.status || '-',
     }));
 
     return res.status(200).json({ compras });

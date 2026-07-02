@@ -400,45 +400,24 @@ export function CommercialTab() {
           />
         </div>
 
-        {/* Kickback */}
-        <div>
-          <Label>Kickback (%)</Label>
-          <Input
-            {...register('kickback')}
-            type="text"
-            placeholder="0,00"
-          />
-        </div>
-
-        {/* Preço Venda Kick Back */}
-        <div>
-          <Label>Preço Venda Kick Back</Label>
-          <Input
-            {...register('precoVendaKickback')}
-            type="text"
-            placeholder="0,00"
-          />
-        </div>
-
-        {/* Preço de Venda (flag S/N) */}
-        <div>
-          <Label>Preço de Venda</Label>
+        {/* Preço de Venda Kick Back (booleano — coluna KICKBACK 0/1, igual ao Delphi) */}
+        <div className="flex items-center gap-2 mt-6">
           <Controller
             control={control}
-            name="descontoAplicado"
+            name="precoVendaKickback"
             render={({ field }) => (
-              <SelectPadrao
-                value={field.value || 'N'}
-                onValueChange={field.onChange}
-                placeholder="Selecione"
-                options={[
-                  { value: 'S', label: 'Sim' },
-                  { value: 'N', label: 'Não' },
-                ]}
+              <Checkbox
+                checked={field.value === true || field.value === 1 || field.value === '1'}
+                onCheckedChange={(checked) => field.onChange(!!checked)}
+                id="chk-preco-venda-kickback"
               />
             )}
           />
+          <Label htmlFor="chk-preco-venda-kickback" className="font-normal cursor-pointer">
+            Preço de Venda Kick Back
+          </Label>
         </div>
+
 
         {/* Bloqueio de Preço */}
         <div className="flex items-center gap-2 mt-6">

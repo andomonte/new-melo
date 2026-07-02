@@ -113,6 +113,7 @@ export default async function handle(
     // Extrair formas de pagamento e dados de entrega do JSON contato
     let formasPagamentoSalvas: string[] = [];
     let entregaDados: any = {};
+    let cobrancaIgualSalva: boolean | null = null;
     try {
       const contatoObj = typeof cliente.contato === 'string' ? JSON.parse(cliente.contato) : cliente.contato;
       if (contatoObj?.formasPagamento && Array.isArray(contatoObj.formasPagamento)) {
@@ -120,6 +121,9 @@ export default async function handle(
       }
       if (contatoObj?.entrega) {
         entregaDados = contatoObj.entrega;
+      }
+      if (typeof contatoObj?.cobrancaIgual === 'boolean') {
+        cobrancaIgualSalva = contatoObj.cobrancaIgual;
       }
     } catch {}
 
@@ -129,6 +133,7 @@ export default async function handle(
       contatos: JSON.stringify(contatosList),
       vendedores_list: vendedoresList,
       formaPagamento: formasPagamentoSalvas.join(','),
+      cobrancaIgual: cobrancaIgualSalva,
       tipoPessoaEntrega: entregaDados.tipoPessoa || '',
       nomeEntrega: entregaDados.nome || '',
       emailEntrega: entregaDados.email || '',

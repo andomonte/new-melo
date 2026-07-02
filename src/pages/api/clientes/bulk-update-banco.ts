@@ -56,12 +56,15 @@ export default async function handle(
       return res.status(400).json({ error: 'Banco não encontrado' });
     }
 
+    // Convenção do Delphi: dbclien.banco é gravado como (código_dbbanco_cobranca - 1)
+    const bancoParaSalvar = String((Number(banco) || 1) - 1);
+
     // Atualizar os clientes em lote
     const updateResult = await client.query(
-      `UPDATE dbclien 
+      `UPDATE dbclien
        SET banco = $1
        WHERE codcli = ANY($2::text[])`,
-      [banco, clienteCodes],
+      [bancoParaSalvar, clienteCodes],
     );
 
     await client.query('COMMIT');

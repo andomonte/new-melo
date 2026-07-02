@@ -9,9 +9,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileDown, Eye } from 'lucide-react';
+import { Loader2, FileDown, Eye, CreditCard } from 'lucide-react';
 import { Cliente } from '@/data/clientes/clientes';
 import { useToast } from '@/hooks/use-toast';
+import { CreditoTemporarioModal } from '@/components/corpo/admin/cadastro/clientes/creditoTemporario/CreditoTemporarioModal';
 
 interface Titulo {
   documento: string;
@@ -79,6 +80,7 @@ export function ClientZoomModal({
   const [loading, setLoading] = useState(false);
   const [dadosZoom, setDadosZoom] = useState<DadosZoom | null>(null);
   const [showAllTitles, setShowAllTitles] = useState(false);
+  const [showCredTemp, setShowCredTemp] = useState(false);
   const { toast } = useToast();
 
   const fetchDadosZoom = useCallback(async () => {
@@ -229,12 +231,12 @@ export function ClientZoomModal({
                           </span>
                           <span
                             className={`ml-2 font-semibold ${
-                              dadosZoom?.status?.includes('AUTORIZADO')
+                              dadosZoom?.status === 'CRÉDITO AUTORIZADO'
                                 ? 'text-green-600 dark:text-green-400'
                                 : 'text-red-600 dark:text-red-400'
                             }`}
                           >
-                            {dadosZoom?.status || 'SEM CRÉDITO'}
+                            {dadosZoom?.status || 'CRÉDITO NÃO AUTORIZADO'}
                           </span>
                         </div>
                       </div>
@@ -591,7 +593,15 @@ export function ClientZoomModal({
         </div>
 
         {/* Rodapé fixo */}
-        <div className="flex justify-end px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-zinc-800">
+        <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-zinc-800">
+          <Button
+            variant="outline"
+            onClick={() => setShowCredTemp(true)}
+            className="bg-white dark:bg-zinc-700 hover:bg-gray-100 dark:hover:bg-zinc-600"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Crédito Temporário
+          </Button>
           <Button
             variant="outline"
             onClick={onClose}
@@ -601,6 +611,15 @@ export function ClientZoomModal({
           </Button>
         </div>
       </div>
+
+      {/* Modal Crédito Temporário (pré-seleciona o cliente do Zoom) */}
+      <CreditoTemporarioModal
+        isOpen={showCredTemp}
+        onClose={() => setShowCredTemp(false)}
+        clientePreselecionado={
+          cliente ? { codcli: cliente.codcli, nome: cliente.nome || '' } : null
+        }
+      />
     </div>
   );
 }

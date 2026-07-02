@@ -452,12 +452,21 @@ export function RegistrationTab({
                 placeholder="Selecione"
                 required
                 options={[
+                  // Opções já existentes (mantidas)
                   { value: 'EPP', label: 'EPP - Empresa de Pequeno Porte' },
                   { value: 'EP', label: 'EP - Empresa de Pequeno Porte' },
                   { value: 'EF', label: 'EF - Empresa Filial' },
                   { value: 'ME', label: 'ME - Microempresa' },
                   { value: 'NL', label: 'NL - Normal' },
                   { value: 'PF', label: 'PF - Pessoa Física' },
+                  // Tipos de empresa adicionados
+                  { value: 'MEI', label: 'MEI - Microempreendedor Individual' },
+                  { value: 'EI', label: 'EI - Empresário Individual' },
+                  { value: 'LTDA', label: 'LTDA - Sociedade Limitada' },
+                  { value: 'SLU', label: 'SLU - Sociedade Limitada Unipessoal' },
+                  { value: 'S/S', label: 'S/S - Sociedade Simples' },
+                  { value: 'S/A', label: 'S/A - Sociedade Anônima' },
+                  { value: 'MGP', label: 'MGP - Empresa de Médio e Grande Porte' },
                 ]}
               />
             )}
@@ -596,6 +605,38 @@ export function RegistrationTab({
             {...register('suframa')}
             disabled={isentoSuframa}
             className={isentoSuframa ? 'bg-gray-100 text-gray-500' : ''}
+          />
+        </div>
+
+        {/* Hab. Suframa (igual ao Delphi: HAB.SUFRAMA Sim/Não -> coluna habilitasuframa 'S'/'N') */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Hab. Suframa</Label>
+            {/* espaço invisível para alinhar a altura com os campos "Isento" ao lado */}
+            <span
+              className="text-xs font-normal text-transparent select-none"
+              aria-hidden="true"
+            >
+              Isento
+            </span>
+          </div>
+          <Controller
+            control={control}
+            name="habilitasuframa"
+            render={({ field }) => (
+              <Select
+                value={field.value === 'S' ? 'S' : 'N'}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="S">Sim</SelectItem>
+                  <SelectItem value="N">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           />
         </div>
       </div>
