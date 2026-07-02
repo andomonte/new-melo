@@ -75,6 +75,24 @@ export const cadastroTransportadoraSchema = z.object({
   banco: optionalStringField(20, 'Banco').optional(),
   n_agencia: optionalStringField(6, 'Número da agência').optional(),
   cod_ident: optionalStringField(5, 'Código de identificação').optional(),
+}).superRefine((data, ctx) => {
+  // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
+  const tipo = (data as any).tipo || 'J';
+  const doc = String((data as any).cpfcgc || '').replace(/\D/g, '');
+  if (tipo === 'J' && doc.length !== 14) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Para Pessoa Jurídica, informe um CNPJ (14 dígitos).',
+      path: ['cpfcgc'],
+    });
+  }
+  if (tipo === 'F' && doc.length !== 11) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Para Pessoa Física, informe um CPF (11 dígitos).',
+      path: ['cpfcgc'],
+    });
+  }
 });
 
 // Schema mais flexível para edição que não valida todos os campos

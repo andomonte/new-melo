@@ -94,6 +94,22 @@ export const cadastroFornecedorSchema = z.object({
       path: ['codpais'],
     });
   }
+  // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
+  const doc = String((data as any).cpf_cgc || '').replace(/\D/g, '');
+  if (data.tipo === 'J' && doc.length !== 14) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Para Pessoa Jurídica, informe um CNPJ (14 dígitos).',
+      path: ['cpf_cgc'],
+    });
+  }
+  if (data.tipo === 'F' && doc.length !== 11) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Para Pessoa Física, informe um CPF (11 dígitos).',
+      path: ['cpf_cgc'],
+    });
+  }
 });
 
 // ✅ CORREÇÃO: Schema específico para edição - mais flexível com campos opcionais
@@ -188,6 +204,22 @@ export const edicaoFornecedorSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: 'Fornecedor exterior não pode ter Brasil como país',
       path: ['codpais'],
+    });
+  }
+  // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
+  const doc = String((data as any).cpf_cgc || '').replace(/\D/g, '');
+  if (data.tipo === 'J' && doc.length !== 14) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Para Pessoa Jurídica, informe um CNPJ (14 dígitos).',
+      path: ['cpf_cgc'],
+    });
+  }
+  if (data.tipo === 'F' && doc.length !== 11) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Para Pessoa Física, informe um CPF (11 dígitos).',
+      path: ['cpf_cgc'],
     });
   }
 });

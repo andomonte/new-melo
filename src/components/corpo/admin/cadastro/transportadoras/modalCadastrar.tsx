@@ -54,7 +54,7 @@ export default function CustomModal({
   // Sempre abrir o cadastro em branco (evita trazer dados de uma abertura anterior)
   useEffect(() => {
     if (isOpen) {
-      setTransportadora({} as Transportadora);
+      setTransportadora({ tipo: 'J' } as Transportadora);
       setErrors({});
       setActiveTab('dadosCadastrais');
       setShowDup(false);
@@ -98,7 +98,7 @@ export default function CustomModal({
   );
 
   const handleClear = () => {
-    setTransportadora({} as Transportadora);
+    setTransportadora({ tipo: 'J' } as Transportadora);
   };
 
   const setCampo = useCallback(
