@@ -57,6 +57,7 @@ import { TbCashRegister } from 'react-icons/tb';
 // Admin / Cadastros / etc.
 import DashBoard from '@/components/corpo/admin/dashBoard';
 import Clientes from '@/components/corpo/admin/cadastro/clientes';
+import CreditoTemporario from '@/components/corpo/admin/cadastro/clientes/creditoTemporario';
 import Fornecedores from '@/components/corpo/admin/cadastro/fornecedores';
 import Produtos from '@/components/corpo/admin/cadastro/produtos';
 import Vendedores from '@/components/corpo/admin/cadastro/vendedores';
@@ -199,16 +200,28 @@ export const menus = [
             corpo: Fornecedores,
           },
           {
-            name: 'Vendedores',
-            href: '/admin/cadastros/vendedores',
-            icon: SquareUserRoundIcon,
-            corpo: Vendedores,
-          },
-          {
             name: 'Transportadoras',
             href: '/admin/cadastros/transportadora',
             icon: Building2Icon,
             corpo: TransportadorasPage,
+          },
+          {
+            name: 'Produtos',
+            href: '/admin/cadastros/produtos',
+            icon: BoxesIcon,
+            corpo: Produtos,
+          },
+          {
+            name: 'Crédito Temporário',
+            href: '/admin/cadastros/creditoTemporario',
+            icon: CreditCardIcon,
+            corpo: CreditoTemporario,
+          },
+          {
+            name: 'Vendedores',
+            href: '/admin/cadastros/vendedores',
+            icon: SquareUserRoundIcon,
+            corpo: Vendedores,
           },
           {
             name: 'CFOP',
@@ -227,12 +240,6 @@ export const menus = [
             href: '/admin/cadastros/locais',
             icon: MapPin,
             corpo: LocaisPage,
-          },
-          {
-            name: 'Produtos',
-            href: '/admin/cadastros/produtos',
-            icon: BoxesIcon,
-            corpo: Produtos,
           },
           {
             name: 'Marcas',
