@@ -122,6 +122,9 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
         <table className="w-full text-xs">
           <thead className="bg-gray-50 dark:bg-zinc-800">
             <tr>
+              <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase w-24">
+                Código
+              </th>
               <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase">
                 Referência
               </th>
@@ -136,21 +139,26 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
           <tbody className="bg-white dark:bg-zinc-900 divide-y divide-gray-200 dark:divide-zinc-700">
             {carregando ? (
               <tr>
-                <td colSpan={3} className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={4} className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
                   Carregando referências...
                 </td>
               </tr>
             ) : referencias.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan={4} className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
                   Nenhuma referência cadastrada
                 </td>
               </tr>
             ) : (
               referencias.map((ref, index) => (
                 <tr key={ref.cod_id || ref.id || index} className="hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <td className="px-3 py-2">{ref.cod_id ?? '-'}</td>
                   <td className="px-3 py-2">{ref.referencia}</td>
-                  <td className="px-3 py-2">{ref.marca_nome || ref.codmarca || '-'}</td>
+                  <td className="px-3 py-2">
+                    {ref.codmarca
+                      ? `${ref.codmarca}${ref.marca_nome ? ' - ' + ref.marca_nome : ''}`
+                      : '-'}
+                  </td>
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
