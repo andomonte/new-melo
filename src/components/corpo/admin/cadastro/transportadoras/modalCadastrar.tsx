@@ -214,11 +214,11 @@ export default function CustomModal({
           const dupResp = await fetch(`/api/transportadoras/verificar-duplicidade?cpfcgc=${encodeURIComponent(transportadora.cpfcgc)}`);
           const dupData = await dupResp.json();
           if (dupData.existe) {
+            // Não bloqueia: transportadoras podem compartilhar o mesmo CNPJ
+            // (ex.: "CLIENTE RETIRA" usa o CNPJ da própria empresa). Apenas avisa.
             toast({
-              description: `CPF/CNPJ já cadastrado para a transportadora "${dupData.transportadora.nome}" (código: ${dupData.transportadora.codtransp}).`,
-              variant: 'destructive',
+              description: `Atenção: o CPF/CNPJ também está cadastrado na transportadora "${dupData.transportadora.nome}" (código: ${dupData.transportadora.codtransp}).`,
             });
-            return;
           }
         } catch (dupError) {
           console.error('Erro ao verificar duplicidade:', dupError);
