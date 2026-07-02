@@ -47,8 +47,8 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 dark:text-gray-200 font-bold">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
+          <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">
             Custo Referente a Lista de Fábrica
           </div>
           <FormInput
@@ -104,8 +104,8 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
             error={error?.precosnf}
           />
         </div>
-        <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 dark:text-gray-200 font-bold">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
+          <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">
             Custo Referente a Compra e Transferência
           </div>
           <FormInput
@@ -170,8 +170,8 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
             error={error?.prcusto}
           />
         </div>
-        <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 dark:text-gray-200 font-bold">Lista de Preço</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
+          <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">Lista de Preço</div>
           <FormInput
             name="prvenda"
             type="number"
@@ -253,8 +253,8 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
         </div>
 
         {/* Seção de Comissões */}
-        <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
+          <div className="col-span-2 flex items-center gap-2">
             <Checkbox
               checked={comissaoHabilitada}
               onCheckedChange={(checked) => {
@@ -313,8 +313,8 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
         </div>
 
         {/* Seção de Taxas de Câmbio Adicionais */}
-        <div className="flex flex-col gap-4 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4">
-          <div className="block text-gray-700 dark:text-gray-200 font-bold">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
+          <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">
             Taxas de Câmbio Adicionais
           </div>
           <FormInput
