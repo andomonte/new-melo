@@ -172,7 +172,7 @@ export default function DadosCadastrais({
               : 'CNPJ'}{' '}
             *
           </label>
-          <div className="flex items-center gap-1">
+          <div className="relative">
             <input
               type="text"
               id="cpfcgc"
@@ -189,7 +189,9 @@ export default function DadosCadastrais({
                 if (transportadora.tipo !== 'X') validarCpfCnpj(e.target.value);
                 onDocumentoBlur?.();
               }}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
+                transportadora.tipo === 'J' ? 'pr-[68px]' : ''
+              }`}
               maxLength={20}
               placeholder={
                 transportadora.tipo === 'F'
@@ -200,12 +202,12 @@ export default function DadosCadastrais({
               }
               required
             />
-            {transportadora.tipo !== 'X' && (
+            {transportadora.tipo === 'J' && (
               <button
                 type="button"
                 onClick={() => onDocumentoBlur?.()}
-                className="px-3 py-2 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-md whitespace-nowrap"
-                title="Buscar dados do documento (Receita Federal) e verificar duplicidade"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded"
+                title="Buscar dados do CNPJ na Receita Federal e verificar duplicidade"
               >
                 Buscar
               </button>

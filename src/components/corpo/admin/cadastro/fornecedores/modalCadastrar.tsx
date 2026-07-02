@@ -81,6 +81,17 @@ export default function CustomModal({
   const [dupMatches, setDupMatches] = useState<DocumentoMatch[]>([]);
   const [showDup, setShowDup] = useState(false);
 
+  // Sempre abrir o cadastro em branco (não traz dados de uma abertura anterior)
+  useEffect(() => {
+    if (isOpen) {
+      setFornecedor({} as Fornecedor);
+      setErrors({});
+      setActiveTab('dadosCadastrais');
+      setShowDup(false);
+      setDupMatches([]);
+    }
+  }, [isOpen]);
+
   const camposObrigatoriosPorAba: Record<string, string[]> = {
     dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'codpais', 'tipoemp', 'tipofornecedor', 'tipo'],
     dadosFinanceiros: ['regime_tributacao'],

@@ -196,34 +196,33 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             />
           </div>
           <div className={error?.cpf_cgc || cnpjCpfError ? 'field-error' : ''}>
-            <div className="flex items-end gap-1">
-              <div className="flex-1">
-                <FormInput
-                  name="cpf_cgc"
-                  type="text"
-                  label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
-                  value={fornecedor.cpf_cgc || ''}
-                  placeholder={fornecedor.tipo === 'F' ? '000.000.000-00' : fornecedor.tipo === 'X' ? 'Documento' : '00.000.000/0000-00'}
-                  onChange={(e) =>
-                    handleFornecedorChange(
-                      'cpf_cgc',
-                      formatarDocumento(e.target.value, fornecedor.tipo),
-                    )
-                  }
-                  onBlur={(e) => {
-                    if (fornecedor.tipo !== 'X') validarCnpjCpf(e.target.value);
-                    onDocumentoBlur?.();
-                  }}
-                  required
-                  disabled={fornecedor.tipo === 'X'}
-                />
-              </div>
-              {fornecedor.tipo !== 'X' && (
+            <div className="relative">
+              <FormInput
+                name="cpf_cgc"
+                type="text"
+                label={fornecedor.tipo === 'F' ? 'CPF' : fornecedor.tipo === 'X' ? 'Documento' : 'CNPJ'}
+                value={fornecedor.cpf_cgc || ''}
+                placeholder={fornecedor.tipo === 'F' ? '000.000.000-00' : fornecedor.tipo === 'X' ? 'Documento' : '00.000.000/0000-00'}
+                onChange={(e) =>
+                  handleFornecedorChange(
+                    'cpf_cgc',
+                    formatarDocumento(e.target.value, fornecedor.tipo),
+                  )
+                }
+                onBlur={(e) => {
+                  if (fornecedor.tipo !== 'X') validarCnpjCpf(e.target.value);
+                  onDocumentoBlur?.();
+                }}
+                required
+                disabled={fornecedor.tipo === 'X'}
+                className={fornecedor.tipo === 'J' ? 'pr-[68px]' : ''}
+              />
+              {fornecedor.tipo === 'J' && (
                 <button
                   type="button"
                   onClick={() => onDocumentoBlur?.()}
-                  className="mb-[1px] h-10 px-3 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-md whitespace-nowrap"
-                  title="Buscar dados do documento (Receita Federal) e verificar duplicidade"
+                  className="absolute right-1.5 bottom-1.5 px-2 py-1 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded"
+                  title="Buscar dados do CNPJ na Receita Federal e verificar duplicidade"
                 >
                   Buscar
                 </button>
