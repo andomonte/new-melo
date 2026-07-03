@@ -42,7 +42,7 @@ export default async function handle(
     const marcasQuery = `
       SELECT * FROM dbmarcas
       ${whereCondition}
-      ORDER BY codmarca
+      ORDER BY CAST(codmarca AS INTEGER) DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
     `;
 
