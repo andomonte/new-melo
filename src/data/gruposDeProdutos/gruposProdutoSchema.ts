@@ -315,16 +315,13 @@ export const grupoProdutoSchema = z.object({
 export const createGrupoProdutoSchema = grupoProdutoSchema
   .extend({
     // Código é gerado automaticamente no backend (igual ao Delphi) — opcional no formulário
-    codgpp: stringPreprocessor({ uppercase: true }).pipe(
-      z
-        .string()
-        .max(5, {
-          message:
-            'Código do grupo de produtos deve ter no máximo 5 caracteres.',
-        })
-        .optional()
-        .or(z.literal('')),
-    ),
+    codgpp: z
+      .string()
+      .max(5, {
+        message: 'Código do grupo de produtos deve ter no máximo 5 caracteres.',
+      })
+      .optional()
+      .or(z.literal('')),
   })
   .refine(
     (data) => {
