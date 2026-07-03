@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useContext } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { PlusIcon, Pencil, Trash2, CircleChevronDown } from 'lucide-react';
-import DataTableFiltro from '@/components/common/DataTableFiltro';
+import DataTablePadrao from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import { AuthContext } from '@/contexts/authContexts';
@@ -316,16 +316,13 @@ const GruposDeProdutosPage = () => {
           (coluna) => !['action', 'ações'].includes(coluna.toLowerCase()),
         );
 
-        const colunasDeDadosLimitadas = colunasAExibirNoDataTable.slice(
-          0,
-          limiteColunas,
-        );
-
         setColunasDbGpp(colunasAExibirNoDataTable);
-        setHeaders(colunasDeDadosLimitadas);
+        // Headers: coluna de ações + TODAS as colunas (a visibilidade é
+        // gerenciada internamente pelo DataTablePadrao / gerenciador de colunas)
+        setHeaders(['ações', ...colunasAExibirNoDataTable]);
       } else {
         setColunasDbGpp([]);
-        setHeaders([]);
+        setHeaders(['ações']);
       }
     } catch (error) {
       console.error('Erro ao buscar grupos de produtos:', error);
@@ -386,34 +383,6 @@ const GruposDeProdutosPage = () => {
   const handleCancelDelete = () => {
     setDeletarOpen(false);
     setCodgppDeletar(null);
-  };
-
-  const handleColunaSubstituida = (
-    colA: string,
-    colB: string,
-    tipo: 'swap' | 'replace' = 'replace',
-  ) => {
-    setHeaders((prev) => {
-      const novaOrdem = [...prev];
-      const indexA = novaOrdem.indexOf(colA);
-      const indexB = novaOrdem.indexOf(colB);
-
-      if (tipo === 'swap' && indexA !== -1 && indexB !== -1) {
-        [novaOrdem[indexA], novaOrdem[indexB]] = [
-          novaOrdem[indexB],
-          novaOrdem[indexA],
-        ];
-      } else if (tipo === 'replace' && indexA !== -1) {
-        const filteredHeaders = novaOrdem.filter((h) => h !== colB);
-        const actualIndexA = filteredHeaders.indexOf(colA);
-
-        if (actualIndexA !== -1) {
-          filteredHeaders[actualIndexA] = colB;
-        }
-        return filteredHeaders;
-      }
-      return novaOrdem;
-    });
   };
 
   useEffect(() => {
@@ -657,19 +626,12 @@ const GruposDeProdutosPage = () => {
       </div>
     );
 
-    // Popula as outras colunas da linha com os dados do grupo de produto, baseando-se nos headers restantes
-    headers.forEach((coluna) => {
-      if (coluna === 'ações') return;
-
-      if (coluna === 'CODGP_P') {
-        linha['CODGP_P'] = grupoProdutoItem.codgpp ?? '';
-      } else if (coluna === 'Descrição') {
-        linha['Descrição'] = grupoProdutoItem.descr ?? '';
-      } else if (coluna === 'Cod. Vendedor') {
-        linha['Cod. Vendedor'] = grupoProdutoItem.codvend ?? '';
-      } else {
-        linha[coluna] = (grupoProdutoItem as any)[coluna] ?? '';
-      }
+    // Popula TODAS as colunas de dados (a visibilidade é gerenciada pelo
+    // DataTablePadrao, então o valor precisa existir mesmo se a coluna
+    // estiver oculta no momento).
+    colunasDbGpp.forEach((coluna) => {
+      const valor = (grupoProdutoItem as any)[coluna];
+      linha[coluna] = valor ?? '';
     });
 
     return linha;
@@ -693,10 +655,14 @@ const GruposDeProdutosPage = () => {
             )}
           </div>
         </header>
-        <DataTableFiltro
+        <DataTablePadrao
+          screenKey="cadastro-grupos-produtos"
+          userName={user?.usuario}
           headers={headers}
           columnLabels={COLUNAS_GRUPO_LABELS}
           rows={rows || []}
+          semColunaDeAcaoPadrao={true}
+          nonsortableColumns={['ações']}
           meta={gruposProdutos.meta}
           onPageChange={(newPage) => {
             if (newPage !== page) setPage(newPage);
@@ -723,7 +689,6 @@ const GruposDeProdutosPage = () => {
               novoLimite.toString(),
             );
           }}
-          onColunaSubstituida={handleColunaSubstituida}
           carregando={false}
         />
       </main>

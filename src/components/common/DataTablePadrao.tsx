@@ -69,6 +69,8 @@ interface DataTablePadraoProps {
   limiteColunas?: number;
   onLimiteColunasChange?: (novoLimite: number) => void;
   customHeaderActions?: React.ReactNode;
+  /** Rótulos customizados por coluna (override do mapa global obterNomeAmigavel) */
+  columnLabels?: Record<string, string>;
 }
 
 export default function DataTablePadrao({
@@ -102,9 +104,12 @@ export default function DataTablePadrao({
   limiteColunas,
   onLimiteColunasChange,
   customHeaderActions,
+  columnLabels,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
+  // Rótulo da coluna: usa override por-tela se houver, senão o mapa global
+  const rotulo = (h: string) => columnLabels?.[h] ?? obterNomeAmigavel(h);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -526,7 +531,7 @@ export default function DataTablePadrao({
                       onClick={() => sortable && handleSort(header)}
                     >
                       <div className="flex items-center justify-center gap-1">
-                        <span>{obterNomeAmigavel(header)}</span>
+                        <span>{rotulo(header)}</span>
                         {sortable && (
                           <span className="inline-flex flex-col">
                             {isActive ? (
@@ -618,7 +623,7 @@ export default function DataTablePadrao({
                       ) : header !== 'Ações' ? (
                         <input
                           type="text"
-                          placeholder={`Filtrar ${obterNomeAmigavel(header)}...`}
+                          placeholder={`Filtrar ${rotulo(header)}...`}
                           value={filtrosColuna[header.toLowerCase()]?.valor || ''}
                           onChange={(e) => handleInputChange(header.toLowerCase(), e.target.value)}
                           onBlur={() => {
@@ -860,7 +865,7 @@ export default function DataTablePadrao({
                         onClick={(e) => e.stopPropagation()}
                       />
                       <span className="text-sm text-gray-700 dark:text-gray-200 group-hover:text-gray-900 dark:group-hover:text-white flex-1">
-                        {obterNomeAmigavel(header)}
+                        {rotulo(header)}
                       </span>
                       {colunasVisiveis.includes(header) ? (
                         <Eye size={14} className="text-blue-500" />
