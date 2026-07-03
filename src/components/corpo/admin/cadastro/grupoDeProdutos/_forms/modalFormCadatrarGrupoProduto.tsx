@@ -1,9 +1,18 @@
 // src/components/gruposDeProdutos/_forms/modalFormCadastrarGrupoProduto.tsx
-import React from 'react';
-import { UseFormRegister, FieldErrors } from 'react-hook-form';
+import React, { useEffect, useState } from 'react';
+import {
+  UseFormRegister,
+  FieldErrors,
+  UseFormSetValue,
+  UseFormWatch,
+} from 'react-hook-form';
+import { useDebouncedCallback } from 'use-debounce';
 import { CreateGrupoProdutoFormInput } from '@/data/gruposDeProdutos/gruposProdutoSchema';
 import { X } from 'lucide-react';
 import FormInput from '@/components/common/FormInput';
+import SelectInput from '@/components/common/SelectPadrao';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import FormFooter from '@/components/common/FormFooter2';
 import Carregamento from '@/utils/carregamento';
 
@@ -16,7 +25,19 @@ interface ModalFormCadastrarGrupoProdutoProps {
   register: UseFormRegister<CreateGrupoProdutoFormInput>;
   errors: FieldErrors<CreateGrupoProdutoFormInput>;
   isDirty: boolean;
+  setValue: UseFormSetValue<CreateGrupoProdutoFormInput>;
+  watch: UseFormWatch<CreateGrupoProdutoFormInput>;
 }
+
+interface Opcao {
+  value: string;
+  label: string;
+}
+
+const negocioOptions: Opcao[] = [
+  { value: 'S', label: 'SIM' },
+  { value: 'N', label: 'NÃO' },
+];
 
 const ModalFormCadastrarGrupoProduto: React.FC<
   ModalFormCadastrarGrupoProdutoProps
@@ -29,7 +50,58 @@ const ModalFormCadastrarGrupoProduto: React.FC<
   errors,
   loading = false,
   isDirty,
+  setValue,
+  watch,
 }) => {
+  const [segmentos, setSegmentos] = useState<Opcao[]>([]);
+  const [compradores, setCompradores] = useState<Opcao[]>([]);
+  const [contabeis, setContabeis] = useState<Opcao[]>([]);
+
+  const buscar = async (
+    url: string,
+    codeField: string,
+    labelField: string,
+    setter: (o: Opcao[]) => void,
+    search = '',
+  ) => {
+    try {
+      const res = await fetch(
+        `${url}?perPage=50&search=${encodeURIComponent(search)}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const rows = data.data || data.rows || data || [];
+      setter(
+        rows.map((r: any) => ({
+          value: String(r[codeField] ?? '').trim(),
+          label: `${String(r[codeField] ?? '').trim()} - ${r[labelField] ?? ''}`,
+        })),
+      );
+    } catch {
+      /* silencioso */
+    }
+  };
+
+  // Carrega as opções iniciais
+  useEffect(() => {
+    buscar('/api/segmentos/get', 'codseg', 'descricao', setSegmentos);
+    buscar('/api/compradores/get', 'codcomprador', 'nome', setCompradores);
+    buscar('/api/gruposContabil/get', 'codgpc', 'descr', setContabeis);
+  }, []);
+
+  const buscarSegmentos = useDebouncedCallback(
+    (s: string) => buscar('/api/segmentos/get', 'codseg', 'descricao', setSegmentos, s),
+    300,
+  );
+  const buscarCompradores = useDebouncedCallback(
+    (s: string) => buscar('/api/compradores/get', 'codcomprador', 'nome', setCompradores, s),
+    300,
+  );
+  const buscarContabeis = useDebouncedCallback(
+    (s: string) => buscar('/api/gruposContabil/get', 'codgpc', 'descr', setContabeis, s),
+    300,
+  );
+
   return (
     <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg shadow-lg w-full max-w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
       {/* Cabeçalho fixo */}
@@ -60,385 +132,126 @@ const ModalFormCadastrarGrupoProduto: React.FC<
         {loading ? (
           <Carregamento />
         ) : (
-          <div className="bg-white dark:bg-zinc-700 rounded-lg p-6 shadow space-y-6 w-full">
-            {/* Informações Principais */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Informações Principais
-              </h3>
+          <div className="bg-white dark:bg-zinc-700 rounded-lg p-6 shadow space-y-4 w-full">
+            <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
+              Grupo de Produto
+            </h3>
 
-              <div className="grid grid-cols-1 gap-4">
-                {/* Descrição (o Código é gerado automaticamente no banco, igual ao Delphi) */}
-                <FormInput
-                  label="Descrição"
-                  type="text"
-                  id="descr"
-                  {...register('descr')}
-                  error={errors.descr?.message}
-                  required
-                  maxLength={30}
-                />
-              </div>
+            {/* Descrição (Código é gerado automaticamente no banco) */}
+            <FormInput
+              label="Descrição"
+              type="text"
+              id="descr"
+              {...register('descr')}
+              error={errors.descr?.message}
+              required
+              maxLength={30}
+            />
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Código Vendedor */}
-                <FormInput
-                  label="Código Vendedor"
-                  type="text"
-                  id="codvend"
-                  {...register('codvend')}
-                  error={errors.codvend?.message}
-                  maxLength={5}
-                />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Segmento */}
+              <SelectInput
+                searchable
+                name="codseg"
+                label="Segmento"
+                options={segmentos}
+                value={watch('codseg') || ''}
+                onValueChange={(v) =>
+                  setValue('codseg', v as string, { shouldDirty: true })
+                }
+                onInputChange={(v) => buscarSegmentos(v)}
+                error={errors.codseg?.message}
+              />
 
-                {/* Código Segmento */}
-                <FormInput
-                  label="Código Segmento"
-                  type="text"
-                  id="codseg"
-                  {...register('codseg')}
-                  error={errors.codseg?.message}
-                  maxLength={5}
-                />
+              {/* Comprador */}
+              <SelectInput
+                searchable
+                name="codcomprador"
+                label="Comprador"
+                options={compradores}
+                value={watch('codcomprador') || ''}
+                onValueChange={(v) =>
+                  setValue('codcomprador', v as string, { shouldDirty: true })
+                }
+                onInputChange={(v) => buscarCompradores(v)}
+                error={errors.codcomprador?.message}
+              />
 
-                {/* Código Comprador */}
-                <FormInput
-                  label="Código Comprador"
-                  type="text"
-                  id="codcomprador"
-                  {...register('codcomprador')}
-                  error={errors.codcomprador?.message}
-                  maxLength={3}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Ramo Negócio */}
-                <FormInput
-                  label="Ramo Negócio"
-                  type="text"
-                  id="ramonegocio"
-                  {...register('ramonegocio')}
-                  error={errors.ramonegocio?.message}
-                  maxLength={1}
-                />
-
-                {/* Dias Reposição */}
-                <FormInput
-                  label="Dias Reposição"
-                  type="number"
-                  id="diasreposicao"
-                  {...register('diasreposicao', { valueAsNumber: true })}
-                  error={errors.diasreposicao?.message}
-                />
-
-                {/* Bloquear Preço */}
-                <FormInput
-                  label="Bloquear Preço (S/N)"
-                  type="text"
-                  id="bloquear_preco"
-                  {...register('bloquear_preco')}
-                  error={errors.bloquear_preco?.message}
-                  maxLength={1}
-                />
-              </div>
-            </div>
-
-            {/* Descontos - Balcão */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Descontos - Balcão
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <FormInput
-                  label="Desc. Balcão"
-                  type="number"
-                  id="descbalcao"
-                  {...register('descbalcao', { valueAsNumber: true })}
-                  error={errors.descbalcao?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Balcão 30d"
-                  type="number"
-                  id="dscbv30"
-                  {...register('dscbv30', { valueAsNumber: true })}
-                  error={errors.dscbv30?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Balcão 45d"
-                  type="number"
-                  id="dscbv45"
-                  {...register('dscbv45', { valueAsNumber: true })}
-                  error={errors.dscbv45?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Balcão 60d"
-                  type="number"
-                  id="dscbv60"
-                  {...register('dscbv60', { valueAsNumber: true })}
-                  error={errors.dscbv60?.message}
-                  step="0.01"
-                />
-              </div>
-
-              <FormInput
-                label="DSCBALCAO"
-                type="number"
-                id="DSCBALCAO"
-                {...register('DSCBALCAO', { valueAsNumber: true })}
-                error={errors.DSCBALCAO?.message}
-                step="0.01"
+              {/* Gp. Contábil */}
+              <SelectInput
+                searchable
+                name="codgpc"
+                label="Gp. Contábil"
+                options={contabeis}
+                value={watch('codgpc') || ''}
+                onValueChange={(v) =>
+                  setValue('codgpc', v as string, { shouldDirty: true })
+                }
+                onInputChange={(v) => buscarContabeis(v)}
+                error={errors.codgpc?.message}
               />
             </div>
 
-            {/* Descontos - Revisão */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Descontos - Revisão
-              </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Dias para Reposição */}
+              <FormInput
+                label="Dias para Reposição"
+                type="number"
+                id="diasreposicao"
+                {...register('diasreposicao', { valueAsNumber: true })}
+                error={errors.diasreposicao?.message}
+              />
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="Desc. Rev. 30d"
-                  type="number"
-                  id="dscrev30"
-                  {...register('dscrev30', { valueAsNumber: true })}
-                  error={errors.dscrev30?.message}
-                  step="0.01"
-                />
+              {/* É do Negócio? */}
+              <SelectInput
+                name="ramonegocio"
+                label="É do Negócio?"
+                options={negocioOptions}
+                value={watch('ramonegocio') || ''}
+                onValueChange={(v) =>
+                  setValue('ramonegocio', v as string, { shouldDirty: true })
+                }
+                error={errors.ramonegocio?.message}
+              />
 
-                <FormInput
-                  label="Desc. Rev. 45d"
-                  type="number"
-                  id="dscrev45"
-                  {...register('dscrev45', { valueAsNumber: true })}
-                  error={errors.dscrev45?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Rev. 60d"
-                  type="number"
-                  id="dscrev60"
-                  {...register('dscrev60', { valueAsNumber: true })}
-                  error={errors.dscrev60?.message}
-                  step="0.01"
-                />
-              </div>
+              {/* Prazo Comercial */}
+              <FormInput
+                label="Prazo Comercial"
+                type="number"
+                id="p_comercial"
+                {...register('p_comercial', { valueAsNumber: true })}
+                error={errors.p_comercial?.message}
+              />
             </div>
 
-            {/* Descontos - Revenda */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Descontos - Revenda
-              </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              {/* Verba Marketing */}
+              <FormInput
+                label="Verba Marketing"
+                type="number"
+                id="v_marketing"
+                step="0.01"
+                {...register('v_marketing', { valueAsNumber: true })}
+                error={errors.v_marketing?.message}
+              />
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="Desc. Revenda 30d"
-                  type="number"
-                  id="dscrv30"
-                  {...register('dscrv30', { valueAsNumber: true })}
-                  error={errors.dscrv30?.message}
-                  step="0.01"
+              {/* Bloquear Preço de Venda */}
+              <div className="flex items-center gap-2 h-10">
+                <Checkbox
+                  id="chk-bloquear-preco-gpp"
+                  checked={watch('bloquear_preco') === 'S'}
+                  onCheckedChange={(c) =>
+                    setValue('bloquear_preco', c ? 'S' : 'N', {
+                      shouldDirty: true,
+                    })
+                  }
                 />
-
-                <FormInput
-                  label="Desc. Revenda 45d"
-                  type="number"
-                  id="dscrv45"
-                  {...register('dscrv45', { valueAsNumber: true })}
-                  error={errors.dscrv45?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Revenda 60d"
-                  type="number"
-                  id="dscrv60"
-                  {...register('dscrv60', { valueAsNumber: true })}
-                  error={errors.dscrv60?.message}
-                  step="0.01"
-                />
-              </div>
-            </div>
-
-            {/* Descontos - Prazo */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Descontos - Prazo
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="Desc. Prazo 30d"
-                  type="number"
-                  id="dscpv30"
-                  {...register('dscpv30', { valueAsNumber: true })}
-                  error={errors.dscpv30?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Prazo 45d"
-                  type="number"
-                  id="dscpv45"
-                  {...register('dscpv45', { valueAsNumber: true })}
-                  error={errors.dscpv45?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Desc. Prazo 60d"
-                  type="number"
-                  id="dscpv60"
-                  {...register('dscpv60', { valueAsNumber: true })}
-                  error={errors.dscpv60?.message}
-                  step="0.01"
-                />
-              </div>
-            </div>
-
-            {/* Comissões */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Comissões
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="Comissão GPP"
-                  type="number"
-                  id="comgpp"
-                  {...register('comgpp', { valueAsNumber: true })}
-                  error={errors.comgpp?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Comissão GPP TMK"
-                  type="number"
-                  id="comgpptmk"
-                  {...register('comgpptmk', { valueAsNumber: true })}
-                  error={errors.comgpptmk?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Comissão GPP Ext. TMK"
-                  type="number"
-                  id="comgppextmk"
-                  {...register('comgppextmk', { valueAsNumber: true })}
-                  error={errors.comgppextmk?.message}
-                  step="0.01"
-                />
-              </div>
-            </div>
-
-            {/* Margens de Venda */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Margens de Venda
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="Margem Mín. Venda"
-                  type="number"
-                  id="margem_min_venda"
-                  {...register('margem_min_venda', { valueAsNumber: true })}
-                  error={errors.margem_min_venda?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Margem Média Venda"
-                  type="number"
-                  id="margem_med_venda"
-                  {...register('margem_med_venda', { valueAsNumber: true })}
-                  error={errors.margem_med_venda?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Margem Ideal Venda"
-                  type="number"
-                  id="margem_ide_venda"
-                  {...register('margem_ide_venda', { valueAsNumber: true })}
-                  error={errors.margem_ide_venda?.message}
-                  step="0.01"
-                />
-              </div>
-            </div>
-
-            {/* Outros Campos */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-400 border-b pb-2">
-                Informações Adicionais
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="GPP ID"
-                  type="number"
-                  id="gpp_id"
-                  {...register('gpp_id', { valueAsNumber: true })}
-                  error={errors.gpp_id?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="P. Comercial"
-                  type="number"
-                  id="p_comercial"
-                  {...register('p_comercial', { valueAsNumber: true })}
-                  error={errors.p_comercial?.message}
-                />
-
-                <FormInput
-                  label="Valor Marketing"
-                  type="number"
-                  id="v_marketing"
-                  {...register('v_marketing', { valueAsNumber: true })}
-                  error={errors.v_marketing?.message}
-                  step="0.01"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormInput
-                  label="Código GPC"
-                  type="text"
-                  id="codgpc"
-                  {...register('codgpc')}
-                  error={errors.codgpc?.message}
-                  maxLength={4}
-                />
-
-                <FormInput
-                  label="Código Grupo Pai"
-                  type="number"
-                  id="codgrupai"
-                  {...register('codgrupai', { valueAsNumber: true })}
-                  error={errors.codgrupai?.message}
-                  step="0.01"
-                />
-
-                <FormInput
-                  label="Código Grupo Produto"
-                  type="number"
-                  id="codgrupoprod"
-                  {...register('codgrupoprod', { valueAsNumber: true })}
-                  error={errors.codgrupoprod?.message}
-                  step="0.01"
-                />
+                <Label
+                  htmlFor="chk-bloquear-preco-gpp"
+                  className="font-normal cursor-pointer"
+                >
+                  Bloquear Preço de Venda
+                </Label>
               </div>
             </div>
           </div>

@@ -24,11 +24,38 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   // Extrai e normaliza os dados do body
-  const { codgpp: codgppRaw, descr: descrRaw } = req.body;
+  const {
+    codgpp: codgppRaw,
+    descr: descrRaw,
+    codseg,
+    codcomprador,
+    codgpc,
+    bloquear_preco,
+    diasreposicao,
+    ramonegocio,
+    p_comercial,
+    v_marketing,
+  } = req.body;
 
   // Normalização conforme schema: uppercase para codgpp e descr
   let codgpp = codgppRaw?.toString().trim().toUpperCase() || '';
   const descr = descrRaw?.toString().trim().toUpperCase();
+
+  // Demais campos do cadastro (igual ao Delphi)
+  const segVal = codseg ? String(codseg).trim() : null;
+  const compVal = codcomprador ? String(codcomprador).trim() : null;
+  const gpcVal = codgpc ? String(codgpc).trim() : null;
+  const bloqVal = bloquear_preco === 'S' ? 'S' : 'N';
+  const ramoVal = ramonegocio === 'S' ? 'S' : 'N';
+  const diasVal = Number.isFinite(Number(diasreposicao))
+    ? Math.trunc(Number(diasreposicao))
+    : 0;
+  const pcomVal = Number.isFinite(Number(p_comercial))
+    ? Math.trunc(Number(p_comercial))
+    : 0;
+  const vmktVal = Number.isFinite(Number(v_marketing))
+    ? Number(v_marketing)
+    : 0;
 
   if (!descr || descr === '') {
     return res.status(400).json({
@@ -92,10 +119,32 @@ export default async function handle(
       }
     }
 
-    // Insere o novo grupo de produtos na tabela dbgpprod
+    // Insere o novo grupo. Descontos/comissões/margens = 0 (igual ao Delphi).
     const result = await client.query(
-      `INSERT INTO dbgpprod (codgpp, descr) VALUES ($1, $2) RETURNING codgpp, descr`,
-      [codgpp, descr],
+      `INSERT INTO dbgpprod (
+         codgpp, descr, codseg, codcomprador, codgpc, bloquear_preco,
+         diasreposicao, ramonegocio, p_comercial, v_marketing,
+         comgpp, comgpptmk, comgppextmk,
+         descbalcao, dscrev30, dscrev45, dscrev60,
+         dscrv30, dscrv45, dscrv60, dscbv30, dscbv45, dscbv60,
+         dscpv30, dscpv45, dscpv60,
+         margem_min_venda, margem_med_venda, margem_ide_venda
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+         0,0,0, 0,0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0
+       ) RETURNING codgpp, descr`,
+      [
+        codgpp,
+        descr,
+        segVal,
+        compVal,
+        gpcVal,
+        bloqVal,
+        diasVal,
+        ramoVal,
+        pcomVal,
+        vmktVal,
+      ],
     );
 
     const novoGrupo = result.rows[0];

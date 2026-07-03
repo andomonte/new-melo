@@ -33,6 +33,8 @@ export default function CadastrarGrupoProdutoModal({
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<CreateGrupoProdutoFormInput>({
     resolver: zodResolver(createGrupoProdutoSchema),
@@ -40,6 +42,8 @@ export default function CadastrarGrupoProdutoModal({
     defaultValues: {
       codgpp: '',
       descr: '',
+      ramonegocio: 'N',
+      bloquear_preco: 'N',
     },
   });
 
@@ -156,6 +160,8 @@ export default function CadastrarGrupoProdutoModal({
         register={register}
         errors={errors}
         isDirty={isDirty}
+        setValue={setValue}
+        watch={watch}
       />
       <Toaster />
     </div>
