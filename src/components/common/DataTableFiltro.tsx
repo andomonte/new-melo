@@ -77,6 +77,8 @@ interface DataTableProps {
   limiteColunas: number;
   onLimiteColunasChange: (novoLimite: number) => void;
   customHeaderActions?: React.ReactNode;
+  /** Rótulos customizados por coluna (chave = nome da coluna). Fallback: nome em maiúsculas. */
+  columnLabels?: Record<string, string>;
 }
 
 export default function DataTable({
@@ -99,7 +101,10 @@ export default function DataTable({
   colunasFiltro = [],
   onColunaSubstituida,
   customHeaderActions,
+  columnLabels,
 }: DataTableProps) {
+  const rotuloColuna = (h: string) =>
+    columnLabels?.[h] ?? h.toUpperCase();
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<
     Record<string, { tipo: string; valor: string }>
@@ -428,7 +433,7 @@ export default function DataTable({
                           }}
                           className="flex items-center justify-center gap-1 cursor-pointer"
                         >
-                          {header.toUpperCase()}
+                          {rotuloColuna(header)}
                           {colunaEmEdicao === header ? (
                             <ChevronUp size={14} />
                           ) : (
@@ -437,7 +442,7 @@ export default function DataTable({
                         </div>
                       ) : (
                         <div className="flex justify-center">
-                          {header.toUpperCase()}
+                          {rotuloColuna(header)}
                         </div>
                       )}
 

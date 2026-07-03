@@ -22,6 +22,41 @@ import {
 import CadastrarGrupoProdutoModal from './modalCadastrarGrupoProduto';
 import EditarGrupoProdutoModal from './modalEditarGrupoProduto';
 
+// Rótulos das colunas conforme o Delphi (Arquivo de Grupo de Produtos - Descontos)
+const COLUNAS_GRUPO_LABELS: Record<string, string> = {
+  codgpp: 'Código',
+  descr: 'Descrição',
+  comgpp: '%Com. Externo',
+  comgpptmk: '%Com. Tmk.',
+  comgppextmk: '%Com. Ex. Tmk.',
+  descbalcao: 'Balcão',
+  dscrev30: 'Rev_30',
+  dscrev45: 'Rev_45',
+  dscrev60: 'Rev_60',
+  dscrv30: 'Rv_30',
+  dscrv45: 'Rv_45',
+  dscrv60: 'Rv_60',
+  dscbv30: 'Bv_30',
+  dscbv45: 'Bv_45',
+  dscbv60: 'Bv_60',
+  dscpv30: 'Pv_30',
+  dscpv45: 'Pv_45',
+  dscpv60: 'Pv_60',
+  codvend: 'Vendedor',
+  codseg: 'Segmento',
+  diasreposicao: 'Dias Repos.',
+  codcomprador: 'Comprador',
+  ramonegocio: 'Negócio',
+  p_comercial: 'Prazo Com.',
+  v_marketing: 'Verba Mkt.',
+  codgpc: 'Gp. Contábil',
+  margem_min_venda: 'Marg. Mín.',
+  margem_med_venda: 'Marg. Méd.',
+  margem_ide_venda: 'Marg. Ideal',
+  bloquear_preco: 'Bloq. Preço',
+  DSCBALCAO: 'Desc. Balcão',
+};
+
 export type Permissao = {
   cadastrar?: boolean;
   editar?: boolean;
@@ -256,7 +291,9 @@ const GruposDeProdutosPage = () => {
 
     try {
       let data: GruposDeProdutosResponse;
-      if (filtros.length > 0 || search) {
+      // Busca simples (search) usa o GET (que filtra por ILIKE). O POST de
+      // buscaGruposDeProdutos só é necessário para filtros avançados.
+      if (filtros.length > 0) {
         data = await buscaGruposDeProdutos({
           page,
           perPage,
@@ -658,6 +695,7 @@ const GruposDeProdutosPage = () => {
         </header>
         <DataTableFiltro
           headers={headers}
+          columnLabels={COLUNAS_GRUPO_LABELS}
           rows={rows || []}
           meta={gruposProdutos.meta}
           onPageChange={(newPage) => {
