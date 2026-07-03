@@ -230,6 +230,7 @@ const ModalFormCadastrarGrupoProduto: React.FC<
                 label="Verba Marketing"
                 type="text"
                 id="v_marketing"
+                name="v_marketing"
                 value={Number(watch('v_marketing') ?? 0).toFixed(2)}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, '');
