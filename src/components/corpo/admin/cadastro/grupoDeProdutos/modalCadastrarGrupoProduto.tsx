@@ -42,7 +42,7 @@ export default function CadastrarGrupoProdutoModal({
     defaultValues: {
       codgpp: '',
       descr: '',
-      ramonegocio: 'N',
+      ramonegocio: 'S',
       bloquear_preco: 'N',
     },
   });

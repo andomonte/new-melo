@@ -84,13 +84,13 @@ const ModalFormCadastrarGrupoProduto: React.FC<
 
   // Carrega as opções iniciais
   useEffect(() => {
-    buscar('/api/segmentos/get', 'codseg', 'descricao', setSegmentos);
+    buscar('/api/segmentos/get', 'codsegmento', 'descricao', setSegmentos);
     buscar('/api/compradores/get', 'codcomprador', 'nome', setCompradores);
     buscar('/api/gruposContabil/get', 'codgpc', 'descr', setContabeis);
   }, []);
 
   const buscarSegmentos = useDebouncedCallback(
-    (s: string) => buscar('/api/segmentos/get', 'codseg', 'descricao', setSegmentos, s),
+    (s: string) => buscar('/api/segmentos/get', 'codsegmento', 'descricao', setSegmentos, s),
     300,
   );
   const buscarCompradores = useDebouncedCallback(
@@ -225,13 +225,17 @@ const ModalFormCadastrarGrupoProduto: React.FC<
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              {/* Verba Marketing */}
+              {/* Verba Marketing — máscara automática (ex.: 1000 -> 10.00) */}
               <FormInput
                 label="Verba Marketing"
-                type="number"
+                type="text"
                 id="v_marketing"
-                step="0.01"
-                {...register('v_marketing', { valueAsNumber: true })}
+                value={Number(watch('v_marketing') ?? 0).toFixed(2)}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const num = digits ? parseInt(digits, 10) / 100 : 0;
+                  setValue('v_marketing', num, { shouldDirty: true });
+                }}
                 error={errors.v_marketing?.message}
               />
 

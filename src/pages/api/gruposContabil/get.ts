@@ -19,7 +19,7 @@ export default async function handle(
 
     const query = `
       SELECT * FROM dbgpprod_contabil
-      WHERE descr ILIKE $1
+      WHERE descr ILIKE $1 OR codgpc ILIKE $1
       LIMIT $2 OFFSET $3;
     `;
 
@@ -29,7 +29,7 @@ export default async function handle(
     const countQuery = `
       SELECT COUNT(*) as total
       FROM dbgpprod_contabil
-      WHERE descr ILIKE $1;
+      WHERE descr ILIKE $1 OR codgpc ILIKE $1;
     `;
 
     const countResult = await client.query(countQuery, [`%${search}%`]);
