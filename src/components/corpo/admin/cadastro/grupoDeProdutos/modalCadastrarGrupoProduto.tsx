@@ -154,9 +154,11 @@ export default function CadastrarGrupoProdutoModal({
       <ModalFormCadastrarGrupoProduto
         titulo={title}
         handleSubmit={handleSubmit(onSubmit, (errs) => {
+          const campos = Object.keys(errs).join(', ');
           const primeiro = Object.values(errs)[0] as any;
+          console.error('[GrupoProduto] erros de validação:', errs);
           toast({
-            title: '❌ Verifique os campos',
+            title: `❌ Campo(s): ${campos}`,
             description:
               primeiro?.message || 'Há campos inválidos no formulário.',
             variant: 'destructive',
