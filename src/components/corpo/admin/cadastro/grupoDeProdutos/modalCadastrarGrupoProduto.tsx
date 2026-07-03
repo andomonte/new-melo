@@ -153,7 +153,15 @@ export default function CadastrarGrupoProdutoModal({
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
       <ModalFormCadastrarGrupoProduto
         titulo={title}
-        handleSubmit={handleSubmit(onSubmit)}
+        handleSubmit={handleSubmit(onSubmit, (errs) => {
+          const primeiro = Object.values(errs)[0] as any;
+          toast({
+            title: '❌ Verifique os campos',
+            description:
+              primeiro?.message || 'Há campos inválidos no formulário.',
+            variant: 'destructive',
+          });
+        })}
         handleClear={() => reset()}
         onClose={onClose}
         loading={isSubmitting}
