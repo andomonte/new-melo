@@ -7,10 +7,10 @@ import { useToast } from '@/hooks/use-toast';
 import FormInput from '@/components/common/FormInput';
 import ModalFormulario from '@/components/common/modalform';
 
+// No Delphi o cadastro de marca tem apenas a Descrição. O código é gerado
+// automaticamente e o bloqueio de preço entra como 'S' por padrão.
 const marcaSchema = z.object({
-  codmarca: z.string().min(1, 'Código é obrigatório'),
   descr: z.string().min(1, 'Descrição é obrigatória'),
-  bloquear_preco: z.string().optional(),
 });
 
 type MarcaForm = z.infer<typeof marcaSchema>;
@@ -41,7 +41,8 @@ export default function Cadastrar({
 
   const onSubmit = async (data: MarcaForm) => {
     try {
-      await createMarca(data);
+      // Bloqueio de preço entra como 'S' por padrão (comportamento do Delphi)
+      await createMarca({ descr: data.descr, bloquear_preco: 'S' } as any);
 
       toast({
         title: 'Sucesso!',
@@ -84,24 +85,11 @@ export default function Cadastrar({
         renderTabContent={() => (
           <div className="space-y-4">
             <FormInput
-              label="Código da Marca"
-              type="text"
-              {...register('codmarca')}
-              error={errors.codmarca?.message}
-            />
-
-            <FormInput
               label="Descrição"
               type="text"
+              autoFocus
               {...register('descr')}
               error={errors.descr?.message}
-            />
-
-            <FormInput
-              label="Bloquear Preço (S/N)"
-              type="text"
-              {...register('bloquear_preco')}
-              error={errors.bloquear_preco?.message}
             />
           </div>
         )}

@@ -1,8 +1,21 @@
 import React, { useEffect, useState, useRef, useContext } from 'react';
-import { Marcas, getMarcas, Marca, deleteMarca } from '@/data/marcas/marcas';
+import {
+  Marcas,
+  getMarcas,
+  Marca,
+  deleteMarca,
+  setBloqueioMarca,
+} from '@/data/marcas/marcas';
 import { useDebouncedCallback } from 'use-debounce';
-import { CircleChevronDown, PlusIcon, Pencil, Trash2 } from 'lucide-react';
-import DataTable from '@/components/common/DataTable';
+import {
+  CircleChevronDown,
+  PlusIcon,
+  Pencil,
+  Trash2,
+  Lock,
+  Unlock,
+} from 'lucide-react';
+import DataTablePadrao from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import Cadastrar from './modalCadastrar';
@@ -10,6 +23,13 @@ import Editar from './modalEditar';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
 import Carregamento from '@/utils/carregamento';
+
+// Rótulos das colunas conforme o Delphi (Arquivo de Marcas)
+const COLUNAS_MARCA_LABELS: Record<string, string> = {
+  codmarca: 'Código',
+  descr: 'Descrição',
+  bloquear_preco: 'Bloquear Preço',
+};
 
 export type Permissao = {
   cadastrar?: boolean;
@@ -215,15 +235,15 @@ const MarcasPage = () => {
     }
   };
 
-  const debouncedFetchMarcas = useDebouncedCallback(() => {
+  const debouncedSearch = useDebouncedCallback((value: string) => {
     setPage(1); // Reset para primeira página ao pesquisar
-    handleMarcas();
+    setSearch(value);
   }, 500);
 
   useEffect(() => {
     handleMarcas();
     dismiss(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, perPage]);
+  }, [page, perPage, search]);
 
   useEffect(() => {
     const checkPermissions = () => {
@@ -279,7 +299,7 @@ const MarcasPage = () => {
     checkPermissions();
   }, [user, toast]);
 
-  const headers = ['Ações', 'Código', 'Descrição', 'Bloquear Preço'];
+  const headers = ['ações', 'codmarca', 'descr', 'bloquear_preco'];
 
   const toggleDropdown = (
     marcaId: string,
@@ -382,6 +402,47 @@ const MarcasPage = () => {
     setIdMarcaDeletar(null);
   };
 
+  // Alterna o bloqueio de preço direto na listagem (S <-> N)
+  const handleToggleBloqueio = async (marca: Marca) => {
+    const atual = marca.bloquear_preco ?? 'S';
+    const novo: 'S' | 'N' = atual === 'S' ? 'N' : 'S';
+
+    // Atualização otimista na tela
+    setMarcas((prev) => ({
+      ...prev,
+      data: prev.data?.map((m) =>
+        m.codmarca === marca.codmarca ? { ...m, bloquear_preco: novo } : m,
+      ),
+    }));
+    closeAllDropdowns();
+
+    try {
+      await setBloqueioMarca(marca, novo);
+      toast({
+        title: 'Sucesso',
+        description:
+          novo === 'S'
+            ? `Preço da marca "${marca.descr}" bloqueado.`
+            : `Preço da marca "${marca.descr}" desbloqueado.`,
+        variant: 'default',
+      });
+    } catch (error) {
+      console.error('Erro ao alterar bloqueio da marca:', error);
+      // Reverte em caso de erro
+      setMarcas((prev) => ({
+        ...prev,
+        data: prev.data?.map((m) =>
+          m.codmarca === marca.codmarca ? { ...m, bloquear_preco: atual } : m,
+        ),
+      }));
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível alterar o bloqueio de preço.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       let shouldClose = false;
@@ -412,93 +473,136 @@ const MarcasPage = () => {
     };
   }, [dropdownStates]);
 
-  const rows = marcas.data?.map((marcaItem) => ({
-    action: (
-      <div className="relative">
-        <button
-          ref={(el) => {
-            if (el) {
-              actionButtonRefs.current[marcaItem.codmarca] = el;
-            }
-          }}
-          onClick={(e) => toggleDropdown(marcaItem.codmarca, e.currentTarget)}
-          className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-transform duration-200"
-          title="Mais Ações"
-          style={{
-            transform: iconRotations[marcaItem.codmarca]
-              ? 'rotate(180deg)'
-              : 'rotate(0deg)',
-          }}
-        >
-          <CircleChevronDown size={18} />
-        </button>
-        {dropdownStates[marcaItem.codmarca] &&
-          dropdownPositions[marcaItem.codmarca] &&
-          createPortal(
-            <div
-              ref={(el) => {
-                if (el) {
-                  dropdownRefs.current[marcaItem.codmarca] = el;
-                }
-              }}
-              className="text-slate-800 bg-white dark:text-gray-100 dark:bg-slate-800"
-              style={{
-                position: 'absolute',
-                top: dropdownPositions[marcaItem.codmarca]?.top,
-                left: dropdownPositions[marcaItem.codmarca]?.left,
-                minWidth: '144px',
-                borderRadius: '0.375rem',
-                boxShadow:
-                  '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.07)',
-                zIndex: 10,
-              }}
-            >
+  const rows = marcas.data?.map((marcaItem) => {
+    const bloqueado = (marcaItem.bloquear_preco ?? 'S') === 'S';
+
+    return {
+      ações: (
+        <div className="relative">
+          <button
+            ref={(el) => {
+              if (el) {
+                actionButtonRefs.current[marcaItem.codmarca] = el;
+              }
+            }}
+            onClick={(e) => toggleDropdown(marcaItem.codmarca, e.currentTarget)}
+            className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-transform duration-200"
+            title="Mais Ações"
+            style={{
+              transform: iconRotations[marcaItem.codmarca]
+                ? 'rotate(180deg)'
+                : 'rotate(0deg)',
+            }}
+          >
+            <CircleChevronDown size={18} />
+          </button>
+          {dropdownStates[marcaItem.codmarca] &&
+            dropdownPositions[marcaItem.codmarca] &&
+            createPortal(
               <div
-                className="py-1"
-                role="menu"
-                aria-orientation="vertical"
-                aria-labelledby="options-menu-button"
+                ref={(el) => {
+                  if (el) {
+                    dropdownRefs.current[marcaItem.codmarca] = el;
+                  }
+                }}
+                className="text-slate-800 bg-white dark:text-gray-100 dark:bg-slate-800"
+                style={{
+                  position: 'absolute',
+                  top: dropdownPositions[marcaItem.codmarca]?.top,
+                  left: dropdownPositions[marcaItem.codmarca]?.left,
+                  minWidth: '180px',
+                  borderRadius: '0.375rem',
+                  boxShadow:
+                    '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.07)',
+                  zIndex: 10,
+                }}
               >
-                {userPermissions.editar && (
-                  <button
-                    onClick={() => handleEditarClick(marcaItem)}
-                    className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full"
-                    role="menuitem"
-                  >
-                    <Pencil
-                      className="mr-2 text-gray-400 dark:text-gray-500"
-                      size={16}
-                    />
-                    Editar
-                  </button>
-                )}
-                {userPermissions.remover && (
-                  <button
-                    onClick={() => handleDeletarClick(marcaItem.codmarca)}
-                    className="flex items-center px-4 py-2 text-sm hover:bg-red-100 dark:hover:bg-red-700 focus:outline-none focus:bg-red-100 dark:focus:bg-red-700 focus:text-red-900 dark:focus:text-red-100 w-full"
-                    role="menuitem"
-                  >
-                    <Trash2
-                      className="mr-2 text-red-400 dark:text-gray-500"
-                      size={16}
-                    />
-                    Deletar
-                  </button>
-                )}
-              </div>
-            </div>,
-            document.body,
-          )}
-      </div>
-    ),
-    codmarca: marcaItem.codmarca,
-    descr: marcaItem.descr,
-    bloquear_preco: marcaItem.bloquear_preco ?? 'S',
-  }));
+                <div
+                  className="py-1"
+                  role="menu"
+                  aria-orientation="vertical"
+                  aria-labelledby="options-menu-button"
+                >
+                  {userPermissions.editar && (
+                    <button
+                      onClick={() => handleEditarClick(marcaItem)}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full"
+                      role="menuitem"
+                    >
+                      <Pencil
+                        className="mr-2 text-gray-400 dark:text-gray-500"
+                        size={16}
+                      />
+                      Editar
+                    </button>
+                  )}
+                  {userPermissions.editar && (
+                    <button
+                      onClick={() => handleToggleBloqueio(marcaItem)}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full"
+                      role="menuitem"
+                    >
+                      {bloqueado ? (
+                        <Unlock
+                          className="mr-2 text-emerald-500 dark:text-emerald-400"
+                          size={16}
+                        />
+                      ) : (
+                        <Lock
+                          className="mr-2 text-amber-500 dark:text-amber-400"
+                          size={16}
+                        />
+                      )}
+                      {bloqueado ? 'Desbloquear Preço' : 'Bloquear Preço'}
+                    </button>
+                  )}
+                  {userPermissions.remover && (
+                    <button
+                      onClick={() => handleDeletarClick(marcaItem.codmarca)}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-red-100 dark:hover:bg-red-700 focus:outline-none focus:bg-red-100 dark:focus:bg-red-700 focus:text-red-900 dark:focus:text-red-100 w-full"
+                      role="menuitem"
+                    >
+                      <Trash2
+                        className="mr-2 text-red-400 dark:text-gray-500"
+                        size={16}
+                      />
+                      Deletar
+                    </button>
+                  )}
+                </div>
+              </div>,
+              document.body,
+            )}
+        </div>
+      ),
+      codmarca: marcaItem.codmarca,
+      descr: marcaItem.descr,
+      bloquear_preco: userPermissions.editar ? (
+        <button
+          onClick={() => handleToggleBloqueio(marcaItem)}
+          title={
+            bloqueado
+              ? 'Preço bloqueado — clique para desbloquear'
+              : 'Preço liberado — clique para bloquear'
+          }
+          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors ${
+            bloqueado
+              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-300'
+              : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300'
+          }`}
+        >
+          {bloqueado ? <Lock size={12} /> : <Unlock size={12} />}
+          {bloqueado ? 'S' : 'N'}
+        </button>
+      ) : (
+        <span className="text-xs font-semibold">{bloqueado ? 'S' : 'N'}</span>
+      ),
+    };
+  });
 
   return (
     <div className="h-full flex flex-col flex-grow bg-white dark:bg-slate-900">
-      <main className="p-4 w-full">
+      <main className="flex-1 flex flex-col p-4 w-full overflow-hidden">
         <header className="mb-2">
           <div className="flex justify-between mb-4 mr-6 ml-6">
             <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
@@ -514,25 +618,30 @@ const MarcasPage = () => {
             )}
           </div>
         </header>
-        <DataTable
-          headers={headers}
-          rows={rows}
-          meta={marcas.meta}
-          onPageChange={handlePageChange}
-          onPerPageChange={handlePerPageChange}
-          onSearch={(e) => {
-            setSearch(e.target.value);
-            debouncedFetchMarcas();
-          }}
-          onSearchKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              setPage(1);
-              handleMarcas();
-            }
-          }}
-          searchInputPlaceholder="Pesquisar por código ou descrição..."
-        />
+        <div className="flex-1 min-h-20 flex flex-col">
+          <DataTablePadrao
+            screenKey="cadastro-marcas"
+            userName={user?.usuario}
+            headers={headers}
+            columnLabels={COLUNAS_MARCA_LABELS}
+            rows={rows || []}
+            semColunaDeAcaoPadrao={true}
+            nonsortableColumns={['ações']}
+            meta={marcas.meta}
+            onPageChange={handlePageChange}
+            onPerPageChange={handlePerPageChange}
+            onSearch={(e) => debouncedSearch(e.target.value)}
+            onSearchBlur={() => {}}
+            onSearchKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                setPage(1);
+                handleMarcas();
+              }
+            }}
+            searchInputPlaceholder="Pesquisar por código ou descrição..."
+          />
+        </div>
       </main>
       <Cadastrar
         isOpen={cadastrarOpen}

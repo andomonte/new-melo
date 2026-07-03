@@ -121,17 +121,14 @@ export default function Editar({
               label="Descrição"
               type="text"
               id="descr"
+              autoFocus
               {...register('descr')}
               error={errors.descr?.message}
             />
 
-            <FormInput
-              label="Bloquear Preço (S/N)"
-              type="text"
-              id="bloquear_preco"
-              {...register('bloquear_preco')}
-              error={errors.bloquear_preco?.message}
-            />
+            {/* Bloqueio de preço é alterado direto na listagem; mantido aqui
+                como campo oculto para não ser sobrescrito ao salvar o nome. */}
+            <input type="hidden" {...register('bloquear_preco')} />
           </div>
         )}
       />

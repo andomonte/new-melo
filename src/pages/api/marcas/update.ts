@@ -28,8 +28,10 @@ export default async function handle(
     const pool = getPgPool();
     client = await pool.connect();
 
-    // Processar bloquear_preco
-    const bloquearPreco = bloquear_preco ? 'S' : 'N';
+    // Normaliza bloquear_preco: aceita 'S'/'N' (string) ou boolean sem
+    // tratar toda string não-vazia como 'S' (bug: 'N' virava 'S').
+    const bloquearPreco =
+      bloquear_preco === 'S' || bloquear_preco === true ? 'S' : 'N';
 
     // Atualizar marca
     const updateQuery = `

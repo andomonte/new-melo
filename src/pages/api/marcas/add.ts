@@ -33,10 +33,12 @@ export default async function handle(
       LIMIT 1;
     `;
     const codmarcaResult = await client.query(nextCodmarcaQuery);
-    const nextCodmarca =
+    const proximoNumero =
       codmarcaResult.rows.length > 0
-        ? (Number(codmarcaResult.rows[0].codmarca) + 1).toString()
-        : '1';
+        ? Number(codmarcaResult.rows[0].codmarca) + 1
+        : 0;
+    // Código no padrão Delphi: 5 dígitos com zeros à esquerda (ex.: 00211)
+    const nextCodmarca = String(proximoNumero).padStart(5, '0');
 
     // Buscar o próximo mar_id
     const nextMarIdQuery = `
@@ -50,8 +52,8 @@ export default async function handle(
         ? parseFloat(marIdResult.rows[0].mar_id) + 1.0
         : 1;
 
-    // Processar bloquear_preco
-    const bloquearPreco = data.bloquear_preco ? 'S' : 'N';
+    // Bloqueio de preço: padrão 'S' (igual ao Delphi), só 'N' se enviado explicitamente
+    const bloquearPreco = data.bloquear_preco === 'N' ? 'N' : 'S';
 
     // Inserir nova marca
     const insertQuery = `

@@ -38,6 +38,21 @@ export async function updateMarca(marca: Marca): Promise<void> {
   await api.put(`/api/marcas/update`, marca);
 }
 
+/**
+ * Bloqueia/desbloqueia o preço de venda da marca direto na listagem
+ * (equivalente ao "Desbloquear Pr. Venda" do Delphi).
+ */
+export async function setBloqueioMarca(
+  marca: Marca,
+  bloquear_preco: 'S' | 'N',
+): Promise<void> {
+  await api.put(`/api/marcas/update`, {
+    codmarca: marca.codmarca,
+    descr: marca.descr,
+    bloquear_preco,
+  });
+}
+
 export async function getMarca(codmarca: string): Promise<Marca> {
   const res = await api.get(`/api/marcas/${codmarca}`);
   return res.data;
