@@ -208,6 +208,10 @@ function App() {
                       onChange: () => setMensagemErro(''),
                     })}
                     autoComplete="username"
+                    // Sobrescreve o text-transform:uppercase global (globals.css):
+                    // no login o valor deve ser exatamente o digitado, sem
+                    // enganar o usuário com caixa alta apenas visual.
+                    style={{ textTransform: 'none' }}
                     className="w-full pl-3 h-12 pr-10 py-2 bg-transparent placeholder:text-slate-400 text-primary text-sm border border-slate-200 rounded-md transition duration-300 ease focus:outline-none focus:border-slate-400 hover:border-slate-300 shadow-sm focus:shadow "
                     placeholder="nome do usuario"
                   />
@@ -232,6 +236,10 @@ function App() {
                         })}
                         type={openOlho ? 'text' : 'password'}
                         autoComplete="current-password"
+                        // CRÍTICO: senha é case-sensitive (bcrypt). Ao revelar
+                        // (type=text) o uppercase global mostraria a senha em
+                        // caixa alta enganosa. Força WYSIWYG.
+                        style={{ textTransform: 'none' }}
                         className="w-full pl-3 h-12 pr-10 py-2 bg-transparent placeholder:text-slate-400 text-primary text-sm border border-blue-500 rounded-md transition duration-300 ease focus:outline-none focus:border-orange-600 hover:border-orange-300 shadow-sm focus:shadow type=password"
                         placeholder="informe sua password aqui"
                       />

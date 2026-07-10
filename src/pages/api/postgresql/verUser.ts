@@ -23,14 +23,17 @@ export default async function handle(
     // 2. Busque o usuário pelo login usando a biblioteca pg
     client = await pool.connect(); // Obtém um cliente do pool de conexões
 
-    // IMPORTANTE: a tabela tb_login_user existe em vários schemas
-    // (db_manaus, db_rondonia, db_roraima, public...) e o mesmo login tem
-    // SENHAS DIFERENTES em cada um. O login é sempre contra o banco central
-    // (db_manaus). Qualificamos o schema explicitamente para NÃO depender do
-    // search_path da conexão — que pode vir "sujo" de uma conexão reaproveitada
-    // do pool e apontar para o schema errado, causando 401 intermitente.
+    // IMPORTANTE:
+    // - A tabela tb_login_user existe em vários schemas (db_manaus, db_rondonia,
+    //   db_roraima, public...) com SENHAS DIFERENTES. O login é sempre contra o
+    //   banco central (db_manaus), qualificado explicitamente para não depender
+    //   do search_path.
+    // - Busca do LOGIN é case-insensitive (UPPER = UPPER): o sistema aplica
+    //   text-transform:uppercase visual nos inputs, então o usuário pode enviar
+    //   o login em caixa diferente da armazenada. A SENHA continua case-sensitive
+    //   (bcrypt), como deve ser.
     const result = await client.query(
-      'SELECT * FROM db_manaus.tb_login_user WHERE login_user_login = $1',
+      'SELECT * FROM db_manaus.tb_login_user WHERE UPPER(login_user_login) = UPPER($1)',
       [userLogin],
     );
     const user = result.rows[0]; // Pega o primeiro resultado
