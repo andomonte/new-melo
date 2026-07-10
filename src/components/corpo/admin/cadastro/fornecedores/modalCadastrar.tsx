@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { campoParaAba } from './_forms/campoParaAba';
 import { cadastroFornecedorSchema } from '@/data/fornecedores/schemas'; // Importa o novo schema
 import {
@@ -54,6 +55,10 @@ export default function CustomModal({
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState<boolean>(true);
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar cadastro',
+    message: 'Deseja realmente cadastrar este fornecedor?',
+  });
 
   const [disableFields, setDisableFields] = useState({
     disableIm: false,
@@ -597,11 +602,12 @@ export default function CustomModal({
         activeTab={activeTab}
         setActiveTab={handleActiveTab}
         renderTabContent={renderTabContent}
-        handleSubmit={handleSubmit}
+        handleSubmit={() => pedirConfirmacao(handleSubmit)}
         handleClear={handleClear}
         onClose={onClose}
         loading={loading}
       />
+      {ConfirmacaoSalvarModal}
       <InfoModal
         isOpen={openInfo}
         onClose={handleCloseInfoModal}

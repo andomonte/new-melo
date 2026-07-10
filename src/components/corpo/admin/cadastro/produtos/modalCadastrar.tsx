@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { X } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 const tabs = [
   { name: 'Dados Cadastrais', key: 'dadosCadastrais' },
@@ -83,6 +84,10 @@ export default function CustomModal({
   const [produto, setProduto] = useState({} as Produto);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar cadastro',
+    message: 'Deseja realmente salvar este produto?',
+  });
 
   const handleProdutoChange = (produtoAtualizado: Produto) => {
     handleProdutoByCodbar(produtoAtualizado.codbar);
@@ -317,7 +322,10 @@ export default function CustomModal({
           </header>
           <div className="w-[35%] h-full flex justify-end">
             {footer || (
-              <FormFooter onSubmit={handleSubmit} onClear={handleClear} />
+              <FormFooter
+                onSubmit={() => pedirConfirmacao(handleSubmit)}
+                onClear={handleClear}
+              />
             )}
           </div>
           <div className="w-[5%] flex justify-end h-full">
@@ -369,6 +377,9 @@ export default function CustomModal({
           confirmText="Prosseguir"
           cancelText="Voltar e corrigir"
         />
+
+        {/* Confirmação antes de salvar */}
+        {ConfirmacaoSalvarModal}
       </div>
     </div>
   );

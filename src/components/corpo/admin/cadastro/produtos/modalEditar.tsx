@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { X, Trash2 } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 const tabs = [
   { name: 'Dados Cadastrais', key: 'dadosCadastrais' },
@@ -80,6 +81,10 @@ export default function CustomModal({
   const [emPromocao, setEmPromocao] = useState<string | null>(null);
 
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar alteração',
+    message: 'Deseja realmente salvar as alterações deste produto?',
+  });
 
   const handleProdutoChange = (produtoAtualizado: Produto) => {
     setProduto(produtoAtualizado);
@@ -441,7 +446,10 @@ export default function CustomModal({
               Excluir
             </button>
             {footer || (
-              <FormFooter onSubmit={handleSubmit} onClear={handleClear} />
+              <FormFooter
+                onSubmit={() => pedirConfirmacao(handleSubmit)}
+                onClear={handleClear}
+              />
             )}
           </div>
           <div className="w-[5%] flex justify-end h-full">
@@ -520,6 +528,9 @@ export default function CustomModal({
           cancelText="Cancelar"
           loading={excluindo}
         />
+
+        {/* Confirmação antes de salvar */}
+        {ConfirmacaoSalvarModal}
       </div>
     </div>
   );

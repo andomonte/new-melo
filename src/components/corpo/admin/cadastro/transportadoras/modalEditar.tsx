@@ -14,6 +14,7 @@ import { Toaster } from '@/components/ui/toaster';
 import Carregamento from '@/utils/carregamento';
 import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { z } from 'zod';
 import { cadastroTransportadoraSchema } from './_forms/transportadoraSchema';
 
@@ -44,6 +45,10 @@ export default function CustomModal({
   const [loading, setLoading] = useState<boolean>(true);
 
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar alteração',
+    message: 'Deseja realmente salvar as alterações desta transportadora?',
+  });
 
   const [modalConfirmAba, setModalConfirmAba] = useState(false);
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
@@ -203,7 +208,7 @@ export default function CustomModal({
           activeTab={activeTab}
           setActiveTab={handleActiveTab}
           renderTabContent={() => <div>{renderTabContent()}</div>}
-          handleSubmit={handleSubmit}
+          handleSubmit={() => pedirConfirmacao(handleSubmit)}
           handleClear={handleClear}
           onClose={onClose}
           loading={loading}
@@ -211,6 +216,7 @@ export default function CustomModal({
       ) : (
         <Carregamento />
       )}
+      {ConfirmacaoSalvarModal}
 
       <InfoModal
         isOpen={openInfo}

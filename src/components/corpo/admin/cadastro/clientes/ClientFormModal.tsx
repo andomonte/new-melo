@@ -29,6 +29,7 @@ import TabNavigation from '@/components/common/TabNavigation';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import Carregamento from '@/utils/carregamento';
 import FormFooter from '@/components/common/FormFooter2';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 // Suprime warning do findDOMNode temporariamente
 if (typeof window !== 'undefined') {
@@ -112,6 +113,13 @@ export default function ClientFormModal({
   const { watch, handleSubmit, reset, formState, trigger } = methods;
   const documento = watch('documento');
   const { errors } = formState;
+
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: isEditing ? 'Confirmar alteração' : 'Confirmar cadastro',
+    message: isEditing
+      ? 'Deseja realmente salvar as alterações deste cliente?'
+      : 'Deseja realmente cadastrar este cliente?',
+  });
 
   // Gatekeeper hook - só verifica se NÃO estiver editando
   const { matches } = useGatekeeper(documento, !isEditing);
@@ -648,8 +656,9 @@ export default function ClientFormModal({
     try {
       await handleSubmit(
         (data: ClientFormValues) => {
-          console.log('✅ Validação passou! Salvando...');
-          onSubmit(data);
+          console.log('✅ Validação passou! Confirmando...');
+          // Só pergunta depois de validar: pede confirmação e salva ao confirmar
+          pedirConfirmacao(() => onSubmit(data));
         },
         (errors) => {
           // Navegar para a aba do primeiro erro na ORDEM das abas (cadastrais → financeiros → comerciais → entrega)
@@ -1244,6 +1253,9 @@ export default function ClientFormModal({
             />
           </div>
         </FormProvider>
+
+        {/* Confirmação antes de salvar */}
+        {ConfirmacaoSalvarModal}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { campoParaAba } from './_forms/campoParaAba';
 import { z } from 'zod';
 import { cadastroTransportadoraSchema } from './_forms/transportadoraSchema';
@@ -50,6 +51,10 @@ export default function CustomModal({
   const [showDup, setShowDup] = useState(false);
 
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar cadastro',
+    message: 'Deseja realmente cadastrar esta transportadora?',
+  });
 
   // Sempre abrir o cadastro em branco (evita trazer dados de uma abertura anterior)
   useEffect(() => {
@@ -321,11 +326,12 @@ export default function CustomModal({
         activeTab={activeTab}
         setActiveTab={handleActiveTab}
         renderTabContent={renderTabContent}
-        handleSubmit={handleSubmit}
+        handleSubmit={() => pedirConfirmacao(handleSubmit)}
         handleClear={handleClear}
         onClose={onClose}
         loading={false}
       />
+      {ConfirmacaoSalvarModal}
       <InfoModal
         isOpen={openInfo}
         onClose={handleCloseInfoModal}

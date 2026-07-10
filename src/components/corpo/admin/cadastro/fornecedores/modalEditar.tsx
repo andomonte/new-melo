@@ -23,6 +23,7 @@ import ModalForm from '@/components/common/modalform';
 import InfoModal from '@/components/common/infoModal';
 import { CircleCheck } from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 const tabs = [
   { name: 'Dados Cadastrais', key: 'dadosCadastrais' },
@@ -49,6 +50,10 @@ export default function CustomModal({
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState<boolean>(true);
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar alteração',
+    message: 'Deseja realmente salvar as alterações deste fornecedor?',
+  });
   const [disableFields, setDisableFields] = useState({
     disableIm: false,
     disableIe: false,
@@ -522,11 +527,12 @@ export default function CustomModal({
           activeTab={activeTab}
           setActiveTab={handleActiveTab}
           renderTabContent={renderTabContent}
-          handleSubmit={handleSubmit}
+          handleSubmit={() => pedirConfirmacao(handleSubmit)}
           handleClear={handleClear}
           onClose={onClose}
         />
       )}
+      {ConfirmacaoSalvarModal}
       <InfoModal
         isOpen={openInfo}
         onClose={handleCloseInfoModal}
