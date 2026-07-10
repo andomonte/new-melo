@@ -84,9 +84,26 @@ export default function CustomModal({
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { toast } = useToast();
 
-  const handleProdutoChange = (produto: Produto) => {
-    handleProdutoByCodbar(produto.codbar);
-    setProduto(produto);
+  const handleProdutoChange = (produtoAtualizado: Produto) => {
+    handleProdutoByCodbar(produtoAtualizado.codbar);
+    setProduto(produtoAtualizado);
+
+    // Limpa o erro de qualquer campo que agora tenha valor preenchido. Antes
+    // os erros só eram recalculados no submit, então o campo continuava
+    // vermelho ("obrigatório"/"Required") mesmo após digitar/selecionar.
+    setErrors((prev) => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      const novos = { ...prev };
+      let mudou = false;
+      Object.keys(novos).forEach((campo) => {
+        const valor = (produtoAtualizado as any)[campo];
+        if (valor !== undefined && valor !== null && valor !== '') {
+          delete novos[campo];
+          mudou = true;
+        }
+      });
+      return mudou ? novos : prev;
+    });
   };
 
   const handleProdutoByCodbar = async (codbar: string | undefined) => {
@@ -245,6 +262,7 @@ export default function CustomModal({
 
   const handleClear = () => {
     setProduto({} as Produto);
+    setErrors({});
   };
 
   const renderTabContent = () => {

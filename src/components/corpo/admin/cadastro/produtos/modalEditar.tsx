@@ -81,8 +81,25 @@ export default function CustomModal({
 
   const { toast } = useToast();
 
-  const handleProdutoChange = (produto: Produto) => {
-    setProduto(produto);
+  const handleProdutoChange = (produtoAtualizado: Produto) => {
+    setProduto(produtoAtualizado);
+
+    // Limpa o erro de qualquer campo que agora tenha valor preenchido, para a
+    // mensagem de obrigatório sumir assim que o usuário digita/seleciona
+    // (antes só era revalidado no submit).
+    setErrors((prev) => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      const novos = { ...prev };
+      let mudou = false;
+      Object.keys(novos).forEach((campo) => {
+        const valor = (produtoAtualizado as any)[campo];
+        if (valor !== undefined && valor !== null && valor !== '') {
+          delete novos[campo];
+          mudou = true;
+        }
+      });
+      return mudou ? novos : prev;
+    });
   };
 
   const handleClear = () => {
