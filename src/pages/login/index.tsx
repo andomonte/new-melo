@@ -72,6 +72,15 @@ function App() {
         query: { perfilName: token },
       });
     else {
+      // Sem cookie válido: garante que não sobrou resíduo de sessão de um
+      // usuário anterior (perfilUserMelo etc.). Assim a próxima autenticação
+      // sempre começa limpa, independente de como se chegou ao /login.
+      [
+        'perfilUserMelo',
+        'newPerfilMelo',
+        'paginaAtualMelo',
+        'telaAtualMelo',
+      ].forEach((k) => sessionStorage.removeItem(k));
       sessionStorage.setItem('newPerfilMelo', JSON.stringify(null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

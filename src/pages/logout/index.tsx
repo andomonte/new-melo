@@ -11,45 +11,29 @@ function LogOut() {
     deleteCookie('token_melo');
     deleteCookie('filial_melo'); // 👈 limpa o cookie da filial escolhida
 
-    // 🧹 Limpa sessionStorage
-    sessionStorage.setItem('newPerfilMelo', JSON.stringify(null));
-    sessionStorage.setItem('carrinhoMelo', JSON.stringify([]));
+    // 🧹 Limpa TODA a sessão do usuário. Antes o perfilUserMelo (usuário
+    // logado) NÃO era removido, então após sair o sistema mantinha resíduo do
+    // usuário anterior (e o header x-user-data das requisições continuava
+    // apontando pra ele), causando o "sistema se perde" ao logar outro usuário.
+    try {
+      const chavesMelo = [
+        'perfilUserMelo',
+        'newPerfilMelo',
+        'paginaAtualMelo',
+        'telaAtualMelo',
+        'carrinhoMelo',
+        'clienteSelectMelo',
+        'dadosClienteSelMelo',
+      ];
+      chavesMelo.forEach((k) => sessionStorage.removeItem(k));
+    } catch (e) {
+      console.warn('Falha ao limpar sessão no logout:', e);
+    }
 
-    sessionStorage.setItem(
-      'clienteSelectMelo',
-      JSON.stringify({
-        codigo: '',
-        nome: '',
-        documento: '',
-        nomeFantasia: '',
-        saldo: 0,
-        status: '',
-        desconto: 0,
-        IPI: '',
-        ICMS: '',
-        zona: '',
-        CLASPGTO: '',
-        UF: '',
-        TIPO: '',
-        limiteAtraso: 0,
-        diasAtrasado: 0,
-        tipoPreco: '',
-        CODVEND: '',
-      }),
-    );
-    sessionStorage.setItem('telaAtualMelo', JSON.stringify(''));
-    sessionStorage.setItem(
-      'dadosClienteSelMelo',
-      JSON.stringify({
-        codigo: '',
-        nome: '',
-        documento: '',
-        nomeFantasia: '',
-      }),
-    );
-
-    // 🔁 Redireciona para login
-    router.push('/login');
+    // 🔁 Redireciona para o login com RELOAD COMPLETO (window.location, não
+    // router.push). Isso remonta o AuthProvider do zero, zerando o estado
+    // `user` em memória — que a navegação SPA não limpava.
+    window.location.href = '/login';
   }, [router]);
 
   return (
