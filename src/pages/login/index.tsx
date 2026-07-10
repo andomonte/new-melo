@@ -111,7 +111,7 @@ function App() {
 
     try {
       const response = await api.post('/api/postgresql/verUser', {
-        userLogin: values.name,
+        userLogin: values.name.trim(),
         userSenha: values.password,
       });
 
@@ -202,10 +202,12 @@ function App() {
                     Informe o Usuário
                   </label>
                   <input
-                    {...register('name')}
-                    onChange={() => {
-                      setMensagemErro('');
-                    }}
+                    {...register('name', {
+                      // onChange como OPÇÃO do register (não sobrescreve o
+                      // onChange interno do RHF, que rastreia o valor).
+                      onChange: () => setMensagemErro(''),
+                    })}
+                    autoComplete="username"
                     className="w-full pl-3 h-12 pr-10 py-2 bg-transparent placeholder:text-slate-400 text-primary text-sm border border-slate-200 rounded-md transition duration-300 ease focus:outline-none focus:border-slate-400 hover:border-slate-300 shadow-sm focus:shadow "
                     placeholder="nome do usuario"
                   />
@@ -229,6 +231,7 @@ function App() {
                           onChange: () => setMensagemErro(''), // 👈 já remove o erro no próprio RHF
                         })}
                         type={openOlho ? 'text' : 'password'}
+                        autoComplete="current-password"
                         className="w-full pl-3 h-12 pr-10 py-2 bg-transparent placeholder:text-slate-400 text-primary text-sm border border-blue-500 rounded-md transition duration-300 ease focus:outline-none focus:border-orange-600 hover:border-orange-300 shadow-sm focus:shadow type=password"
                         placeholder="informe sua password aqui"
                       />
