@@ -32,9 +32,20 @@ export function getPgPool(): Pool {
 // Pool para produção (variável local do módulo)
 let modulePool: Pool | null = null;
 
+// Schema central (banco de login/cadastros base). Toda conexão do pool
+// central deve nascer com este search_path.
+// OBS: sem espaço entre os schemas — no parâmetro "options" do libpq o espaço
+// separa argumentos e quebra o valor (ex.: "db_manaus," inválido).
+const SEARCH_PATH_CENTRAL = 'db_manaus,public';
+
 function createPool(): Pool {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    // IMPORTANTE: fixa o search_path no handshake (modo libpq). O parâmetro
+    // "schema=" que vem na connection string é IGNORADO pelo node-postgres,
+    // então dependíamos do default do role. Aqui garantimos db_manaus em
+    // TODA conexão física nova, independente da URL.
+    options: `-c search_path=${SEARCH_PATH_CENTRAL}`,
     max: 20, // Reduzido para evitar esgotar conexões
     min: 2, // Menos conexões ociosas
     idleTimeoutMillis: 10000, // 10 segundos - fechar conexões ociosas mais rápido
@@ -52,8 +63,12 @@ function createPool(): Pool {
   });
 
   pool.on('connect', (client) => {
-    // Configurar timeout na sessão
+    // Reforço (belt-and-suspenders): garante timeout e search_path corretos
+    // em cada conexão física nova, além do que já vem via options.
     client.query('SET statement_timeout = 60000').catch(() => {});
+    client
+      .query(`SET search_path TO ${SEARCH_PATH_CENTRAL}`)
+      .catch(() => {});
   });
 
   return pool;
