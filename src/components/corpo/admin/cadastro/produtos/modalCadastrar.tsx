@@ -34,6 +34,9 @@ interface ModalProps {
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Chamado quando o usuário opta por editar um produto já existente
+      (mesma referência + marca) em vez de cadastrar um novo. */
+  onEditarExistente?: (codprod: string) => void;
 }
 
 //dados para achar as abas com erro e poder chavear
@@ -99,9 +102,17 @@ export default function CustomModal({
   onClose,
   onSuccess,
   footer,
+  onEditarExistente,
 }: ModalProps) {
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
   const [produto, setProduto] = useState<Produto>({ ...PRODUTO_PADRAO });
+  // Produto já existente com a mesma referência + marca (para oferecer editar)
+  const [produtoDuplicado, setProdutoDuplicado] = useState<{
+    codprod: string;
+    ref: string;
+    descr: string;
+    codmarca: string;
+  } | null>(null);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { toast } = useToast();
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
@@ -117,8 +128,31 @@ export default function CustomModal({
       setProduto({ ...PRODUTO_PADRAO });
       setActiveTab('dadosCadastrais');
       setErrors({});
+      setProdutoDuplicado(null);
     }
   }, [isOpen]);
+
+  // Ao preencher Referência + Marca, verifica no banco se já existe um produto
+  // com essa combinação (não pode haver duplicado). Se existir, oferece editar.
+  useEffect(() => {
+    const ref = (produto.ref || '').trim();
+    const codmarca = (produto.codmarca || '').trim();
+    if (!isOpen || ref.length < 2 || !codmarca) return;
+
+    const t = setTimeout(() => {
+      fetch(
+        `/api/produtos/verificar-ref-marca?ref=${encodeURIComponent(
+          ref,
+        )}&codmarca=${encodeURIComponent(codmarca)}`,
+      )
+        .then((r) => (r.ok ? r.json() : { existe: false }))
+        .then((d) => {
+          if (d.existe && d.produto) setProdutoDuplicado(d.produto);
+        })
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [produto.ref, produto.codmarca, isOpen]);
 
   const handleProdutoChange = (produtoAtualizado: Produto) => {
     handleProdutoByCodbar(produtoAtualizado.codbar);
@@ -459,6 +493,25 @@ export default function CustomModal({
 
         {/* Confirmação antes de salvar */}
         {ConfirmacaoSalvarModal}
+
+        {/* Referência + Marca já cadastradas: oferece editar o existente */}
+        <ConfirmationModal
+          isOpen={!!produtoDuplicado}
+          onClose={() => setProdutoDuplicado(null)}
+          onConfirm={() => {
+            const cod = produtoDuplicado?.codprod;
+            setProdutoDuplicado(null);
+            if (cod && onEditarExistente) {
+              onClose();
+              onEditarExistente(cod);
+            }
+          }}
+          title="Produto já cadastrado"
+          message={`Já existe o produto ${produtoDuplicado?.codprod} - ${produtoDuplicado?.descr} com a referência "${produtoDuplicado?.ref}" nessa marca.\nDeseja editar esse produto?`}
+          type="warning"
+          confirmText="Sim, editar"
+          cancelText="Não, continuar novo"
+        />
       </div>
     </div>
   );

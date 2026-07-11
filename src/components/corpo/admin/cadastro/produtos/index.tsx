@@ -1208,6 +1208,11 @@ const ProdutosPage = () => {
         onClose={() => setCadastrarOpen(false)}
         onSuccess={recarregarLista}
         title="Cadastrar Produto"
+        onEditarExistente={(codprod) => {
+          setCadastrarOpen(false);
+          setIdProduto(codprod);
+          setEditarOpen(true);
+        }}
       >
         <div className="space-y-2">
           {selectedRow &&
