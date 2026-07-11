@@ -51,6 +51,80 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
     null,
   );
 
+  // ---- NOVA referência (botão "NOVO", equivalente ao Delphi) ----
+  const [novoAberto, setNovoAberto] = useState(false);
+  const [novaReferencia, setNovaReferencia] = useState('');
+  const [criandoNovo, setCriandoNovo] = useState(false);
+  const [erroNovo, setErroNovo] = useState('');
+  // busca de marca para a nova referência
+  const [marcaSel, setMarcaSel] = useState<{ codmarca: string; descr: string } | null>(null);
+  const [marcaOpen, setMarcaOpen] = useState(false);
+  const [marcaQuery, setMarcaQuery] = useState('');
+  const [debouncedMarca] = useDebounce(marcaQuery, 300);
+  const [marcaResultados, setMarcaResultados] = useState<{ codmarca: string; descr: string }[]>([]);
+
+  useEffect(() => {
+    if (!marcaOpen) return;
+    let ativo = true;
+    fetch(`/api/marcas/get?perPage=30&search=${encodeURIComponent(debouncedMarca)}`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((data) => {
+        if (ativo) setMarcaResultados(data.data || data.rows || []);
+      })
+      .catch(() => ativo && setMarcaResultados([]));
+    return () => {
+      ativo = false;
+    };
+  }, [debouncedMarca, marcaOpen]);
+
+  const criarNovaReferencia = async () => {
+    setErroNovo('');
+    const ref = novaReferencia.trim();
+    if (!ref) {
+      setErroNovo('Informe a referência.');
+      return;
+    }
+    if (!marcaSel) {
+      setErroNovo('Selecione a marca.');
+      return;
+    }
+    setCriandoNovo(true);
+    try {
+      const resp = await fetch('/api/produtos/ref-fabrica-novo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referencia: ref, codmarca: marcaSel.codmarca }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setErroNovo(data.error || 'Falha ao criar referência.');
+        return;
+      }
+      const nova: ReferenciaItem = {
+        cod_id: data.referencia.cod_id,
+        referencia: data.referencia.referencia,
+        codmarca: data.referencia.codmarca || '',
+        codcredor: data.referencia.codcredor || '',
+        marca_nome: data.referencia.marca_nome || marcaSel.descr || '',
+      };
+      // não duplica se já estiver na lista
+      if (!referencias.some((r) => r.cod_id === nova.cod_id)) {
+        const novasRefs = [...referencias, nova];
+        setReferencias(novasRefs);
+        handleProdutoChange({ ...produto, referenciasFabrica: novasRefs });
+      }
+      // limpa o formulário do NOVO
+      setNovaReferencia('');
+      setMarcaSel(null);
+      setMarcaQuery('');
+      setNovoAberto(false);
+    } catch (e: any) {
+      setErroNovo('Erro ao criar referência.');
+    } finally {
+      setCriandoNovo(false);
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     let ativo = true;
@@ -198,18 +272,126 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
             </PopoverContent>
           </Popover>
         </div>
-        <div>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={adicionarReferencia}
             disabled={!refSelecionada}
-            className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-xs rounded transition-colors h-[38px]"
+            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white text-xs rounded transition-colors h-[38px]"
           >
             <Plus size={14} />
             Adicionar
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setNovoAberto((v) => !v);
+              setErroNovo('');
+            }}
+            title="Cadastrar uma referência que não existe (como o NOVO do Delphi)"
+            className="flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded transition-colors h-[38px]"
+          >
+            <Plus size={14} />
+            Novo
+          </button>
         </div>
       </div>
+
+      {/* Formulário do NOVO: cria uma referência inexistente */}
+      {novoAberto && (
+        <div className="rounded-md border border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-3 space-y-3">
+          <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+            Nova referência de fábrica
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label>Referência *</Label>
+              <input
+                type="text"
+                value={novaReferencia}
+                onChange={(e) => setNovaReferencia(e.target.value)}
+                placeholder="Ex.: F000BL07TAB15"
+                className="w-full h-[38px] px-2 py-1 text-sm border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800"
+              />
+            </div>
+            <div>
+              <Label>Marca *</Label>
+              <Popover open={marcaOpen} onOpenChange={setMarcaOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={marcaOpen}
+                    className="w-full justify-between font-normal h-[38px]"
+                  >
+                    {marcaSel
+                      ? `${marcaSel.codmarca} - ${marcaSel.descr}`
+                      : 'Buscar marca...'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Digite a marca..."
+                      value={marcaQuery}
+                      onValueChange={setMarcaQuery}
+                    />
+                    <CommandList>
+                      {marcaResultados.length === 0 && (
+                        <CommandEmpty>Nenhuma marca encontrada.</CommandEmpty>
+                      )}
+                      <CommandGroup>
+                        {marcaResultados.map((m) => (
+                          <CommandItem
+                            key={m.codmarca}
+                            value={m.codmarca}
+                            onSelect={() => {
+                              setMarcaSel({ codmarca: m.codmarca, descr: m.descr });
+                              setMarcaOpen(false);
+                            }}
+                          >
+                            <span className="font-medium">{m.codmarca}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {m.descr}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          {erroNovo && <span className="text-red-500 text-xs">{erroNovo}</span>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setNovoAberto(false);
+                setErroNovo('');
+              }}
+              className="px-3 py-2 text-xs rounded border border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-800"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={criarNovaReferencia}
+              disabled={criandoNovo}
+              className="flex items-center gap-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs rounded"
+            >
+              {criandoNovo ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus size={14} />
+              )}
+              Criar e adicionar
+            </button>
+          </div>
+        </div>
+      )}
 
       {error?.referencia && (
         <span className="text-red-500 text-xs">{error.referencia}</span>
