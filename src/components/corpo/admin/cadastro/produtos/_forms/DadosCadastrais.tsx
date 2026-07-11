@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Plus } from 'lucide-react';
 import FormInput from '@/components/common/FormInput';
 import CampoDecimal from './CampoDecimal';
+import CadastroRapidoAux, { TipoAux } from './CadastroRapidoAux';
 import SelectInput from '@/components/common/SelectPadrao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -127,6 +129,27 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [gruposFuncao, setGruposFuncao] = useState<GrupoFuncao[]>([]);
   const [gruposProduto, setGruposProduto] = useState<GrupoProduto[]>([]);
+
+  // Cadastro rápido (Marca / Grupo de Função / Grupo de Produto) via botão "+"
+  const [auxAberto, setAuxAberto] = useState<TipoAux | null>(null);
+  const handleAuxCriado = (codigo: string, descr: string) => {
+    if (auxAberto === 'marca') {
+      setMarcas((prev) => [{ codmarca: codigo, descr } as Marca, ...prev]);
+      handleProdutoChange({ ...produto, codmarca: codigo });
+    } else if (auxAberto === 'grupoFuncao') {
+      setGruposFuncao((prev) => [
+        { codgpf: codigo, descr } as unknown as GrupoFuncao,
+        ...prev,
+      ]);
+      handleProdutoChange({ ...produto, codgpf: codigo });
+    } else if (auxAberto === 'grupoProduto') {
+      setGruposProduto((prev) => [
+        { codgpp: codigo, descr } as GrupoProduto,
+        ...prev,
+      ]);
+      handleProdutoChange({ ...produto, codgpp: codigo });
+    }
+  };
   const [searchMarcas, setSearchMarcas] = useState<string>('');
   const [searchGruposFuncao, setSearchGruposFuncao] = useState<string>('');
   const [searchGruposProduto, setSearchGruposProduto] = useState<string>('');
@@ -326,60 +349,96 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className={error?.codmarca ? 'field-error' : ''}>
-            <SelectInput searchable
-              name="codmarca"
-              label="Marca"
-              required
-              loading={loadingMarcas}
-              options={marcaOptions}
-              value={produto.codmarca || ''}
-              onValueChange={(value) =>
-                handleProdutoChange({ ...produto, codmarca: value as string })
-              }
-              onInputChange={(value) => {
-                setSearchMarcas(value);
-                handleMarcasSearch();
-              }}
-              error={error?.codmarca}
-            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <SelectInput searchable
+                  name="codmarca"
+                  label="Marca"
+                  required
+                  loading={loadingMarcas}
+                  options={marcaOptions}
+                  value={produto.codmarca || ''}
+                  onValueChange={(value) =>
+                    handleProdutoChange({ ...produto, codmarca: value as string })
+                  }
+                  onInputChange={(value) => {
+                    setSearchMarcas(value);
+                    handleMarcasSearch();
+                  }}
+                  error={error?.codmarca}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuxAberto('marca')}
+                title="Cadastrar nova marca"
+                className="mt-6 h-10 w-10 shrink-0 flex items-center justify-center rounded bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
           </div>
           <div className={error?.codgpf ? 'field-error' : ''}>
-            <SelectInput searchable
-              name="codgpf"
-              label="Grupo de Função"
-              required
-              loading={loadingGruposFuncao}
-              options={grupoFuncaoOptions}
-              value={produto.codgpf || ''}
-              onValueChange={(value) =>
-                handleProdutoChange({ ...produto, codgpf: value as string })
-              }
-              onInputChange={(value) => {
-                setSearchGruposFuncao(value);
-                handleGruposFuncaoSearch();
-              }}
-              error={error?.codgpf}
-            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <SelectInput searchable
+                  name="codgpf"
+                  label="Grupo de Função"
+                  required
+                  loading={loadingGruposFuncao}
+                  options={grupoFuncaoOptions}
+                  value={produto.codgpf || ''}
+                  onValueChange={(value) =>
+                    handleProdutoChange({ ...produto, codgpf: value as string })
+                  }
+                  onInputChange={(value) => {
+                    setSearchGruposFuncao(value);
+                    handleGruposFuncaoSearch();
+                  }}
+                  error={error?.codgpf}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuxAberto('grupoFuncao')}
+                title="Cadastrar novo grupo de função"
+                className="mt-6 h-10 w-10 shrink-0 flex items-center justify-center rounded bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-4">
           <div className={error?.codgpp ? 'field-error' : ''}>
-            <SelectInput searchable
-              name="codgpp"
-              label="Grupo de Produto"
-              required
-              loading={loadingGruposProduto}
-              options={grupoProdutoOptions}
-              value={produto.codgpp || ''}
-              onValueChange={(value) =>
-                handleProdutoChange({ ...produto, codgpp: value as string })
-              }
-              onInputChange={(value) => {
-                setSearchGruposProduto(value);
-                handleGruposProdutoSearch();
-              }}
-              error={error?.codgpp}
-            />
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <SelectInput searchable
+                  name="codgpp"
+                  label="Grupo de Produto"
+                  required
+                  loading={loadingGruposProduto}
+                  options={grupoProdutoOptions}
+                  value={produto.codgpp || ''}
+                  onValueChange={(value) =>
+                    handleProdutoChange({ ...produto, codgpp: value as string })
+                  }
+                  onInputChange={(value) => {
+                    setSearchGruposProduto(value);
+                    handleGruposProdutoSearch();
+                  }}
+                  error={error?.codgpp}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuxAberto('grupoProduto')}
+                title="Cadastrar novo grupo de produto"
+                className="mt-6 h-10 w-10 shrink-0 flex items-center justify-center rounded bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
           </div>
           <SelectInput
             name="curva"
@@ -665,6 +724,14 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           )}
         </div>
       </div>
+
+      {/* Cadastro rápido de Marca / Grupo de Função / Grupo de Produto */}
+      <CadastroRapidoAux
+        aberto={auxAberto !== null}
+        tipo={auxAberto ?? 'marca'}
+        onClose={() => setAuxAberto(null)}
+        onCriado={handleAuxCriado}
+      />
     </>
   );
 };
