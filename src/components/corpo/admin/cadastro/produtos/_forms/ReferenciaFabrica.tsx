@@ -63,11 +63,11 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
   const [debouncedMarca] = useDebounce(marcaQuery, 300);
   const [marcaResultados, setMarcaResultados] = useState<{ codmarca: string; descr: string }[]>([]);
   // busca de fornecedor (credor) — obrigatório, como no Delphi
-  const [fornecedorSel, setFornecedorSel] = useState<{ cod_credor: string; nome: string } | null>(null);
+  const [fornecedorSel, setFornecedorSel] = useState<{ cod_credor: string; nome: string; cpf_cgc?: string } | null>(null);
   const [fornOpen, setFornOpen] = useState(false);
   const [fornQuery, setFornQuery] = useState('');
   const [debouncedForn] = useDebounce(fornQuery, 300);
-  const [fornResultados, setFornResultados] = useState<{ cod_credor: string; nome: string; nome_fant?: string }[]>([]);
+  const [fornResultados, setFornResultados] = useState<{ cod_credor: string; nome: string; nome_fant?: string; cpf_cgc?: string }[]>([]);
 
   useEffect(() => {
     if (!marcaOpen) return;
@@ -421,7 +421,9 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                     className="w-full justify-between font-normal h-[38px]"
                   >
                     {fornecedorSel
-                      ? `${fornecedorSel.cod_credor} - ${fornecedorSel.nome}`
+                      ? `${fornecedorSel.cod_credor} - ${fornecedorSel.nome}${
+                          fornecedorSel.cpf_cgc ? ` (${fornecedorSel.cpf_cgc})` : ''
+                        }`
                       : 'Buscar fornecedor...'}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -446,14 +448,24 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                               setFornecedorSel({
                                 cod_credor: String(f.cod_credor).trim(),
                                 nome: f.nome || f.nome_fant || '',
+                                cpf_cgc: f.cpf_cgc || '',
                               });
                               setFornOpen(false);
                             }}
                           >
-                            <span className="font-medium">{f.cod_credor}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {f.nome || f.nome_fant || ''}
-                            </span>
+                            <div className="flex flex-col">
+                              <div>
+                                <span className="font-medium">{f.cod_credor}</span>
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  {f.nome || f.nome_fant || ''}
+                                </span>
+                              </div>
+                              {f.cpf_cgc && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  CNPJ/CPF: {f.cpf_cgc}
+                                </span>
+                              )}
+                            </div>
                           </CommandItem>
                         ))}
                       </CommandGroup>
