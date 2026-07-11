@@ -8,29 +8,24 @@ interface DadosCustosProps {
   error?: { [p: string]: string };
 }
 
-// Helper function para lidar com valores numéricos opcionais
-const handleOptionalNumberChange = (value: string): number | undefined => {
-  if (value === '' || value === null || value === undefined) return undefined;
-  const num = Number(value);
-  return isNaN(num) ? undefined : num;
+// Máscara decimal no padrão do Delphi: os dígitos entram pela direita e as
+// últimas `casas` viram os decimais (ex.: digitar 1080 -> 10.80). Guarda o
+// número real, não o texto.
+const mascaraDecimalChange = (value: string, casas = 2): number => {
+  const digits = (value || '').replace(/\D/g, '');
+  if (!digits) return 0;
+  return parseInt(digits, 10) / Math.pow(10, casas);
 };
 
-// Helper function para lidar com valores numéricos obrigatórios
-const handleRequiredNumberChange = (
-  value: string,
-  defaultValue: number = 0,
-): number => {
-  if (value === '' || value === null || value === undefined)
-    return defaultValue;
-  const num = Number(value);
-  return isNaN(num) ? defaultValue : num;
+// Exibe com `casas` decimais fixas (ex.: 10.8 -> "10.80").
+const exibeDecimal = (value: number | null | undefined, casas = 2): string => {
+  const n = Number(value ?? 0);
+  return (isNaN(n) ? 0 : n).toFixed(casas);
 };
 
-// Helper function para exibir valores numéricos
-const displayNumberValue = (value: number | null | undefined): string => {
-  if (value === null || value === undefined) return '';
-  return value.toString();
-};
+// Casas de cada campo (Delphi): preços/custos = 2; taxas de dólar = 6.
+const DEC_PRECO = 2;
+const DEC_DOLAR = 6;
 
 const DadosCustos: React.FC<DadosCustosProps> = ({
   produto,
@@ -38,6 +33,21 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
   error,
 }) => {
   const moeda = produto.dolar === 'S' ? 'US$' : 'R$';
+
+  // Gera value/onChange padronizados para um campo decimal com máscara.
+  const campoDecimal = (campo: string, casas: number = DEC_PRECO) => ({
+    type: 'text' as const,
+    inputMode: 'numeric' as const,
+    value: exibeDecimal(
+      (produto as any)[campo] as number | null | undefined,
+      casas,
+    ),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      handleProdutoChange({
+        ...produto,
+        [campo]: mascaraDecimalChange(e.target.value, casas),
+      } as Produto),
+  });
 
   return (
     <>
@@ -48,54 +58,26 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           </div>
           <FormInput
             name="prfabr"
-            type="number"
             label={`Preço Fábrica (${moeda})`}
-            value={displayNumberValue(produto.prfabr)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                prfabr: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('prfabr')}
             error={error?.prfabr}
           />
           <FormInput
             name="prcustoatual"
-            type="number"
             label={`Preço Líquido (${moeda})`}
-            value={displayNumberValue(produto.prcustoatual)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                prcustoatual: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('prcustoatual')}
             error={error?.prcustoatual}
           />
           <FormInput
             name="preconf"
-            type="number"
             label={`Preço NF (${moeda})`}
-            value={displayNumberValue(produto.preconf)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                preconf: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('preconf')}
             error={error?.preconf}
           />
           <FormInput
             name="precosnf"
-            type="number"
             label={`Preço sem NF (${moeda})`}
-            value={displayNumberValue(produto.precosnf)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                precosnf: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('precosnf')}
             error={error?.precosnf}
           />
         </div>
@@ -105,63 +87,33 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           </div>
           <FormInput
             name="prcompra"
-            type="number"
             label={`Custo Compra (${moeda})`}
-            value={displayNumberValue(produto.prcompra)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                prcompra: handleRequiredNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('prcompra')}
             error={error?.prcompra}
             required
           />
           <FormInput
             name="prcomprasemst"
-            type="number"
             label={`Custo Transf. Líquido (${moeda})`}
-            value={displayNumberValue(produto.prcomprasemst)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                prcomprasemst: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('prcomprasemst')}
             error={error?.prcomprasemst}
           />
           <FormInput
             name="pratualdesp"
-            type="number"
             label={`Custo Transf. Bruto (${moeda})`}
-            value={displayNumberValue(produto.pratualdesp)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                pratualdesp: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('pratualdesp')}
             error={error?.pratualdesp}
           />
           <FormInput
             name="txdolarcompra"
-            type="number"
             label="Taxa Dólar"
-            value={displayNumberValue(produto.txdolarcompra)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                txdolarcompra: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('txdolarcompra', DEC_DOLAR)}
             error={error?.txdolarcompra}
           />
           <FormInput
             name="prcusto"
-            type="number"
             label="Custo Contábil"
-            value={displayNumberValue(produto.prcusto)}
-            onChange={(e) => handleProdutoChange({ ...produto, prcusto: handleOptionalNumberChange(e.target.value) })}
+            {...campoDecimal('prcusto')}
             error={error?.prcusto}
           />
         </div>
@@ -169,80 +121,38 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">Lista de Preço</div>
           <FormInput
             name="prvenda"
-            type="number"
             label={`Preço Venda (${moeda})`}
-            value={displayNumberValue(produto.prvenda)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                prvenda: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('prvenda')}
             error={error?.prvenda}
           />
           <FormInput
             name="primp"
-            type="number"
             label="Preço Importação"
-            value={displayNumberValue(produto.primp)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                primp: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('primp')}
             error={error?.primp}
           />
           <FormInput
             name="impfat"
-            type="number"
             label="Preço Importação Fatura"
-            value={displayNumberValue(produto.impfat)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                impfat: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('impfat')}
             error={error?.impfat}
           />
           <FormInput
             name="impfab"
-            type="number"
             label="Preço Importação Fábrica"
-            value={displayNumberValue(produto.impfab)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                impfab: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('impfab')}
             error={error?.impfab}
           />
           <FormInput
             name="concor"
-            type="number"
             label={`Preço Concorrência (${moeda})`}
-            value={displayNumberValue(produto.concor)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                concor: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('concor')}
             error={error?.concor}
           />
           <FormInput
             name="txdolarvenda"
-            type="number"
             label="Taxa Dólar"
-            value={displayNumberValue(produto.txdolarvenda)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                txdolarvenda: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('txdolarvenda', DEC_DOLAR)}
             error={error?.txdolarvenda}
           />
         </div>
@@ -254,28 +164,14 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           </div>
           <FormInput
             name="txdolarfabrica"
-            type="number"
             label="Taxa Dólar Fábrica"
-            value={displayNumberValue(produto.txdolarfabrica)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                txdolarfabrica: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('txdolarfabrica', DEC_DOLAR)}
             error={error?.txdolarfabrica}
           />
           <FormInput
             name="txdolarcompramedio"
-            type="number"
             label="Taxa Dólar Compra Médio"
-            value={displayNumberValue(produto.txdolarcompramedio)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                txdolarcompramedio: handleOptionalNumberChange(e.target.value),
-              })
-            }
+            {...campoDecimal('txdolarcompramedio', DEC_DOLAR)}
             error={error?.txdolarcompramedio}
           />
         </div>

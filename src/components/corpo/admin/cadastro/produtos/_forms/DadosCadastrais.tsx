@@ -115,6 +115,17 @@ const displayNumberValue = (value: number | null | undefined): string => {
   return value.toString();
 };
 
+// Máscara decimal no padrão do Delphi (digitar 1080 -> 10.80). Guarda o número.
+const mascaraDecimalChange = (value: string, casas = 2): number => {
+  const digits = (value || '').replace(/\D/g, '');
+  if (!digits) return 0;
+  return parseInt(digits, 10) / Math.pow(10, casas);
+};
+const exibeDecimal = (value: number | null | undefined, casas = 2): string => {
+  const n = Number(value ?? 0);
+  return (isNaN(n) ? 0 : n).toFixed(casas);
+};
+
 const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   produto,
   handleProdutoChange,
@@ -439,13 +450,14 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           </div>
           <FormInput
             name="pesoliq"
-            type="number"
+            type="text"
+            inputMode="numeric"
             label="Peso Líquido"
-            value={displayNumberValue(produto.pesoliq)}
+            value={exibeDecimal(produto.pesoliq)}
             onChange={(e) =>
               handleProdutoChange({
                 ...produto,
-                pesoliq: handleOptionalNumberChange(e.target.value),
+                pesoliq: mascaraDecimalChange(e.target.value),
               })
             }
             error={error?.pesoliq}
@@ -632,39 +644,42 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             <div className="grid grid-cols-3 gap-4">
               <FormInput
                 name="comdifeext"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 label="Comissão Externa (%)"
-                value={displayNumberValue(produto.comdifeext)}
+                value={exibeDecimal(produto.comdifeext)}
                 onChange={(e) =>
                   handleProdutoChange({
                     ...produto,
-                    comdifeext: handleOptionalNumberChange(e.target.value),
+                    comdifeext: mascaraDecimalChange(e.target.value),
                   })
                 }
                 error={error?.comdifeext}
               />
               <FormInput
                 name="comdifeext_int"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 label="Comissão Externa Internacional (%)"
-                value={displayNumberValue(produto.comdifeext_int)}
+                value={exibeDecimal(produto.comdifeext_int)}
                 onChange={(e) =>
                   handleProdutoChange({
                     ...produto,
-                    comdifeext_int: handleOptionalNumberChange(e.target.value),
+                    comdifeext_int: mascaraDecimalChange(e.target.value),
                   })
                 }
                 error={error?.comdifeext_int}
               />
               <FormInput
                 name="comdifint"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 label="Comissão Interna (%)"
-                value={displayNumberValue(produto.comdifint)}
+                value={exibeDecimal(produto.comdifint)}
                 onChange={(e) =>
                   handleProdutoChange({
                     ...produto,
-                    comdifint: handleOptionalNumberChange(e.target.value),
+                    comdifint: mascaraDecimalChange(e.target.value),
                   })
                 }
                 error={error?.comdifint}

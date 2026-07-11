@@ -210,6 +210,27 @@ export default function CustomModal({
         return;
       }
 
+      // Validação (Delphi): a Marca das referências de fábrica deve ser igual
+      // à Marca informada nos Dados Cadastrais.
+      if (
+        produtoFinal.referenciasFabrica &&
+        produtoFinal.referenciasFabrica.length > 0 &&
+        produtoFinal.codmarca
+      ) {
+        const marcaProd = String(produtoFinal.codmarca).trim();
+        const divergente = produtoFinal.referenciasFabrica.find(
+          (r: any) => r.codmarca && String(r.codmarca).trim() !== marcaProd,
+        );
+        if (divergente) {
+          toast({
+            description: `A Marca da referência de fábrica "${divergente.referencia}" difere da Marca informada na aba Dados Cadastrais.`,
+            variant: 'destructive',
+          });
+          setActiveTab('referenciaFabrica');
+          return;
+        }
+      }
+
       cadastroProdutoSchema.parse(produtoFinal);
 
       await insertProduto(produtoFinal);
