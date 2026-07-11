@@ -81,7 +81,8 @@ export default function CustomModal({
   footer,
 }: ModalProps) {
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
-  const [produto, setProduto] = useState({} as Produto);
+  // Novo produto: Tributado começa como NÃO (padrão do Delphi)
+  const [produto, setProduto] = useState({ trib: 'N' } as Produto);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { toast } = useToast();
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
@@ -175,12 +176,9 @@ export default function CustomModal({
     try {
       const produtoFinal = produtoUpperCase(produto);
 
-      // Validação: Compra Direta SIM exige pelo menos 1 Ref. Fábrica
-      if (produtoFinal.compradireta === 'S' && (!produtoFinal.referenciasFabrica || produtoFinal.referenciasFabrica.length === 0)) {
-        toast({ description: 'Compra Direta = SIM exige pelo menos 1 Referência de Fábrica cadastrada.', variant: 'destructive' });
-        setActiveTab('referenciaFabrica');
-        return;
-      }
+      // Obs.: a validação de "Compra Direta = SIM exige Ref. de Fábrica" é
+      // feita no backend (não depende de abrir a aba); a mensagem retornada é
+      // exibida no catch abaixo.
 
       // Validação CEST/NCM — bloqueia save se inválido
       if (produtoFinal.cest && produtoFinal.cest.length > 0) {
@@ -247,8 +245,10 @@ export default function CustomModal({
         onSuccess?.();
       }, 1500);
     } catch (error) {
+      // Mensagem específica do backend (ex.: Compra Direta exige Ref. Fábrica)
+      const msgBackend = (error as any)?.response?.data?.error;
       toast({
-        description: 'Falha ao cadastrar produto.',
+        description: msgBackend || 'Falha ao cadastrar produto.',
         variant: 'destructive',
       });
       if (error instanceof z.ZodError) {
@@ -287,7 +287,7 @@ export default function CustomModal({
   };
 
   const handleClear = () => {
-    setProduto({} as Produto);
+    setProduto({ trib: 'N' } as Produto);
     setErrors({});
   };
 

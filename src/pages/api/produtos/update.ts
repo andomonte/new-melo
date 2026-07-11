@@ -25,6 +25,30 @@ export default async function handle(
     // Iniciar transação
     await client.query('BEGIN');
 
+    // Validação (Delphi): Compra Direta = SIM exige >= 1 referência de fábrica.
+    // Feita no backend para NÃO depender do usuário abrir a aba no front:
+    // se o front enviou a lista, usa-a; senão confere os vínculos no banco.
+    if (produto.compradireta === 'S') {
+      let temRef = false;
+      if (Array.isArray(produto.referenciasFabrica)) {
+        temRef = produto.referenciasFabrica.some((r: any) => r?.referencia);
+      } else {
+        const q = await client.query(
+          'SELECT 1 FROM dbprod_ref_fabrica WHERE codprod = $1 LIMIT 1',
+          [produto.codprod],
+        );
+        temRef = (q.rowCount ?? 0) > 0;
+      }
+      if (!temRef) {
+        await client.query('ROLLBACK');
+        res.status(400).json({
+          error:
+            'Compra Direta = SIM exige pelo menos 1 Referência de Fábrica cadastrada.',
+        });
+        return;
+      }
+    }
+
     // Chaves que NÃO são colunas de dbprod (tratadas à parte ou apenas de
     // exibição no front) — precisam ficar fora do UPDATE dinâmico, senão geram
     // "column ... does not exist" (ex.: referenciasFabrica é um array salvo em

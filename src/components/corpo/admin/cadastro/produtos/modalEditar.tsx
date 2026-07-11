@@ -187,12 +187,9 @@ export default function CustomModal({
     try {
       const produtoFinal = produtoUpperCase(produto);
 
-      // Validação: Compra Direta SIM exige pelo menos 1 Ref. Fábrica
-      if (produtoFinal.compradireta === 'S' && (!produtoFinal.referenciasFabrica || produtoFinal.referenciasFabrica.length === 0)) {
-        toast({ description: 'Compra Direta = SIM exige pelo menos 1 Referência de Fábrica cadastrada.', variant: 'destructive' });
-        setActiveTab('referenciaFabrica');
-        return;
-      }
+      // Obs.: a validação de "Compra Direta = SIM exige Ref. de Fábrica" é
+      // feita no backend (checa os vínculos no banco, sem depender de abrir a
+      // aba); a mensagem retornada é exibida no catch abaixo.
 
       // Validação CEST/NCM — bloqueia save se inválido
       if (produtoFinal.cest && produtoFinal.cest.length > 0) {
@@ -279,8 +276,10 @@ export default function CustomModal({
       }, 1500);
     } catch (error) {
       setLoading(false);
+      // Mensagem específica do backend (ex.: Compra Direta exige Ref. Fábrica)
+      const msgBackend = (error as any)?.response?.data?.error;
       toast({
-        description: 'Falha ao atualizar produto.',
+        description: msgBackend || 'Falha ao atualizar produto.',
         variant: 'destructive',
       });
       if (error instanceof z.ZodError) {

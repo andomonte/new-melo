@@ -24,6 +24,22 @@ export default async function handle(
   data.prvenda = data.prvenda || 0;
   data.prcompra = data.prcompra || 0;
 
+  // Validação (Delphi): Compra Direta = SIM exige >= 1 referência de fábrica.
+  // No cadastro a lista vem do front (produto novo ainda não tem vínculos).
+  if (
+    data.compradireta === 'S' &&
+    !(
+      Array.isArray(data.referenciasFabrica) &&
+      data.referenciasFabrica.some((r: any) => r?.referencia)
+    )
+  ) {
+    res.status(400).json({
+      error:
+        'Compra Direta = SIM exige pelo menos 1 Referência de Fábrica cadastrada.',
+    });
+    return;
+  }
+
   const pool = getPgPool();
   const client = await pool.connect();
 
