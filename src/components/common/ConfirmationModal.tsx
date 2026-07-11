@@ -11,6 +11,8 @@ interface ConfirmationModalProps {
   confirmText?: string;
   cancelText?: string;
   loading?: boolean;
+  /** Alerta de um botão só (esconde o Cancelar) */
+  hideCancel?: boolean;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -22,7 +24,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   type = 'info',
   confirmText = 'Confirmar',
   cancelText = 'Cancelar',
-  loading = false
+  loading = false,
+  hideCancel = false,
 }) => {
   if (!isOpen) return null;
 
@@ -70,13 +73,15 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
         </div>
         
         <div className="flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="px-4 py-2 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-          >
-            {cancelText}
-          </button>
+          {!hideCancel && (
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+            >
+              {cancelText}
+            </button>
+          )}
           <button
             onClick={onConfirm}
             disabled={loading}

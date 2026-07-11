@@ -250,11 +250,13 @@ export default function CustomModal({
           (r: any) => r.codmarca && String(r.codmarca).trim() !== marcaProd,
         );
         if (divergente) {
-          toast({
-            description: `A Marca da referência de fábrica "${divergente.referencia}" difere da Marca informada na aba Dados Cadastrais.`,
-            variant: 'destructive',
+          pedirConfirmacao(() => setActiveTab('referenciaFabrica'), {
+            title: 'Marca divergente',
+            message: `A Marca da referência de fábrica "${divergente.referencia}" difere da Marca informada na aba Dados Cadastrais.`,
+            type: 'warning',
+            confirmText: 'OK',
+            somenteOk: true,
           });
-          setActiveTab('referenciaFabrica');
           return;
         }
       }

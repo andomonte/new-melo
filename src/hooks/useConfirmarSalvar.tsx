@@ -9,6 +9,8 @@ interface OpcoesConfirmarSalvar {
   type?: 'warning' | 'danger' | 'info' | 'success';
   /** Executada quando o usuário CANCELA (botão cancelar/fechar). */
   onCancel?: () => void;
+  /** Alerta de um botão só (esconde o Cancelar). Use com confirmText: 'OK'. */
+  somenteOk?: boolean;
 }
 
 /**
@@ -70,6 +72,7 @@ export function useConfirmarSalvar(opcoes?: OpcoesConfirmarSalvar) {
       type={ef.type ?? 'info'}
       confirmText={ef.confirmText ?? 'Sim, salvar'}
       cancelText={ef.cancelText ?? 'Cancelar'}
+      hideCancel={ef.somenteOk}
     />
   );
 
