@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import DadosCadastrais from './_forms/DadosCadastrais';
 import DadosFiscais from './_forms/DadosFiscais';
 import DadosCustos from './_forms/DadosCustos';
@@ -74,6 +74,26 @@ const campoParaAba: Record<string, string> = {
   prfabr: 'dadosCustos',
 };
 
+// Valores padrão de um NOVO produto (espelha o "Novo" do Delphi):
+// Tributado=NÃO, Isento PIS/COFINS=NÃO, Situação IPI=Cobrar, Curva=D,
+// Múltiplo Venda/Compra=1, Tipo=ME, Preço Tabelado=SIM, Compra Direta=SIM,
+// Moeda=R$, Unidade=PC, Informativo=*, Situação Tributária=000.
+const PRODUTO_PADRAO = {
+  trib: 'N',
+  isentopiscofins: 'N',
+  isentoipi: 'C',
+  curva: 'D',
+  multiplo: 1,
+  multiplocompra: 1,
+  tipo: 'ME',
+  tabelado: 'S',
+  compradireta: 'S',
+  dolar: 'N',
+  unimed: 'PC',
+  inf: '*',
+  strib: '000',
+} as unknown as Produto;
+
 export default function CustomModal({
   isOpen,
   onClose,
@@ -81,14 +101,24 @@ export default function CustomModal({
   footer,
 }: ModalProps) {
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
-  // Novo produto: Tributado começa como NÃO (padrão do Delphi)
-  const [produto, setProduto] = useState({ trib: 'N' } as Produto);
+  const [produto, setProduto] = useState<Produto>({ ...PRODUTO_PADRAO });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { toast } = useToast();
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
     title: 'Confirmar cadastro',
     message: 'Deseja realmente salvar este produto?',
   });
+
+  // Ao ABRIR o modal, sempre começa do zero (igual Clientes): limpa os dados,
+  // volta para a primeira aba e reaplica os padrões. Assim, fechar e reabrir
+  // não traz o produto que estava sendo cadastrado nem mantém a aba anterior.
+  useEffect(() => {
+    if (isOpen) {
+      setProduto({ ...PRODUTO_PADRAO });
+      setActiveTab('dadosCadastrais');
+      setErrors({});
+    }
+  }, [isOpen]);
 
   const handleProdutoChange = (produtoAtualizado: Produto) => {
     handleProdutoByCodbar(produtoAtualizado.codbar);
@@ -287,7 +317,8 @@ export default function CustomModal({
   };
 
   const handleClear = () => {
-    setProduto({ trib: 'N' } as Produto);
+    setProduto({ ...PRODUTO_PADRAO });
+    setActiveTab('dadosCadastrais');
     setErrors({});
   };
 
@@ -299,6 +330,7 @@ export default function CustomModal({
             produto={produto}
             handleProdutoChange={handleProdutoChange}
             error={errors}
+            multiploReadonly
           />
         );
       case 'dadosFiscais':

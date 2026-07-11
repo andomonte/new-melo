@@ -90,6 +90,8 @@ interface DadosCadastraisProps {
   produto: Produto;
   handleProdutoChange: (produto: Produto) => void;
   error?: { [p: string]: string };
+  /** No cadastro (novo produto) o Múltiplo Venda vem bloqueado com 1 (Delphi) */
+  multiploReadonly?: boolean;
 }
 
 // Helper function para lidar com valores numéricos opcionais
@@ -120,6 +122,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   produto,
   handleProdutoChange,
   error,
+  multiploReadonly,
 }) => {
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [gruposFuncao, setGruposFuncao] = useState<GrupoFuncao[]>([]);
@@ -486,6 +489,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               type="number"
               label="Múltiplo Venda"
               required
+              disabled={multiploReadonly}
               value={displayNumberValue(produto.multiplo)}
               onChange={(e) =>
                 handleProdutoChange({
