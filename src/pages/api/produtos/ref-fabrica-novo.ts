@@ -20,8 +20,7 @@ export default async function handle(
 
   const referencia = String(req.body?.referencia ?? '').trim().toUpperCase();
   const codmarca = String(req.body?.codmarca ?? '').trim();
-  // credor é opcional; mantemos string vazia (não null) para casar com o
-  // match do update.ts (WHERE codcredor = $3).
+  // Fornecedor (credor) é obrigatório, como no Delphi.
   const codcredor = String(req.body?.codcredor ?? '').trim();
 
   if (!referencia) {
@@ -29,6 +28,9 @@ export default async function handle(
   }
   if (!codmarca) {
     return res.status(400).json({ error: 'Marca é obrigatória.' });
+  }
+  if (!codcredor) {
+    return res.status(400).json({ error: 'Fornecedor é obrigatório.' });
   }
 
   const pool = getPgPool();

@@ -62,6 +62,12 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
   const [marcaQuery, setMarcaQuery] = useState('');
   const [debouncedMarca] = useDebounce(marcaQuery, 300);
   const [marcaResultados, setMarcaResultados] = useState<{ codmarca: string; descr: string }[]>([]);
+  // busca de fornecedor (credor) — obrigatório, como no Delphi
+  const [fornecedorSel, setFornecedorSel] = useState<{ cod_credor: string; nome: string } | null>(null);
+  const [fornOpen, setFornOpen] = useState(false);
+  const [fornQuery, setFornQuery] = useState('');
+  const [debouncedForn] = useDebounce(fornQuery, 300);
+  const [fornResultados, setFornResultados] = useState<{ cod_credor: string; nome: string; nome_fant?: string }[]>([]);
 
   useEffect(() => {
     if (!marcaOpen) return;
@@ -77,6 +83,40 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
     };
   }, [debouncedMarca, marcaOpen]);
 
+  useEffect(() => {
+    if (!fornOpen) return;
+    let ativo = true;
+    fetch(`/api/fornecedores/get?perPage=30&search=${encodeURIComponent(debouncedForn)}`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((data) => {
+        if (ativo) setFornResultados(data.data || data.rows || []);
+      })
+      .catch(() => ativo && setFornResultados([]));
+    return () => {
+      ativo = false;
+    };
+  }, [debouncedForn, fornOpen]);
+
+  // Abre o formulário "Novo" já com a marca do produto pré-preenchida
+  // (como o Delphi, que traz a marca selecionada nos dados do produto).
+  const abrirNovo = () => {
+    setErroNovo('');
+    setNovoAberto((v) => !v);
+    if (produto.codmarca && !marcaSel) {
+      const cod = String(produto.codmarca).trim();
+      setMarcaSel({ codmarca: cod, descr: '' });
+      // busca a descrição da marca para exibir "cod - NOME"
+      fetch(`/api/marcas/get?perPage=5&search=${encodeURIComponent(cod)}`)
+        .then((r) => (r.ok ? r.json() : { data: [] }))
+        .then((data) => {
+          const lista = data.data || data.rows || [];
+          const achou = lista.find((m: any) => String(m.codmarca).trim() === cod);
+          if (achou) setMarcaSel({ codmarca: cod, descr: achou.descr || '' });
+        })
+        .catch(() => {});
+    }
+  };
+
   const criarNovaReferencia = async () => {
     setErroNovo('');
     const ref = novaReferencia.trim();
@@ -88,12 +128,20 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
       setErroNovo('Selecione a marca.');
       return;
     }
+    if (!fornecedorSel) {
+      setErroNovo('Selecione o fornecedor.');
+      return;
+    }
     setCriandoNovo(true);
     try {
       const resp = await fetch('/api/produtos/ref-fabrica-novo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referencia: ref, codmarca: marcaSel.codmarca }),
+        body: JSON.stringify({
+          referencia: ref,
+          codmarca: marcaSel.codmarca,
+          codcredor: fornecedorSel.cod_credor,
+        }),
       });
       const data = await resp.json();
       if (!resp.ok) {
@@ -117,6 +165,8 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
       setNovaReferencia('');
       setMarcaSel(null);
       setMarcaQuery('');
+      setFornecedorSel(null);
+      setFornQuery('');
       setNovoAberto(false);
     } catch (e: any) {
       setErroNovo('Erro ao criar referência.');
@@ -284,10 +334,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => {
-              setNovoAberto((v) => !v);
-              setErroNovo('');
-            }}
+            onClick={abrirNovo}
             title="Cadastrar uma referência que não existe (como o NOVO do Delphi)"
             className="flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded transition-colors h-[38px]"
           >
@@ -354,6 +401,58 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                             <span className="font-medium">{m.codmarca}</span>
                             <span className="ml-2 text-xs text-muted-foreground">
                               {m.descr}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="md:col-span-2">
+              <Label>Fornecedor *</Label>
+              <Popover open={fornOpen} onOpenChange={setFornOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={fornOpen}
+                    className="w-full justify-between font-normal h-[38px]"
+                  >
+                    {fornecedorSel
+                      ? `${fornecedorSel.cod_credor} - ${fornecedorSel.nome}`
+                      : 'Buscar fornecedor...'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[420px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Digite o fornecedor (código, nome ou CNPJ)..."
+                      value={fornQuery}
+                      onValueChange={setFornQuery}
+                    />
+                    <CommandList>
+                      {fornResultados.length === 0 && (
+                        <CommandEmpty>Nenhum fornecedor encontrado.</CommandEmpty>
+                      )}
+                      <CommandGroup>
+                        {fornResultados.map((f) => (
+                          <CommandItem
+                            key={f.cod_credor}
+                            value={f.cod_credor}
+                            onSelect={() => {
+                              setFornecedorSel({
+                                cod_credor: String(f.cod_credor).trim(),
+                                nome: f.nome || f.nome_fant || '',
+                              });
+                              setFornOpen(false);
+                            }}
+                          >
+                            <span className="font-medium">{f.cod_credor}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {f.nome || f.nome_fant || ''}
                             </span>
                           </CommandItem>
                         ))}
