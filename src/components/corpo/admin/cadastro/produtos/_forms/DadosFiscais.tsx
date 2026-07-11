@@ -91,6 +91,21 @@ const displayNumberValue = (value: number | null | undefined): string => {
   return value.toString();
 };
 
+// Máscara decimal no padrão do Delphi: os dígitos entram pela direita e as
+// últimas `casas` viram os decimais (ex.: digitar 1080 -> 10.80). O valor
+// guardado é o número real (10.80), não o texto.
+const mascaraDecimalChange = (value: string, casas = 2): number => {
+  const digits = (value || '').replace(/\D/g, '');
+  if (!digits) return 0;
+  return parseInt(digits, 10) / Math.pow(10, casas);
+};
+
+// Exibe sempre com `casas` decimais fixas (ex.: 10.8 -> "10.80").
+const exibeDecimal = (value: number | null | undefined, casas = 2): string => {
+  const n = Number(value ?? 0);
+  return (isNaN(n) ? 0 : n).toFixed(casas);
+};
+
 const DadosFiscais: React.FC<DadosFiscaisProps> = ({
   produto,
   handleProdutoChange,
@@ -308,13 +323,14 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           </div>
           <FormInput
             name="percsubst"
-            type="number"
+            type="text"
+            inputMode="numeric"
             label="% Agregado"
-            value={displayNumberValue(produto.percsubst)}
+            value={exibeDecimal(produto.percsubst)}
             onChange={(e) =>
               handleProdutoChange({
                 ...produto,
-                percsubst: handleRequiredNumberChange(e.target.value, 0),
+                percsubst: mascaraDecimalChange(e.target.value),
               })
             }
             error={error?.percsubst}
@@ -339,26 +355,28 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           </div>
           <FormInput
             name="pis"
-            type="number"
+            type="text"
+            inputMode="numeric"
             label="PIS"
-            value={displayNumberValue(produto.pis)}
+            value={exibeDecimal(produto.pis)}
             onChange={(e) =>
               handleProdutoChange({
                 ...produto,
-                pis: handleOptionalNumberChange(e.target.value),
+                pis: mascaraDecimalChange(e.target.value),
               })
             }
             error={error?.pis}
           />
           <FormInput
             name="cofins"
-            type="number"
+            type="text"
+            inputMode="numeric"
             label="COFINS"
-            value={displayNumberValue(produto.cofins)}
+            value={exibeDecimal(produto.cofins)}
             onChange={(e) =>
               handleProdutoChange({
                 ...produto,
-                cofins: handleOptionalNumberChange(e.target.value),
+                cofins: mascaraDecimalChange(e.target.value),
               })
             }
             error={error?.cofins}
@@ -380,13 +398,14 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           </div>
           <FormInput
             name="ipi"
-            type="number"
+            type="text"
+            inputMode="numeric"
             label="IPI"
-            value={displayNumberValue(produto.ipi)}
+            value={exibeDecimal(produto.ipi)}
             onChange={(e) =>
               handleProdutoChange({
                 ...produto,
-                ipi: handleOptionalNumberChange(e.target.value),
+                ipi: mascaraDecimalChange(e.target.value),
               })
             }
             error={error?.ipi}
@@ -409,13 +428,14 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           />
           <FormInput
             name="ii"
-            type="number"
+            type="text"
+            inputMode="numeric"
             label="Imp. Importação (II)"
-            value={displayNumberValue(produto.ii)}
+            value={exibeDecimal(produto.ii)}
             onChange={(e) =>
               handleProdutoChange({
                 ...produto,
-                ii: handleOptionalNumberChange(e.target.value),
+                ii: mascaraDecimalChange(e.target.value),
               })
             }
             error={error?.ii}

@@ -323,7 +323,22 @@ export default function CustomModal({
           <div className="w-[35%] h-full flex justify-end">
             {footer || (
               <FormFooter
-                onSubmit={() => pedirConfirmacao(handleSubmit)}
+                onSubmit={() => {
+                  // Aviso do Delphi: Tributado = SIM e % Agregado = 0
+                  if (
+                    produto.trib === 'S' &&
+                    (Number(produto.percsubst) || 0) === 0
+                  ) {
+                    const ok = window.confirm(
+                      'Informe o percentual agregado para cálculo da Substituição Tributária.\n.:: Deseja salvar sem essa informação?',
+                    );
+                    if (!ok) {
+                      setActiveTab('dadosFiscais');
+                      return;
+                    }
+                  }
+                  pedirConfirmacao(handleSubmit);
+                }}
                 onClear={handleClear}
               />
             )}
