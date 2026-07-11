@@ -109,6 +109,50 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
   const [loadingClassFiscal, setLoadingClassFiscal] = useState<boolean>(false);
   const [loadingCest, setLoadingCest] = useState<boolean>(false);
 
+  // Valores fiscais (IPI/PIS/COFINS/MVA) da Classificação Fiscal escolhida
+  type ValorNcm = {
+    ipi: number | string;
+    pis: number | string;
+    cofins: number | string;
+    agregado: number | string;
+    descricao?: string | null;
+  };
+  const [ncmValores, setNcmValores] = useState<ValorNcm[]>([]);
+  const [ncmSelIdx, setNcmSelIdx] = useState<number>(0);
+  const [mostrarModalNcm, setMostrarModalNcm] = useState<boolean>(false);
+
+  // Ao escolher a Classif. Fiscal (NCM), busca os valores fiscais associados e,
+  // se houver, pergunta se o usuário quer aplicá-los (lista quando há vários).
+  const handleClasfiscalChange = (ncm: string) => {
+    handleProdutoChange({ ...produto, clasfiscal: ncm });
+    if (!ncm || !ncm.trim()) return;
+    fetch(`/api/produtos/classif-fiscal-valores?ncm=${encodeURIComponent(ncm.trim())}`)
+      .then((r) => (r.ok ? r.json() : { valores: [] }))
+      .then((d) => {
+        const vals: ValorNcm[] = d.valores || [];
+        if (vals.length > 0) {
+          setNcmValores(vals);
+          setNcmSelIdx(0);
+          setMostrarModalNcm(true);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const aplicarValoresNcm = () => {
+    const v = ncmValores[ncmSelIdx];
+    if (v) {
+      handleProdutoChange({
+        ...produto,
+        ipi: Number(v.ipi) || 0,
+        pis: Number(v.pis) || 0,
+        cofins: Number(v.cofins) || 0,
+        percsubst: Number(v.agregado) || 0,
+      });
+    }
+    setMostrarModalNcm(false);
+  };
+
   // Carrega as opções assim que o componente montar
   useEffect(() => {
     const loadInitialOptions = async () => {
@@ -259,7 +303,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
               options={classificaoesFiscaisOptions}
               value={produto.clasfiscal || ''}
               onValueChange={(value) =>
-                handleProdutoChange({ ...produto, clasfiscal: value as string })
+                handleClasfiscalChange(value as string)
               }
               onInputChange={(value) => {
                 setClassificacaoFiscalSearch(value);
@@ -458,6 +502,80 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
           />
         </div>
       </div>
+
+      {/* Modal: valores fiscais da Classificação Fiscal (NCM) escolhida */}
+      {mostrarModalNcm && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center px-4">
+          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg w-full max-w-lg p-5">
+            <h3 className="text-base font-semibold text-blue-600 dark:text-blue-300">
+              Valores da Classificação Fiscal
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-4">
+              NCM {produto.clasfiscal} —{' '}
+              {ncmValores.length > 1
+                ? 'foram encontrados vários conjuntos de valores. Escolha um para aplicar:'
+                : 'valores encontrados. Deseja aplicar nos campos fiscais?'}
+            </p>
+
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+              {ncmValores.map((v, i) => (
+                <label
+                  key={i}
+                  className={`flex items-center gap-3 border rounded-md p-3 cursor-pointer transition-colors ${
+                    ncmSelIdx === i
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-200 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-700/40'
+                  }`}
+                >
+                  {ncmValores.length > 1 && (
+                    <input
+                      type="radio"
+                      name="ncm-valor"
+                      checked={ncmSelIdx === i}
+                      onChange={() => setNcmSelIdx(i)}
+                    />
+                  )}
+                  <div className="grid grid-cols-4 gap-3 text-sm flex-1">
+                    <div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">IPI</div>
+                      <div className="font-medium">{Number(v.ipi).toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">PIS</div>
+                      <div className="font-medium">{Number(v.pis).toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">COFINS</div>
+                      <div className="font-medium">{Number(v.cofins).toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">MVA</div>
+                      <div className="font-medium">{Number(v.agregado).toFixed(2)}</div>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setMostrarModalNcm(false)}
+                className="px-4 py-2 text-sm rounded border border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700"
+              >
+                Manter atuais
+              </button>
+              <button
+                type="button"
+                onClick={aplicarValoresNcm}
+                className="px-4 py-2 text-sm rounded bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
