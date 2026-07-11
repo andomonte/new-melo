@@ -137,6 +137,18 @@ const TransportadorasPage = () => {
     setSearch(value);
   }, 500);
 
+  // Após salvar (novo/edição), filtra a listagem pela transportadora salva
+  const handleSuccess = (busca?: string) => {
+    const termo = (busca || '').trim();
+    if (termo) {
+      setFiltros([]);
+      setPage(1);
+      setSearch(termo);
+    } else {
+      fetchData();
+    }
+  };
+
   const rows = transportadoras.data?.map((transportadora) => {
     const linha: Record<string, any> = {};
     const id = transportadora.codtransp;
@@ -238,7 +250,7 @@ const TransportadorasPage = () => {
       <Cadastrar
         isOpen={cadastrarOpen}
         onClose={() => setCadastrarOpen(false)}
-        onSuccess={() => { setPage(1); fetchData(); }}
+        onSuccess={handleSuccess}
         onEditarTransportadora={(id) => {
           setCadastrarOpen(false);
           setIdTransportadora(id);
@@ -251,7 +263,7 @@ const TransportadorasPage = () => {
           isOpen={editarOpen}
           onClose={() => setEditarOpen(false)}
           transportadoraId={idTransportadora}
-          onSuccess={fetchData}
+          onSuccess={handleSuccess}
         />
       )}
     </div>

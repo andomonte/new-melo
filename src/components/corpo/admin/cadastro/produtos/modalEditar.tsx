@@ -24,7 +24,7 @@ const tabs = [
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -35,6 +35,7 @@ interface ModalProps {
 const campoParaAba: Record<string, string> = {
   // Dados Cadastrais
   ref: 'dadosCadastrais',
+  aplic_extendida: 'dadosCadastrais',
   descr: 'dadosCadastrais',
   codmarca: 'dadosCadastrais',
   codgpf: 'dadosCadastrais',
@@ -270,11 +271,13 @@ export default function CustomModal({
 
       toast({ description: 'Produto atualizado com sucesso!' });
 
+      const buscaSalva = (produtoFinal.ref || '').trim();
+
       // Fecha o modal após sucesso sem reload
       setTimeout(() => {
         handleClose();
-        // Chama o callback para atualizar a lista
-        onSuccess?.();
+        // Filtra a listagem pela referência do produto salvo
+        onSuccess?.(buscaSalva);
       }, 1500);
     } catch (error) {
       setLoading(false);

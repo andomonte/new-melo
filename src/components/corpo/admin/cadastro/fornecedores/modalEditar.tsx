@@ -34,7 +34,7 @@ const tabs = [
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
   fornecedorId: string;
 }
 
@@ -470,7 +470,8 @@ export default function CustomModal({
   const handleCloseInfoModal = () => {
     setOpenInfo(false);
     onClose();
-    onSuccess?.();
+    // Filtra a listagem pelo fornecedor salvo
+    onSuccess?.(fornecedor?.nome);
   };
 
   const renderTabContent = () => {

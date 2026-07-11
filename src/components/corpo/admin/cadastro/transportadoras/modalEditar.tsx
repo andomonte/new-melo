@@ -21,7 +21,7 @@ import { cadastroTransportadoraSchema } from './_forms/transportadoraSchema';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
   transportadoraId: string;
 }
 
@@ -163,7 +163,8 @@ export default function CustomModal({
   const handleCloseInfoModal = () => {
     setOpenInfo(false);
     onClose();
-    onSuccess?.(); // <-- chama o onSuccess após fechamento
+    // Filtra a listagem pela transportadora salva
+    onSuccess?.(transportadora?.nome);
   };
 
   const renderTabContent = () => {

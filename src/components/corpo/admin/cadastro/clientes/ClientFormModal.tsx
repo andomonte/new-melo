@@ -46,7 +46,7 @@ interface ClientFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   clientToEdit?: Cliente | null;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
 }
 
 const tabs = [
@@ -638,7 +638,8 @@ export default function ClientFormModal({
         toast.success(`Cliente cadastrado com sucesso!${codigoGerado ? ` Código: ${codigoGerado}` : ''}`, { duration: 5000 });
       }
 
-      if (onSuccess) onSuccess();
+      // Filtra a listagem pelo nome (ou documento) do cliente salvo
+      if (onSuccess) onSuccess(data.nome || data.documento);
       onClose();
     } catch (err) {
       const errorMessage =

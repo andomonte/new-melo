@@ -38,7 +38,7 @@ export type CadFornecedorSearchOptions = 'classeFornecedor' | 'pais';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
   /** Quando o documento já existe como fornecedor, abre esse fornecedor para edição */
   onEditarFornecedor?: (codCredor: string) => void;
 }
@@ -551,7 +551,8 @@ export default function CustomModal({
   const handleCloseInfoModal = () => {
     setOpenInfo(false);
     onClose();
-    onSuccess?.(); // <-- chama onSuccess após o fechamento do modal de sucesso
+    // Filtra a listagem pelo fornecedor salvo
+    onSuccess?.(fornecedor?.nome);
   };
 
   const renderTabContent = () => {

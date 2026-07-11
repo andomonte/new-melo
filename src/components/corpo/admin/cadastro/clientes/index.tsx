@@ -361,10 +361,13 @@ const ClientesPage = () => {
   /**
    * Sucesso em operação individual
    */
-  const handleSuccess = () => {
-    // Após salvar, buscar pelo último cliente criado/editado
-    if (clientToEdit?.nome) {
-      setSearch(clientToEdit.nome);
+  const handleSuccess = (busca?: string) => {
+    // Após salvar (novo/edição), filtra a listagem pelo cliente salvo
+    const termo = (busca || clientToEdit?.nome || '').trim();
+    if (termo) {
+      setFiltros([]);
+      setPage(1);
+      setSearch(termo);
     }
     setForceUpdate((prev) => prev + 1);
   };

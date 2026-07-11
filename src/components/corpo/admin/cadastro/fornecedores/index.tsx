@@ -246,7 +246,14 @@ const FornecedoresPage = () => {
   // ✅ CORREÇÃO: Funções para controlar modais envolvidas em useCallback para estabilizá-las.
   const handleCloseCadastrar = useCallback(() => setCadastrarOpen(false), []);
   const handleCloseEditar = useCallback(() => setEditarOpen(false), []);
-  const handleSuccess = useCallback(() => {
+  const handleSuccess = useCallback((busca?: string) => {
+    // Após salvar (novo/edição), filtra a listagem pelo fornecedor salvo
+    const termo = (busca || '').trim();
+    if (termo) {
+      setFiltros([]);
+      setPage(1);
+      setSearch(termo);
+    }
     setForceUpdate((prev) => prev + 1);
   }, []);
 

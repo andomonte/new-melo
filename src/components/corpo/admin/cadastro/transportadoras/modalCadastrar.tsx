@@ -25,7 +25,7 @@ import {
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
   /** Quando o documento já existe como transportadora, abre para edição */
   onEditarTransportadora?: (codtransp: string) => void;
 }
@@ -281,7 +281,8 @@ export default function CustomModal({
   const handleCloseInfoModal = () => {
     setOpenInfo(false);
     onClose();
-    onSuccess?.(); // <-- chama onSuccess após o fechamento do modal de sucesso
+    // Filtra a listagem pela transportadora salva
+    onSuccess?.(transportadora?.nome);
   };
 
   const renderTabContent = () => {

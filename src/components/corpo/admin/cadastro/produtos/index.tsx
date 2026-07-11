@@ -513,6 +513,23 @@ const ProdutosPage = () => {
     fetchProdutos({ page, perPage, search, filtros });
   }, [page, perPage, search, filtros, fetchProdutos]);
 
+  // Após salvar (novo/edição), filtra a listagem pela referência salva para o
+  // usuário ver o produto recém-cadastrado/alterado (a lista vem vazia).
+  const handleSalvoComSucesso = useCallback(
+    (busca?: string) => {
+      const termo = (busca || '').trim();
+      if (termo) {
+        setFiltros([]);
+        setSearch(termo);
+        setPage(1);
+        fetchProdutosUnico({ page: 1, perPage, search: termo });
+      } else {
+        recarregarLista();
+      }
+    },
+    [perPage, fetchProdutosUnico, recarregarLista],
+  );
+
   // Exportar lista de produtos para Excel
   const handleExportarExcel = useCallback(async () => {
     if (!produtos.data || produtos.data.length === 0) {
@@ -1206,7 +1223,7 @@ const ProdutosPage = () => {
       <CadastrarProduto
         isOpen={cadastrarOpen}
         onClose={() => setCadastrarOpen(false)}
-        onSuccess={recarregarLista}
+        onSuccess={handleSalvoComSucesso}
         title="Cadastrar Produto"
         onEditarExistente={(codprod) => {
           setCadastrarOpen(false);
@@ -1231,7 +1248,7 @@ const ProdutosPage = () => {
           setIdProduto('');
           setSelectedRow(null);
         }}
-        onSuccess={recarregarLista}
+        onSuccess={handleSalvoComSucesso}
         title="Editar Produto"
         produtoId={idProduto}
       >

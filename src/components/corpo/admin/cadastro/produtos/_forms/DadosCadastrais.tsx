@@ -316,6 +316,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
             name="aplic_extendida"
             type="text"
             label="Aplicação Extendida"
+            required
             value={produto.aplic_extendida || ''}
             onChange={(e) =>
               handleProdutoChange({ ...produto, aplic_extendida: e.target.value })

@@ -30,7 +30,7 @@ export type CadFornecedorSearchOptions = 'classeFornecedor' | 'pais';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (busca?: string) => void;
   title?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -43,6 +43,7 @@ interface ModalProps {
 const campoParaAba: Record<string, string> = {
   // Dados Cadastrais
   ref: 'dadosCadastrais',
+  aplic_extendida: 'dadosCadastrais',
   descr: 'dadosCadastrais',
   codmarca: 'dadosCadastrais',
   codgpf: 'dadosCadastrais',
@@ -303,12 +304,16 @@ export default function CustomModal({
 
       toast({ description: 'Produto cadastrado com sucesso!' });
 
+      // Referência salva — usada para filtrar a listagem ao fechar
+      const buscaSalva = (produtoFinal.ref || '').trim();
+
       // Fecha o modal e limpa os dados ao invés de recarregar
       setTimeout(() => {
         handleClear();
         onClose();
-        // Chama o callback para atualizar a lista
-        onSuccess?.();
+        // Chama o callback com a referência para a listagem filtrar e mostrar
+        // o produto recém-salvo.
+        onSuccess?.(buscaSalva);
       }, 1500);
     } catch (error) {
       // Mensagem específica do backend (ex.: Compra Direta exige Ref. Fábrica)

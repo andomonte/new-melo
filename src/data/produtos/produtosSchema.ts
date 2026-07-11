@@ -98,10 +98,10 @@ export const cadastroProdutoSchema = z.object({
     .optional()
     .nullable(),
   aplic_extendida: z
-    .string()
-    .max(255, 'Aplicação extendida não pode ter mais de 255 caracteres')
-    .optional()
-    .nullable(),
+    .string({ required_error: 'Aplicação Extendida é obrigatória' })
+    .trim()
+    .min(1, 'Aplicação Extendida é obrigatória')
+    .max(255, 'Aplicação extendida não pode ter mais de 255 caracteres'),
   obs: z
     .string()
     .max(100, 'Observações não pode ter mais de 100 caracteres')
