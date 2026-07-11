@@ -7,49 +7,69 @@ interface OpcoesConfirmarSalvar {
   confirmText?: string;
   cancelText?: string;
   type?: 'warning' | 'danger' | 'info' | 'success';
+  /** Executada quando o usuário CANCELA (botão cancelar/fechar). */
+  onCancel?: () => void;
 }
 
 /**
- * Padrão de confirmação antes de salvar nos formulários de cadastro
- * (novo e edição). Uso:
+ * Padrão único de confirmação/alerta estilizado (ConfirmationModal) para os
+ * formulários. Substitui window.confirm/alert.
  *
- *   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
- *   // no botão/handler de salvar:
+ * Uso básico (confirmação de salvar):
+ *   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+ *     title: 'Confirmar cadastro', message: 'Deseja salvar?'
+ *   });
  *   onSubmit={() => pedirConfirmacao(handleSubmit)}
- *   // no JSX:
  *   {ConfirmacaoSalvarModal}
  *
- * A ação só é executada quando o usuário confirma. Para validar antes de
- * perguntar (RHF), chame pedirConfirmacao dentro do callback de sucesso do
- * handleSubmit.
+ * Alerta/confirmação com mensagem própria (sobrescreve as opções):
+ *   pedirConfirmacao(acaoAoConfirmar, {
+ *     title: 'Atenção', message: '...', type: 'warning',
+ *     confirmText: 'Sim', cancelText: 'Não', onCancel: () => {...},
+ *   });
+ *
+ * A ação só roda ao confirmar. Pode-se encadear (a ação de um pode abrir
+ * outro pedirConfirmacao — o mesmo modal é reaproveitado).
  */
 export function useConfirmarSalvar(opcoes?: OpcoesConfirmarSalvar) {
-  const [acaoPendente, setAcaoPendente] = useState<(() => void) | null>(null);
+  const [estado, setEstado] = useState<{
+    acao: () => void;
+    override?: OpcoesConfirmarSalvar;
+  } | null>(null);
 
-  // Recebe a ação de salvar e abre o modal; nada é executado até confirmar.
-  const pedirConfirmacao = useCallback((acao: () => void) => {
-    setAcaoPendente(() => acao);
-  }, []);
+  // Recebe a ação e (opcionalmente) opções que sobrescrevem as padrão.
+  const pedirConfirmacao = useCallback(
+    (acao: () => void, override?: OpcoesConfirmarSalvar) => {
+      setEstado({ acao, override });
+    },
+    [],
+  );
 
-  const fechar = useCallback(() => setAcaoPendente(null), []);
+  const fechar = useCallback(() => {
+    const oc = estado?.override?.onCancel ?? opcoes?.onCancel;
+    setEstado(null);
+    oc?.();
+  }, [estado, opcoes]);
 
   const confirmar = useCallback(() => {
-    // Executa FORA do updater do setState (evita disparo duplo no StrictMode)
-    const acao = acaoPendente;
-    setAcaoPendente(null);
-    acao?.();
-  }, [acaoPendente]);
+    const a = estado?.acao;
+    setEstado(null);
+    a?.();
+  }, [estado]);
+
+  // Opções efetivas: padrão do hook + sobrescritas da chamada
+  const ef: OpcoesConfirmarSalvar = { ...opcoes, ...estado?.override };
 
   const ConfirmacaoSalvarModal = (
     <ConfirmationModal
-      isOpen={!!acaoPendente}
+      isOpen={!!estado}
       onClose={fechar}
       onConfirm={confirmar}
-      title={opcoes?.title ?? 'Confirmar'}
-      message={opcoes?.message ?? 'Deseja realmente salvar os dados informados?'}
-      type={opcoes?.type ?? 'info'}
-      confirmText={opcoes?.confirmText ?? 'Sim, salvar'}
-      cancelText={opcoes?.cancelText ?? 'Cancelar'}
+      title={ef.title ?? 'Confirmar'}
+      message={ef.message ?? 'Deseja realmente salvar os dados informados?'}
+      type={ef.type ?? 'info'}
+      confirmText={ef.confirmText ?? 'Sim, salvar'}
+      cancelText={ef.cancelText ?? 'Cancelar'}
     />
   );
 

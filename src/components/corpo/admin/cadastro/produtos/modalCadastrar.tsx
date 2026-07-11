@@ -345,20 +345,26 @@ export default function CustomModal({
             {footer || (
               <FormFooter
                 onSubmit={() => {
-                  // Aviso do Delphi: Tributado = SIM e % Agregado = 0
+                  // Confirmação padrão de salvar (usa as opções do hook)
+                  const confirmarSalvar = () => pedirConfirmacao(handleSubmit);
+                  // Aviso do Delphi (mesmo modal estilizado): Tributado = SIM
+                  // e % Agregado = 0.
                   if (
                     produto.trib === 'S' &&
                     (Number(produto.percsubst) || 0) === 0
                   ) {
-                    const ok = window.confirm(
-                      'Informe o percentual agregado para cálculo da Substituição Tributária.\n.:: Deseja salvar sem essa informação?',
-                    );
-                    if (!ok) {
-                      setActiveTab('dadosFiscais');
-                      return;
-                    }
+                    pedirConfirmacao(confirmarSalvar, {
+                      title: 'Substituição Tributária',
+                      message:
+                        'Informe o percentual agregado para cálculo da Substituição Tributária.\n.:: Deseja salvar sem essa informação?',
+                      type: 'warning',
+                      confirmText: 'Sim, salvar assim',
+                      cancelText: 'Não',
+                      onCancel: () => setActiveTab('dadosFiscais'),
+                    });
+                    return;
                   }
-                  pedirConfirmacao(handleSubmit);
+                  confirmarSalvar();
                 }}
                 onClear={handleClear}
               />

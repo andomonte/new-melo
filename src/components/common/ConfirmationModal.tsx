@@ -64,7 +64,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">
             {title}
           </h2>
-          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+          <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
             {message}
           </p>
         </div>
