@@ -149,9 +149,10 @@ const ModalFormCadastrarGrupoProduto: React.FC<
             />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Segmento */}
+              {/* Segmento (obrigatório) */}
               <SelectInput
                 searchable
+                required
                 name="codseg"
                 label="Segmento"
                 options={segmentos}

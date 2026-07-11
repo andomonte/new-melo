@@ -13,7 +13,10 @@ import {
   updateGrupoProdutoSchema,
   UpdateGrupoProdutoFormInput,
 } from '@/data/gruposDeProdutos/gruposProdutoSchema';
-import ModalFormEditarGrupoProduto from './_forms/modalFormEditarGrupoProduto';
+// Reusa o MESMO formulário do cadastro (apenas os campos que o Delphi mostra
+// na tela de Alterar: Descrição, Segmento, Comprador, Gp. Contábil, Dias
+// Reposição, É do Negócio, Prazo Comercial, Verba Marketing, Bloquear Preço).
+import ModalFormCadastrarGrupoProduto from './_forms/modalFormCadatrarGrupoProduto';
 
 interface ModalProps {
   isOpen: boolean;
@@ -37,6 +40,8 @@ export default function EditarGrupoProdutoModal({
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<UpdateGrupoProdutoFormInput>({
     resolver: zodResolver(updateGrupoProdutoSchema),
@@ -188,15 +193,25 @@ export default function EditarGrupoProdutoModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
       {grupoProdutoProp ? (
-        <ModalFormEditarGrupoProduto
+        <ModalFormCadastrarGrupoProduto
           titulo={title}
-          handleSubmit={handleSubmit(onSubmit)}
+          handleSubmit={handleSubmit(onSubmit, (errs) => {
+            const primeiro = Object.values(errs)[0] as any;
+            toast({
+              title: '❌ Verifique os campos',
+              description:
+                primeiro?.message || 'Há campos inválidos no formulário.',
+              variant: 'destructive',
+            });
+          })}
           handleClear={() => reset()}
           onClose={onClose}
           loading={isSubmitting || loading}
-          register={register}
-          errors={errors}
+          register={register as any}
+          errors={errors as any}
           isDirty={isDirty}
+          setValue={setValue as any}
+          watch={watch as any}
         />
       ) : (
         <Carregamento />

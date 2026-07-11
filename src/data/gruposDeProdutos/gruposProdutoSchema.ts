@@ -117,17 +117,15 @@ export const grupoProdutoSchema = z.object({
     .nullable()
     .or(z.literal('')),
 
-  codseg: stringPreprocessor({ uppercase: true })
-    .pipe(
-      z
-        .string()
-        .max(5, {
-          message: 'Código do segmento deve ter no máximo 5 caracteres.',
-        }),
-    )
-    .optional()
-    .nullable()
-    .or(z.literal('')),
+  // Segmento é obrigatório (igual ao Delphi)
+  codseg: stringPreprocessor({ uppercase: true }).pipe(
+    z
+      .string()
+      .min(1, { message: 'Segmento é obrigatório.' })
+      .max(5, {
+        message: 'Código do segmento deve ter no máximo 5 caracteres.',
+      }),
+  ),
 
   codcomprador: stringPreprocessor({ uppercase: true })
     .pipe(

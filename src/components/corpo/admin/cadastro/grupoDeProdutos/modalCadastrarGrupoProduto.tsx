@@ -44,6 +44,8 @@ export default function CadastrarGrupoProdutoModal({
       descr: '',
       ramonegocio: 'S',
       bloquear_preco: 'N',
+      // Padrões do Delphi ao abrir um novo grupo de produto
+      diasreposicao: 40,
     },
   });
 

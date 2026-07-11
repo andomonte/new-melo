@@ -43,7 +43,9 @@ export default async function handle(
 
   // Demais campos do cadastro (igual ao Delphi)
   const segVal = codseg ? String(codseg).trim() : null;
-  const compVal = codcomprador ? String(codcomprador).trim() : null;
+  // Comprador: quando não informado, grava o padrão '000' (COMPRA ANTIGA),
+  // igual ao Delphi.
+  const compVal = codcomprador ? String(codcomprador).trim() : '000';
   const gpcVal = codgpc ? String(codgpc).trim() : null;
   const bloqVal = bloquear_preco === 'S' ? 'S' : 'N';
   const ramoVal = ramonegocio === 'S' ? 'S' : 'N';
@@ -61,6 +63,14 @@ export default async function handle(
     return res.status(400).json({
       error: 'A descrição do grupo de produtos (descr) é obrigatória.',
       field: 'descr',
+    });
+  }
+
+  // Segmento é obrigatório (igual ao Delphi).
+  if (!segVal) {
+    return res.status(400).json({
+      error: 'O Segmento é obrigatório.',
+      field: 'codseg',
     });
   }
 
