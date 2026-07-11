@@ -25,14 +25,25 @@ export default async function handle(
     // Iniciar transação
     await client.query('BEGIN');
 
-    const updateFields = Object.keys(produto)
-      .filter((key) => key !== 'codprod')
+    // Chaves que NÃO são colunas de dbprod (tratadas à parte ou apenas de
+    // exibição no front) — precisam ficar fora do UPDATE dinâmico, senão geram
+    // "column ... does not exist" (ex.: referenciasFabrica é um array salvo em
+    // dbprod_ref_fabrica logo abaixo).
+    const CAMPOS_NAO_COLUNA = new Set([
+      'codprod',
+      'referenciasFabrica',
+      'marca_nome',
+    ]);
+
+    const colunas = Object.keys(produto).filter(
+      (key) => !CAMPOS_NAO_COLUNA.has(key),
+    );
+
+    const updateFields = colunas
       .map((key, index) => `${key} = $${index + 2}`)
       .join(', ');
 
-    const updateValues = Object.keys(produto)
-      .filter((key) => key !== 'codprod')
-      .map((key) => produto[key as keyof Produto]);
+    const updateValues = colunas.map((key) => produto[key as keyof Produto]);
 
     const updatedProdutoResult = await client.query(
       `UPDATE dbprod SET ${updateFields} WHERE codprod = $1 RETURNING *`,
