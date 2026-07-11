@@ -204,6 +204,29 @@ const ProdutosPage = () => {
       search: string;
       filtros: Filtro[];
     }) => {
+      // Igual à tela de Clientes: a listagem vem vazia e só busca quando há
+      // pesquisa com 3+ caracteres OU filtros avançados ativos. Sem isso, o
+      // grid não carrega todos os produtos por padrão.
+      const temBusca = !!search && search.trim().length >= 3;
+      const temFiltros = !!novosFiltros && novosFiltros.length > 0;
+      if (!temBusca && !temFiltros) {
+        setProdutos({
+          data: [],
+          meta: { total: 0, lastPage: 1, currentPage: 1, perPage },
+        } as any);
+        setHeaders(['selecionar', 'ações']);
+        setLoading(false);
+        // zera o cache da última chamada para permitir buscar de novo depois
+        ultimaChamada.current = {
+          page: 0,
+          perPage: 0,
+          search: '',
+          limiteColunas,
+          filtros: [],
+        };
+        return;
+      }
+
       const ultima = ultimaChamada.current;
 
       // Evita chamadas duplicadas
