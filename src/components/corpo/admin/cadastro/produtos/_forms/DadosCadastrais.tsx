@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
+import CampoDecimal from './CampoDecimal';
 import SelectInput from '@/components/common/SelectPadrao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -113,17 +114,6 @@ const handleRequiredNumberChange = (
 const displayNumberValue = (value: number | null | undefined): string => {
   if (value === null || value === undefined) return '';
   return value.toString();
-};
-
-// Máscara decimal no padrão do Delphi (digitar 1080 -> 10.80). Guarda o número.
-const mascaraDecimalChange = (value: string, casas = 2): number => {
-  const digits = (value || '').replace(/\D/g, '');
-  if (!digits) return 0;
-  return parseInt(digits, 10) / Math.pow(10, casas);
-};
-const exibeDecimal = (value: number | null | undefined, casas = 2): string => {
-  const n = Number(value ?? 0);
-  return (isNaN(n) ? 0 : n).toFixed(casas);
 };
 
 const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
@@ -448,17 +438,14 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               required
             />
           </div>
-          <FormInput
+          <CampoDecimal
             name="pesoliq"
-            type="text"
-            inputMode="numeric"
             label="Peso Líquido"
-            value={exibeDecimal(produto.pesoliq)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                pesoliq: mascaraDecimalChange(e.target.value),
-              })
+            intDigits={5}
+            decDigits={2}
+            value={produto.pesoliq}
+            onChangeValue={(v) =>
+              handleProdutoChange({ ...produto, pesoliq: v })
             }
             error={error?.pesoliq}
           />
@@ -642,45 +629,30 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           </div>
           {comissaoHabilitada && (
             <div className="grid grid-cols-3 gap-4">
-              <FormInput
+              <CampoDecimal
                 name="comdifeext"
-                type="text"
-                inputMode="numeric"
                 label="Comissão Externa (%)"
-                value={exibeDecimal(produto.comdifeext)}
-                onChange={(e) =>
-                  handleProdutoChange({
-                    ...produto,
-                    comdifeext: mascaraDecimalChange(e.target.value),
-                  })
+                value={produto.comdifeext}
+                onChangeValue={(v) =>
+                  handleProdutoChange({ ...produto, comdifeext: v })
                 }
                 error={error?.comdifeext}
               />
-              <FormInput
+              <CampoDecimal
                 name="comdifeext_int"
-                type="text"
-                inputMode="numeric"
                 label="Comissão Externa Internacional (%)"
-                value={exibeDecimal(produto.comdifeext_int)}
-                onChange={(e) =>
-                  handleProdutoChange({
-                    ...produto,
-                    comdifeext_int: mascaraDecimalChange(e.target.value),
-                  })
+                value={produto.comdifeext_int}
+                onChangeValue={(v) =>
+                  handleProdutoChange({ ...produto, comdifeext_int: v })
                 }
                 error={error?.comdifeext_int}
               />
-              <FormInput
+              <CampoDecimal
                 name="comdifint"
-                type="text"
-                inputMode="numeric"
                 label="Comissão Interna (%)"
-                value={exibeDecimal(produto.comdifint)}
-                onChange={(e) =>
-                  handleProdutoChange({
-                    ...produto,
-                    comdifint: mascaraDecimalChange(e.target.value),
-                  })
+                value={produto.comdifint}
+                onChangeValue={(v) =>
+                  handleProdutoChange({ ...produto, comdifint: v })
                 }
                 error={error?.comdifint}
               />

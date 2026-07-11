@@ -1,6 +1,6 @@
 import React from 'react';
-import FormInput from '@/components/common/FormInput';
 import { Produto } from '@/data/produtos/produtos';
+import CampoDecimal from './CampoDecimal';
 
 interface DadosCustosProps {
   produto: Produto;
@@ -8,25 +8,8 @@ interface DadosCustosProps {
   error?: { [p: string]: string };
 }
 
-// Máscara decimal no padrão do Delphi: os dígitos entram pela direita e as
-// últimas `casas` viram os decimais (ex.: digitar 1080 -> 10.80). Guarda o
-// número real, não o texto.
-const mascaraDecimalChange = (value: string, casas = 2): number => {
-  const digits = (value || '').replace(/\D/g, '');
-  if (!digits) return 0;
-  return parseInt(digits, 10) / Math.pow(10, casas);
-};
-
-// Exibe com `casas` decimais fixas (ex.: 10.8 -> "10.80").
-const exibeDecimal = (value: number | null | undefined, casas = 2): string => {
-  const n = Number(value ?? 0);
-  return (isNaN(n) ? 0 : n).toFixed(casas);
-};
-
-// Casas de cada campo (Delphi): preços/custos = 2; taxas de dólar = 6.
-const DEC_PRECO = 2;
-const DEC_DOLAR = 6;
-
+// Casas do Delphi: preços/custos = 99999.99 (5 int, 2 dec);
+// taxas de dólar = 99.999999 (2 int, 6 dec).
 const DadosCustos: React.FC<DadosCustosProps> = ({
   produto,
   handleProdutoChange,
@@ -34,20 +17,26 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
 }) => {
   const moeda = produto.dolar === 'S' ? 'US$' : 'R$';
 
-  // Gera value/onChange padronizados para um campo decimal com máscara.
-  const campoDecimal = (campo: string, casas: number = DEC_PRECO) => ({
-    type: 'text' as const,
-    inputMode: 'numeric' as const,
-    value: exibeDecimal(
-      (produto as any)[campo] as number | null | undefined,
-      casas,
-    ),
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      handleProdutoChange({
-        ...produto,
-        [campo]: mascaraDecimalChange(e.target.value, casas),
-      } as Produto),
-  });
+  const campo = (
+    nome: string,
+    label: string,
+    opts: { int?: number; dec?: number; required?: boolean } = {},
+  ) => (
+    <CampoDecimal
+      name={nome}
+      label={label}
+      intDigits={opts.int ?? 5}
+      decDigits={opts.dec ?? 2}
+      required={opts.required}
+      value={(produto as any)[nome]}
+      onChangeValue={(v) =>
+        handleProdutoChange({ ...produto, [nome]: v } as Produto)
+      }
+      error={error?.[nome]}
+    />
+  );
+
+  const dolar = { int: 2, dec: 6 };
 
   return (
     <>
@@ -56,105 +45,29 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">
             Custo Referente a Lista de Fábrica
           </div>
-          <FormInput
-            name="prfabr"
-            label={`Preço Fábrica (${moeda})`}
-            {...campoDecimal('prfabr')}
-            error={error?.prfabr}
-          />
-          <FormInput
-            name="prcustoatual"
-            label={`Preço Líquido (${moeda})`}
-            {...campoDecimal('prcustoatual')}
-            error={error?.prcustoatual}
-          />
-          <FormInput
-            name="preconf"
-            label={`Preço NF (${moeda})`}
-            {...campoDecimal('preconf')}
-            error={error?.preconf}
-          />
-          <FormInput
-            name="precosnf"
-            label={`Preço sem NF (${moeda})`}
-            {...campoDecimal('precosnf')}
-            error={error?.precosnf}
-          />
+          {campo('prfabr', `Preço Fábrica (${moeda})`)}
+          {campo('prcustoatual', `Preço Líquido (${moeda})`)}
+          {campo('preconf', `Preço NF (${moeda})`)}
+          {campo('precosnf', `Preço sem NF (${moeda})`)}
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
           <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">
             Custo Referente a Compra e Transferência
           </div>
-          <FormInput
-            name="prcompra"
-            label={`Custo Compra (${moeda})`}
-            {...campoDecimal('prcompra')}
-            error={error?.prcompra}
-            required
-          />
-          <FormInput
-            name="prcomprasemst"
-            label={`Custo Transf. Líquido (${moeda})`}
-            {...campoDecimal('prcomprasemst')}
-            error={error?.prcomprasemst}
-          />
-          <FormInput
-            name="pratualdesp"
-            label={`Custo Transf. Bruto (${moeda})`}
-            {...campoDecimal('pratualdesp')}
-            error={error?.pratualdesp}
-          />
-          <FormInput
-            name="txdolarcompra"
-            label="Taxa Dólar"
-            {...campoDecimal('txdolarcompra', DEC_DOLAR)}
-            error={error?.txdolarcompra}
-          />
-          <FormInput
-            name="prcusto"
-            label="Custo Contábil"
-            {...campoDecimal('prcusto')}
-            error={error?.prcusto}
-          />
+          {campo('prcompra', `Custo Compra (${moeda})`, { required: true })}
+          {campo('prcomprasemst', `Custo Transf. Líquido (${moeda})`)}
+          {campo('pratualdesp', `Custo Transf. Bruto (${moeda})`)}
+          {campo('txdolarcompra', 'Taxa Dólar', dolar)}
+          {campo('prcusto', 'Custo Contábil')}
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 border border-[#347AB6]/25 dark:border-blue-900/25 rounded-lg p-4 content-start">
           <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">Lista de Preço</div>
-          <FormInput
-            name="prvenda"
-            label={`Preço Venda (${moeda})`}
-            {...campoDecimal('prvenda')}
-            error={error?.prvenda}
-          />
-          <FormInput
-            name="primp"
-            label="Preço Importação"
-            {...campoDecimal('primp')}
-            error={error?.primp}
-          />
-          <FormInput
-            name="impfat"
-            label="Preço Importação Fatura"
-            {...campoDecimal('impfat')}
-            error={error?.impfat}
-          />
-          <FormInput
-            name="impfab"
-            label="Preço Importação Fábrica"
-            {...campoDecimal('impfab')}
-            error={error?.impfab}
-          />
-          <FormInput
-            name="concor"
-            label={`Preço Concorrência (${moeda})`}
-            {...campoDecimal('concor')}
-            error={error?.concor}
-          />
-          <FormInput
-            name="txdolarvenda"
-            label="Taxa Dólar"
-            {...campoDecimal('txdolarvenda', DEC_DOLAR)}
-            error={error?.txdolarvenda}
-          />
+          {campo('prvenda', `Preço Venda (${moeda})`)}
+          {campo('primp', 'Preço Importação')}
+          {campo('impfat', 'Preço Importação Fatura')}
+          {campo('impfab', 'Preço Importação Fábrica')}
+          {campo('concor', `Preço Concorrência (${moeda})`)}
+          {campo('txdolarvenda', 'Taxa Dólar', dolar)}
         </div>
 
         {/* Seção de Taxas de Câmbio Adicionais */}
@@ -162,18 +75,8 @@ const DadosCustos: React.FC<DadosCustosProps> = ({
           <div className="col-span-2 block text-gray-700 dark:text-gray-200 font-bold">
             Taxas de Câmbio Adicionais
           </div>
-          <FormInput
-            name="txdolarfabrica"
-            label="Taxa Dólar Fábrica"
-            {...campoDecimal('txdolarfabrica', DEC_DOLAR)}
-            error={error?.txdolarfabrica}
-          />
-          <FormInput
-            name="txdolarcompramedio"
-            label="Taxa Dólar Compra Médio"
-            {...campoDecimal('txdolarcompramedio', DEC_DOLAR)}
-            error={error?.txdolarcompramedio}
-          />
+          {campo('txdolarfabrica', 'Taxa Dólar Fábrica', dolar)}
+          {campo('txdolarcompramedio', 'Taxa Dólar Compra Médio', dolar)}
         </div>
       </div>
     </>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
+import CampoDecimal from './CampoDecimal';
 import SelectInput from '@/components/common/SelectPadrao';
 import { Label } from '@/components/ui/label';
 import { IsentoIPI, Produto } from '@/data/produtos/produtos';
@@ -91,20 +92,6 @@ const displayNumberValue = (value: number | null | undefined): string => {
   return value.toString();
 };
 
-// Máscara decimal no padrão do Delphi: os dígitos entram pela direita e as
-// últimas `casas` viram os decimais (ex.: digitar 1080 -> 10.80). O valor
-// guardado é o número real (10.80), não o texto.
-const mascaraDecimalChange = (value: string, casas = 2): number => {
-  const digits = (value || '').replace(/\D/g, '');
-  if (!digits) return 0;
-  return parseInt(digits, 10) / Math.pow(10, casas);
-};
-
-// Exibe sempre com `casas` decimais fixas (ex.: 10.8 -> "10.80").
-const exibeDecimal = (value: number | null | undefined, casas = 2): string => {
-  const n = Number(value ?? 0);
-  return (isNaN(n) ? 0 : n).toFixed(casas);
-};
 
 const DadosFiscais: React.FC<DadosFiscaisProps> = ({
   produto,
@@ -321,17 +308,14 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
               />
             </div>
           </div>
-          <FormInput
+          <CampoDecimal
             name="percsubst"
-            type="text"
-            inputMode="numeric"
             label="% Agregado"
-            value={exibeDecimal(produto.percsubst)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                percsubst: mascaraDecimalChange(e.target.value),
-              })
+            intDigits={4}
+            decDigits={2}
+            value={produto.percsubst}
+            onChangeValue={(v) =>
+              handleProdutoChange({ ...produto, percsubst: v })
             }
             error={error?.percsubst}
           />
@@ -353,32 +337,18 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
               error={error?.isentopiscofins}
             />
           </div>
-          <FormInput
+          <CampoDecimal
             name="pis"
-            type="text"
-            inputMode="numeric"
             label="PIS"
-            value={exibeDecimal(produto.pis)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                pis: mascaraDecimalChange(e.target.value),
-              })
-            }
+            value={produto.pis}
+            onChangeValue={(v) => handleProdutoChange({ ...produto, pis: v })}
             error={error?.pis}
           />
-          <FormInput
+          <CampoDecimal
             name="cofins"
-            type="text"
-            inputMode="numeric"
             label="COFINS"
-            value={exibeDecimal(produto.cofins)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                cofins: mascaraDecimalChange(e.target.value),
-              })
-            }
+            value={produto.cofins}
+            onChangeValue={(v) => handleProdutoChange({ ...produto, cofins: v })}
             error={error?.cofins}
           />
         </div>
@@ -396,18 +366,11 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
               error={error?.isentoipi}
             />
           </div>
-          <FormInput
+          <CampoDecimal
             name="ipi"
-            type="text"
-            inputMode="numeric"
             label="IPI"
-            value={exibeDecimal(produto.ipi)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                ipi: mascaraDecimalChange(e.target.value),
-              })
-            }
+            value={produto.ipi}
+            onChangeValue={(v) => handleProdutoChange({ ...produto, ipi: v })}
             error={error?.ipi}
           />
           <div></div>
@@ -426,18 +389,11 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             }
             error={error?.descontopiscofins}
           />
-          <FormInput
+          <CampoDecimal
             name="ii"
-            type="text"
-            inputMode="numeric"
             label="Imp. Importação (II)"
-            value={exibeDecimal(produto.ii)}
-            onChange={(e) =>
-              handleProdutoChange({
-                ...produto,
-                ii: mascaraDecimalChange(e.target.value),
-              })
-            }
+            value={produto.ii}
+            onChangeValue={(v) => handleProdutoChange({ ...produto, ii: v })}
             error={error?.ii}
           />
           <div className={error?.cest ? 'field-error' : ''}>
