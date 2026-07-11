@@ -391,7 +391,12 @@ export default function CustomModal({
               />
 
               <div>
-                <form>{renderTabContent()}</form>
+                {/* preventDefault: evita que Enter/submit implícito recarregue
+                    a página (fechava o modal e zerava a listagem). O salvar é
+                    feito pelos botões, não pelo submit do form. */}
+                <form onSubmit={(e) => e.preventDefault()}>
+                  {renderTabContent()}
+                </form>
               </div>
             </div>
           </div>
