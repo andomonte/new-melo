@@ -71,6 +71,9 @@ interface DataTablePadraoProps {
   customHeaderActions?: React.ReactNode;
   /** Rótulos customizados por coluna (override do mapa global obterNomeAmigavel) */
   columnLabels?: Record<string, string>;
+  /** Quando informado, controla o valor da busca (mantém o texto em sincronia
+      com o estado do pai, inclusive quando o pai altera a busca por código). */
+  searchValue?: string;
 }
 
 export default function DataTablePadrao({
@@ -105,6 +108,7 @@ export default function DataTablePadrao({
   onLimiteColunasChange,
   customHeaderActions,
   columnLabels,
+  searchValue,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
@@ -115,7 +119,15 @@ export default function DataTablePadrao({
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});
-  const [termoBuscaGlobal, setTermoBuscaGlobal] = useState('');
+  const [termoBuscaGlobal, setTermoBuscaGlobal] = useState(searchValue ?? '');
+  // Sincroniza o texto da busca quando o pai controla via searchValue
+  // (ex.: após salvar, o pai filtra pelo código do registro).
+  useEffect(() => {
+    if (searchValue !== undefined && searchValue !== termoBuscaGlobal) {
+      setTermoBuscaGlobal(searchValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchValue]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [larguraTabela, setLarguraTabela] = useState(0);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -368,6 +380,7 @@ export default function DataTablePadrao({
         <div className="flex justify-between items-center gap-2">
           <SearchInput
             placeholder={searchInputPlaceholder ?? 'Pesquisar...'}
+            value={searchValue !== undefined ? termoBuscaGlobal : undefined}
             onChange={(e) => {
               const valor = e.target.value;
               console.log('🔍 Busca global alterada:', valor);

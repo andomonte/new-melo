@@ -298,14 +298,15 @@ export default function CustomModal({
 
       cadastroProdutoSchema.parse(produtoFinal);
 
-      await insertProduto(produtoFinal);
+      const criado = await insertProduto(produtoFinal);
 
       setErrors({});
 
       toast({ description: 'Produto cadastrado com sucesso!' });
 
-      // Referência salva — usada para filtrar a listagem ao fechar
-      const buscaSalva = (produtoFinal.ref || '').trim();
+      // Código do produto criado — filtra a listagem por ele (é único; a
+      // referência poderia casar com o código de vários produtos).
+      const buscaSalva = (criado?.codprod || produtoFinal.ref || '').trim();
 
       // Fecha o modal e limpa os dados ao invés de recarregar
       setTimeout(() => {

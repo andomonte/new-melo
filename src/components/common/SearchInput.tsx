@@ -6,6 +6,8 @@ interface SearchInputProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onBlur?: () => void;
+  /** Quando informado, o input passa a ser CONTROLADO (o texto reflete o valor). */
+  value?: string;
 }
 
 const SearchInput = ({
@@ -13,6 +15,7 @@ const SearchInput = ({
   onChange,
   onKeyDown,
   onBlur,
+  value,
 }: SearchInputProps) => {
   return (
     <Input
@@ -22,6 +25,7 @@ const SearchInput = ({
       onChange={onChange}
       onKeyDown={onKeyDown}
       onBlur={onBlur}
+      {...(value !== undefined ? { value } : {})}
     />
   );
 };

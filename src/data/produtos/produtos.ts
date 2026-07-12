@@ -407,8 +407,12 @@ export async function getProdutos({
  * @param {Produto} produto - O objeto Produto a ser inserido.
  * @returns {Promise<void>} Uma promessa que resolve quando a operação é concluída.
  */
-export async function insertProduto(produto: Produto): Promise<void> {
-  await api.post('/api/produtos/add', produto);
+export async function insertProduto(
+  produto: Produto,
+): Promise<Produto | undefined> {
+  const r = await api.post('/api/produtos/add', produto);
+  // add.ts retorna { data: <produto criado com codprod> }
+  return r?.data?.data as Produto | undefined;
 }
 
 /**

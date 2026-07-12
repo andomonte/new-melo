@@ -271,7 +271,9 @@ export default function CustomModal({
 
       toast({ description: 'Produto atualizado com sucesso!' });
 
-      const buscaSalva = (produtoFinal.ref || '').trim();
+      // Filtra pelo código do produto (único), não pela referência (que
+      // poderia casar com o código de vários produtos).
+      const buscaSalva = (produtoFinal.codprod || produtoFinal.ref || '').trim();
 
       // Fecha o modal após sucesso sem reload
       setTimeout(() => {

@@ -1156,6 +1156,7 @@ const ProdutosPage = () => {
               fetchProdutos({ page, perPage: newPerPage, search, filtros });
             }
           }}
+          searchValue={search}
           onSearch={(e) => setSearch(e.target.value)}
           onSearchBlur={() => debouncedSearchUnico(search)}
           onSearchKeyDown={(e) => {
