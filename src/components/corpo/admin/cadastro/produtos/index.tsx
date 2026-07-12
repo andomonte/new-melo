@@ -15,6 +15,7 @@ import EditarProduto from './modalEditar';
 import { ProdutoZoomModal } from './ProdutoZoomModal';
 import { CopiarProdutoModal } from './CopiarProdutoModal';
 import { AlteracaoMassaModal } from './AlteracaoMassaModal';
+import { AlterarCamposListaModal } from './AlterarCamposListaModal';
 import { DemandaModal } from './DemandaModal';
 import { ExtratoItemModal } from './ExtratoItemModal';
 import { ProdutosEquivalentesModal } from './ProdutosEquivalentesModal';
@@ -124,6 +125,7 @@ const ProdutosPage = () => {
   const [isCopiarOpen, setIsCopiarOpen] = useState(false);
   const [produtoToCopiar, setProdutoToCopiar] = useState<any>(null);
   const [isAlteracaoMassaOpen, setIsAlteracaoMassaOpen] = useState(false);
+  const [isCamposListaOpen, setIsCamposListaOpen] = useState(false);
   const [isDemandaOpen, setIsDemandaOpen] = useState(false);
   const [produtoToDemanda, setProdutoToDemanda] = useState<any>(null);
   const [isExtratoOpen, setIsExtratoOpen] = useState(false);
@@ -766,6 +768,27 @@ const ProdutosPage = () => {
   };
 
   /**
+   * Alterar Campos Lista (grade tipo Excel, edição linha a linha)
+   */
+  const handleCamposLista = () => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: 'Nenhum produto selecionado',
+        description: 'Selecione pelo menos um produto.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsCamposListaOpen(true);
+  };
+
+  const handleCamposListaSuccess = () => {
+    setSelectedProducts(new Set());
+    setSelectAll(false);
+    forcarRefresh();
+  };
+
+  /**
    * Alterna seleção de um produto
    */
   const toggleSelectProduct = (codprod: string) => {
@@ -1250,6 +1273,13 @@ const ProdutosPage = () => {
               )}
 
               {userPermissions.editar && (
+                <DropdownMenuItem onClick={handleCamposLista}>
+                  <Edit3 className="mr-2 size-4 text-indigo-500 dark:text-indigo-300" />
+                  Alterar Campos Lista
+                </DropdownMenuItem>
+              )}
+
+              {userPermissions.editar && (
                 <DropdownMenuItem onClick={handleTransferenciaMassa}>
                   <ArrowRightLeft className="mr-2 size-4 text-green-500 dark:text-green-300" />
                   Transferência de Armazém
@@ -1353,6 +1383,14 @@ const ProdutosPage = () => {
         onClose={() => setIsAlteracaoMassaOpen(false)}
         selectedProducts={selectedProducts}
         onSuccess={handleAlteracaoMassaSuccess}
+      />
+
+      {/* Modal Alterar Campos Lista */}
+      <AlterarCamposListaModal
+        isOpen={isCamposListaOpen}
+        onClose={() => setIsCamposListaOpen(false)}
+        selectedProducts={selectedProducts}
+        onSuccess={handleCamposListaSuccess}
       />
 
       {/* Modal Demanda */}
