@@ -1887,7 +1887,7 @@ export function ContasAPagar() {
 
     try {
       // Capturar username do sessionStorage
-      const perfilUserMelo = sessionStorage.getItem('perfilUserMelo');
+      const perfilUserMelo = localStorage.getItem('perfilUserMelo');
       const userInfo = perfilUserMelo ? JSON.parse(perfilUserMelo) : null;
       const username = userInfo?.usuario || 'Sistema';
 

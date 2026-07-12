@@ -9,7 +9,7 @@ api.interceptors.request.use(
   (config) => {
     try {
       // Obter dados do usuário do sessionStorage
-      const userSession = sessionStorage.getItem('perfilUserMelo');
+      const userSession = localStorage.getItem('perfilUserMelo');
       if (userSession) {
         const userData = JSON.parse(userSession);
         

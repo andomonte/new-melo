@@ -80,7 +80,11 @@ function App() {
         'newPerfilMelo',
         'paginaAtualMelo',
         'telaAtualMelo',
-      ].forEach((k) => sessionStorage.removeItem(k));
+      ].forEach((k) => {
+        // perfilUserMelo agora fica no localStorage (compartilhado entre abas)
+        sessionStorage.removeItem(k);
+        localStorage.removeItem(k);
+      });
       sessionStorage.setItem('newPerfilMelo', JSON.stringify(null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const session = sessionStorage.getItem('perfilUserMelo');
+    const session = localStorage.getItem('perfilUserMelo');
     const pagina = sessionStorage.getItem('paginaAtualMelo');
 
     let userData: User = {
@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
     } else if (session && !token) {
       // Cookie expirou ou foi removido (logout) — limpa dados órfãos
-      sessionStorage.removeItem('perfilUserMelo');
+      localStorage.removeItem('perfilUserMelo');
       sessionStorage.removeItem('paginaAtualMelo');
       sessionStorage.removeItem('telaAtualMelo');
       sessionStorage.removeItem('newPerfilMelo');
@@ -236,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             armazens,
           };
           setUser(updatedUser);
-          sessionStorage.setItem('perfilUserMelo', JSON.stringify(updatedUser));
+          localStorage.setItem('perfilUserMelo', JSON.stringify(updatedUser));
           setIsLoading(false);
         })
         .catch((error) => {
@@ -272,7 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function filialSet({ filial }: Filial) {
     const currentUser = user.usuario
       ? user
-      : JSON.parse(sessionStorage.getItem('perfilUserMelo') || '{}');
+      : JSON.parse(localStorage.getItem('perfilUserMelo') || '{}');
 
     if (!currentUser.usuario) {
       console.error('Não há usuário logado para definir a filial.');
@@ -309,7 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       setUser(updatedUser);
-      sessionStorage.setItem('perfilUserMelo', JSON.stringify(updatedUser));
+      localStorage.setItem('perfilUserMelo', JSON.stringify(updatedUser));
       setCookie('filial_melo', filial, { path: '/' });
     } catch (error) {
       console.error('Erro ao definir filial e perfil:', error);
@@ -352,7 +352,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       setUser(newUser);
-      sessionStorage.setItem('perfilUserMelo', JSON.stringify(newUser));
+      localStorage.setItem('perfilUserMelo', JSON.stringify(newUser));
     } catch (error) {
       console.error('Erro no signIn:', error);
       deleteCookie('token_melo');

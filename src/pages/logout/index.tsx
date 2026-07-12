@@ -25,7 +25,11 @@ function LogOut() {
         'clienteSelectMelo',
         'dadosClienteSelMelo',
       ];
-      chavesMelo.forEach((k) => sessionStorage.removeItem(k));
+      // perfilUserMelo agora fica no localStorage (compartilhado entre abas)
+      chavesMelo.forEach((k) => {
+        sessionStorage.removeItem(k);
+        localStorage.removeItem(k);
+      });
     } catch (e) {
       console.warn('Falha ao limpar sessão no logout:', e);
     }
