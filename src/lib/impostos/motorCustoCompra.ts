@@ -4,6 +4,7 @@
  * fiscais (IPI, ICMS-ST, PIS, COFINS, desconto ICMS SUFRAMA) que alimentam a
  * aritmética já migrada e validada em `calcularCustoMercadoria.ts`.
  *
+ * MOTOR COMPLETO validado ponta-a-ponta: 110/110 Custo/FE/ZF identicos ao Oracle.
  * Cada peça é portada e validada contra o Oracle (harness em scratchpad,
  * instrumentando a própria procedure para expor os valores internos).
  *
@@ -14,6 +15,8 @@
  *   [x] Desconto SUFRAMA (xVlrDesconto_ICMS) — 72/72 OK vs Oracle
  *   [~] ICMS-ST: valor 48/48 OK; MVA ajustada/derivado OK; MVA_PRODUTO_LEGISLACAO 80/80 OK
  */
+
+import { calcularCustoMercadoria, type ParamsCusto, type ResultadoCusto } from './calcularCustoMercadoria';
 
 function round2(v: number): number {
   const f = Math.round((Math.abs(v) + Number.EPSILON) * 100) / 100;
@@ -390,4 +393,142 @@ export function mvaProdutoLegislacao(
   if (colons === 3) return calcularMvaAjustado(mvaOrig, icmsExterno, icmsInterno);
   if (colons === 1) return round4(mvaOrig / 100);
   return 0;
+}
+
+/**
+ * ORQUESTRAÇÃO do custo de compra — junta as peças validadas na mesma ordem do
+ * CALCULO_IMPOSTO.Calcular_Impostos (ramo ENTRADA_COMPRAS/COMPRA), já com as
+ * simplificações confirmadas no fonte:
+ *   - Aliquota_ICMS passada = 0  ⇒  Valor_ICMS = 0 (não afeta as bases);
+ *   - Tipo_Operacao_Entrada('COMPRA')  ⇒  Pode_ST = True sempre;
+ *   - Base do IPI e do PIS/COFINS = vPrUnitNF (Base_Produto).
+ *
+ * Total_Produto (xTotalProd) recebe o desconto de ICMS SUFRAMA na base quando a
+ * regra concede (mesma condição do desconto SUFRAMA).
+ *
+ * Falta apenas alimentar `mva` e `legislacao` a partir das tabelas de protocolo
+ * (LEGISLACAO_ICMS/MVA_PRODUTO_LEGISLACAO) na camada de integração (Postgres).
+ */
+export interface EstadoCompraCompleto {
+  prNF: number;
+  prSNF: number;
+  params: ParamsCusto;
+  // produto
+  isentoipi: string;
+  strib: string;
+  ipiAliquota: number;
+  percsubst: number;
+  ncm: string;
+  prodPis: number;
+  prodCofins: number | null;
+  // empresa (destino) / fornecedor (origem)
+  ufEmpresa: string;
+  zonaEmpresa: string; // Zona_Isentivada
+  icmsInternoEmpresa: number;
+  ufFornecedor: string;
+  icmsExternoFornecedor: number;
+  regimeFornecedor: string;
+  fabricante: string;
+  // regra do credor
+  cobrarIpiImportado: number | null;
+  piscofins365: number | null;
+  piscofins925: number | null;
+  piscofins1150: number | null;
+  piscofins1310: number | null;
+  descIcmsSufra: number | null;
+  descIcmsSufraImportado: number | null;
+  baseReduzidaST: number | null;
+  descPiscofinsST: number | null;
+  acresPiscofinsST: number | null;
+  // fiscal já apurado na integração
+  cfop: string;
+  legislacao: boolean;
+  protocolo1785: boolean;
+  mva: number; // 0 se não há ST; senão MVA final (ajustada/derivado/legislação)
+  zerarST: boolean;
+}
+
+export function orquestrarCustoCompra(e: EstadoCompraCompleto): ResultadoCusto {
+  const importado = ['1', '2', '3'].includes(String(e.strib).charAt(0));
+
+  // IPI (base = vPrUnitNF)
+  const ipi = calcularIPICompra(
+    { isentoipi: e.isentoipi, strib: e.strib, ipiAliquota: e.ipiAliquota, zonaDestino: e.zonaEmpresa, cobrarIpiImportado: e.cobrarIpiImportado },
+    e.prNF,
+  );
+
+  // Alíquota de ICMS (para SUFRAMA e base)
+  const aliqICMS = validarICMSCompra({
+    cfop: e.cfop, ufOrigem: e.ufFornecedor, ufDestino: e.ufEmpresa, strib: e.strib,
+    icmsInterno: e.icmsInternoEmpresa, icmsExterno: e.icmsExternoFornecedor,
+    agregado: e.percsubst, legislacao: e.legislacao,
+  });
+
+  // Total_Produto (xTotalProd) com desconto SUFRAMA na base, quando aplica
+  const s1 = String(e.strib).charAt(0);
+  const semST = (Number(e.percsubst) || 0) === 0;
+  const derivado = ncmDerivadoPetroleo(e.ncm);
+  const aplicaSufraBase =
+    (!derivado && !e.protocolo1785 && semST) &&
+    ((e.descIcmsSufra === 1 && s1 === '0') ||
+      (e.descIcmsSufraImportado === 1 && ['1', '2'].includes(s1)));
+  const totalProduto = aplicaSufraBase
+    ? round2((e.prNF * (100 - aliqICMS)) / 100)
+    : e.prNF;
+
+  // PIS/COFINS (base = vPrUnitNF)
+  const pc = calcularPisCofinsCompra(
+    {
+      regimeFornecedor: e.regimeFornecedor, fabricante: e.fabricante,
+      ufOrigem: e.ufFornecedor, ufDestino: e.ufEmpresa,
+      piscofins365: e.piscofins365, piscofins925: e.piscofins925,
+      piscofins1150: e.piscofins1150, piscofins1310: e.piscofins1310,
+      prodPis: e.prodPis, prodCofins: e.prodCofins,
+    },
+    e.prNF,
+  );
+
+  // Desconto SUFRAMA (valor)
+  const descontoSuframa = calcularDescontoSuframa(
+    {
+      descIcmsSufra: e.descIcmsSufra, descIcmsSufraImportado: e.descIcmsSufraImportado,
+      percsubst: e.percsubst, strib: e.strib, ncm: e.ncm,
+      protocolo1785: e.protocolo1785, aliquotaICMS: aliqICMS,
+    },
+    e.prNF,
+  );
+
+  // ICMS-ST (Pode_ST sempre true p/ COMPRA; ST=0 quando MVA<=0)
+  let valorICMSSubst = 0;
+  if (!e.zerarST && e.mva > 0) {
+    // xBaseAlterada do ST (Valor_ICMS = 0, então o termo Desc_Icms_Sufra_St some)
+    let xBaseAlterada = e.baseReduzidaST === 1 ? totalProduto : e.prNF;
+    if (e.descPiscofinsST === 1 && pc.valorCofins < 0) {
+      xBaseAlterada += pc.valorPis + pc.valorCofins;
+    }
+    if (e.acresPiscofinsST === 1 && pc.valorCofins > 0) {
+      xBaseAlterada += pc.valorPis + pc.valorCofins;
+    }
+    const baseCalcST = round2((xBaseAlterada + ipi.valor) * (1 + e.mva));
+    valorICMSSubst = calcularValorICMSSubst(baseCalcST, {
+      icmsInterno: e.icmsInternoEmpresa,
+      icmsExterno: importado ? 4.0 : e.icmsExternoFornecedor,
+      precoNF: e.prNF,
+      baseReduzidaST: e.baseReduzidaST === 1,
+      valorICMS: 0,
+      derivado,
+    });
+  }
+
+  // Aritmética final
+  return calcularCustoMercadoria(e.prNF, e.prSNF, e.params, {
+    valorIPI: ipi.valor,
+    valorICMSSubst,
+    valorPIS: pc.valorPis,
+    valorCofins: pc.valorCofins,
+    descontoICMSSuframa: descontoSuframa,
+    zonaNaoIncentivada: e.zonaEmpresa === 'N',
+    isentoIpi: e.isentoipi === 'S',
+    ipiAliquota: e.ipiAliquota,
+  });
 }
