@@ -87,6 +87,22 @@ export default async function handle(
         );
         alterados += r.rowCount || 0;
       }
+    } else if (campo === 'descr') {
+      // Na tela de Descrição a Referência também pode ser alterada (Delphi)
+      for (const row of rows) {
+        if (!row?.codprod) continue;
+        const temRef = row.ref !== undefined && row.ref !== null;
+        const r = temRef
+          ? await client.query(
+              `UPDATE db_manaus.dbprod SET descr = $1, ref = $2 WHERE codprod = $3`,
+              [String(row.valor ?? ''), String(row.ref ?? ''), String(row.codprod)],
+            )
+          : await client.query(
+              `UPDATE db_manaus.dbprod SET descr = $1 WHERE codprod = $2`,
+              [String(row.valor ?? ''), String(row.codprod)],
+            );
+        alterados += r.rowCount || 0;
+      }
     } else {
       const tipo = CAMPOS_SIMPLES[campo];
       for (const row of rows) {

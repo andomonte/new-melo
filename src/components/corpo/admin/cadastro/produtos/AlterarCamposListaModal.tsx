@@ -138,6 +138,8 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
 
   // valores editados da coluna atual: codprod -> valor (ou objeto p/ fiscal)
   const [valores, setValores] = useState<Record<string, any>>({});
+  // referências editadas (apenas na tela de Descrição): codprod -> ref
+  const [refs, setRefs] = useState<Record<string, string>>({});
 
   // barra "aplicar a todos"
   const [ncm, setNcm] = useState('');
@@ -183,7 +185,10 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
       setValorTodos('');
       const def = CAMPOS.find((c) => c.value === novo);
       const init: Record<string, any> = {};
+      // Na tela de Descrição a Referência também é editável (como no Delphi)
+      const initRefs: Record<string, string> = {};
       for (const d of dados) {
+        if (novo === 'descr') initRefs[d.codprod] = d.ref ?? '';
         if (def?.modo === 'fiscal') {
           init[d.codprod] = {
             clasfiscal: soDigitos(d.clasfiscal),
@@ -197,6 +202,7 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
         }
       }
       setValores(init);
+      setRefs(initRefs);
     },
     [dados],
   );
@@ -309,6 +315,15 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
         // no Delphi só entra quem tem NCM válido (>= 8 díg.) e mudou
         if (mudou && soDigitos(atual.clasfiscal).length >= 8) {
           rows.push({ codprod: d.codprod, ...atual });
+        }
+      } else if (campo === 'descr') {
+        // Descrição + Referência (ambas editáveis, em MAIÚSCULAS como o Delphi)
+        const descrAtual = String(atual ?? '').toUpperCase();
+        const refAtual = String(refs[d.codprod] ?? '').toUpperCase();
+        const descrMudou = descrAtual !== String(d.descr ?? '').toUpperCase();
+        const refMudou = refAtual !== String(d.ref ?? '').toUpperCase();
+        if (descrMudou || refMudou) {
+          rows.push({ codprod: d.codprod, valor: descrAtual, ref: refAtual });
         }
       } else if (campoDef?.tipo === 'number' || campoDef?.tipo === 'integer') {
         const original = num((d as any)[campo]);
@@ -551,7 +566,14 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
                   <table className="w-full text-sm border-collapse">
                     <thead className="sticky top-0 bg-muted">
                       <tr>
-                        <th className="text-left px-2 py-1.5 border-b w-44">Referência</th>
+                        <th className="text-left px-2 py-1.5 border-b w-44">
+                          Referência
+                          {campo === 'descr' && (
+                            <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                              (editável)
+                            </span>
+                          )}
+                        </th>
                         {campoDef.modo === 'fiscal' ? (
                           <>
                             <th className="text-center px-2 py-1.5 border-b">Class. Fiscal</th>
@@ -567,7 +589,22 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
                     <tbody>
                       {dados.map((d) => (
                         <tr key={d.codprod} className="odd:bg-muted/20">
-                          <td className="px-2 py-1 border-b whitespace-nowrap">{d.ref}</td>
+                          {campo === 'descr' ? (
+                            <td className="px-1 py-0.5 border-b">
+                              <Input
+                                value={refs[d.codprod] ?? ''}
+                                onChange={(e) =>
+                                  setRefs((prev) => ({
+                                    ...prev,
+                                    [d.codprod]: e.target.value,
+                                  }))
+                                }
+                                className="h-7"
+                              />
+                            </td>
+                          ) : (
+                            <td className="px-2 py-1 border-b whitespace-nowrap">{d.ref}</td>
+                          )}
                           {campoDef.modo === 'fiscal' ? (
                             <>
                               <td className="px-2 py-1 border-b text-center">
