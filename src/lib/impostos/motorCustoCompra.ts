@@ -12,7 +12,7 @@
  *   [x] PIS/COFINS de compra                — 66/66 OK vs Oracle
  *   [x] Validar_ICMS (alíquota ICMS compra) — 48/48 OK vs Oracle
  *   [x] Desconto SUFRAMA (xVlrDesconto_ICMS) — 72/72 OK vs Oracle
- *   [ ] ICMS-ST valor (Calcular_ICMS_Subst + MVA)
+ *   [~] ICMS-ST: valor 48/48 OK; MVA ajustada/derivado OK; falta MVA_PRODUTO_LEGISLACAO (parser)
  */
 
 function round2(v: number): number {
@@ -297,4 +297,70 @@ export function calcularDescontoSuframa(
     return round2((Number(prNF) || 0) * (Number(st.aliquotaICMS) || 0) / 100);
   }
   return 0;
+}
+
+function round4(v: number): number {
+  const f = Math.round((Math.abs(v) + Number.EPSILON) * 10000) / 10000;
+  return v < 0 ? -f : f;
+}
+
+/**
+ * MVA ajustada (Calcular_ICMS_Subst, caso Agregado>0 e UF origem≠destino, não RO):
+ *   ((1 + agregado/100) · (1 − externo/100) / (1 − interno/100)) − 1
+ * (mesma fórmula da function calcular_mva_ajustado do Postgres).
+ */
+export function calcularMvaAjustado(
+  agregado: number,
+  icmsExterno: number,
+  icmsInterno: number,
+): number {
+  return round4(
+    (1 + agregado / 100) * (1 - icmsExterno / 100) / (1 - icmsInterno / 100) - 1,
+  );
+}
+
+/** MVA de derivado de petróleo (CALCULO_IMPOSTO.MVA_Derivado_Petroleo). */
+export function mvaDerivadoPetroleo(
+  ufOrigem: string,
+  ufDestino: string,
+  tipoMovimentacao: string,
+): number {
+  if (ufDestino === ufOrigem && tipoMovimentacao !== 'SAIDA') return 61.31 / 100;
+  if (ufDestino !== ufOrigem && ufDestino === 'AC') return 94.35 / 100;
+  if (ufDestino !== ufOrigem) return 96.72 / 100;
+  return 0;
+}
+
+export interface EstadoValorICMSSubst {
+  /** ICMS_Interno_Destino (%) — RowUF_Destino.Icmsinterno (empresa AM) */
+  icmsInterno: number;
+  /** ICMS_Externo_Origem (%) — importado?4:RowUF_Origem.Icmsexterno */
+  icmsExterno: number;
+  /** Base_Produto (vPrUnitNF) */
+  precoNF: number;
+  /** RowRegraCredor.BaseReduzida_ST = 1 (só ENTRADA_COMPRAS) */
+  baseReduzidaST: boolean;
+  /** Valor_ICMS já apurado (usado no caso BaseReduzida_ST) */
+  valorICMS: number;
+  /** Derivado de petróleo */
+  derivado: boolean;
+}
+
+/**
+ * Valor do ICMS-ST (Calcular_ICMS_Subst) dado a Base_Calc_ICMS_Subst já apurada
+ * (= round((Total_Produto + Valor_IPI) · (1 + MVA), 2)). Cobre os casos de
+ * ENTRADA_COMPRAS (destino = empresa AM; MT/MS e destino final não se aplicam).
+ * Validado 48/48 vs Oracle (produtos com ST reais).
+ *
+ * NOTA: a MVA desses produtos vem de MVA_PRODUTO_LEGISLACAO (parser de protocolo),
+ * ainda a portar; aqui a base já embute a MVA correta.
+ */
+export function calcularValorICMSSubst(
+  base: number,
+  st: EstadoValorICMSSubst,
+): number {
+  const interno = Number(st.icmsInterno) || 0;
+  if (st.derivado) return round2(base * (interno / 100));
+  if (st.baseReduzidaST) return round2(base * (interno / 100) - (Number(st.valorICMS) || 0));
+  return round2(base * (interno / 100) - (Number(st.precoNF) || 0) * ((Number(st.icmsExterno) || 0) / 100));
 }
