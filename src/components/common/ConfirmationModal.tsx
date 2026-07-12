@@ -62,7 +62,10 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   // pois o Radix Dialog aplica pointer-events:none no body enquanto aberto.
   // Sem isso, a confirmação aninhada em um modal ficava atrás/inclicável.
   return createPortal(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] pointer-events-auto">
+    <div
+      data-confirmacao-modal
+      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] pointer-events-auto"
+    >
       <div className="bg-white dark:bg-slate-800 p-6 rounded-md shadow-lg min-w-[400px] max-w-[500px] mx-4">
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
