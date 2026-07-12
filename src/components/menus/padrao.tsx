@@ -63,6 +63,10 @@ import Produtos from '@/components/corpo/admin/cadastro/produtos';
 import Vendedores from '@/components/corpo/admin/cadastro/vendedores';
 import Marcas from '@/components/corpo/admin/cadastro/marcas';
 import GrupoDeProdutos from '@/components/corpo/admin/cadastro/grupoDeProdutos';
+import Informativos from '@/components/corpo/admin/cadastro/informativos';
+import GruposFuncao from '@/components/corpo/admin/cadastro/gruposFuncao';
+import ClassificacaoFiscal from '@/components/corpo/admin/cadastro/classificacaoFiscal';
+import RefFabrica from '@/components/corpo/admin/cadastro/refFabrica';
 import Armazens from '@/components/corpo/admin/cadastro/armazens';
 import BancosContas from '@/components/corpo/admin/cadastro/bancosContas';
 import KickbackBosch from '@/components/corpo/gerenciamento/produtos/kickback';
@@ -252,6 +256,30 @@ export const menus = [
             href: '/admin/cadastros/grupoDeProdutos',
             icon: GroupIcon,
             corpo: GrupoDeProdutos,
+          },
+          {
+            name: 'Grupos de Função',
+            href: '/admin/cadastros/gruposFuncao',
+            icon: GroupIcon,
+            corpo: GruposFuncao,
+          },
+          {
+            name: 'Classificação Fiscal',
+            href: '/admin/cadastros/classificacaoFiscal',
+            icon: FileTextIcon,
+            corpo: ClassificacaoFiscal,
+          },
+          {
+            name: 'Referência de Fábrica',
+            href: '/admin/cadastros/refFabrica',
+            icon: BoxesIcon,
+            corpo: RefFabrica,
+          },
+          {
+            name: 'Informativos',
+            href: '/admin/cadastros/informativos',
+            icon: HexagonIcon,
+            corpo: Informativos,
           },
           {
             name: 'Armazens',
