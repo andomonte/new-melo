@@ -49,6 +49,10 @@ interface SelectOption {
 // Campos alteráveis em massa — mesmo conjunto do Delphi ("Escolha do campo
 // para alteração"): Marca, Grupo de Produto, Grupo de Função, custos/preços
 // de transferência e mercadoria, Preço de Venda e IPI.
+// Espelha a tela de Alteração em Massa do Delphi: os campos que lá aparecem
+// habilitados (preto) podem ser alterados; os cinza são exibidos para manter a
+// mesma lista, mas ficam desabilitados (disabled) e não podem ser selecionados
+// até o cliente definir a regra de quem pode alterá-los.
 const CAMPOS_DISPONIVEIS = {
   'Dados Cadastrais': [
     { value: 'codmarca', label: 'Marca', tipo: 'select-async', apiEndpoint: '/api/marcas/get' },
@@ -56,11 +60,15 @@ const CAMPOS_DISPONIVEIS = {
     { value: 'codgpf', label: 'Grupo de Função', tipo: 'select-async', apiEndpoint: '/api/gruposFuncao/get' },
   ],
   'Custos e Preços': [
-    { value: 'prcompra', label: 'Custo Compra', tipo: 'number' },
-    { value: 'prcomprasemst', label: 'Preço de Transferência Líquido', tipo: 'number' },
-    { value: 'pratualdesp', label: 'Preço de Transferência Bruto', tipo: 'number' },
-    { value: 'prcustoatual', label: 'Custo da Mercadoria', tipo: 'number' },
-    { value: 'prvenda', label: 'Preço de Venda', tipo: 'number' },
+    { value: 'prcompra', label: 'Custo Compra', tipo: 'number', disabled: true },
+    { value: 'prcompra_fe', label: 'Custo Compra FE', tipo: 'number', disabled: true },
+    { value: 'prcompra_zf', label: 'Custo Compra ZF', tipo: 'number', disabled: true },
+    { value: 'prcomprasemst', label: 'Preço de Transferência Líquido', tipo: 'number', disabled: true },
+    { value: 'pratualdesp', label: 'Preço de Transferência Bruto', tipo: 'number', disabled: true },
+    { value: 'prcustoatual', label: 'Custo da Mercadoria', tipo: 'number', disabled: true },
+    { value: 'prcustoatual_fe', label: 'Custo da Mercadoria FE', tipo: 'number', disabled: true },
+    { value: 'prcustoatual_zf', label: 'Custo da Mercadoria ZF', tipo: 'number', disabled: true },
+    { value: 'prvenda', label: 'Preço de Venda', tipo: 'number', disabled: true },
   ],
   'Dados Fiscais': [
     { value: 'ipi', label: 'IPI', tipo: 'number' },
@@ -282,7 +290,11 @@ export const AlteracaoMassaModal: React.FC<AlteracaoMassaModalProps> = ({
                       {grupo}
                     </div>
                     {campos.map((campo) => (
-                      <SelectItem key={campo.value} value={campo.value}>
+                      <SelectItem
+                        key={campo.value}
+                        value={campo.value}
+                        disabled={Boolean((campo as { disabled?: boolean }).disabled)}
+                      >
                         {campo.label}
                       </SelectItem>
                     ))}
