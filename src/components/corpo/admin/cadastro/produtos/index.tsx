@@ -769,6 +769,35 @@ const ProdutosPage = () => {
     }
   };
 
+  /**
+   * Seleciona TODOS os produtos do filtro atual (todas as páginas), buscando
+   * os códigos na API — não apenas os da página exibida.
+   */
+  const handleSelecionarTudoFiltro = async () => {
+    try {
+      const r = await fetch(
+        `/api/produtos/ids?search=${encodeURIComponent(search)}`,
+      );
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Falha');
+      const ids = new Set<string>(d.ids || []);
+      setSelectedProducts(ids);
+      setSelectAll(true);
+      toast({
+        title: 'Seleção',
+        description: d.limitado
+          ? `Selecionados ${ids.size} de ${d.total}. Atingiu o limite de ${d.limite}; refine o filtro para incluir todos.`
+          : `${ids.size} produto(s) selecionado(s) (todo o filtro).`,
+      });
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Falha ao selecionar tudo do filtro.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // ========================================
   // EFFECTS
   // ========================================
@@ -1213,7 +1242,17 @@ const ProdutosPage = () => {
                   checked={selectAll}
                   className="mr-2 size-4 pointer-events-none"
                 />
-                {selectAll ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                {selectAll
+                  ? 'Desmarcar Todos'
+                  : 'Selecionar Todos (página atual)'}
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={handleSelecionarTudoFiltro}>
+                <Checkbox
+                  checked={false}
+                  className="mr-2 size-4 pointer-events-none"
+                />
+                Selecionar Tudo (todo o filtro)
               </DropdownMenuItem>
             </>
           }
