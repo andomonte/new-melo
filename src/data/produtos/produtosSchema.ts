@@ -17,11 +17,17 @@ const numberWithDefault = (defaultValue: number) =>
 export const cadastroProdutoSchema = z.object({
   // Campos obrigatórios essenciais
   ref: z
-    .string()
+    .string({
+      required_error: 'Referência é obrigatória',
+      invalid_type_error: 'Referência é obrigatória',
+    })
     .min(1, 'Referência é obrigatória')
     .max(20, 'Referência não pode ter mais de 20 caracteres'),
   descr: z
-    .string()
+    .string({
+      required_error: 'Descrição é obrigatória',
+      invalid_type_error: 'Descrição é obrigatória',
+    })
     .min(1, 'Descrição é obrigatória')
     .max(200, 'Descrição não pode ter mais de 200 caracteres'),
   unimed: z
