@@ -11,7 +11,7 @@
  *   [x] IPI (Validar_IPI compra + valor)   — 20/20 OK vs Oracle
  *   [x] PIS/COFINS de compra                — 66/66 OK vs Oracle
  *   [x] Validar_ICMS (alíquota ICMS compra) — 48/48 OK vs Oracle
- *   [ ] Desconto SUFRAMA (xVlrDesconto_ICMS)
+ *   [x] Desconto SUFRAMA (xVlrDesconto_ICMS) — 72/72 OK vs Oracle
  *   [ ] ICMS-ST valor (Calcular_ICMS_Subst + MVA)
  */
 
@@ -240,4 +240,61 @@ export function validarICMSCompra(st: EstadoValidarICMS): number {
     return ufIguais ? 0.0 : externoOuImp;
   }
   return ufIguais ? Number(st.icmsInterno) || 0 : externoOuImp;
+}
+
+/** Derivado_Petroleo: NCM começa com 2710193 (CALCULO_IMPOSTO.Derivado_Petroleo). */
+export function ncmDerivadoPetroleo(ncm: string): boolean {
+  return String(ncm || '').replace(/\D/g, '').substr(0, 7) === '2710193';
+}
+
+export interface EstadoDescontoSuframa {
+  /** RowRegraCredor.desc_icms_sufra (1 = aplica p/ nacional) */
+  descIcmsSufra: number | null;
+  /** RowRegraCredor.desc_icms_sufra_importado (1 = aplica p/ importado) */
+  descIcmsSufraImportado: number | null;
+  /** dbprod.percsubst — só aplica quando 0 */
+  percsubst: number;
+  /** dbprod.strib — 1º díg. '0' nacional / '1','2' importado */
+  strib: string;
+  /** dbprod.clasfiscal (NCM) — para Derivado_Petroleo */
+  ncm: string;
+  /** PROTOCOLO_1785 (NCM em protocolo nº 17) — bloqueia o desconto */
+  protocolo1785: boolean;
+  /** Validar_ICMS('04', cfop) já apurado (%) — ver validarICMSCompra */
+  aliquotaICMS: number;
+}
+
+/**
+ * Desconto de ICMS SUFRAMA (xVlrDesconto_ICMS do TMP_PROD.PRODUTO_CALCULA_CUSTO).
+ * Aplica quando a regra do credor concede o desconto, o produto não tem ST
+ * (percsubst=0), não é derivado de petróleo nem está no protocolo 1785.
+ * Validado 72/72 vs Oracle.
+ *
+ * @param prNF vPrUnitNF (preço com nota)
+ */
+export function calcularDescontoSuframa(
+  st: EstadoDescontoSuframa,
+  prNF: number,
+): number {
+  const primeiroDig = String(st.strib || '').charAt(0);
+  const semST = (Number(st.percsubst) || 0) === 0;
+  const derivado = ncmDerivadoPetroleo(st.ncm);
+
+  const cond1 =
+    st.descIcmsSufra === 1 &&
+    semST &&
+    primeiroDig === '0' &&
+    !derivado &&
+    !st.protocolo1785;
+  const cond2 =
+    st.descIcmsSufraImportado === 1 &&
+    semST &&
+    ['1', '2'].includes(primeiroDig) &&
+    !derivado &&
+    !st.protocolo1785;
+
+  if (cond1 || cond2) {
+    return round2((Number(prNF) || 0) * (Number(st.aliquotaICMS) || 0) / 100);
+  }
+  return 0;
 }
