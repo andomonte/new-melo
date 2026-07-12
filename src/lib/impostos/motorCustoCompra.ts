@@ -446,16 +446,20 @@ export interface EstadoCompraCompleto {
   protocolo1785: boolean;
   mva: number; // 0 se não há ST; senão MVA final (ajustada/derivado/legislação)
   zerarST: boolean;
+  /** ZERAR IPI — zera o valor do IPI no custo (Validar_IPI: xIPI := 0) */
+  zerarIpi?: boolean;
 }
 
 export function orquestrarCustoCompra(e: EstadoCompraCompleto): ResultadoCusto {
   const importado = ['1', '2', '3'].includes(String(e.strib).charAt(0));
 
-  // IPI (base = vPrUnitNF)
-  const ipi = calcularIPICompra(
+  // IPI (base = vPrUnitNF). ZERAR IPI zera o valor (mas a alíquota do produto
+  // segue sendo usada no custo FE de zona incentivada).
+  const ipiCalc = calcularIPICompra(
     { isentoipi: e.isentoipi, strib: e.strib, ipiAliquota: e.ipiAliquota, zonaDestino: e.zonaEmpresa, cobrarIpiImportado: e.cobrarIpiImportado },
     e.prNF,
   );
+  const ipi = { aliquota: ipiCalc.aliquota, valor: e.zerarIpi ? 0 : ipiCalc.valor };
 
   // Alíquota de ICMS (para SUFRAMA e base)
   const aliqICMS = validarICMSCompra({
