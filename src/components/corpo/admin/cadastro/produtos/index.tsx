@@ -17,6 +17,7 @@ import { CopiarProdutoModal } from './CopiarProdutoModal';
 import { AlteracaoMassaModal } from './AlteracaoMassaModal';
 import { AlterarCamposListaModal } from './AlterarCamposListaModal';
 import { SubstituirProdutoModal } from './SubstituirProdutoModal';
+import { AtualizarCustoModal } from './AtualizarCustoModal';
 import { DemandaModal } from './DemandaModal';
 import { ExtratoItemModal } from './ExtratoItemModal';
 import { ProdutosEquivalentesModal } from './ProdutosEquivalentesModal';
@@ -130,6 +131,7 @@ const ProdutosPage = () => {
   const [isCamposListaOpen, setIsCamposListaOpen] = useState(false);
   const [isSubstituirOpen, setIsSubstituirOpen] = useState(false);
   const [produtoToSubstituir, setProdutoToSubstituir] = useState<any>(null);
+  const [isAtualizarCustoOpen, setIsAtualizarCustoOpen] = useState(false);
   const [isDemandaOpen, setIsDemandaOpen] = useState(false);
   const [produtoToDemanda, setProdutoToDemanda] = useState<any>(null);
   const [isExtratoOpen, setIsExtratoOpen] = useState(false);
@@ -1307,6 +1309,13 @@ const ProdutosPage = () => {
               )}
 
               {userPermissions.editar && (
+                <DropdownMenuItem onClick={() => setIsAtualizarCustoOpen(true)}>
+                  <Edit3 className="mr-2 size-4 text-emerald-500 dark:text-emerald-300" />
+                  Atualizar Custo da Mercadoria
+                </DropdownMenuItem>
+              )}
+
+              {userPermissions.editar && (
                 <DropdownMenuItem onClick={handleTransferenciaMassa}>
                   <ArrowRightLeft className="mr-2 size-4 text-green-500 dark:text-green-300" />
                   Transferência de Armazém
@@ -1428,6 +1437,13 @@ const ProdutosPage = () => {
           setProdutoToSubstituir(null);
         }}
         produto={produtoToSubstituir}
+        onSuccess={forcarRefresh}
+      />
+
+      {/* Modal Atualizar Custo da Mercadoria */}
+      <AtualizarCustoModal
+        isOpen={isAtualizarCustoOpen}
+        onClose={() => setIsAtualizarCustoOpen(false)}
         onSuccess={forcarRefresh}
       />
 
