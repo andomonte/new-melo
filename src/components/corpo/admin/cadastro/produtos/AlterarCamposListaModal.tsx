@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import InputMoeda from '@/components/common/InputMoeda';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { Loader2, Save } from 'lucide-react';
@@ -309,6 +310,11 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
         if (mudou && soDigitos(atual.clasfiscal).length >= 8) {
           rows.push({ codprod: d.codprod, ...atual });
         }
+      } else if (campoDef?.tipo === 'number' || campoDef?.tipo === 'integer') {
+        const original = num((d as any)[campo]);
+        if (num(atual) !== original) {
+          rows.push({ codprod: d.codprod, valor: atual });
+        }
       } else {
         const original = (d as any)[campo] ?? '';
         if (String(atual ?? '') !== String(original)) {
@@ -527,11 +533,10 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
                     {campoDef.modo === 'linha' && campoDef.aplicarTodos && (
                       <div>
                         <label className="text-xs block mb-0.5">{campoDef.label} (todos)</label>
-                        <Input
+                        <InputMoeda
                           value={valorTodos}
-                          onChange={(e) => setValorTodos(e.target.value)}
-                          className="w-32 h-8"
-                          inputMode="decimal"
+                          onChangeValue={(v) => setValorTodos(String(v))}
+                          className="w-32 h-8 text-right"
                         />
                       </div>
                     )}
@@ -580,13 +585,28 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
                             </>
                           ) : readonlyGrid ? (
                             <td className="px-2 py-1 border-b">{rotuloCelula(d)}</td>
+                          ) : campoDef.tipo === 'number' ? (
+                            <td className="px-1 py-0.5 border-b">
+                              <InputMoeda
+                                value={valores[d.codprod]}
+                                onChangeValue={(v) => setValorLinha(d.codprod, v)}
+                                className="h-7 text-right"
+                              />
+                            </td>
                           ) : (
                             <td className="px-1 py-0.5 border-b">
                               <Input
                                 value={valores[d.codprod] ?? ''}
-                                onChange={(e) => setValorLinha(d.codprod, e.target.value)}
+                                onChange={(e) =>
+                                  setValorLinha(
+                                    d.codprod,
+                                    campoDef.tipo === 'integer'
+                                      ? e.target.value.replace(/\D/g, '')
+                                      : e.target.value,
+                                  )
+                                }
                                 className="h-7"
-                                inputMode={campoDef.tipo === 'text' ? 'text' : 'decimal'}
+                                inputMode={campoDef.tipo === 'integer' ? 'numeric' : 'text'}
                               />
                             </td>
                           )}
