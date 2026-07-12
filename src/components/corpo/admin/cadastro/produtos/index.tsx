@@ -16,6 +16,7 @@ import { ProdutoZoomModal } from './ProdutoZoomModal';
 import { CopiarProdutoModal } from './CopiarProdutoModal';
 import { AlteracaoMassaModal } from './AlteracaoMassaModal';
 import { AlterarCamposListaModal } from './AlterarCamposListaModal';
+import { SubstituirProdutoModal } from './SubstituirProdutoModal';
 import { DemandaModal } from './DemandaModal';
 import { ExtratoItemModal } from './ExtratoItemModal';
 import { ProdutosEquivalentesModal } from './ProdutosEquivalentesModal';
@@ -36,6 +37,7 @@ import {
   Link2,
   Package,
   ArrowRightLeft,
+  Replace,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
@@ -126,6 +128,8 @@ const ProdutosPage = () => {
   const [produtoToCopiar, setProdutoToCopiar] = useState<any>(null);
   const [isAlteracaoMassaOpen, setIsAlteracaoMassaOpen] = useState(false);
   const [isCamposListaOpen, setIsCamposListaOpen] = useState(false);
+  const [isSubstituirOpen, setIsSubstituirOpen] = useState(false);
+  const [produtoToSubstituir, setProdutoToSubstituir] = useState<any>(null);
   const [isDemandaOpen, setIsDemandaOpen] = useState(false);
   const [produtoToDemanda, setProdutoToDemanda] = useState<any>(null);
   const [isExtratoOpen, setIsExtratoOpen] = useState(false);
@@ -789,6 +793,14 @@ const ProdutosPage = () => {
   };
 
   /**
+   * Substituir produto (por outro de mesma marca)
+   */
+  const handleSubstituir = (produto: any) => {
+    setProdutoToSubstituir(produto);
+    setIsSubstituirOpen(true);
+  };
+
+  /**
    * Alterna seleção de um produto
    */
   const toggleSelectProduct = (codprod: string) => {
@@ -1116,6 +1128,21 @@ const ProdutosPage = () => {
                       Produtos Relacionados
                     </button>
 
+                    {/* Substituir Produto */}
+                    {userPermissions.editar && (
+                      <button
+                        onClick={() => handleSubstituir(produto)}
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-left"
+                        title="Substituir por outro produto de mesma marca"
+                      >
+                        <Replace
+                          className="mr-2 text-gray-400 dark:text-gray-500"
+                          size={16}
+                        />
+                        Substituir Produto
+                      </button>
+                    )}
+
                     {/* Transferência de Armazém */}
                     {userPermissions.editar && (
                       <button
@@ -1391,6 +1418,17 @@ const ProdutosPage = () => {
         onClose={() => setIsCamposListaOpen(false)}
         selectedProducts={selectedProducts}
         onSuccess={handleCamposListaSuccess}
+      />
+
+      {/* Modal Substituir Produto */}
+      <SubstituirProdutoModal
+        isOpen={isSubstituirOpen}
+        onClose={() => {
+          setIsSubstituirOpen(false);
+          setProdutoToSubstituir(null);
+        }}
+        produto={produtoToSubstituir}
+        onSuccess={forcarRefresh}
       />
 
       {/* Modal Demanda */}
