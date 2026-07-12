@@ -12,7 +12,7 @@
  *   [x] PIS/COFINS de compra                — 66/66 OK vs Oracle
  *   [x] Validar_ICMS (alíquota ICMS compra) — 48/48 OK vs Oracle
  *   [x] Desconto SUFRAMA (xVlrDesconto_ICMS) — 72/72 OK vs Oracle
- *   [~] ICMS-ST: valor 48/48 OK; MVA ajustada/derivado OK; falta MVA_PRODUTO_LEGISLACAO (parser)
+ *   [~] ICMS-ST: valor 48/48 OK; MVA ajustada/derivado OK; MVA_PRODUTO_LEGISLACAO 80/80 OK
  */
 
 function round2(v: number): number {
@@ -363,4 +363,31 @@ export function calcularValorICMSSubst(
   if (st.derivado) return round2(base * (interno / 100));
   if (st.baseReduzidaST) return round2(base * (interno / 100) - (Number(st.valorICMS) || 0));
   return round2(base * (interno / 100) - (Number(st.precoNF) || 0) * ((Number(st.icmsExterno) || 0) / 100));
+}
+
+/**
+ * MVA de produto por legislação (CALCULO_IMPOSTO.MVA_PRODUTO_LEGISLACAO).
+ * Só existem 2 fórmulas em LEI_Mva_Ajustada (confirmado no banco):
+ *   - 3 binds: ((1 + mvaOrig/100)·(1 − externo/100)/(1 − interno/100)) − 1  (= MVA ajustada)
+ *   - 1 bind:  mvaOrig/100
+ * Fornecedor Simples (regime 0) em ENTRADA_COMPRAS usa sempre mvaOrig/100.
+ * Validado 80/80 vs Oracle.
+ *
+ * @param mvaOrig LIN_Mva_St_Original do protocolo (CAD_LEGISLACAO_ICMSST_ncm)
+ * @param colons  nº de ':' em LEI_Mva_Ajustada (3 ou 1)
+ */
+export function mvaProdutoLegislacao(
+  mvaOrig: number,
+  colons: number,
+  icmsExterno: number,
+  icmsInterno: number,
+  regimeFornecedor: string,
+  tipoMovimentacao: string,
+): number {
+  if (tipoMovimentacao === 'ENTRADA_COMPRAS' && String(regimeFornecedor) === '0') {
+    return round4(mvaOrig / 100);
+  }
+  if (colons === 3) return calcularMvaAjustado(mvaOrig, icmsExterno, icmsInterno);
+  if (colons === 1) return round4(mvaOrig / 100);
+  return 0;
 }
