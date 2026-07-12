@@ -657,10 +657,34 @@ const ProdutosPage = () => {
   };
 
   /**
+   * Força um refetch mesmo com os mesmos parâmetros (o fetch tem um cache de
+   * duplicidade que, sem isso, ignoraria o recarregamento após alteração em
+   * massa / transferência — a listagem ficava com os dados antigos).
+   */
+  const forcarRefresh = useCallback(() => {
+    ultimaChamada.current = {
+      page: 0,
+      perPage: 0,
+      search: '',
+      limiteColunas: 0,
+      filtros: [],
+    };
+    ultimaChamadaUnico.current = { page: 0, perPage: 0, search: '' };
+    const termo = (search || '').trim();
+    if (filtros.length > 0) {
+      fetchProdutos({ page, perPage, search, filtros });
+    } else if (termo.length >= 3) {
+      fetchProdutosUnico({ page, perPage, search: termo });
+    } else {
+      fetchProdutos({ page, perPage, search, filtros });
+    }
+  }, [page, perPage, search, filtros, fetchProdutos, fetchProdutosUnico]);
+
+  /**
    * Sucesso em transferência
    */
   const handleTransferenciaSuccess = () => {
-    recarregarLista();
+    forcarRefresh();
   };
 
   /**
@@ -738,7 +762,7 @@ const ProdutosPage = () => {
   const handleAlteracaoMassaSuccess = () => {
     setSelectedProducts(new Set());
     setSelectAll(false);
-    recarregarLista();
+    forcarRefresh();
   };
 
   /**

@@ -46,75 +46,24 @@ interface SelectOption {
   label: string;
 }
 
-// Grupos de campos disponíveis (baseado no Delphi)
+// Campos alteráveis em massa — mesmo conjunto do Delphi ("Escolha do campo
+// para alteração"): Marca, Grupo de Produto, Grupo de Função, custos/preços
+// de transferência e mercadoria, Preço de Venda e IPI.
 const CAMPOS_DISPONIVEIS = {
   'Dados Cadastrais': [
     { value: 'codmarca', label: 'Marca', tipo: 'select-async', apiEndpoint: '/api/marcas/get' },
-    { value: 'codgpf', label: 'Grupo de Função', tipo: 'select-async', apiEndpoint: '/api/gruposFuncao/get' },
     { value: 'codgpp', label: 'Grupo de Produto', tipo: 'select-async', apiEndpoint: '/api/gruposProduto/get' },
-    { value: 'curva', label: 'Curva ABC', tipo: 'select', opcoes: ['A', 'B', 'C', 'D'] },
-    { value: 'inf', label: 'Info', tipo: 'select', opcoes: ['A', 'B', 'C', 'D'] },
-    { value: 'unimed', label: 'Unidade de Medida', tipo: 'text' },
-    { value: 'tabelado', label: 'Tabelado', tipo: 'select', opcoes: [{ value: '1', label: 'Sim' }, { value: '0', label: 'Não' }] },
-    { value: 'compradireta', label: 'Compra Direta', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'tipo', label: 'Tipo', tipo: 'select', opcoes: [{ value: 'ME', label: 'Mercadoria Especial' }, { value: 'MC', label: 'Mercadoria Comercial' }] },
-    { value: 'dolar', label: 'Moeda', tipo: 'select', opcoes: [{ value: 'S', label: 'Dólar (US$)' }, { value: 'N', label: 'Real (R$)' }] },
-    { value: 'multiplo', label: 'Múltiplo', tipo: 'number' },
-    { value: 'multiplocompra', label: 'Múltiplo Compra', tipo: 'number' },
+    { value: 'codgpf', label: 'Grupo de Função', tipo: 'select-async', apiEndpoint: '/api/gruposFuncao/get' },
+  ],
+  'Custos e Preços': [
+    { value: 'prcompra', label: 'Custo Compra', tipo: 'number' },
+    { value: 'prcomprasemst', label: 'Preço de Transferência Líquido', tipo: 'number' },
+    { value: 'pratualdesp', label: 'Preço de Transferência Bruto', tipo: 'number' },
+    { value: 'prcustoatual', label: 'Custo da Mercadoria', tipo: 'number' },
+    { value: 'prvenda', label: 'Preço de Venda', tipo: 'number' },
   ],
   'Dados Fiscais': [
-    { value: 'clasfiscal', label: 'NCM/Classificação Fiscal', tipo: 'select-async', apiEndpoint: '/api/classificacoesFiscais/get' },
-    { value: 'cest', label: 'CEST', tipo: 'select-async', apiEndpoint: '/api/cests/get' },
-    { value: 'trib', label: 'Tributado', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'percsubst', label: '% Substituição', tipo: 'number' },
-    { value: 'ipi', label: 'IPI (%)', tipo: 'number' },
-    { value: 'isentoipi', label: 'Isento IPI', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'pis', label: 'PIS (%)', tipo: 'number' },
-    { value: 'cofins', label: 'COFINS (%)', tipo: 'number' },
-    { value: 'isentopiscofins', label: 'Isento PIS/COFINS', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'descontopiscofins', label: 'Desconto PIS/COFINS', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'ii', label: 'II (%)', tipo: 'number' },
-    { value: 'naotemst', label: 'Não tem ST', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'prodepe', label: 'Incentivado PRODEPE', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-    { value: 'hanan', label: 'SAP/HANAN', tipo: 'select', opcoes: [{ value: 'S', label: 'Sim' }, { value: 'N', label: 'Não' }] },
-  ],
-  'Custos de Compra': [
-    { value: 'prcompra', label: 'Preço Compra', tipo: 'number' },
-    { value: 'prfabr', label: 'Preço Fábrica', tipo: 'number' },
-    { value: 'prcomprasemst', label: 'Preço s/ ST', tipo: 'number' },
-    { value: 'pratualdesp', label: 'Preço Atual Desp', tipo: 'number' },
-    { value: 'prcustoatual', label: 'Preço Custo Atual', tipo: 'number' },
-    { value: 'txdolarcompra', label: 'Taxa Dólar Compra', tipo: 'number' },
-    { value: 'txdolarfabrica', label: 'Taxa Dólar Fábrica', tipo: 'number' },
-    { value: 'txdolarcompramedio', label: 'Taxa Dólar Compra Médio', tipo: 'number' },
-  ],
-  'Preços de Venda': [
-    { value: 'prvenda', label: 'Preço Venda', tipo: 'number' },
-    { value: 'preconf', label: 'Preço NF', tipo: 'number' },
-    { value: 'precosnf', label: 'Preço s/ NF', tipo: 'number' },
-    { value: 'primp', label: 'Preço Importação', tipo: 'number' },
-    { value: 'impfat', label: 'Importação Fatura', tipo: 'number' },
-    { value: 'impfab', label: 'Importação Fábrica', tipo: 'number' },
-    { value: 'concor', label: 'Concorrência', tipo: 'number' },
-    { value: 'txdolarvenda', label: 'Taxa Dólar Venda', tipo: 'number' },
-  ],
-  'Margens': [
-    { value: 'margem', label: 'Margem Nacional', tipo: 'number' },
-    { value: 'margempromo', label: 'Margem Promo', tipo: 'number' },
-    { value: 'margemfe', label: 'Margem Fora Estado', tipo: 'number' },
-    { value: 'margempromofe', label: 'Margem Promo FE', tipo: 'number' },
-    { value: 'margemzf', label: 'Margem Zona Franca', tipo: 'number' },
-    { value: 'margempromozf', label: 'Margem Promo ZF', tipo: 'number' },
-  ],
-  'Custos de Mercado': [
-    { value: 'cmercd', label: 'Custo Mercado Nacional', tipo: 'text' },
-    { value: 'cmercf', label: 'Custo Mercado Filial', tipo: 'text' },
-    { value: 'cmerczf', label: 'Custo Mercado ZF', tipo: 'text' },
-  ],
-  'Comissões': [
-    { value: 'comdifeext', label: 'Comissão Dif. Externa', tipo: 'number' },
-    { value: 'comdifeext_int', label: 'Comissão Dif. Externa Int', tipo: 'number' },
-    { value: 'comdifint', label: 'Comissão Dif. Interna', tipo: 'number' },
+    { value: 'ipi', label: 'IPI', tipo: 'number' },
   ],
 };
 
