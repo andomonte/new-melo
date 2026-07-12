@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle, Info, AlertCircle, Loader2 } from 'lucide-react';
 
 interface ConfirmationModalProps {
@@ -27,7 +28,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   loading = false,
   hideCancel = false,
 }) => {
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const getIcon = () => {
     switch (type) {
@@ -57,8 +58,11 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+  // Portal para o body + z acima do Dialog (z-50) e pointer-events reabilitado,
+  // pois o Radix Dialog aplica pointer-events:none no body enquanto aberto.
+  // Sem isso, a confirmação aninhada em um modal ficava atrás/inclicável.
+  return createPortal(
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[60] pointer-events-auto">
       <div className="bg-white dark:bg-slate-800 p-6 rounded-md shadow-lg min-w-[400px] max-w-[500px] mx-4">
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
@@ -92,7 +96,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
