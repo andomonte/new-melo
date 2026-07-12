@@ -53,6 +53,7 @@ export const SubstituirProdutoModal: React.FC<SubstituirProdutoModalProps> = ({
   const [atual, setAtual] = useState<ProdutoInfo | null>(null);
   const [candidato, setCandidato] = useState<ProdutoInfo | null>(null);
   const [refBusca, setRefBusca] = useState('');
+  const [resultados, setResultados] = useState<ProdutoInfo[]>([]);
   const [erro, setErro] = useState(''); // mensagem de validação (vermelho)
   const [jaSubstituido, setJaSubstituido] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -73,6 +74,7 @@ export const SubstituirProdutoModal: React.FC<SubstituirProdutoModalProps> = ({
     if (!isOpen || !produto?.codprod) return;
     setCandidato(null);
     setRefBusca('');
+    setResultados([]);
     setErro('');
     setJaSubstituido(false);
     setAtual(null);
@@ -127,25 +129,36 @@ export const SubstituirProdutoModal: React.FC<SubstituirProdutoModalProps> = ({
   );
 
   const localizar = async () => {
-    const ref = refBusca.trim();
-    if (!ref) {
+    const termo = refBusca.trim();
+    if (!termo) {
       alerta('Referência inválida.');
       return;
     }
     setBuscando(true);
     setErro('');
+    setResultados([]);
     try {
       const { data } = await api.get(
-        `/api/produtos/substituir-buscar-ref?ref=${encodeURIComponent(ref)}`,
+        `/api/produtos/substituir-buscar?termo=${encodeURIComponent(termo)}`,
       );
-      setCandidato(data.produto);
-      await validarCandidato(data.produto);
+      const lista: ProdutoInfo[] = data.produtos || [];
+      if (lista.length === 0) {
+        alerta('Nenhum produto localizado para essa referência.');
+        return;
+      }
+      setResultados(lista);
     } catch (e: any) {
-      setCandidato(null);
-      setErro(e?.response?.data?.error || 'NÃO ENCONTRADO');
+      alerta(e?.response?.data?.error || 'Erro ao localizar produto.');
     } finally {
       setBuscando(false);
     }
+  };
+
+  const selecionar = async (prod: ProdutoInfo) => {
+    setResultados([]);
+    setCandidato(prod);
+    setErro('');
+    await validarCandidato(prod);
   };
 
   const confirmar = () => {
@@ -266,6 +279,36 @@ export const SubstituirProdutoModal: React.FC<SubstituirProdutoModalProps> = ({
                   )}
                 </Button>
               </div>
+
+              {/* Lista de resultados (Localizar Produto...) */}
+              {resultados.length > 0 && (
+                <div className="mb-3 border rounded-md max-h-56 overflow-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="text-left px-2 py-1.5 border-b">Referência</th>
+                        <th className="text-left px-2 py-1.5 border-b">Marca</th>
+                        <th className="text-center px-2 py-1.5 border-b w-14">Est.</th>
+                        <th className="text-left px-2 py-1.5 border-b">Descrição</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultados.map((p) => (
+                        <tr
+                          key={p.codprod}
+                          onClick={() => selecionar(p)}
+                          className="odd:bg-muted/20 hover:bg-accent cursor-pointer"
+                        >
+                          <td className="px-2 py-1 border-b whitespace-nowrap">{p.ref}</td>
+                          <td className="px-2 py-1 border-b whitespace-nowrap">{p.marca_nome}</td>
+                          <td className="px-2 py-1 border-b text-center">{String(p.qtest)}</td>
+                          <td className="px-2 py-1 border-b">{p.descr}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <Linha
