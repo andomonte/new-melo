@@ -10,7 +10,9 @@
  * Estado da migração:
  *   [x] IPI (Validar_IPI compra + valor)   — 20/20 OK vs Oracle
  *   [x] PIS/COFINS de compra                — 66/66 OK vs Oracle
- *   [ ] ICMS-ST (MVA + regra credor + SUFRAMA)
+ *   [x] Validar_ICMS (alíquota ICMS compra) — 48/48 OK vs Oracle
+ *   [ ] Desconto SUFRAMA (xVlrDesconto_ICMS)
+ *   [ ] ICMS-ST valor (Calcular_ICMS_Subst + MVA)
  */
 
 function round2(v: number): number {
@@ -196,4 +198,46 @@ export function calcularPisCofinsCompra(
   }
 
   return { valorPis, valorCofins, aliquotaPis, aliquotaCofins };
+}
+
+export interface EstadoValidarICMS {
+  /** CFOP apurado */
+  cfop: string;
+  /** RowUF_Origem.Uf (fornecedor na compra) */
+  ufOrigem: string;
+  /** RowUF_Destino.Uf (empresa, AM) */
+  ufDestino: string;
+  /** dbprod.strib — 1º díg. em (1,2,3,8) => produto importado */
+  strib: string;
+  /** RowUF_Origem.Icmsinterno */
+  icmsInterno: number;
+  /** RowUF_Origem.Icmsexterno */
+  icmsExterno: number;
+  /** RowNCM.Agregado (= dbprod.percsubst) */
+  agregado: number;
+  /** LEGISLACAO_ICMS: NCM participa de CONVENIO/PROTOCOLO/RESOLUCAO/DECRETO vigente */
+  legislacao: boolean;
+}
+
+/**
+ * Alíquota de ICMS para ENTRADA_COMPRAS (Insc_Estadual '04', empresa AM).
+ * Espelha CALCULO_IMPOSTO.Validar_ICMS (ramos aplicáveis à compra; os ramos
+ * de Insc '07' e UF 'RO' não se aplicam aqui). Validado 48/48 vs Oracle.
+ */
+export function validarICMSCompra(st: EstadoValidarICMS): number {
+  const importado = ['1', '2', '3', '8'].includes(String(st.strib || '').charAt(0));
+  const externoOuImp = importado ? 4.0 : Number(st.icmsExterno) || 0;
+  const ufIguais = st.ufOrigem === st.ufDestino;
+  const cfop = String(st.cfop || '');
+
+  if (cfop === '1600') return 6.0;
+  if (['6915', '6916'].includes(cfop)) return 0.0;
+  if (['5551', '6651', '1553'].includes(cfop)) {
+    return ufIguais ? Number(st.icmsInterno) || 0 : externoOuImp;
+  }
+  // legislação (convênio/protocolo/resolução/decreto) OU MVA agregado > 0
+  if (st.legislacao || (Number(st.agregado) || 0) > 0) {
+    return ufIguais ? 0.0 : externoOuImp;
+  }
+  return ufIguais ? Number(st.icmsInterno) || 0 : externoOuImp;
 }
