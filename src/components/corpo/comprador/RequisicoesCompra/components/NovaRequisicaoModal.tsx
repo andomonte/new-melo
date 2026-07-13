@@ -209,7 +209,23 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
       ]);
       
       setTipos(tiposRes.data || []);
-      setFiliais(filiaisRes.data || []);
+      const filiaisData: Filial[] = filiaisRes.data || [];
+      setFiliais(filiaisData);
+
+      // Nova requisição (não é duplicação): já vem MELO MAO como padrão em
+      // Entrega e Destino. O usuário pode trocar no select.
+      if (!initialData) {
+        const padrao = filiaisData.find(
+          (f) => String(f.unm_id) === '1' || f.unm_nome === 'MELO MAO',
+        );
+        if (padrao) {
+          setFormData((prev) => ({
+            ...prev,
+            entrega_em: String(padrao.unm_id),
+            destinado_para: String(padrao.unm_id),
+          }));
+        }
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
