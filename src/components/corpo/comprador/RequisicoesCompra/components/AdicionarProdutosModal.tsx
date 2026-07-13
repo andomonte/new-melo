@@ -6,6 +6,8 @@ import FormFooter2 from '@/components/common/FormFooter2';
 import { useDebounce } from 'use-debounce';
 import type { Produto } from '../types';
 import api from '@/components/services/api';
+import { formataMoedaBR } from '@/components/common/InputMoeda';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProdutoSelecionado extends Produto {
   quantidade: number;
@@ -27,6 +29,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   onConfirm,
   produtosJaAdicionados = [],
 }) => {
+  const { toast } = useToast();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosSelecionados, setProdutosSelecionados] = useState<ProdutoSelecionado[]>([]);
   const [busca, setBusca] = useState('');
@@ -166,6 +169,21 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   };
 
   const handleConfirmar = () => {
+    // Não permitir itens com valor 0 — obrigatório valor > 0 para adicionar
+    const semValor = produtosSelecionados.filter(
+      (p) => !(Number(p.preco_unitario) > 0),
+    );
+    if (semValor.length > 0) {
+      toast({
+        title: 'Informe um valor maior que 0',
+        description: `${semValor.length} item(ns) estão com valor 0: ${semValor
+          .map((p) => p.ref || p.codprod)
+          .slice(0, 5)
+          .join(', ')}${semValor.length > 5 ? '…' : ''}`,
+        variant: 'destructive',
+      });
+      return;
+    }
     onConfirm(produtosSelecionados);
     onClose();
   };
@@ -318,12 +336,15 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                               <div className="flex items-center bg-white dark:bg-zinc-900 rounded-lg border-2 border-blue-400 dark:border-blue-500 h-10" style={{ minWidth: '140px', maxWidth: '160px' }}>
                                 <span className="pl-3 pr-1 text-sm font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">R$</span>
                                 <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={produtoSelecionado?.preco_unitario || 0}
-                                  onChange={(e) => alterarPreco(produto.codprod, Number(e.target.value))}
-                                  className="flex-1 px-2 text-sm font-bold bg-transparent text-gray-900 dark:text-gray-100 outline-none border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={formataMoedaBR(produtoSelecionado?.preco_unitario || 0)}
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onChange={(e) => {
+                                    const digitos = e.target.value.replace(/\D/g, '');
+                                    alterarPreco(produto.codprod, digitos ? parseInt(digitos, 10) / 100 : 0);
+                                  }}
+                                  className="flex-1 px-2 text-sm font-bold text-right bg-transparent text-gray-900 dark:text-gray-100 outline-none border-none"
                                   style={{ minWidth: '0' }}
                                 />
                               </div>
