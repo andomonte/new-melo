@@ -285,6 +285,20 @@ export default function CustomModal({
       setLoading(false);
       // Mensagem específica do backend (ex.: Compra Direta exige Ref. Fábrica)
       const msgBackend = (error as any)?.response?.data?.error;
+
+      // "Compra Direta = SIM exige Referência de Fábrica": modal estilizado
+      // com OK que leva à aba Referência de Fábrica.
+      if (msgBackend && /refer[êe]ncia de f[áa]brica/i.test(msgBackend)) {
+        pedirConfirmacao(() => setActiveTab('referenciaFabrica'), {
+          title: 'Referência de Fábrica obrigatória',
+          message: msgBackend,
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
+        });
+        return;
+      }
+
       toast({
         description: msgBackend || 'Falha ao atualizar produto.',
         variant: 'destructive',
