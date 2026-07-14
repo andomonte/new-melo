@@ -54,40 +54,37 @@ export default async function handle(
 
     data.codprod = sequenceResult.rows[0].codprod;
 
-    // Inserir o novo produto
-    const insertQuery = `
-      INSERT INTO dbprod (
-        codprod, descr, unimed, prvenda, qtest, codbar,
-        qtdreservada, qtest_filial, cmercd, margem, cmercf,
-        margempromo, cmerczf, excluido, qtestmax_sugerido,
-        prmedio, prcompra
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16, $17
-      ) RETURNING *
-    `;
+    // Inserir o novo produto — INSERT DINÂMICO com TODAS as colunas enviadas
+    // pelo formulário (ref, codmarca, codgpf, codgpp, aplic_extendida, inf,
+    // fiscais, etc.). Antes a lista era fixa e perdia esses campos no cadastro.
+    // Filtra pelas colunas REAIS de dbprod para evitar "column does not exist".
+    const colsRes = await client.query(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'db_manaus' AND table_name = 'dbprod'`,
+    );
+    const colunasReais = new Set<string>(
+      colsRes.rows.map((r: any) => r.column_name),
+    );
 
-    const values = [
-      data.codprod,
-      data.descr,
-      data.unimed,
-      data.prvenda,
-      data.qtest,
-      data.codbar,
-      data.qtdreservada,
-      data.qtest_filial,
-      data.cmercd,
-      data.margem,
-      data.cmercf,
-      data.margempromo,
-      data.cmerczf,
-      data.excluido,
-      data.qtestmax_sugerido,
-      data.prmedio,
-      data.prcompra,
-    ];
+    // garante que o produto nasça visível na listagem
+    if (data.excluido === undefined || data.excluido === null) {
+      (data as any).excluido = 0;
+    }
 
-    const result = await client.query(insertQuery, values);
+    const CAMPOS_NAO_COLUNA = new Set(['referenciasFabrica', 'marca_nome']);
+    const colunas = Object.keys(data).filter(
+      (key) =>
+        colunasReais.has(key) &&
+        !CAMPOS_NAO_COLUNA.has(key) &&
+        (data as any)[key] !== undefined,
+    );
+
+    const insertCols = colunas.join(', ');
+    const placeholders = colunas.map((_, i) => `$${i + 1}`).join(', ');
+    const insertValues = colunas.map((key) => (data as any)[key]);
+
+    const insertQuery = `INSERT INTO dbprod (${insertCols}) VALUES (${placeholders}) RETURNING *`;
+    const result = await client.query(insertQuery, insertValues);
 
     // ✅ RECALCULAR PREÇOS AUTOMATICAMENTE (igual ao Delphi)
     await recalcularPrecosProduto(client, {
