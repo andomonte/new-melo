@@ -362,10 +362,6 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
                   onValueChange={(value) =>
                     handleProdutoChange({ ...produto, codmarca: value as string })
                   }
-                  onInputChange={(value) => {
-                    setSearchMarcas(value);
-                    handleMarcasSearch();
-                  }}
                   error={error?.codmarca}
                 />
               </div>
@@ -392,10 +388,6 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
                   onValueChange={(value) =>
                     handleProdutoChange({ ...produto, codgpf: value as string })
                   }
-                  onInputChange={(value) => {
-                    setSearchGruposFuncao(value);
-                    handleGruposFuncaoSearch();
-                  }}
                   error={error?.codgpf}
                 />
               </div>
@@ -424,10 +416,6 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
                   onValueChange={(value) =>
                     handleProdutoChange({ ...produto, codgpp: value as string })
                   }
-                  onInputChange={(value) => {
-                    setSearchGruposProduto(value);
-                    handleGruposProdutoSearch();
-                  }}
                   error={error?.codgpp}
                 />
               </div>

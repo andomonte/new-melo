@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FormInput from '@/components/common/FormInput';
 import CampoDecimal from './CampoDecimal';
 import SelectInput from '@/components/common/SelectPadrao';
+import ComboboxInput from '@/components/common/ComboboxInput';
 import { Label } from '@/components/ui/label';
 import { IsentoIPI, Produto } from '@/data/produtos/produtos';
 import {
@@ -295,7 +296,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             />
           </div>
           <div className={error?.clasfiscal ? 'field-error' : ''}>
-            <SelectInput searchable
+            <ComboboxInput
               name="clasfiscal"
               label="Classif. Fiscal"
               required
@@ -441,7 +442,7 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             error={error?.ii}
           />
           <div className={error?.cest ? 'field-error' : ''}>
-            <SelectInput searchable
+            <ComboboxInput
               name="cest"
               label="CEST"
               loading={loadingCest}
