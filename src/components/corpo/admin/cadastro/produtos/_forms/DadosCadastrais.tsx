@@ -4,6 +4,7 @@ import FormInput from '@/components/common/FormInput';
 import CampoDecimal from './CampoDecimal';
 import CadastroRapidoAux, { TipoAux } from './CadastroRapidoAux';
 import SelectInput from '@/components/common/SelectPadrao';
+import ComboboxInput from '@/components/common/ComboboxInput';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
@@ -351,7 +352,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <div className={error?.codmarca ? 'field-error' : ''}>
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <SelectInput searchable
+                <ComboboxInput
                   name="codmarca"
                   label="Marca"
                   required
@@ -381,7 +382,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <div className={error?.codgpf ? 'field-error' : ''}>
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <SelectInput searchable
+                <ComboboxInput
                   name="codgpf"
                   label="Grupo de Função"
                   required
@@ -413,7 +414,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
           <div className={error?.codgpp ? 'field-error' : ''}>
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <SelectInput searchable
+                <ComboboxInput
                   name="codgpp"
                   label="Grupo de Produto"
                   required
