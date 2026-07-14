@@ -669,6 +669,15 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
                     comdifeext_int: undefined,
                     comdifint: undefined,
                   });
+                } else {
+                  // Ao habilitar, inicializa os 3 (defined) — a validação ao
+                  // salvar exige valor > 0 nas três comissões.
+                  handleProdutoChange({
+                    ...produto,
+                    comdifeext: produto.comdifeext ?? 0,
+                    comdifeext_int: produto.comdifeext_int ?? 0,
+                    comdifint: produto.comdifint ?? 0,
+                  });
                 }
               }}
               id="chk-comissao"
@@ -693,7 +702,7 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               />
               <CampoDecimal
                 name="comdifeext_int"
-                label="Comissão Externa Internacional (%)"
+                label="Comissão Externa/Interna (%)"
                 value={produto.comdifeext_int}
                 onChangeValue={(v) =>
                   handleProdutoChange({ ...produto, comdifeext_int: v })

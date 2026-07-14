@@ -246,6 +246,24 @@ export default function CustomModal({
         }
       }
 
+      // Comissões Diferenciadas: se habilitadas (qualquer das 3 definida), exige
+      // valor > 0 nas três comissões (Externa, Externa/Interna e Interna).
+      const comissoes = [
+        produtoFinal.comdifeext,
+        produtoFinal.comdifeext_int,
+        produtoFinal.comdifint,
+      ];
+      const comissaoAtiva = comissoes.some((v) => v !== undefined && v !== null);
+      if (comissaoAtiva && comissoes.some((v) => !(Number(v) > 0))) {
+        toast({
+          description:
+            'Comissões Diferenciadas: informe valor maior que 0 nas três comissões (Externa, Externa/Interna e Interna).',
+          variant: 'destructive',
+        });
+        setActiveTab('dadosCadastrais');
+        return;
+      }
+
       // Validação (Delphi): a Marca das referências de fábrica deve ser igual
       // à Marca informada nos Dados Cadastrais.
       if (
