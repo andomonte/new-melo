@@ -344,13 +344,16 @@ export default function CustomModal({
             fieldErrors[error.path[0]] = error.message;
           }
         });
-        // Ordenar erros pela sequência das abas
+        // Ordenar erros pela sequência das abas. Campos não mapeados vão pro
+        // FIM (999), para que o primeiro erro seja sempre de uma aba conhecida.
         const tabOrder = ['dadosCadastrais', 'dadosFiscais', 'dadosCustos', 'referenciaFabrica'];
-        const sortedErrors = [...error.errors].sort((a, b) => {
-          const tabA = tabOrder.indexOf(campoParaAba[String(a.path[0])] || '');
-          const tabB = tabOrder.indexOf(campoParaAba[String(b.path[0])] || '');
-          return tabA - tabB;
-        });
+        const idxAba = (field: unknown) => {
+          const i = tabOrder.indexOf(campoParaAba[String(field)] || '');
+          return i < 0 ? 999 : i;
+        };
+        const sortedErrors = [...error.errors].sort(
+          (a, b) => idxAba(a.path[0]) - idxAba(b.path[0]),
+        );
         const firstError = sortedErrors[0];
         const fieldWithError = firstError.path[0];
         const abaDoErro = campoParaAba[fieldWithError as string];
