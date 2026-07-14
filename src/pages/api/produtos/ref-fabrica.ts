@@ -21,10 +21,12 @@ export default async function handle(
   try {
     const result = await client.query(
       `SELECT rf.cod_id, rf.referencia, rf.codmarca, rf.codcredor,
-              m.descr as marca_nome
+              m.descr as marca_nome,
+              c.nome as credor_nome
        FROM dbprod_ref_fabrica prf
        JOIN dbref_fabrica rf ON rf.cod_id = prf.cod_id
        LEFT JOIN dbmarcas m ON m.codmarca = rf.codmarca
+       LEFT JOIN dbcredor c ON c.cod_credor = rf.codcredor
        WHERE prf.codprod = $1
        ORDER BY rf.referencia`,
       [codprod]

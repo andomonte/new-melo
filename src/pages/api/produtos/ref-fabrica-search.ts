@@ -15,19 +15,25 @@ export default async function handle(
   }
 
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  // filtra só as referências da marca do produto (quando informada)
+  const codmarca =
+    typeof req.query.codmarca === 'string' ? req.query.codmarca.trim() : '';
 
   const pool = getPgPool();
   const client = await pool.connect();
   try {
     const result = await client.query(
       `SELECT rf.cod_id, rf.referencia, rf.codmarca, rf.codcredor,
-              m.descr AS marca_nome
+              m.descr AS marca_nome,
+              c.nome AS credor_nome
          FROM dbref_fabrica rf
          LEFT JOIN dbmarcas m ON m.codmarca = rf.codmarca
+         LEFT JOIN dbcredor c ON c.cod_credor = rf.codcredor
         WHERE ($1 = '' OR rf.referencia ILIKE '%' || $1 || '%')
+          AND ($2 = '' OR rf.codmarca = $2)
         ORDER BY rf.referencia
         LIMIT 50`,
-      [q],
+      [q, codmarca],
     );
     res.status(200).json({ referencias: serializeBigInt(result.rows) });
   } catch (error: any) {

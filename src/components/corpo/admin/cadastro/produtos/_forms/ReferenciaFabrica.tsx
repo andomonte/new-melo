@@ -25,6 +25,7 @@ export interface ReferenciaItem {
   codmarca?: string;
   codcredor?: string;
   marca_nome?: string;
+  credor_nome?: string;
 }
 
 interface ReferenciaFabricaProps {
@@ -154,6 +155,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
         codmarca: data.referencia.codmarca || '',
         codcredor: data.referencia.codcredor || '',
         marca_nome: data.referencia.marca_nome || marcaSel.descr || '',
+        credor_nome: fornecedorSel.nome || '',
       };
       // não duplica se já estiver na lista
       if (!referencias.some((r) => r.cod_id === nova.cod_id)) {
@@ -179,7 +181,11 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
     if (!open) return;
     let ativo = true;
     setBuscando(true);
-    fetch(`/api/produtos/ref-fabrica-search?q=${encodeURIComponent(debouncedQuery)}`)
+    // filtra só as referências da marca selecionada no cadastro do produto
+    const marcaProd = String(produto.codmarca || '').trim();
+    fetch(
+      `/api/produtos/ref-fabrica-search?q=${encodeURIComponent(debouncedQuery)}&codmarca=${encodeURIComponent(marcaProd)}`,
+    )
       .then((r) => (r.ok ? r.json() : { referencias: [] }))
       .then((data) => {
         if (ativo) setResultados(data.referencias || []);
@@ -189,7 +195,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
     return () => {
       ativo = false;
     };
-  }, [debouncedQuery, open]);
+  }, [debouncedQuery, open, produto.codmarca]);
 
   // Carregar referências do banco ao editar produto existente
   useEffect(() => {
@@ -204,6 +210,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
             codmarca: r.codmarca || '',
             codcredor: r.codcredor || '',
             marca_nome: r.marca_nome || r.codmarca || '',
+            credor_nome: r.credor_nome || '',
           }));
           setReferencias(refs);
           // Sincroniza com o produto pai
@@ -232,6 +239,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
       codmarca: refSelecionada.codmarca || '',
       codcredor: refSelecionada.codcredor || '',
       marca_nome: refSelecionada.marca_nome || '',
+      credor_nome: refSelecionada.credor_nome || '',
     };
     const novasRefs = [...referencias, novaRef];
     setReferencias(novasRefs);
@@ -313,6 +321,12 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                               {r.marca_nome ? ` - ${r.marca_nome}` : ''}
                             </span>
                           )}
+                          {r.codcredor && (
+                            <span className="ml-2 text-xs text-blue-500 dark:text-blue-300">
+                              Forn: {r.codcredor}
+                              {r.credor_nome ? ` - ${r.credor_nome}` : ''}
+                            </span>
+                          )}
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -363,52 +377,16 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
             </div>
             <div>
               <Label>Marca *</Label>
-              <Popover open={marcaOpen} onOpenChange={setMarcaOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={marcaOpen}
-                    className="w-full justify-between font-normal h-[38px]"
-                  >
-                    {marcaSel
-                      ? `${marcaSel.codmarca} - ${marcaSel.descr}`
-                      : 'Buscar marca...'}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[320px] p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      placeholder="Digite a marca..."
-                      value={marcaQuery}
-                      onValueChange={setMarcaQuery}
-                    />
-                    <CommandList>
-                      {marcaResultados.length === 0 && (
-                        <CommandEmpty>Nenhuma marca encontrada.</CommandEmpty>
-                      )}
-                      <CommandGroup>
-                        {marcaResultados.map((m) => (
-                          <CommandItem
-                            key={m.codmarca}
-                            value={m.codmarca}
-                            onSelect={() => {
-                              setMarcaSel({ codmarca: m.codmarca, descr: m.descr });
-                              setMarcaOpen(false);
-                            }}
-                          >
-                            <span className="font-medium">{m.codmarca}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {m.descr}
-                            </span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              {/* Marca bloqueada: sempre igual à marca selecionada no cadastro do
+                  produto — não pode ser alterada aqui. */}
+              <div
+                title="A marca é sempre a mesma do produto e não pode ser alterada"
+                className="w-full h-[38px] flex items-center px-3 text-sm rounded border border-gray-300 dark:border-zinc-600 bg-gray-100 dark:bg-zinc-900 text-gray-600 dark:text-gray-300 cursor-not-allowed truncate"
+              >
+                {marcaSel
+                  ? `${marcaSel.codmarca}${marcaSel.descr ? ' - ' + marcaSel.descr : ''}`
+                  : '— selecione a Marca do produto em Dados Cadastrais —'}
+              </div>
             </div>
             <div className="md:col-span-2">
               <Label>Fornecedor *</Label>
@@ -520,7 +498,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                 Referência
               </th>
               <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase">
-                Marca
+                Fornecedor
               </th>
               <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase w-20">
                 Ações
@@ -546,8 +524,8 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                   <td className="px-3 py-2">{ref.cod_id ?? '-'}</td>
                   <td className="px-3 py-2">{ref.referencia}</td>
                   <td className="px-3 py-2">
-                    {ref.codmarca
-                      ? `${ref.codmarca}${ref.marca_nome ? ' - ' + ref.marca_nome : ''}`
+                    {ref.codcredor
+                      ? `${ref.codcredor}${ref.credor_nome ? ' - ' + ref.credor_nome : ''}`
                       : '-'}
                   </td>
                   <td className="px-3 py-2 text-center">

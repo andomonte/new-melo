@@ -213,8 +213,13 @@ export default function CustomModal({
         });
         const cestResult = await cestResp.json();
         if (cestResult.resultado === 'NOK1' || cestResult.resultado === 'NOK2') {
-          toast({ description: cestResult.message, variant: 'destructive' });
-          setActiveTab('dadosFiscais');
+          pedirConfirmacao(() => setActiveTab('dadosFiscais'), {
+            title: 'CEST inválido',
+            message: cestResult.message,
+            type: 'warning',
+            confirmText: 'OK',
+            somenteOk: true,
+          });
           return;
         }
       }
@@ -223,8 +228,13 @@ export default function CustomModal({
       // 'D' exige checagem de estoque > 0 (conforme Delphi)
       const infVal = (produtoFinal.inf || '').toUpperCase();
       if (infVal === 'E' || infVal === 'S') {
-        toast({ description: `Informativo "${infVal}" não é permitido para edição de produto.`, variant: 'destructive' });
-        setActiveTab('dadosCadastrais');
+        pedirConfirmacao(() => setActiveTab('dadosCadastrais'), {
+          title: 'Informativo inválido',
+          message: `Informativo "${infVal}" não é permitido para edição de produto.`,
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
+        });
         return;
       }
 
@@ -234,11 +244,13 @@ export default function CustomModal({
           const estoqueResp = await fetch(`/api/produtos/verificar-estoque?codprod=${encodeURIComponent(produtoFinal.codprod)}`);
           const estoqueData = await estoqueResp.json();
           if (estoqueData.temEstoque) {
-            toast({
-              description: `Não é possível desativar produto com estoque (quantidade: ${estoqueData.quantidade}).`,
-              variant: 'destructive',
+            pedirConfirmacao(() => setActiveTab('dadosCadastrais'), {
+              title: 'Produto com estoque',
+              message: `Não é possível desativar produto com estoque (quantidade: ${estoqueData.quantidade}).`,
+              type: 'warning',
+              confirmText: 'OK',
+              somenteOk: true,
             });
-            setActiveTab('dadosCadastrais');
             return;
           }
         } catch (estoqueError) {
@@ -255,12 +267,14 @@ export default function CustomModal({
       ];
       const comissaoAtiva = comissoes.some((v) => v !== undefined && v !== null);
       if (comissaoAtiva && comissoes.some((v) => !(Number(v) > 0))) {
-        toast({
-          description:
-            'Comissões Diferenciadas: informe valor maior que 0 nas três comissões (Externa, Externa/Interna e Interna).',
-          variant: 'destructive',
+        pedirConfirmacao(() => setActiveTab('dadosCadastrais'), {
+          title: 'Comissões Diferenciadas',
+          message:
+            'Informe valor maior que 0 nas três comissões (Externa, Externa/Interna e Interna).',
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
         });
-        setActiveTab('dadosCadastrais');
         return;
       }
 

@@ -259,8 +259,13 @@ export default function CustomModal({
         });
         const cestResult = await cestResp.json();
         if (cestResult.resultado === 'NOK1' || cestResult.resultado === 'NOK2') {
-          toast({ description: cestResult.message, variant: 'destructive' });
-          setActiveTab('dadosFiscais');
+          pedirConfirmacao(() => setActiveTab('dadosFiscais'), {
+            title: 'CEST inválido',
+            message: cestResult.message,
+            type: 'warning',
+            confirmText: 'OK',
+            somenteOk: true,
+          });
           return;
         }
       }
@@ -268,8 +273,14 @@ export default function CustomModal({
       // Validação Informativo: no cadastro, 'D', 'E' e 'S' são inválidos (conforme Delphi)
       const infVal = (produtoFinal.inf || '').toUpperCase();
       if (infVal === 'D' || infVal === 'E' || infVal === 'S') {
-        toast({ description: 'Informativo inválido para cadastro. Valores "D", "E" e "S" não são permitidos ao criar um produto.', variant: 'destructive' });
-        setActiveTab('dadosFiscais');
+        pedirConfirmacao(() => setActiveTab('dadosCadastrais'), {
+          title: 'Informativo inválido',
+          message:
+            'Informativo inválido para cadastro. Valores "D", "E" e "S" não são permitidos ao criar um produto.',
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
+        });
         return;
       }
 
@@ -282,12 +293,14 @@ export default function CustomModal({
       ];
       const comissaoAtiva = comissoes.some((v) => v !== undefined && v !== null);
       if (comissaoAtiva && comissoes.some((v) => !(Number(v) > 0))) {
-        toast({
-          description:
-            'Comissões Diferenciadas: informe valor maior que 0 nas três comissões (Externa, Externa/Interna e Interna).',
-          variant: 'destructive',
+        pedirConfirmacao(() => setActiveTab('dadosCadastrais'), {
+          title: 'Comissões Diferenciadas',
+          message:
+            'Informe valor maior que 0 nas três comissões (Externa, Externa/Interna e Interna).',
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
         });
-        setActiveTab('dadosCadastrais');
         return;
       }
 
