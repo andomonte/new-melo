@@ -538,19 +538,19 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
                   )}
                   <div className="grid grid-cols-4 gap-3 text-sm flex-1">
                     <div>
-                      <div className="text-[11px] text-gray-500 dark:text-gray-400">IPI</div>
+                      <div className="text-[0.6875rem] text-gray-500 dark:text-gray-400">IPI</div>
                       <div className="font-medium">{Number(v.ipi).toFixed(2)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-gray-500 dark:text-gray-400">PIS</div>
+                      <div className="text-[0.6875rem] text-gray-500 dark:text-gray-400">PIS</div>
                       <div className="font-medium">{Number(v.pis).toFixed(2)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-gray-500 dark:text-gray-400">COFINS</div>
+                      <div className="text-[0.6875rem] text-gray-500 dark:text-gray-400">COFINS</div>
                       <div className="font-medium">{Number(v.cofins).toFixed(2)}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-gray-500 dark:text-gray-400">MVA</div>
+                      <div className="text-[0.6875rem] text-gray-500 dark:text-gray-400">MVA</div>
                       <div className="font-medium">{Number(v.agregado).toFixed(2)}</div>
                     </div>
                   </div>
@@ -559,12 +559,15 @@ const DadosFiscais: React.FC<DadosFiscaisProps> = ({
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
+              {/* Desconsidera os valores do NCM: fecha sem aplicar, preservando
+                  os valores fiscais atuais do produto. Em vermelho para deixar
+                  claro que é o caminho de descarte. */}
               <button
                 type="button"
                 onClick={() => setMostrarModalNcm(false)}
-                className="px-4 py-2 text-sm rounded border border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                className="px-4 py-2 text-sm rounded bg-red-600 hover:bg-red-700 text-white transition-colors"
               >
-                Manter atuais
+                Desconsiderar
               </button>
               <button
                 type="button"
