@@ -28,7 +28,6 @@ import {
   GrupoProduto,
   GruposProduto,
 } from '@/data/gruposProduto/gruposProduto';
-import { toast } from 'sonner';
 
 const curvaOptions = [
   { value: 'A', label: 'A' },
@@ -154,7 +153,6 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
   const [searchMarcas, setSearchMarcas] = useState<string>('');
   const [searchGruposFuncao, setSearchGruposFuncao] = useState<string>('');
   const [searchGruposProduto, setSearchGruposProduto] = useState<string>('');
-  const [validatingRef, setValidatingRef] = useState<boolean>(false);
   const [loadingMarcas, setLoadingMarcas] = useState<boolean>(false);
   const [loadingGruposFuncao, setLoadingGruposFuncao] = useState<boolean>(false);
   const [loadingGruposProduto, setLoadingGruposProduto] = useState<boolean>(false);
@@ -223,33 +221,10 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
     } finally { setLoadingGruposProduto(false); }
   };
 
-  const handleValidateRef = async () => {
-    if (!produto.ref || produto.ref.trim() === '') return;
-
-    setValidatingRef(true);
-    try {
-      const response = await fetch('/api/produtos/validar-referencia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ref: produto.ref,
-          codprod: produto.codprod, // Para edição, não validar contra si mesmo
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.resultado === 'NOK') {
-        toast.error(data.message, {
-          duration: 5000,
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao validar referência:', error);
-    } finally {
-      setValidatingRef(false);
-    }
-  };
+  // Não há validação de referência ao sair do campo: a mesma referência existe
+  // legitimamente em marcas diferentes, então avisar só com a ref digitada era
+  // falso alarme. O duplicado real é Referência + Marca, verificado no
+  // modalCadastrar (verificar-ref-marca), que oferece editar o existente.
 
   const marcaOptions = marcas.map((marca) => ({
     value: marca.codmarca.toString(),
@@ -306,7 +281,6 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
               onChange={(e) =>
                 handleProdutoChange({ ...produto, ref: e.target.value })
               }
-              onBlur={handleValidateRef}
               error={error?.ref}
               required
             />
@@ -729,6 +703,24 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
         tipo={auxAberto ?? 'marca'}
         onClose={() => setAuxAberto(null)}
         onCriado={handleAuxCriado}
+        existentes={
+          auxAberto === 'marca'
+            ? marcas.map((m) => ({
+                codigo: String(m.codmarca ?? '').trim(),
+                descr: String(m.descr ?? '').trim(),
+              }))
+            : auxAberto === 'grupoFuncao'
+              ? gruposFuncao.map((g) => ({
+                  codigo: String(g.codgpf ?? '').trim(),
+                  descr: String(g.descr ?? '').trim(),
+                }))
+              : auxAberto === 'grupoProduto'
+                ? gruposProduto.map((g) => ({
+                    codigo: String(g.codgpp ?? '').trim(),
+                    descr: String(g.descr ?? '').trim(),
+                  }))
+                : []
+        }
       />
     </>
   );
