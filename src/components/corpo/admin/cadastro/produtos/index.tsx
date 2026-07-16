@@ -9,7 +9,9 @@ import { Produtos, getProdutos } from '@/data/produtos/produtos';
 import { useDebouncedCallback } from 'use-debounce';
 import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
+import SelectInput from '@/components/common/SelectPadrao';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import CadastrarProduto from './modalCadastrar';
 import EditarProduto from './modalEditar';
 import { ProdutoZoomModal } from './ProdutoZoomModal';
@@ -39,6 +41,8 @@ import {
   Package,
   ArrowRightLeft,
   Replace,
+  Ban,
+  RotateCcw,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
@@ -106,6 +110,16 @@ const ProdutosPage = () => {
   const [produtos, setProdutos] = useState<Produtos>({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 } } as any);
   const [loading, setLoading] = useState(false);
   const [filtros, setFiltros] = useState<Filtro[]>([]);
+  // Status do produto exibido (ver memória produto-status-ativo-inativo).
+  // Padrão: só Ativos. Um ref acompanha para as funções de busca lerem o valor
+  // atual sem precisar entrar nas dependências de todos os call sites.
+  const [statusFiltro, setStatusFiltro] = useState<'ativo' | 'inativo' | 'todos'>(
+    'ativo',
+  );
+  const statusFiltroRef = useRef<'ativo' | 'inativo' | 'todos'>('ativo');
+  useEffect(() => {
+    statusFiltroRef.current = statusFiltro;
+  }, [statusFiltro]);
   const [colunasDbProd, setColunasDbProd] = useState<string[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
@@ -121,6 +135,10 @@ const ProdutosPage = () => {
   const [editarOpen, setEditarOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<any>(null);
   const [idProduto, setIdProduto] = useState<string>('');
+  // Códigos na MESMA ordem exibida na grade (após filtro/ordenação de coluna) —
+  // habilita o navegador de registros do modal de edição (editar vários
+  // produtos na sequência que o usuário vê, como no Delphi).
+  const [ordemNavCodprods, setOrdemNavCodprods] = useState<string[]>([]);
 
   // Novos modais
   const [isZoomOpen, setIsZoomOpen] = useState(false);
@@ -171,6 +189,10 @@ const ProdutosPage = () => {
 
   // Contexts
   const { dismiss, toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar',
+    message: 'Deseja realmente continuar?',
+  });
   const { user } = useContext(AuthContext) as AuthContextProps;
 
   // Permissões
@@ -206,11 +228,16 @@ const ProdutosPage = () => {
       perPage,
       search,
       filtros: novosFiltros,
+      forcar = false,
     }: {
       page: number;
       perPage: number;
       search: string;
       filtros: Filtro[];
+      /** Refaz a busca mesmo com os mesmos parâmetros. Necessário para
+       *  recarregar após salvar: um refresh é, por definição, a mesma busca —
+       *  sem isso o anti-duplicidade abaixo cancela e a lista fica velha. */
+      forcar?: boolean;
     }) => {
       // Igual à tela de Clientes: a listagem vem vazia e só busca quando há
       // pesquisa com 3+ caracteres OU filtros avançados ativos. Sem isso, o
@@ -237,8 +264,9 @@ const ProdutosPage = () => {
 
       const ultima = ultimaChamada.current;
 
-      // Evita chamadas duplicadas
+      // Evita chamadas duplicadas (exceto refresh explícito)
       if (
+        !forcar &&
         ultima.page === page &&
         ultima.perPage === perPage &&
         ultima.search === search &&
@@ -286,6 +314,7 @@ const ProdutosPage = () => {
               perPage,
               productSearch: search,
               filtros: novosFiltros,
+              status: statusFiltroRef.current,
             }),
           });
 
@@ -301,6 +330,7 @@ const ProdutosPage = () => {
             perPage,
             search,
             filtros: novosFiltros,
+            status: statusFiltroRef.current,
           });
         }
 
@@ -330,7 +360,12 @@ const ProdutosPage = () => {
             `📊 ${colunasDinamicas.length} colunas disponíveis, ${ordenadas.length} visíveis`,
           );
         } else {
-          setHeaders(['selecionar', 'ações']);
+          // Busca/filtro sem resultado: MANTÉM as colunas já conhecidas. Zerar
+          // os headers derrubava junto a linha de filtros rápidos, e o usuário
+          // ficava sem como corrigir o que tinha acabado de digitar.
+          setHeaders((prev) =>
+            prev && prev.length > 2 ? prev : ['selecionar', 'ações'],
+          );
         }
       } catch (error) {
         console.error('❌ Erro ao buscar produtos:', error);
@@ -388,7 +423,12 @@ const ProdutosPage = () => {
       setLoading(true);
 
       try {
-        const data = await getProdutos({ page, perPage, search });
+        const data = await getProdutos({
+          page,
+          perPage,
+          search,
+          status: statusFiltroRef.current,
+        });
 
         if (!isMountedRef.current) return;
 
@@ -433,12 +473,18 @@ const ProdutosPage = () => {
   );
 
   const debouncedSearchUnico = useDebouncedCallback((value: string) => {
+    setPage(1);
+    // Busca global e filtro rápido se SOMAM (o buscaComFiltro aplica
+    // productSearch AND filtros). Antes esta função zerava os filtros de
+    // coluna, então digitar na busca descartava o que havia no filtro rápido.
+    if (filtros.length > 0) {
+      fetchProdutos({ page: 1, perPage, search: value, filtros });
+      return;
+    }
     if (value.length < 3) {
       setProdutos({ data: [], meta: { total: 0, lastPage: 1, currentPage: 1, perPage } } as any);
       return;
     }
-    setPage(1);
-    setFiltros([]);
     fetchProdutosUnico({ page: 1, perPage, search: value });
   }, 500);
 
@@ -518,7 +564,9 @@ const ProdutosPage = () => {
   );
 
   const recarregarLista = useCallback(() => {
-    fetchProdutos({ page, perPage, search, filtros });
+    // forcar: mantém o filtro/página atuais e refaz a busca mesmo sendo os
+    // mesmos parâmetros (senão o anti-duplicidade cancela e nada atualiza).
+    fetchProdutos({ page, perPage, search, filtros, forcar: true });
   }, [page, perPage, search, filtros, fetchProdutos]);
 
   // Após salvar (novo/edição), filtra a listagem pela referência salva para o
@@ -696,46 +744,93 @@ const ProdutosPage = () => {
   };
 
   /**
-   * Excluir produto (soft delete)
+   * Desativa / Ativa produtos. Produto não é excluído, é desativado (inf='D');
+   * ativar volta inf='-' (ver memória produto-status-ativo-inativo).
    */
-  const handleExcluir = async (produto: any) => {
-    if (
-      !confirm(
-        `Tem certeza que deseja excluir o produto:\n${produto.codprod} - ${produto.descr}?\n\nEsta ação pode ser desfeita.`,
-      )
-    ) {
-      return;
-    }
-
-    closeAllDropdowns();
-
+  const alterarStatusProdutos = async (
+    codprods: string[],
+    acao: 'desativar' | 'ativar',
+  ) => {
     try {
-      const response = await fetch('/api/produtos/delete', {
+      const response = await fetch('/api/produtos/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codprod: produto.codprod }),
+        body: JSON.stringify({ codprods, acao }),
       });
-
       const resultado = await response.json();
+      if (!response.ok) throw new Error(resultado.error || 'Falha na operação');
 
-      if (!response.ok) {
-        throw new Error(resultado.error || 'Erro ao excluir produto');
-      }
-
+      const verbo = acao === 'desativar' ? 'desativado' : 'ativado';
       toast({
-        title: 'Produto excluído',
-        description: resultado.message,
+        description:
+          codprods.length === 1
+            ? `Produto ${verbo} com sucesso.`
+            : `${resultado.afetados} produto(s) ${verbo}(s) com sucesso.`,
       });
-
+      setSelectedProducts(new Set());
+      setSelectAll(false);
       recarregarLista();
     } catch (error: any) {
-      console.error('Erro ao excluir produto:', error);
       toast({
-        title: 'Erro ao excluir produto',
+        title: `Erro ao ${acao} produto`,
         description: error.message || 'Tente novamente mais tarde.',
         variant: 'destructive',
       });
     }
+  };
+
+  // Ação de linha — Desativar (produto ativo) com confirmação estilizada
+  const handleDesativar = (produto: any) => {
+    closeAllDropdowns();
+    pedirConfirmacao(() => alterarStatusProdutos([produto.codprod], 'desativar'), {
+      title: 'Desativar produto',
+      message: `Deseja desativar o produto ${produto.codprod} - ${produto.descr}?\nEle deixa de aparecer nos ativos, mas pode ser ativado depois.`,
+      type: 'warning',
+      confirmText: 'Sim, desativar',
+      cancelText: 'Não',
+    });
+  };
+
+  // Ação de linha — Ativar (produto inativo)
+  const handleAtivar = (produto: any) => {
+    closeAllDropdowns();
+    pedirConfirmacao(() => alterarStatusProdutos([produto.codprod], 'ativar'), {
+      title: 'Ativar produto',
+      message: `Deseja ativar o produto ${produto.codprod} - ${produto.descr}?`,
+      type: 'info',
+      confirmText: 'Sim, ativar',
+      cancelText: 'Não',
+    });
+  };
+
+  // Troca a visão (Ativos/Inativos/Todos) e recarrega mantendo busca/filtro.
+  const mudarStatusFiltro = (novo: 'ativo' | 'inativo' | 'todos') => {
+    if (novo === statusFiltro) return;
+    statusFiltroRef.current = novo; // imediato: forcarRefresh lê o ref
+    setStatusFiltro(novo);
+    setPage(1);
+    forcarRefresh();
+  };
+
+  // Desativar / Ativar em massa (produtos selecionados)
+  const handleStatusMassa = (acao: 'desativar' | 'ativar') => {
+    if (selectedProducts.size === 0) {
+      toast({
+        title: 'Nenhum produto selecionado',
+        description: 'Selecione pelo menos um produto.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const codprods = Array.from(selectedProducts);
+    const verbo = acao === 'desativar' ? 'desativar' : 'ativar';
+    pedirConfirmacao(() => alterarStatusProdutos(codprods, acao), {
+      title: `${verbo[0].toUpperCase()}${verbo.slice(1)} em massa`,
+      message: `Deseja ${verbo} ${codprods.length} produto(s) selecionado(s)?`,
+      type: acao === 'desativar' ? 'warning' : 'info',
+      confirmText: `Sim, ${verbo}`,
+      cancelText: 'Não',
+    });
   };
 
   /**
@@ -837,7 +932,7 @@ const ProdutosPage = () => {
   const handleSelecionarTudoFiltro = async () => {
     try {
       const r = await fetch(
-        `/api/produtos/ids?search=${encodeURIComponent(search)}`,
+        `/api/produtos/ids?search=${encodeURIComponent(search)}&status=${statusFiltroRef.current}`,
       );
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Falha');
@@ -857,6 +952,17 @@ const ProdutosPage = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  /**
+   * Abre o modal de edição no produto informado, habilitando o navegador de
+   * registros. A lista de navegação (`ordemNavCodprods`) reflete exatamente a
+   * ordem exibida na grade (filtro + ordenação de coluna), reportada pelo
+   * DataTable via `onOrderedRowsChange`.
+   */
+  const abrirEdicaoComNav = (codprod: string) => {
+    setIdProduto(codprod);
+    setEditarOpen(true);
   };
 
   // ========================================
@@ -1064,8 +1170,7 @@ const ProdutosPage = () => {
                             return;
                           }
                           setSelectedRow(produto);
-                          setIdProduto(produto.codprod);
-                          setEditarOpen(true);
+                          abrirEdicaoComNav(produto.codprod);
                           closeAllDropdowns();
                         }}
                         className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-left"
@@ -1175,20 +1280,34 @@ const ProdutosPage = () => {
                       </button>
                     )}
 
-                    {/* Excluir */}
-                    {userPermissions.remover && (
-                      <button
-                        onClick={() => handleExcluir(produto)}
-                        className="flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 w-full text-left"
-                        title="Excluir produto (soft delete)"
-                      >
-                        <Trash2
-                          className="mr-2 text-red-500 dark:text-red-400"
-                          size={16}
-                        />
-                        Excluir
-                      </button>
-                    )}
+                    {/* Desativar (produto ativo) / Ativar (produto inativo).
+                        No Delphi produto não é excluído, é desativado (inf='D'). */}
+                    {userPermissions.remover &&
+                      (String(produto.inf).trim() === 'D' ? (
+                        <button
+                          onClick={() => handleAtivar(produto)}
+                          className="flex items-center px-4 py-2 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950 w-full text-left"
+                          title="Ativar item"
+                        >
+                          <RotateCcw
+                            className="mr-2 text-green-500 dark:text-green-400"
+                            size={16}
+                          />
+                          Ativar item
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleDesativar(produto)}
+                          className="flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 w-full text-left"
+                          title="Desativar produto"
+                        >
+                          <Ban
+                            className="mr-2 text-red-500 dark:text-red-400"
+                            size={16}
+                          />
+                          Desativar
+                        </button>
+                      ))}
                   </div>
                 </div>,
                 document.body,
@@ -1202,6 +1321,9 @@ const ProdutosPage = () => {
       }
     });
 
+    // Código oculto para recuperar a ordem exibida na navegação de registros
+    // (não é uma coluna — não aparece na grade).
+    (linha as any).__codprod = id;
     return linha;
   });
 
@@ -1221,7 +1343,24 @@ const ProdutosPage = () => {
             )}
           </div>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-3 items-center">
+            {/* Filtro de status (mesmo componente da Central de Vendas).
+                Padrão: Ativos. */}
+            <div className="w-44">
+              <SelectInput
+                name="statusProduto"
+                options={[
+                  { value: 'ativo', label: 'Ativos' },
+                  { value: 'inativo', label: 'Inativos' },
+                  { value: 'todos', label: 'Todos' },
+                ]}
+                value={statusFiltro}
+                onValueChange={(v) =>
+                  mudarStatusFiltro(v as 'ativo' | 'inativo' | 'todos')
+                }
+              />
+            </div>
+
             {userPermissions.cadastrar && (
               <DefaultButton
                 variant="primary"
@@ -1247,6 +1386,16 @@ const ProdutosPage = () => {
           rows={rows || []}
           semColunaDeAcaoPadrao={true}
           nonsortableColumns={['Ações', 'selecionar']}
+          onOrderedRowsChange={(ordered) => {
+            const ids = ordered
+              .map((r) => (r as any).__codprod)
+              .filter(Boolean) as string[];
+            setOrdemNavCodprods((prev) =>
+              prev.length === ids.length && prev.every((v, i) => v === ids[i])
+                ? prev
+                : ids,
+            );
+          }}
           onColunaSubstituida={handleColunaSubstituida}
           meta={produtos.meta}
           onPageChange={(newPage) => {
@@ -1291,6 +1440,27 @@ const ProdutosPage = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                Exibir
+              </DropdownMenuLabel>
+              {([
+                ['ativo', 'Ativos'],
+                ['inativo', 'Inativos'],
+                ['todos', 'Todos'],
+              ] as const).map(([valor, rotulo]) => (
+                <DropdownMenuItem
+                  key={valor}
+                  onClick={() => mudarStatusFiltro(valor)}
+                  className={statusFiltro === valor ? 'font-bold text-blue-600 dark:text-blue-400' : ''}
+                >
+                  <span className="mr-2 w-4 inline-flex justify-center">
+                    {statusFiltro === valor ? '●' : ''}
+                  </span>
+                  {rotulo}
+                </DropdownMenuItem>
+              ))}
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                 Ações Coletivas
               </DropdownMenuLabel>
 
@@ -1322,6 +1492,22 @@ const ProdutosPage = () => {
                 </DropdownMenuItem>
               )}
 
+              {/* Em "Ativos" não há o que ativar; em "Inativos" não há o que
+                  desativar. Em "Todos" mostra as duas. */}
+              {userPermissions.remover && statusFiltro !== 'inativo' && (
+                <DropdownMenuItem onClick={() => handleStatusMassa('desativar')}>
+                  <Ban className="mr-2 size-4 text-red-500 dark:text-red-300" />
+                  Desativar Selecionados
+                </DropdownMenuItem>
+              )}
+
+              {userPermissions.remover && statusFiltro !== 'ativo' && (
+                <DropdownMenuItem onClick={() => handleStatusMassa('ativar')}>
+                  <RotateCcw className="mr-2 size-4 text-green-600 dark:text-green-400" />
+                  Ativar Selecionados
+                </DropdownMenuItem>
+              )}
+
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                 Seleção
@@ -1350,6 +1536,9 @@ const ProdutosPage = () => {
         </div>
       </main>
 
+      {/* Confirmação estilizada (Desativar/Ativar) */}
+      {ConfirmacaoSalvarModal}
+
       <CadastrarProduto
         isOpen={cadastrarOpen}
         onClose={() => setCadastrarOpen(false)}
@@ -1357,8 +1546,7 @@ const ProdutosPage = () => {
         title="Cadastrar Produto"
         onEditarExistente={(codprod) => {
           setCadastrarOpen(false);
-          setIdProduto(codprod);
-          setEditarOpen(true);
+          abrirEdicaoComNav(codprod);
         }}
       >
         <div className="space-y-2">
@@ -1381,6 +1569,7 @@ const ProdutosPage = () => {
         onSuccess={handleSalvoComSucesso}
         title="Editar Produto"
         produtoId={idProduto}
+        listaCodprods={ordemNavCodprods}
       >
         <div className="space-y-2">
           {selectedRow &&

@@ -390,11 +390,14 @@ export async function getProdutos({
   page,
   perPage,
   search,
-}: GetParams): Promise<Produtos> {
+  status = 'ativo',
+}: GetParams & { status?: string }): Promise<Produtos> {
   let produtos: Produtos = {} as Produtos;
 
   await api
-    .get(`/api/produtos/get?page=${page}&perPage=${perPage}&search=${search}`)
+    .get(
+      `/api/produtos/get?page=${page}&perPage=${perPage}&search=${search}&status=${status}`,
+    )
     .then((response) => {
       produtos = response.data;
     });

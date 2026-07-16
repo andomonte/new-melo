@@ -12,7 +12,8 @@ export default async function handle(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { page = '1', perPage = '10', search = '' } = req.query;
+  const { page = '1', perPage = '10', search = '', status = 'ativo' } =
+    req.query;
   let client: PoolClient | undefined;
 
   try {
@@ -23,9 +24,23 @@ export default async function handle(
     const itemsPerPage = Number(perPage);
     const offset = (currentPage - 1) * itemsPerPage;
 
+    // Status do produto (ver memória produto-status-ativo-inativo):
+    //   ativo (padrão) => inf <> 'D'  | inativo => inf = 'D' | todos => sem filtro
+    // Obs.: dirigido só por inf='D'; a coluna `excluido` (legado) não filtra.
+    const filtroStatus =
+      status === 'inativo'
+        ? `inf = 'D'`
+        : status === 'todos'
+          ? ''
+          : `inf IS DISTINCT FROM 'D'`;
+
     // Construir a cláusula WHERE (com alias p. para uso na query principal)
-    const whereConditions: string[] = ['p.excluido = 0'];
-    const whereConditionsCount: string[] = ['excluido = 0'];
+    const whereConditions: string[] = [];
+    const whereConditionsCount: string[] = [];
+    if (filtroStatus) {
+      whereConditions.push(`p.${filtroStatus}`);
+      whereConditionsCount.push(filtroStatus);
+    }
     const queryParams: any[] = [];
     let paramIndex = 1;
 
@@ -41,8 +56,12 @@ export default async function handle(
       paramIndex++;
     }
 
-    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
-    const whereClauseCount = `WHERE ${whereConditionsCount.join(' AND ')}`;
+    const whereClause = whereConditions.length
+      ? `WHERE ${whereConditions.join(' AND ')}`
+      : '';
+    const whereClauseCount = whereConditionsCount.length
+      ? `WHERE ${whereConditionsCount.join(' AND ')}`
+      : '';
 
     // Buscar os produtos com subqueries para nomes (evita conflito de colunas com JOINs)
     const produtosQuery = `

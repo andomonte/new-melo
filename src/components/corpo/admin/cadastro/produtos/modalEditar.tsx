@@ -11,7 +11,15 @@ import FormFooter from '@/components/common/FormFooter';
 import Carregamento from '@/utils/carregamento';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { X, Trash2 } from 'lucide-react';
+import {
+  X,
+  Ban,
+  RotateCcw,
+  ChevronFirst,
+  ChevronLast,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
@@ -29,6 +37,9 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   produtoId: string;
+  /** Lista ordenada de codprods do filtro atual — habilita navegar prev/próximo
+   *  entre os produtos do filtro (como o navegador de registros do Delphi). */
+  listaCodprods?: string[];
 }
 
 //dados para achar as abas com erro e poder chavear
@@ -80,6 +91,7 @@ export default function CustomModal({
   onClose,
   onSuccess,
   footer,
+  listaCodprods,
 }: ModalProps) {
   const [produto, setProduto] = useState<Produto>({} as Produto);
   const [dadosOriginais, setDadosOriginais] = useState<Produto>({} as Produto);
@@ -87,6 +99,21 @@ export default function CustomModal({
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
   const [emPromocao, setEmPromocao] = useState<string | null>(null);
+
+  // Navegador de registros (prev/próximo conforme o filtro). O produto exibido
+  // é sempre `codprodNav` (começa no produtoId e muda ao navegar).
+  const [codprodNav, setCodprodNav] = useState<string>(produtoId);
+  // Marca se houve algum salvamento durante a navegação (para recarregar a
+  // listagem ao fechar, já que no modo navegação o salvar não fecha o modal).
+  const [houveSalvamentoNav, setHouveSalvamentoNav] = useState(false);
+  useEffect(() => {
+    setCodprodNav(produtoId);
+    setHouveSalvamentoNav(false);
+  }, [produtoId]);
+  const navLista = listaCodprods || [];
+  const navIndex = navLista.indexOf(codprodNav);
+  const navTotal = navLista.length;
+  const temNav = navTotal > 1 && navIndex >= 0;
 
   const { toast } = useToast();
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
@@ -120,28 +147,111 @@ export default function CustomModal({
     setErrors({});
   };
 
+  // Há alterações não salvas em relação ao produto carregado?
+  const temAlteracoesPendentes = () =>
+    JSON.stringify(produto) !== JSON.stringify(dadosOriginais);
+
+  // Navega para outro produto do filtro. Se houver alterações não salvas,
+  // confirma antes de descartá-las (usa o modal estilizado padrão).
+  const navegarPara = (i: number) => {
+    if (i < 0 || i >= navTotal || navLista[i] === codprodNav) return;
+    const trocar = () => setCodprodNav(navLista[i]);
+    if (temAlteracoesPendentes()) {
+      pedirConfirmacao(trocar, {
+        title: 'Alterações não salvas',
+        message:
+          'Existem alterações não salvas neste produto.\n.:: Deseja descartá-las e ir para outro registro?',
+        type: 'warning',
+        confirmText: 'Descartar e continuar',
+        cancelText: 'Ficar neste',
+      });
+      return;
+    }
+    trocar();
+  };
+
   const [modalConfirmAba, setModalConfirmAba] = useState(false);
   const [abaPendente, setAbaPendente] = useState<string | null>(null);
   const [modalExcluir, setModalExcluir] = useState(false);
+
+  // Referência + Marca duplicada: o par não pode se repetir entre produtos.
+  // (Só a referência repete legitimamente entre marcas — por isso a checagem é
+  // do par, não da ref sozinha.)
+  const [produtoDuplicado, setProdutoDuplicado] = useState<{
+    codprod: string;
+    ref: string;
+    descr: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const ref = (produto.ref || '').trim();
+    const codmarca = (produto.codmarca || '').trim();
+
+    // Só acusa duplicidade que ESTE edit está criando. A base tem ~44 mil
+    // produtos herdados do Oracle já duplicados em ref+marca (ex.: 1.117 com
+    // ref "DESATIVADO"); avisar sem o usuário ter mexido em ref/marca encheria
+    // a tela de alarme falso — e travar o save deixaria esses 44 mil
+    // impossíveis de editar.
+    const refMudou =
+      ref.toUpperCase() !== (dadosOriginais.ref || '').trim().toUpperCase();
+    const marcaMudou = codmarca !== (dadosOriginais.codmarca || '').trim();
+    const alterouChave = refMudou || marcaMudou;
+
+    if (!isOpen || !alterouChave || ref.length < 2 || !codmarca) {
+      setProdutoDuplicado(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      fetch(
+        `/api/produtos/verificar-ref-marca?ref=${encodeURIComponent(ref)}` +
+          `&codmarca=${encodeURIComponent(codmarca)}` +
+          // ignorarCodprod: senão o próprio produto em edição se acusaria
+          `&ignorarCodprod=${encodeURIComponent(codprodNav)}`,
+      )
+        .then((r) => (r.ok ? r.json() : { existe: false }))
+        .then((d) => setProdutoDuplicado(d.existe && d.produto ? d.produto : null))
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [
+    produto.ref,
+    produto.codmarca,
+    dadosOriginais.ref,
+    dadosOriginais.codmarca,
+    codprodNav,
+    isOpen,
+  ]);
   const [excluindo, setExcluindo] = useState(false);
 
-  const handleExcluir = async () => {
+  // Produto não é excluído, é desativado (inf='D'); ativar volta inf='-'.
+  // Ver memória produto-status-ativo-inativo.
+  const produtoInativo = String(produto.inf ?? '').trim() === 'D';
+
+  const handleAlterarStatus = async () => {
     if (!produto.codprod) return;
+    const acao = produtoInativo ? 'ativar' : 'desativar';
     setExcluindo(true);
     try {
-      const response = await fetch('/api/produtos/delete', {
+      const response = await fetch('/api/produtos/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codprod: produto.codprod }),
+        body: JSON.stringify({ codprods: [produto.codprod], acao }),
       });
       const resultado = await response.json();
-      if (!response.ok) throw new Error(resultado.error || 'Erro ao excluir');
-      toast({ description: `Produto ${produto.codprod} excluído com sucesso!` });
+      if (!response.ok) throw new Error(resultado.error || 'Falha na operação');
+      toast({
+        description: `Produto ${produto.codprod} ${
+          acao === 'ativar' ? 'ativado' : 'desativado'
+        } com sucesso!`,
+      });
       setModalExcluir(false);
       onClose();
       onSuccess?.();
     } catch (error: any) {
-      toast({ description: error.message || 'Erro ao excluir produto', variant: 'destructive' });
+      toast({
+        description: error.message || 'Erro ao alterar status do produto',
+        variant: 'destructive',
+      });
     } finally {
       setExcluindo(false);
     }
@@ -171,11 +281,17 @@ export default function CustomModal({
   };
 
   const handleClose = () => {
+    // Se salvou durante a navegação, recarrega a listagem ao fechar (mantendo
+    // o filtro atual) para refletir as alterações feitas nos vários produtos.
+    if (houveSalvamentoNav) {
+      onSuccess?.();
+    }
     // Limpa estado ao fechar modal
     setProduto({} as Produto);
     setErrors({});
     setActiveTab('dadosCadastrais');
     setLoading(true);
+    setHouveSalvamentoNav(false);
     onClose();
   };
 
@@ -198,6 +314,7 @@ export default function CustomModal({
       // Obs.: a validação de "Compra Direta = SIM exige Ref. de Fábrica" é
       // feita no backend (checa os vínculos no banco, sem depender de abrir a
       // aba); a mensagem retornada é exibida no catch abaixo.
+
 
       // Validação CEST/NCM — bloqueia save se inválido
       if (produtoFinal.cest && produtoFinal.cest.length > 0) {
@@ -310,15 +427,23 @@ export default function CustomModal({
 
       toast({ description: 'Produto atualizado com sucesso!' });
 
-      // Filtra pelo código do produto (único), não pela referência (que
-      // poderia casar com o código de vários produtos).
-      const buscaSalva = (produtoFinal.codprod || produtoFinal.ref || '').trim();
+      // Modo navegação (editar vários em sequência conforme o filtro): NÃO fecha
+      // — mantém o produto na tela para continuar navegando. Atualiza o
+      // "original" para voltar ao estado de "sem alterações".
+      if (temNav) {
+        setLoading(false);
+        setDadosOriginais(produtoFinal);
+        setHouveSalvamentoNav(true);
+        return;
+      }
 
-      // Fecha o modal após sucesso sem reload
+      // Fecha o modal após sucesso sem reload. Sem argumento de propósito:
+      // mantém o filtro que o usuário montou e só recarrega a lista com os
+      // valores alterados. (Trocar o filtro pelo código do produto salvo
+      // fazia o usuário perder a busca a cada edição.)
       setTimeout(() => {
         handleClose();
-        // Filtra a listagem pela referência do produto salvo
-        onSuccess?.(buscaSalva);
+        onSuccess?.();
       }, 1500);
     } catch (error) {
       setLoading(false);
@@ -387,7 +512,7 @@ export default function CustomModal({
     // Controlador para cancelar requisições pendentes
     const controller = new AbortController();
 
-    if (produtoId && isOpen) {
+    if (codprodNav && isOpen) {
       const fetchUsuario = async () => {
         try {
           setLoading(true);
@@ -397,7 +522,7 @@ export default function CustomModal({
           setActiveTab('dadosCadastrais');
 
           const produtoData = await getProduto(
-            produtoId as string,
+            codprodNav as string,
             controller.signal,
           );
 
@@ -425,7 +550,7 @@ export default function CustomModal({
           setLoading(false);
 
           // Verifica se produto está em promoção ativa
-          fetch(`/api/produtos/verificar-promocao?codprod=${produtoId}`)
+          fetch(`/api/produtos/verificar-promocao?codprod=${codprodNav}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => {
               if (data?.emPromocao) {
@@ -467,7 +592,7 @@ export default function CustomModal({
       isMounted = false;
       controller.abort();
     };
-  }, [produtoId, isOpen, toast]);
+  }, [codprodNav, isOpen, toast]);
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -514,26 +639,90 @@ export default function CustomModal({
       <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg w-full max-w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         {/* Cabeçalho fixo */}
         <div className="flex justify-center items-center px-4 py-3 border-b border-gray-200 dark:border-zinc-700 bg-gray-100 dark:bg-zinc-800">
-          <header className="mb-0 w-[60%]">
-            <h4 className="text-xl font-bold text-blue-600 dark:text-blue-300">
+          <header className="mb-0 w-[60%] flex items-center gap-4">
+            <h4 className="text-xl font-bold text-blue-600 dark:text-blue-300 whitespace-nowrap">
               Editar Produto
             </h4>
+            {/* Navegador de registros (igual ao Delphi): percorre os produtos do
+                filtro atual, salvando e mantendo na tela. */}
+            {temNav && (
+              <div className="flex items-center gap-1 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5">
+                <button
+                  type="button"
+                  onClick={() => navegarPara(0)}
+                  disabled={navIndex <= 0}
+                  title="Primeiro"
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 dark:text-gray-200"
+                >
+                  <ChevronFirst size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navegarPara(navIndex - 1)}
+                  disabled={navIndex <= 0}
+                  title="Anterior"
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 dark:text-gray-200"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="px-2 text-xs font-medium text-gray-600 dark:text-gray-300 tabular-nums whitespace-nowrap">
+                  {navIndex + 1} / {navTotal}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navegarPara(navIndex + 1)}
+                  disabled={navIndex >= navTotal - 1}
+                  title="Próximo"
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 dark:text-gray-200"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navegarPara(navTotal - 1)}
+                  disabled={navIndex >= navTotal - 1}
+                  title="Último"
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed text-gray-700 dark:text-gray-200"
+                >
+                  <ChevronLast size={16} />
+                </button>
+              </div>
+            )}
           </header>
           <div className="w-[35%] h-full flex justify-end gap-2 items-center">
             <button
               type="button"
               onClick={() => setModalExcluir(true)}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-              title="Excluir produto"
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs text-white rounded transition-colors ${
+                produtoInativo
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+              title={produtoInativo ? 'Ativar produto' : 'Desativar produto'}
             >
-              <Trash2 size={14} />
-              Excluir
+              {produtoInativo ? <RotateCcw size={14} /> : <Ban size={14} />}
+              {produtoInativo ? 'Ativar' : 'Desativar'}
             </button>
             {footer || (
               <FormFooter
                 onSubmit={() => {
                   // Confirmação padrão de salvar (usa as opções do hook)
                   const confirmarSalvar = () => pedirConfirmacao(handleSubmit);
+
+                  // Ref+Marca que ESTE edit passou a duplicar. Avisa e deixa
+                  // decidir — igual ao cadastro, que também não impede.
+                  if (produtoDuplicado) {
+                    pedirConfirmacao(confirmarSalvar, {
+                      title: 'Referência já cadastrada nessa marca',
+                      message: `A referência "${produtoDuplicado.ref}" já é do produto ${produtoDuplicado.codprod} - ${produtoDuplicado.descr} nessa marca.\n.:: Deseja salvar assim mesmo?`,
+                      type: 'warning',
+                      confirmText: 'Sim, salvar assim',
+                      cancelText: 'Não',
+                      onCancel: () => setActiveTab('dadosCadastrais'),
+                    });
+                    return;
+                  }
+
                   // Aviso do Delphi (mesmo modal estilizado): Tributado = SIM
                   // e % Agregado = 0.
                   if (
@@ -572,6 +761,17 @@ export default function CustomModal({
           <div className="flex-shrink-0 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 border-b border-yellow-300 dark:border-yellow-700 text-center">
             <span className="text-sm font-bold text-yellow-800 dark:text-yellow-200">
               ⚠ PRODUTO EM PROMOÇÃO: {emPromocao}
+            </span>
+          </div>
+        )}
+
+        {/* Referência + Marca já usada por outro produto. Faixa em vez de modal
+            para não interromper quem está digitando — o save é bloqueado. */}
+        {produtoDuplicado && (
+          <div className="flex-shrink-0 px-4 py-2 bg-red-100 dark:bg-red-900/30 border-b border-red-300 dark:border-red-700 text-center">
+            <span className="text-sm font-bold text-red-800 dark:text-red-200">
+              ⚠ REFERÊNCIA &quot;{produtoDuplicado.ref}&quot; JÁ É DO PRODUTO{' '}
+              {produtoDuplicado.codprod} - {produtoDuplicado.descr} NESSA MARCA
             </span>
           </div>
         )}
@@ -626,15 +826,19 @@ export default function CustomModal({
           cancelText="Voltar e corrigir"
         />
 
-        {/* Modal de confirmação de exclusão */}
+        {/* Confirmação de desativar / ativar */}
         <ConfirmationModal
           isOpen={modalExcluir}
           onClose={() => setModalExcluir(false)}
-          onConfirm={handleExcluir}
-          title="Excluir Produto"
-          message={`Tem certeza que deseja excluir o produto ${produto.codprod} - ${produto.descr}? Esta ação pode ser desfeita.`}
-          type="danger"
-          confirmText="Excluir"
+          onConfirm={handleAlterarStatus}
+          title={produtoInativo ? 'Ativar Produto' : 'Desativar Produto'}
+          message={
+            produtoInativo
+              ? `Deseja ativar o produto ${produto.codprod} - ${produto.descr}?`
+              : `Deseja desativar o produto ${produto.codprod} - ${produto.descr}? Ele deixa de aparecer nos ativos, mas pode ser ativado depois.`
+          }
+          type={produtoInativo ? 'info' : 'warning'}
+          confirmText={produtoInativo ? 'Ativar' : 'Desativar'}
           cancelText="Cancelar"
           loading={excluindo}
         />

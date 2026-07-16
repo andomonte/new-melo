@@ -74,6 +74,10 @@ interface DataTablePadraoProps {
   /** Quando informado, controla o valor da busca (mantém o texto em sincronia
       com o estado do pai, inclusive quando o pai altera a busca por código). */
   searchValue?: string;
+  /** Notifica o pai com as linhas na ORDEM exibida (após filtro rápido +
+      ordenação por coluna). Usado para navegar registros na mesma sequência
+      que o usuário vê na grade. */
+  onOrderedRowsChange?: (rows: any[]) => void;
 }
 
 export default function DataTablePadrao({
@@ -109,6 +113,7 @@ export default function DataTablePadrao({
   customHeaderActions,
   columnLabels,
   searchValue,
+  onOrderedRowsChange,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
@@ -229,6 +234,94 @@ export default function DataTablePadrao({
     }
   }, [headers, prefsCarregadas]);
 
+  // Linhas na ordem exibida (filtro rápido do ☑️ + ordenação por coluna).
+  // Mesma lógica usada no <tbody>, extraída para poder informar o pai.
+  const linhasOrdenadas = React.useMemo(() => {
+    if (!rows || rows.length === 0) return [] as any[];
+
+    // Filtro local do ☑️
+    let filteredRows = rows;
+    const checkFilter = filtrosColuna['check']?.valor;
+    if (checkFilter && checkFilter !== '') {
+      const checkColIndex = headers.indexOf('☑️');
+      if (checkColIndex !== -1) {
+        filteredRows = filteredRows.filter((row) => {
+          const cell = row[checkColIndex];
+          const isChecked =
+            cell?.props?.checked || cell?.props?.defaultChecked || false;
+          return checkFilter === 'true' ? isChecked : !isChecked;
+        });
+      }
+    }
+
+    // Ordenação local pelas colunas
+    let sortedRows = filteredRows;
+    if (sortColumn) {
+      const colIndex = headers.indexOf(sortColumn);
+      if (colIndex !== -1) {
+        sortedRows = [...filteredRows].sort((a, b) => {
+          const valA = Array.isArray(a) ? a[colIndex] : a[sortColumn];
+          const valB = Array.isArray(b) ? b[colIndex] : b[sortColumn];
+
+          const extractText = (v: any): string => {
+            if (v == null) return '';
+            if (typeof v === 'string') return v;
+            if (typeof v === 'number') return String(v);
+            if (typeof v === 'object' && v?.props) {
+              const c = v.props?.children;
+              if (typeof c === 'string') return c;
+              if (typeof c === 'number') return String(c);
+              if (Array.isArray(c)) return c.map(extractText).join('');
+              if (c?.props) return extractText(c);
+            }
+            return String(v);
+          };
+
+          const textA = extractText(valA).trim();
+          const textB = extractText(valB).trim();
+
+          const parseDataBR = (s: string) => {
+            const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (!m) return null;
+            return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+          };
+          const dataA = parseDataBR(textA);
+          const dataB = parseDataBR(textB);
+
+          const parseNum = (s: string) => {
+            const limpo = s
+              .replace(/[R$\s]/g, '')
+              .replace(/\./g, '')
+              .replace(',', '.');
+            const n = Number(limpo);
+            return Number.isFinite(n) ? n : null;
+          };
+          const numA = parseNum(textA);
+          const numB = parseNum(textB);
+
+          let cmp: number;
+          if (dataA !== null && dataB !== null) {
+            cmp = dataA - dataB;
+          } else if (numA !== null && numB !== null) {
+            cmp = numA - numB;
+          } else {
+            cmp = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base' });
+          }
+          return sortDirection === 'asc' ? cmp : -cmp;
+        });
+      }
+    }
+    return sortedRows;
+  }, [rows, filtrosColuna, sortColumn, sortDirection, headers]);
+
+  // Informa o pai sempre que a ordem exibida mudar (para navegar registros
+  // na mesma sequência da grade).
+  const onOrderedRowsChangeRef = useRef(onOrderedRowsChange);
+  onOrderedRowsChangeRef.current = onOrderedRowsChange;
+  useEffect(() => {
+    onOrderedRowsChangeRef.current?.(linhasOrdenadas);
+  }, [linhasOrdenadas]);
+
   // Ordenação por coluna
   const isColumnSortable = (header: string) => {
     if (nonsortableColumns?.includes(header)) return false;
@@ -277,28 +370,55 @@ export default function DataTablePadrao({
   };
 
   const handleInputChange = (key: string, value: string) => {
-    console.log(`🔍 Filtro rápido alterado - Campo: ${key}, Valor: ${value}`);
-    setFiltrosColuna((prev) => ({
-      ...prev,
-      [key]: { tipo: prev[key]?.tipo || 'contém', valor: value },
-    }));
-    
-    if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
-    
-    // Debounce the filter application
+    // Monta o novo estado AQUI e passa adiante: o debounce abaixo capturaria
+    // `filtrosColuna` de antes do setState (a atualização é assíncrona) e
+    // aplicaria sempre uma tecla atrasada — digitar "BOSCH" filtrava "BOSC".
+    const novos = {
+      ...filtrosColuna,
+      [key]: { tipo: filtrosColuna[key]?.tipo || 'contém', valor: value },
+    };
+    setFiltrosColuna(novos);
+
+    // Não limpa mais a busca global: os dois se combinam (o backend aplica
+    // productSearch AND filtros). Limpar só o texto exibido, sem avisar o pai,
+    // deixava a busca ainda valendo na consulta com a caixa aparentemente vazia.
+
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
     debounceRef.current = setTimeout(() => {
-      aplicarFiltro();
+      aplicarFiltro(novos);
     }, 300);
   };
 
-  const aplicarFiltro = () => {
+  /** Operadores sem valor: o campo de texto não se aplica. */
+  const SEM_VALOR = ['nulo', 'nao_nulo'];
+
+  /** Troca o operador da coluna (menu igual ao do Delphi/C#). "" = Sem filtro. */
+  const handleTipoChange = (key: string, novoTipo: string) => {
+    const novos = { ...filtrosColuna };
+    if (!novoTipo) {
+      delete novos[key]; // Sem filtro
+    } else {
+      novos[key] = {
+        tipo: novoTipo,
+        // "Está nulo"/"Não está nulo" não usam valor
+        valor: SEM_VALOR.includes(novoTipo) ? '' : novos[key]?.valor || '',
+      };
+    }
+    setFiltrosColuna(novos);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    aplicarFiltro(novos);
+  };
+
+  const aplicarFiltro = (
+    base: Record<string, { tipo: string; valor: string }> = filtrosColuna,
+  ) => {
     // Enviar TODOS os filtros, incluindo os vazios (para remover filtros anteriores)
-    const filtrosAtualizados = Object.entries(filtrosColuna)
-      .map(([campo, { tipo, valor }]) => ({ campo, tipo, valor }));
-    
+    const filtrosAtualizados = Object.entries(base).map(
+      ([campo, { tipo, valor }]) => ({ campo, tipo, valor }),
+    );
+
     console.log('🔍 Aplicando filtros rápidos (incluindo vazios):', filtrosAtualizados);
     onFiltroChange?.(filtrosAtualizados);
   };
@@ -385,14 +505,8 @@ export default function DataTablePadrao({
               const valor = e.target.value;
               console.log('🔍 Busca global alterada:', valor);
               setTermoBuscaGlobal(valor);
-              
-              // Limpar filtros de coluna quando usar busca global
-              if (valor.trim() !== '' && Object.keys(filtrosColuna).length > 0) {
-                console.log('🔍 Limpando filtros de coluna para busca global');
-                setFiltrosColuna({});
-                onFiltroChange?.([]);
-              }
-              
+              // Os filtros de coluna NÃO são mais limpos aqui: busca global e
+              // filtro rápido se somam (backend faz productSearch AND filtros).
               onSearch?.(e);
             }}
             onKeyDown={onSearchKeyDown}
@@ -537,7 +651,7 @@ export default function DataTablePadrao({
                   return (
                     <th
                       key={index}
-                      className={`px-2 py-1.5 text-center text-[11px] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
+                      className={`px-2 py-1.5 text-center text-[0.6875rem] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
                         sortable ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors' : ''
                       }`}
                       style={header === '☑️' ? { width: '40px', maxWidth: '40px' } : header === 'Ações' ? { width: '50px', maxWidth: '50px' } : undefined}
@@ -593,7 +707,7 @@ export default function DataTablePadrao({
                             );
                           }}
                         >
-                          <RadixSelectTrigger className="h-6 text-[10px] px-1.5">
+                          <RadixSelectTrigger className="h-6 text-[0.625rem] px-1.5">
                             <RadixSelectValue />
                           </RadixSelectTrigger>
                           <RadixSelectContent>
@@ -624,7 +738,7 @@ export default function DataTablePadrao({
                             ]);
                           }}
                         >
-                          <RadixSelectTrigger className="h-6 text-[10px] px-1">
+                          <RadixSelectTrigger className="h-6 text-[0.625rem] px-1">
                             <RadixSelectValue />
                           </RadixSelectTrigger>
                           <RadixSelectContent>
@@ -634,27 +748,78 @@ export default function DataTablePadrao({
                           </RadixSelectContent>
                         </RadixSelect>
                       ) : header !== 'Ações' ? (
-                        <input
-                          type="text"
-                          placeholder={`Filtrar ${rotulo(header)}...`}
-                          value={filtrosColuna[header.toLowerCase()]?.valor || ''}
-                          onChange={(e) => handleInputChange(header.toLowerCase(), e.target.value)}
-                          onBlur={() => {
-                            if (debounceRef.current) {
-                              clearTimeout(debounceRef.current);
-                            }
-                            aplicarFiltro();
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              if (debounceRef.current) {
-                                clearTimeout(debounceRef.current);
-                              }
-                              aplicarFiltro();
-                            }
-                          }}
-                          className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
-                        />
+                        (() => {
+                          const chave = header.toLowerCase();
+                          const atual = filtrosColuna[chave];
+                          const tipoAtual = atual?.tipo || 'contém';
+                          const semValor = SEM_VALOR.includes(tipoAtual);
+                          const rotuloTipo =
+                            tiposDeFiltro.find((t) => t.value === tipoAtual)?.label ?? 'Contém';
+                          return (
+                            <div className="flex items-center gap-0.5">
+                              <input
+                                type="text"
+                                placeholder={
+                                  semValor ? rotuloTipo : `Filtrar ${rotulo(header)}...`
+                                }
+                                disabled={semValor}
+                                value={atual?.valor || ''}
+                                onChange={(e) => handleInputChange(chave, e.target.value)}
+                                onBlur={() => {
+                                  if (debounceRef.current) clearTimeout(debounceRef.current);
+                                  aplicarFiltro();
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    if (debounceRef.current) clearTimeout(debounceRef.current);
+                                    aplicarFiltro();
+                                  }
+                                }}
+                                className="w-full min-w-0 px-2 py-1 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 disabled:opacity-60 disabled:italic"
+                              />
+                              {/* Operador da coluna — mesmas opções do Delphi/C# */}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    title={`Operador: ${rotuloTipo}`}
+                                    className={`flex-shrink-0 px-1 py-1 rounded border text-[0.625rem] leading-none transition-colors ${
+                                      atual
+                                        ? 'border-blue-500 bg-blue-500 text-white'
+                                        : 'border-gray-300 dark:border-zinc-600 text-gray-500 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                                    }`}
+                                  >
+                                    <ChevronDown size={12} />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-600 text-xs"
+                                >
+                                  <DropdownMenuItem
+                                    onClick={() => handleTipoChange(chave, '')}
+                                    className={!atual ? 'font-bold text-blue-600' : ''}
+                                  >
+                                    Sem filtro
+                                  </DropdownMenuItem>
+                                  {tiposDeFiltro.map((t) => (
+                                    <DropdownMenuItem
+                                      key={t.value}
+                                      onClick={() => handleTipoChange(chave, t.value)}
+                                      className={
+                                        tipoAtual === t.value && atual
+                                          ? 'font-bold text-blue-600'
+                                          : ''
+                                      }
+                                    >
+                                      {t.label}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          );
+                        })()
                       ) : null}
                       </th>
                     )
@@ -667,85 +832,7 @@ export default function DataTablePadrao({
               rows?.length === 0 ? (
                 null
               ) : (
-                (() => {
-                  // Filtro local do ☑️
-                  let filteredRows = rows;
-                  const checkFilter = filtrosColuna['check']?.valor;
-                  if (checkFilter && checkFilter !== '') {
-                    const checkColIndex = headers.indexOf('☑️');
-                    if (checkColIndex !== -1) {
-                      filteredRows = filteredRows.filter((row) => {
-                        const cell = row[checkColIndex];
-                        // Verifica se é um input checkbox e se está checked
-                        const isChecked = cell?.props?.checked || cell?.props?.defaultChecked || false;
-                        return checkFilter === 'true' ? isChecked : !isChecked;
-                      });
-                    }
-                  }
-
-                  // Ordenação local pelas colunas
-                  let sortedRows = filteredRows;
-                  if (sortColumn) {
-                    const colIndex = headers.indexOf(sortColumn);
-                    if (colIndex !== -1) {
-                      sortedRows = [...filteredRows].sort((a, b) => {
-                        let valA = Array.isArray(a) ? a[colIndex] : a[sortColumn];
-                        let valB = Array.isArray(b) ? b[colIndex] : b[sortColumn];
-
-                        // Extrai texto de elementos React
-                        const extractText = (v: any): string => {
-                          if (v == null) return '';
-                          if (typeof v === 'string') return v;
-                          if (typeof v === 'number') return String(v);
-                          if (typeof v === 'object' && v?.props) {
-                            // React element — tenta children
-                            const c = v.props?.children;
-                            if (typeof c === 'string') return c;
-                            if (typeof c === 'number') return String(c);
-                            if (Array.isArray(c)) return c.map(extractText).join('');
-                            if (c?.props) return extractText(c);
-                          }
-                          return String(v);
-                        };
-
-                        const textA = extractText(valA).trim();
-                        const textB = extractText(valB).trim();
-
-                        // Tenta comparar como data BR (DD/MM/YYYY)
-                        const parseDataBR = (s: string) => {
-                          const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                          if (!m) return null;
-                          return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
-                        };
-
-                        const dataA = parseDataBR(textA);
-                        const dataB = parseDataBR(textB);
-
-                        // Tenta comparar como número (remove R$, pontos, troca vírgula)
-                        const parseNum = (s: string) => {
-                          const limpo = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-                          const n = Number(limpo);
-                          return Number.isFinite(n) ? n : null;
-                        };
-
-                        const numA = parseNum(textA);
-                        const numB = parseNum(textB);
-
-                        let cmp: number;
-                        if (dataA !== null && dataB !== null) {
-                          cmp = dataA - dataB;
-                        } else if (numA !== null && numB !== null) {
-                          cmp = numA - numB;
-                        } else {
-                          cmp = textA.localeCompare(textB, 'pt-BR', { sensitivity: 'base' });
-                        }
-
-                        return sortDirection === 'asc' ? cmp : -cmp;
-                      });
-                    }
-                  }
-                  return sortedRows;
-                })().map((row, rowIndex) => (
+                linhasOrdenadas.map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
                     className={`hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
@@ -894,6 +981,16 @@ export default function DataTablePadrao({
         </div>
 
         <div className="flex gap-3 items-center text-xs text-gray-700 dark:text-gray-300">
+          <span className="whitespace-nowrap text-xs font-medium">
+            {isLoading && !meta?.total ? (
+              <span className="inline-block h-3 w-10 bg-gray-200 dark:bg-zinc-700 rounded animate-pulse align-middle" />
+            ) : (
+              <>
+                {(meta?.total ?? 0).toLocaleString('pt-BR')}{' '}
+                {(meta?.total ?? 0) === 1 ? 'item' : 'itens'}
+              </>
+            )}
+          </span>
           <div className="flex items-center gap-1.5">
             <span className="text-xs">Ir para página:</span>
             <input

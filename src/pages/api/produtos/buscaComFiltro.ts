@@ -17,6 +17,62 @@ interface RequestBody {
   filtros: Filtro[];
 }
 
+/**
+ * Colunas que podem ir para a SQL. O Postgres não parametriza NOME de coluna
+ * (só valores), então `campo` é interpolado — sem esta checagem ele executa SQL
+ * arbitrário. Verificado: `campo` = "codprod IS NOT NULL AND p.codmarca =
+ * '00080' --" com tipo "nao_nulo" derrubava o total de 385.575 para 14.693.
+ *
+ * A lista vem do próprio banco (não é hardcode que envelhece) e é cacheada por
+ * processo. Bônus: a grade oferece colunas calculadas no SELECT (ex.:
+ * qtd_armazens) que não existem em dbprod — filtrar por elas dava erro 500.
+ */
+let colunasValidas: Map<string, string> | null = null;
+
+/** Nome da coluna -> data_type. O tipo importa: ILIKE em coluna numérica é erro
+ *  no Postgres ("operator does not exist: integer ~~* unknown"), e 63 das 103
+ *  colunas de dbprod não são texto. */
+async function carregarColunasValidas(
+  client: PoolClient,
+): Promise<Map<string, string>> {
+  if (colunasValidas) return colunasValidas;
+  const r = await client.query(
+    `SELECT column_name, data_type
+       FROM information_schema.columns
+      WHERE table_schema = 'db_manaus' AND table_name = 'dbprod'`,
+  );
+  colunasValidas = new Map(
+    r.rows.map((x: any) => [
+      String(x.column_name).trim().toLowerCase(),
+      String(x.data_type).trim().toLowerCase(),
+    ]),
+  );
+  return colunasValidas;
+}
+
+const TIPOS_NUM = new Set([
+  'numeric',
+  'integer',
+  'bigint',
+  'smallint',
+  'double precision',
+  'real',
+]);
+const TIPOS_DATA = new Set([
+  'date',
+  'timestamp without time zone',
+  'timestamp with time zone',
+]);
+
+/** O valor digitado serve para comparar com uma coluna deste tipo? */
+const valorCompativel = (valor: string, tipo: string): boolean => {
+  const v = String(valor ?? '').trim();
+  if (!v) return false;
+  if (TIPOS_NUM.has(tipo)) return Number.isFinite(Number(v.replace(',', '.')));
+  if (TIPOS_DATA.has(tipo)) return !Number.isNaN(Date.parse(v));
+  return true;
+};
+
 export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -31,7 +87,8 @@ export default async function handle(
     perPage = 10,
     productSearch = '',
     filtros = [],
-  }: RequestBody = req.body;
+    status = 'ativo',
+  }: RequestBody & { status?: string } = req.body;
   let client: PoolClient | undefined;
 
   try {
@@ -44,93 +101,137 @@ export default async function handle(
 
     // Construir a cláusula WHERE (com alias p. para uso na query principal)
     const whereConditions: string[] = [];
-    const whereConditionsCount: string[] = [];
     const queryParams: any[] = [];
     let paramIndex = 1;
+
+    // Status do produto (ver memória produto-status-ativo-inativo):
+    //   ativo (padrão) => inf <> 'D' | inativo => inf='D' | todos => sem filtro
+    if (status === 'inativo') {
+      whereConditions.push(`p.inf = 'D'`);
+    } else if (status !== 'todos') {
+      whereConditions.push(`p.inf IS DISTINCT FROM 'D'`);
+    }
 
     // Busca geral
     if (productSearch && productSearch.trim()) {
       whereConditions.push(
         `(p.codprod ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex})`,
       );
-      whereConditionsCount.push(
-        `(codprod ILIKE $${paramIndex} OR descr ILIKE $${paramIndex} OR ref ILIKE $${paramIndex})`,
-      );
       queryParams.push(`%${productSearch.trim()}%`);
       paramIndex++;
     }
+
+    // Colunas exibidas como "codigo - nome": o usuário digita o NOME (BOSCH),
+    // mas a coluna guarda só o código (00080) — filtrar na coluna crua não
+    // acha nada. Aqui a comparação passa a ser feita sobre "codigo - nome",
+    // que é exatamente o que está na tela.
+    const EXIBE_COD_NOME: Record<string, string> = {
+      codmarca: `(p.codmarca || ' - ' || COALESCE((SELECT m.descr FROM dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), ''))`,
+      codgpf: `(p.codgpf || ' - ' || COALESCE((SELECT gf.descr FROM dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), ''))`,
+      codgpp: `(p.codgpp || ' - ' || COALESCE((SELECT gp.descr FROM dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), ''))`,
+    };
+
+    const permitidas = await carregarColunasValidas(client);
 
     // Filtros específicos por coluna
     for (const filtro of filtros) {
       if (!filtro.campo || !filtro.tipo) continue;
 
-      const campo = filtro.campo;
-      const campoAlias = `p.${campo}`;
+      const campo = String(filtro.campo).trim().toLowerCase();
+
+      // Só colunas reais de dbprod entram na SQL. Ignora em vez de derrubar a
+      // requisição: a grade lista colunas calculadas que não existem na tabela.
+      if (!permitidas.has(campo)) {
+        console.warn(`Filtro ignorado — coluna não permitida: ${filtro.campo}`);
+        continue;
+      }
+
+      const campoAlias = EXIBE_COD_NOME[campo] ?? `p.${campo}`;
       const tipo = filtro.tipo;
       const valor = filtro.valor;
 
+      // Tipo real da coluna. As colunas "código - nome" viram texto na
+      // expressão acima, então valem como texto.
+      const tipoCol = EXIBE_COD_NOME[campo]
+        ? 'character varying'
+        : permitidas.get(campo) || 'character varying';
+      const ehNum = TIPOS_NUM.has(tipoCol);
+      const ehData = TIPOS_DATA.has(tipoCol);
+
+      // Comparar como TEXTO (ILIKE) exige cast: ILIKE direto em integer/numeric
+      // é erro no Postgres, e era isso que derrubava o filtro de Estoque/Preço.
+      const comoTexto = ehNum || ehData ? `${campoAlias}::text` : campoAlias;
+
+      // Comparações de ordem/igualdade convertem o PARÂMETRO para o tipo da
+      // coluna (o valor chega sempre como string do formulário).
+      const castParam = ehNum ? '::numeric' : ehData ? '::date' : '';
+
+      // Valor incompatível (ex.: "abc" em coluna numérica) faria a query
+      // estourar — ignora o filtro em vez de derrubar a listagem.
+      const precisaValor = [
+        'igual', 'diferente', 'contém', 'começa', 'termina',
+        'maior', 'maior_igual', 'menor', 'menor_igual',
+      ].includes(tipo);
+      const comparaNativo = ['igual', 'diferente', 'maior', 'maior_igual', 'menor', 'menor_igual'].includes(tipo);
+      if (precisaValor && !String(valor ?? '').trim()) continue;
+      if (comparaNativo && !valorCompativel(valor, tipoCol)) {
+        console.warn(`Filtro ignorado — valor "${valor}" incompatível com ${campo} (${tipoCol})`);
+        continue;
+      }
+      // number aceita vírgula decimal do usuário
+      const valorNum = ehNum ? String(valor).trim().replace(',', '.') : valor;
+
       switch (tipo) {
         case 'igual':
-          whereConditions.push(`${campoAlias} = $${paramIndex}`);
-          whereConditionsCount.push(`${campo} = $${paramIndex}`);
-          queryParams.push(valor);
+          whereConditions.push(`${campoAlias} = $${paramIndex}${castParam}`);
+          queryParams.push(valorNum);
           paramIndex++;
           break;
         case 'diferente':
-          whereConditions.push(`${campoAlias} != $${paramIndex}`);
-          whereConditionsCount.push(`${campo} != $${paramIndex}`);
-          queryParams.push(valor);
+          whereConditions.push(`${campoAlias} != $${paramIndex}${castParam}`);
+          queryParams.push(valorNum);
           paramIndex++;
           break;
         case 'contém':
-          whereConditions.push(`${campoAlias} ILIKE $${paramIndex}`);
-          whereConditionsCount.push(`${campo} ILIKE $${paramIndex}`);
+          whereConditions.push(`${comoTexto} ILIKE $${paramIndex}`);
           queryParams.push(`%${valor}%`);
           paramIndex++;
           break;
         case 'começa':
-          whereConditions.push(`${campoAlias} ILIKE $${paramIndex}`);
-          whereConditionsCount.push(`${campo} ILIKE $${paramIndex}`);
+          whereConditions.push(`${comoTexto} ILIKE $${paramIndex}`);
           queryParams.push(`${valor}%`);
           paramIndex++;
           break;
         case 'termina':
-          whereConditions.push(`${campoAlias} ILIKE $${paramIndex}`);
-          whereConditionsCount.push(`${campo} ILIKE $${paramIndex}`);
+          whereConditions.push(`${comoTexto} ILIKE $${paramIndex}`);
           queryParams.push(`%${valor}`);
           paramIndex++;
           break;
         case 'maior':
-          whereConditions.push(`${campoAlias} > $${paramIndex}`);
-          whereConditionsCount.push(`${campo} > $${paramIndex}`);
-          queryParams.push(valor);
+          whereConditions.push(`${campoAlias} > $${paramIndex}${castParam}`);
+          queryParams.push(valorNum);
           paramIndex++;
           break;
         case 'maior_igual':
-          whereConditions.push(`${campoAlias} >= $${paramIndex}`);
-          whereConditionsCount.push(`${campo} >= $${paramIndex}`);
-          queryParams.push(valor);
+          whereConditions.push(`${campoAlias} >= $${paramIndex}${castParam}`);
+          queryParams.push(valorNum);
           paramIndex++;
           break;
         case 'menor':
-          whereConditions.push(`${campoAlias} < $${paramIndex}`);
-          whereConditionsCount.push(`${campo} < $${paramIndex}`);
-          queryParams.push(valor);
+          whereConditions.push(`${campoAlias} < $${paramIndex}${castParam}`);
+          queryParams.push(valorNum);
           paramIndex++;
           break;
         case 'menor_igual':
-          whereConditions.push(`${campoAlias} <= $${paramIndex}`);
-          whereConditionsCount.push(`${campo} <= $${paramIndex}`);
-          queryParams.push(valor);
+          whereConditions.push(`${campoAlias} <= $${paramIndex}${castParam}`);
+          queryParams.push(valorNum);
           paramIndex++;
           break;
         case 'nulo':
           whereConditions.push(`${campoAlias} IS NULL`);
-          whereConditionsCount.push(`${campo} IS NULL`);
           break;
         case 'nao_nulo':
           whereConditions.push(`${campoAlias} IS NOT NULL`);
-          whereConditionsCount.push(`${campo} IS NOT NULL`);
           break;
         default:
           console.warn(`Tipo de filtro não reconhecido: ${tipo}`);
@@ -140,10 +241,6 @@ export default async function handle(
     const whereClause =
       whereConditions.length > 0
         ? `WHERE ${whereConditions.join(' AND ')}`
-        : '';
-    const whereClauseCount =
-      whereConditionsCount.length > 0
-        ? `WHERE ${whereConditionsCount.join(' AND ')}`
         : '';
 
     // Buscar os produtos com subqueries para nomes (evita conflito de colunas)
@@ -166,10 +263,13 @@ export default async function handle(
     queryParams.push(offset, itemsPerPage);
     const produtosResult = await client.query(produtosQuery, queryParams);
 
-    // Contar o totalll
+    // Conta o total com o MESMO WHERE da listagem (mesmo alias "p"). Antes eram
+    // dois WHERE construídos em paralelo, que podiam divergir — e as subqueries
+    // correlacionadas (marca/grupo) quebram sem o alias: "m.codmarca = codmarca"
+    // resolveria o lado direito para a própria tabela interna.
     const countQuery = `
-      SELECT COUNT(*) as total FROM db_manaus.dbprod
-      ${whereClauseCount}
+      SELECT COUNT(*) as total FROM db_manaus.dbprod p
+      ${whereClause}
     `;
 
     const countParams = queryParams.slice(0, -2); // Remove offset e limit
