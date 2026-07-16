@@ -26,6 +26,27 @@ export default async function handle(
     const pool = getPgPool();
     client = await pool.connect();
 
+    // Duplicidade: o cliente já avisa enquanto digita, mas a lista dele pode
+    // estar desatualizada (outro usuário cadastrou) — aqui é a garantia real.
+    // Compara como o usuário enxerga: sem caixa e sem espaços repetidos.
+    const duplicada = await client.query(
+      `SELECT codmarca, descr
+         FROM dbmarcas
+        WHERE UPPER(regexp_replace(TRIM(descr), '\\s+', ' ', 'g'))
+            = UPPER(regexp_replace(TRIM($1), '\\s+', ' ', 'g'))
+        LIMIT 1`,
+      [String(data.descr)],
+    );
+    if (duplicada.rows.length > 0) {
+      const m = duplicada.rows[0];
+      res.status(409).json({
+        error: `Marca já cadastrada: ${String(m.codmarca).trim()} - ${String(m.descr).trim()}`,
+        codmarca: String(m.codmarca).trim(),
+        descr: String(m.descr).trim(),
+      });
+      return;
+    }
+
     // Buscar o próximo código de marca
     const nextCodmarcaQuery = `
       SELECT codmarca FROM dbmarcas 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { AlertCircle, Loader2, X } from 'lucide-react';
 
 export type TipoAux = 'marca' | 'grupoFuncao' | 'grupoProduto';
 
@@ -9,15 +9,39 @@ interface CadastroRapidoAuxProps {
   onClose: () => void;
   /** Chamado quando o registro é criado com sucesso (código + descrição). */
   onCriado: (codigo: string, descr: string) => void;
+  /** Já cadastrados, para acusar duplicidade enquanto digita. O servidor
+   *  revalida — esta lista pode estar desatualizada. */
+  existentes?: { codigo: string; descr: string }[];
 }
+
+/** Compara como o usuário enxerga: ignora caixa, acentos e espaços repetidos —
+ *  "Bosch", "BOSCH " e "BÓSCH" são a mesma marca. */
+const normalizar = (s: string) =>
+  (s || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+
+/** Campo obrigatório além da Descrição, quando a API exige (ex.: Segmento no
+ *  Grupo de Produto — obrigatório igual ao Delphi). */
+type CampoExtra = {
+  rotulo: string;
+  url: string;
+  /** Monta as opções a partir do payload da API. */
+  opcoes: (d: any) => { valor: string; texto: string }[];
+  erroVazio: string;
+};
 
 const CONFIG: Record<
   TipoAux,
   {
     titulo: string;
     url: string;
-    body: (descr: string) => Record<string, any>;
+    body: (descr: string, extra?: string) => Record<string, any>;
     extrair: (d: any) => { codigo?: string; descr?: string };
+    extra?: CampoExtra;
   }
 > = {
   marca: {
@@ -35,8 +59,19 @@ const CONFIG: Record<
   grupoProduto: {
     titulo: 'Novo Grupo de Produto',
     url: '/api/gruposProduto/add',
-    body: (descr) => ({ descr }),
+    // /api/gruposProduto/add rejeita sem codseg ("O Segmento é obrigatório").
+    body: (descr, extra) => ({ descr, codseg: extra }),
     extrair: (d) => ({ codigo: d?.data?.codgpp, descr: d?.data?.descr }),
+    extra: {
+      rotulo: 'Segmento',
+      url: '/api/segmentos/get?perPage=999',
+      opcoes: (d) =>
+        (d?.data || []).map((s: any) => ({
+          valor: String(s.codsegmento ?? '').trim(),
+          texto: `${String(s.codsegmento ?? '').trim()} - ${String(s.descricao ?? '').trim()}`,
+        })),
+      erroVazio: 'O Segmento é obrigatório.',
+    },
   },
 };
 
@@ -50,18 +85,66 @@ const CadastroRapidoAux: React.FC<CadastroRapidoAuxProps> = ({
   tipo,
   onClose,
   onCriado,
+  existentes = [],
 }) => {
   const [descr, setDescr] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [extra, setExtra] = useState('');
+  const [extraOpcoes, setExtraOpcoes] = useState<
+    { valor: string; texto: string }[]
+  >([]);
+  const [carregandoExtra, setCarregandoExtra] = useState(false);
 
   useEffect(() => {
     if (aberto) {
       setDescr('');
       setErro('');
       setSalvando(false);
+      setExtra('');
     }
   }, [aberto, tipo]);
+
+  // Carrega as opções do campo extra (ex.: Segmento) ao abrir
+  useEffect(() => {
+    const cfgExtra = CONFIG[tipo].extra;
+    if (!aberto || !cfgExtra) {
+      setExtraOpcoes([]);
+      return;
+    }
+    let vivo = true;
+    setCarregandoExtra(true);
+    fetch(cfgExtra.url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (vivo) setExtraOpcoes(d ? cfgExtra.opcoes(d) : []);
+      })
+      .catch(() => {
+        if (vivo) setExtraOpcoes([]);
+      })
+      .finally(() => {
+        if (vivo) setCarregandoExtra(false);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [aberto, tipo]);
+
+  const alvo = normalizar(descr);
+
+  // Já existe exatamente esta descrição? (bloqueia o salvar)
+  const duplicada = alvo
+    ? existentes.find((e) => normalizar(e.descr) === alvo)
+    : undefined;
+
+  // Parecidas — pega o quase-duplicado ("BOSCH" vs "BOSCH DIESEL") que a
+  // comparação exata não pega. Só informa, não bloqueia.
+  const similares =
+    alvo.length >= 2 && !duplicada
+      ? existentes
+          .filter((e) => normalizar(e.descr).includes(alvo))
+          .slice(0, 4)
+      : [];
 
   if (!aberto) return null;
   const cfg = CONFIG[tipo];
@@ -73,12 +156,20 @@ const CadastroRapidoAux: React.FC<CadastroRapidoAuxProps> = ({
       setErro('Informe a descrição.');
       return;
     }
+    if (duplicada) {
+      setErro(`Já cadastrado como ${duplicada.codigo} - ${duplicada.descr}.`);
+      return;
+    }
+    if (cfg.extra && !extra) {
+      setErro(cfg.extra.erroVazio);
+      return;
+    }
     setSalvando(true);
     try {
       const resp = await fetch(cfg.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg.body(d)),
+        body: JSON.stringify(cfg.body(d, extra)),
       });
       const data = await resp.json();
       if (!resp.ok) {
@@ -129,10 +220,71 @@ const CadastroRapidoAux: React.FC<CadastroRapidoAuxProps> = ({
               salvar();
             }
           }}
-          className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-100"
+          className={`w-full h-10 px-3 text-sm border rounded bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-100 ${
+            duplicada
+              ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+              : 'border-gray-300 dark:border-zinc-600'
+          }`}
           placeholder="Digite a descrição"
         />
-        {erro && <p className="text-red-500 text-xs mt-1">{erro}</p>}
+
+        {/* Duplicidade: já existe com essa descrição */}
+        {duplicada && (
+          <p className="flex items-center gap-1 text-red-500 text-xs mt-1">
+            <AlertCircle size={13} />
+            Já cadastrado como{' '}
+            <strong>
+              {duplicada.codigo} - {duplicada.descr}
+            </strong>
+          </p>
+        )}
+
+        {/* Parecidas: alerta o quase-duplicado sem impedir o cadastro */}
+        {similares.length > 0 && (
+          <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            <span className="flex items-center gap-1">
+              <AlertCircle size={13} />
+              Já existe parecido:
+            </span>
+            <ul className="mt-0.5 ml-4 list-disc">
+              {similares.map((s) => (
+                <li key={s.codigo}>
+                  {s.codigo} - {s.descr}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Campo extra exigido pela API (ex.: Segmento no Grupo de Produto) */}
+        {cfg.extra && (
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+              {cfg.extra.rotulo} *
+            </label>
+            <select
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+              disabled={carregandoExtra}
+              className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-100 disabled:opacity-50"
+            >
+              <option value="">
+                {carregandoExtra
+                  ? 'Carregando...'
+                  : `Selecione o ${cfg.extra.rotulo.toLowerCase()}`}
+              </option>
+              {extraOpcoes.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.texto}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {erro && !duplicada && (
+          <p className="text-red-500 text-xs mt-1">{erro}</p>
+        )}
 
         <div className="flex justify-end gap-2 mt-5">
           <button
@@ -145,8 +297,9 @@ const CadastroRapidoAux: React.FC<CadastroRapidoAuxProps> = ({
           <button
             type="button"
             onClick={salvar}
-            disabled={salvando}
-            className="flex items-center gap-1 px-4 py-2 text-sm rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
+            disabled={salvando || !!duplicada}
+            title={duplicada ? 'Já existe um registro com essa descrição' : undefined}
+            className="flex items-center gap-1 px-4 py-2 text-sm rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white"
           >
             {salvando && <Loader2 className="h-4 w-4 animate-spin" />}
             Salvar
