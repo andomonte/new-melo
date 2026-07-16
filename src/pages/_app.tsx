@@ -25,9 +25,12 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
       <AuthProvider>
         <ToastProvider>
           <Head>
+            {/* Sem user-scalable=no/minimum-scale: bloquear zoom tira a saída
+                de emergência de quem usa escala alta no Windows (e é falha de
+                acessibilidade). O usuário precisa poder ampliar/reduzir. */}
             <meta
               name="viewport"
-              content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover"
+              content="width=device-width, initial-scale=1, viewport-fit=cover"
             />
             <meta httpEquiv="Content-Language" content="pt-BR" />
             <title>Sistema-Melo</title>

@@ -562,7 +562,7 @@ export default function DataTableContasPagar({
                   return (
                     <th
                       key={index}
-                      className={`px-2 py-1.5 text-center text-[11px] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
+                      className={`px-2 py-1.5 text-center text-[0.6875rem] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
                         sortable ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors' : ''
                       }`}
                       style={header === '☑️' ? { width: '40px', maxWidth: '40px' } : header === 'Ações' ? { width: '50px', maxWidth: '50px' } : undefined}
@@ -620,7 +620,7 @@ export default function DataTableContasPagar({
                             );
                           }}
                         >
-                          <RadixSelectTrigger className="h-6 text-[10px] px-1.5">
+                          <RadixSelectTrigger className="h-6 text-[0.625rem] px-1.5">
                             <RadixSelectValue />
                           </RadixSelectTrigger>
                           <RadixSelectContent>
@@ -652,7 +652,7 @@ export default function DataTableContasPagar({
                             ]);
                           }}
                         >
-                          <RadixSelectTrigger className="h-6 text-[10px] px-1">
+                          <RadixSelectTrigger className="h-6 text-[0.625rem] px-1">
                             <RadixSelectValue />
                           </RadixSelectTrigger>
                           <RadixSelectContent>

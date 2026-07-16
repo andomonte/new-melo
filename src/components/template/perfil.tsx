@@ -12,7 +12,8 @@ import { TbSunHigh } from 'react-icons/tb';
 import { MdOutlineChangeCircle, MdOutlineDarkMode } from 'react-icons/md';
 import { RiLockPasswordLine } from 'react-icons/ri';
 import { FaUser } from 'react-icons/fa';
-import { LogOut } from 'lucide-react';
+import { LogOut, ZoomIn } from 'lucide-react';
+import { useEscalaUI } from '@/hooks/useEscalaUI';
 
 interface DadosPerfil {
   usuario?: string;
@@ -27,6 +28,7 @@ interface LayoutPaginaProps {
 
 const PerfilPagina: React.FC<LayoutPaginaProps> = ({ perfilUser }) => {
   const { theme, setTheme } = useTheme();
+  const { escala, setEscala, escalas } = useEscalaUI();
 
   return (
     <div className="flex items-center justify-start">
@@ -77,6 +79,31 @@ const PerfilPagina: React.FC<LayoutPaginaProps> = ({ perfilUser }) => {
               )}
               {theme === 'dark' ? 'Tela Clara' : 'Tela Escura'}
             </DropdownMenuItem>
+
+            {/* Escala da interface — multiplica a preferência do Windows/navegador */}
+            <div className="px-2 py-1.5 border-t border-gray-200 dark:border-zinc-700">
+              <div className="flex items-center mb-1.5">
+                <ZoomIn className="mx-2 h-5 w-5 text-primary transition-all" />
+                <span className="text-xs">Escala da tela</span>
+              </div>
+              <div className="flex gap-1 px-2">
+                {escalas.map((e) => (
+                  <button
+                    key={e.valor}
+                    type="button"
+                    onClick={() => setEscala(e.valor)}
+                    title={`${e.label} (${e.valor}%)`}
+                    className={`flex-1 rounded border px-1 py-1 text-[0.625rem] transition-colors ${
+                      escala === e.valor
+                        ? 'border-blue-500 bg-blue-500 text-white'
+                        : 'border-gray-300 dark:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    {e.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <DropdownMenuItem>
               {' '}

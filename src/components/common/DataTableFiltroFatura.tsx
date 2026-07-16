@@ -542,7 +542,7 @@ export default function DataTable({
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className="w-full flex items-center justify-between gap-1 px-2 py-1 border rounded-md text-[12px] bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-700"
+                                    className="w-full flex items-center justify-between gap-1 px-2 py-1 border rounded-md text-[0.75rem] bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-700"
                                   >
                                     <span className="truncate">
                                       {filtrosColuna[header]?.valor === 'cancelado' && (
@@ -694,7 +694,7 @@ export default function DataTable({
                                     aplicarFiltro();
                                   }
                                 }}
-                                className="w-full font-normal px-2 py-1 border rounded-md text-[12px] pr-8"
+                                className="w-full font-normal px-2 py-1 border rounded-md text-[0.75rem] pr-8"
                               />
 
                               <DropdownMenu>

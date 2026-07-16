@@ -569,7 +569,7 @@ export const AlterarCamposListaModal: React.FC<AlterarCamposListaModalProps> = (
                         <th className="text-left px-2 py-1.5 border-b w-44">
                           Referência
                           {campo === 'descr' && (
-                            <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                            <span className="text-[0.625rem] font-normal text-muted-foreground ml-1">
                               (editável)
                             </span>
                           )}

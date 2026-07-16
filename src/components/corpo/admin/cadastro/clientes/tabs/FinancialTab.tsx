@@ -432,7 +432,7 @@ export function FinancialTab() {
                       </span>
                       <span className="flex items-center gap-1 shrink-0">
                         {selecionadas.length > 0 && (
-                          <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5">
+                          <span className="text-[0.625rem] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full px-1.5 py-0.5">
                             {selecionadas.length}
                           </span>
                         )}

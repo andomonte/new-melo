@@ -10,11 +10,26 @@
  * Não redefina aqui em hex — um :root fora de @layer vence a cascata e quebra
  * o hsl() (ex.: hsl(#ffffff) é inválido → fundo transparente nos Dialogs).
  */
+/*
+ * ESCALA DA INTERFACE
+ * -------------------
+ * O root NÃO fixa px: 100% = o tamanho de fonte que o usuário definiu no
+ * navegador/Windows. Assim toda a UI (que usa rem) acompanha a escala do
+ * sistema em vez de ficar presa a um px hardcoded.
+ *
+ * --ui-scale permite ajuste fino por usuário (ver useEscalaUI). Ex.: 87.5%
+ * (compacto) ... 125% (ampliado). Multiplica a preferência do SO, não a
+ * substitui.
+ */
+html {
+  font-size: var(--ui-scale, 100%);
+}
+
 body {
   color: hsl(var(--foreground));
   background: hsl(var(--background));
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  font-size: 0.8125rem; /* 13px no padrão de 16px — agora escalável */
 }
 
 /* Caixa alta padrão em todo o sistema */
@@ -54,26 +69,28 @@ textarea:focus,
   border-color: #60a5fa !important;
 }
 
-/* Inputs compactos em forms de modal */
+/* Inputs compactos em forms de modal — em rem para acompanharem a escala.
+   A altura precisa ser rem junto com a fonte: se a fonte cresce e a altura
+   fica em px, o texto é cortado dentro do campo. */
 .form-compact input,
 .form-compact select,
 .form-compact textarea,
 .form-compact [role="combobox"] {
-  font-size: 12px;
-  padding-top: 4px;
-  padding-bottom: 4px;
-  height: 30px;
+  font-size: 0.75rem; /* 12px */
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  height: 1.875rem; /* 30px */
 }
 
 .form-compact textarea {
   height: auto;
-  min-height: 60px;
+  min-height: 3.75rem; /* 60px */
 }
 
 .form-compact label {
-  font-size: 11px;
+  font-size: 0.6875rem; /* 11px */
   font-weight: 500;
-  margin-bottom: 2px;
+  margin-bottom: 0.125rem;
   display: block;
   color: #6b7280;
 }

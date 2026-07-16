@@ -309,7 +309,7 @@ export function RegistrationTab({
                   <button
                     type="button"
                     onClick={() => setValue('documento', '')}
-                    className="px-1 py-0.5 text-[10px] text-gray-400 hover:text-red-500 transition-colors"
+                    className="px-1 py-0.5 text-[0.625rem] text-gray-400 hover:text-red-500 transition-colors"
                     title="Limpar documento"
                   >
                     ✕
@@ -319,7 +319,7 @@ export function RegistrationTab({
                   <button
                     type="button"
                     onClick={handleDocumentoBlur}
-                    className="px-1.5 py-0.5 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                    className="px-1.5 py-0.5 text-[0.625rem] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
                     title="Buscar dados do CNPJ na Receita Federal"
                   >
                     Buscar
@@ -506,7 +506,7 @@ export function RegistrationTab({
           rows={3}
           className="resize-y min-h-[60px]"
         />
-        <p className="text-[11px] text-gray-400 mt-1">{(watch('obs') || '').length}/500</p>
+        <p className="text-[0.6875rem] text-gray-400 mt-1">{(watch('obs') || '').length}/500</p>
       </div>
 
       {/* Fiscal Info Section Title */}
@@ -685,7 +685,7 @@ export function RegistrationTab({
               <button
                 type="button"
                 onClick={handleCepBlur}
-                className="absolute right-1 top-1 px-1.5 py-0.5 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                className="absolute right-1 top-1 px-1.5 py-0.5 text-[0.625rem] bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
                 title="Buscar endereço pelo CEP"
               >
                 Buscar

@@ -522,7 +522,7 @@ export default function DataTable({
                                   aplicarFiltro();
                                 }
                               }}
-                              className="w-full font-normal px-2 py-1 border rounded-md text-[12px] pr-8"
+                              className="w-full font-normal px-2 py-1 border rounded-md text-[0.75rem] pr-8"
                             />
 
                             <DropdownMenu>

@@ -226,7 +226,7 @@ export function CommercialTab() {
                 className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-zinc-800 rounded-md border border-gray-200 dark:border-zinc-700"
               >
                 {/* Tipo do Vendedor */}
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded ${
                   (field as any).tipoVendedor === 'tmk'
                     ? 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
                     : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'

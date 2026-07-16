@@ -447,7 +447,7 @@ const DashboardFinanceiro: React.FC<DashboardFinanceiroProps> = ({
                   <div className="text-lg font-bold text-yellow-600 dark:text-yellow-500">
                     {resumoCalculado.totalPendentes}
                   </div>
-                  <span className="text-[10px] text-gray-500">Pendente</span>
+                  <span className="text-[0.625rem] text-gray-500">Pendente</span>
                 </div>
                 {resumoCalculado.totalParciais > 0 && (
                   <>
@@ -456,7 +456,7 @@ const DashboardFinanceiro: React.FC<DashboardFinanceiroProps> = ({
                       <div className="text-lg font-bold text-blue-600 dark:text-blue-500">
                         {resumoCalculado.totalParciais}
                       </div>
-                      <span className="text-[10px] text-gray-500">Parcial</span>
+                      <span className="text-[0.625rem] text-gray-500">Parcial</span>
                     </div>
                   </>
                 )}

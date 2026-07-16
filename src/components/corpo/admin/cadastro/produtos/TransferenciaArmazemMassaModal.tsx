@@ -595,7 +595,7 @@ export const TransferenciaArmazemMassaModal: React.FC<TransferenciaArmazemMassaM
                               {item.estoqueOrigem}
                             </span>
                             {item.estoqueReservado > 0 && (
-                              <div className="text-[10px] text-orange-500" title={`${item.estoqueReservado} unid. reservadas para vendas`}>
+                              <div className="text-[0.625rem] text-orange-500" title={`${item.estoqueReservado} unid. reservadas para vendas`}>
                                 (R: {item.estoqueReservado})
                               </div>
                             )}
@@ -604,7 +604,7 @@ export const TransferenciaArmazemMassaModal: React.FC<TransferenciaArmazemMassaM
                           <div>
                             <span className="text-red-500 text-xs">0</span>
                             {item.estoqueReservado > 0 && (
-                              <div className="text-[10px] text-orange-500">
+                              <div className="text-[0.625rem] text-orange-500">
                                 (R: {item.estoqueReservado})
                               </div>
                             )}
@@ -645,7 +645,7 @@ export const TransferenciaArmazemMassaModal: React.FC<TransferenciaArmazemMassaM
               <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-orange-800 dark:text-orange-200">
                 <div>A transferência afetará o estoque de <strong>{totalItens}</strong> produto(s) imediatamente.</div>
-                <div className="mt-1 text-[10px] opacity-80">
+                <div className="mt-1 text-[0.625rem] opacity-80">
                   <strong>(R)</strong> = Quantidade reservada para vendas em andamento (não pode ser transferida)
                 </div>
               </div>

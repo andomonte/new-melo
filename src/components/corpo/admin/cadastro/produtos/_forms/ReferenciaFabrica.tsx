@@ -439,7 +439,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
                                 </span>
                               </div>
                               {f.cpf_cgc && (
-                                <span className="text-[11px] text-muted-foreground">
+                                <span className="text-[0.6875rem] text-muted-foreground">
                                   CNPJ/CPF: {f.cpf_cgc}
                                 </span>
                               )}
@@ -491,16 +491,16 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
         <table className="w-full text-xs">
           <thead className="bg-gray-50 dark:bg-zinc-800">
             <tr>
-              <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase w-24">
+              <th className="px-3 py-2 text-left text-[0.6875rem] font-medium text-gray-500 dark:text-gray-400 uppercase w-24">
                 Código
               </th>
-              <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 py-2 text-left text-[0.6875rem] font-medium text-gray-500 dark:text-gray-400 uppercase">
                 Referência
               </th>
-              <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase">
+              <th className="px-3 py-2 text-left text-[0.6875rem] font-medium text-gray-500 dark:text-gray-400 uppercase">
                 Fornecedor
               </th>
-              <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase w-20">
+              <th className="px-3 py-2 text-center text-[0.6875rem] font-medium text-gray-500 dark:text-gray-400 uppercase w-20">
                 Ações
               </th>
             </tr>
@@ -545,7 +545,7 @@ const ReferenciaFabrica: React.FC<ReferenciaFabricaProps> = ({
         </table>
       </div>
 
-      <p className="text-[10px] text-gray-400 dark:text-gray-500">
+      <p className="text-[0.625rem] text-gray-400 dark:text-gray-500">
         {referencias.length} referência{referencias.length !== 1 ? 's' : ''} cadastrada{referencias.length !== 1 ? 's' : ''}
       </p>
     </div>
