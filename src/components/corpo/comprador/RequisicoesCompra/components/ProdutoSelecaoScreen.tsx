@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Package, Plus, Minus, ShoppingCart, Save, Send, X, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
+import { motivoBloqueioRequisicao, rotuloStatus } from '../statusRequisicao';
 import { useRequisicaoStore } from '../stores/useRequisicaoStore';
 
 interface Produto {
@@ -8,6 +10,7 @@ interface Produto {
   descr: string;
   marca: string;
   ref?: string;
+  inf?: string | null; // Informativo/status — bloqueia requisição se D/S/N
   aplicacao?: string;
   estoque: number;
   prcompra: number;
@@ -46,6 +49,10 @@ const ProdutoSelecaoScreen: React.FC<ProdutoSelecaoScreenProps> = ({
   const perPage = 20;
 
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Produto não permitido',
+    message: '',
+  });
 
   const fetchProdutos = useCallback(async () => {
     setLoading(true);
@@ -79,15 +86,16 @@ const ProdutoSelecaoScreen: React.FC<ProdutoSelecaoScreenProps> = ({
     fetchProdutos();
   }, [fetchProdutos]);
 
-  const adicionarProduto = (produto: Produto) => {
+  // Insere de fato no carrinho (sem revalidar status).
+  const inserirProduto = (produto: Produto) => {
     const produtoExistente = produtosSelecionados.find(p => p.codprod === produto.codprod);
-    
+
     if (produtoExistente) {
-      setProdutosSelecionados(prev => 
-        prev.map(p => 
-          p.codprod === produto.codprod 
-            ? { 
-                ...p, 
+      setProdutosSelecionados(prev =>
+        prev.map(p =>
+          p.codprod === produto.codprod
+            ? {
+                ...p,
                 quantidade: p.quantidade + 1,
                 subtotal: (p.quantidade + 1) * p.prcompra
               }
@@ -107,6 +115,44 @@ const ProdutoSelecaoScreen: React.FC<ProdutoSelecaoScreenProps> = ({
       title: "Produto adicionado",
       description: `${produto.descr} foi adicionado à requisição`,
     });
+  };
+
+  const adicionarProduto = async (produto: Produto) => {
+    // Regra do Delphi: bloqueia incluir produto com inf D/S/N na requisição.
+    const rotulo = rotuloStatus(produto.inf);
+    if (rotulo) {
+      // Bloqueado — tenta oferecer o substituto (dbprod_substituir).
+      let substituto: Produto | null = null;
+      try {
+        const resp = await fetch(
+          `/api/produtos/substituto-requisicao?codprod=${encodeURIComponent(produto.codprod)}`,
+        );
+        if (resp.ok) substituto = (await resp.json())?.substituto ?? null;
+      } catch {
+        substituto = null;
+      }
+
+      if (substituto) {
+        pedirConfirmacao(() => inserirProduto(substituto as Produto), {
+          title: 'Produto substituído',
+          message: `O produto ${produto.ref || produto.codprod} está ${rotulo}.\nDeseja adicionar o substituto ${substituto.ref} - ${substituto.descr}?`,
+          type: 'warning',
+          confirmText: 'Sim, adicionar substituto',
+          cancelText: 'Não',
+        });
+      } else {
+        pedirConfirmacao(() => {}, {
+          title: 'Produto não permitido',
+          message: motivoBloqueioRequisicao(produto.inf) as string,
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
+        });
+      }
+      return;
+    }
+
+    inserirProduto(produto);
   };
 
   const atualizarQuantidade = (codprod: string, novaQuantidade: number) => {
@@ -401,6 +447,7 @@ const ProdutoSelecaoScreen: React.FC<ProdutoSelecaoScreenProps> = ({
           )}
         </div>
       </div>
+      {ConfirmacaoSalvarModal}
     </div>
   );
 };

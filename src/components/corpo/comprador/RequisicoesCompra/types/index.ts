@@ -63,6 +63,7 @@ export interface Produto {
   codmarca?: string; // Código da marca
   marca_nome?: string; // Nome da marca (ex: "Bosch", "SKF")
   ref?: string;
+  inf?: string | null; // Informativo/status — bloqueia requisição se D/S/N
   aplicacao?: string;
   estoque?: number;
   qtddisponivel?: number;

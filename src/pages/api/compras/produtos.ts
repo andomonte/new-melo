@@ -6,6 +6,7 @@ interface Produto {
   descr: string;
   marca: string;
   ref?: string;
+  inf?: string | null;
   aplicacao?: string;
   estoque: number;
   prcompra: number;
@@ -95,6 +96,7 @@ export default async function handler(
         p.descr,
         COALESCE(m.descr, p.codmarca) as marca,
         p.ref,
+        p.inf,
         '' as aplicacao,
         COALESCE(p.qtest, 0) as estoque,
         ROUND(

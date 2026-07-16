@@ -8,6 +8,8 @@ import type { Produto } from '../types';
 import api from '@/components/services/api';
 import { formataMoedaBR } from '@/components/common/InputMoeda';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
+import { motivoBloqueioRequisicao, rotuloStatus } from '../statusRequisicao';
 
 interface ProdutoSelecionado extends Produto {
   quantidade: number;
@@ -30,6 +32,10 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   produtosJaAdicionados = [],
 }) => {
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Produto não permitido',
+    message: '',
+  });
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosSelecionados, setProdutosSelecionados] = useState<ProdutoSelecionado[]>([]);
   const [busca, setBusca] = useState('');
@@ -92,7 +98,8 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
     buscarProdutos(debouncedBusca, novaPagina);
   };
 
-  const adicionarProduto = (produto: Produto) => {
+  // Insere de fato no carrinho (sem revalidar status).
+  const inserirProduto = (produto: Produto) => {
     const jaAdicionado = produtosSelecionados.find(p => p.codprod === produto.codprod);
 
     if (jaAdicionado) {
@@ -115,6 +122,44 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
       };
       setProdutosSelecionados(prev => [...prev, novoProduto]);
     }
+  };
+
+  const adicionarProduto = async (produto: Produto) => {
+    // Regra do Delphi: bloqueia incluir produto com inf D/S/N na requisição.
+    const rotulo = rotuloStatus(produto.inf);
+    if (rotulo) {
+      // Bloqueado — tenta oferecer o substituto (dbprod_substituir).
+      let substituto: Produto | null = null;
+      try {
+        const resp = await api.get('/api/produtos/substituto-requisicao', {
+          params: { codprod: produto.codprod },
+        });
+        substituto = resp.data?.substituto ?? null;
+      } catch {
+        substituto = null;
+      }
+
+      if (substituto) {
+        pedirConfirmacao(() => inserirProduto(substituto as Produto), {
+          title: 'Produto substituído',
+          message: `O produto ${produto.ref || produto.codprod} está ${rotulo}.\nDeseja adicionar o substituto ${substituto.ref} - ${substituto.descr}?`,
+          type: 'warning',
+          confirmText: 'Sim, adicionar substituto',
+          cancelText: 'Não',
+        });
+      } else {
+        pedirConfirmacao(() => {}, {
+          title: 'Produto não permitido',
+          message: motivoBloqueioRequisicao(produto.inf) as string,
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
+        });
+      }
+      return;
+    }
+
+    inserirProduto(produto);
   };
 
   const removerProduto = (codprod: string) => {
@@ -465,6 +510,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
           </div>
         </div>
       </div>
+      {ConfirmacaoSalvarModal}
     </div>
   );
 };
