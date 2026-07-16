@@ -27,7 +27,7 @@ function lerUsuario(req: NextApiRequest): { codusr: string; nomeusr: string } {
 }
 
 const SEL_PROD = `
-  SELECT p.codprod, p.ref, p.qtest, p.inf,
+  SELECT p.codprod, p.ref, p.codmarca, p.qtest, p.inf,
          COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m
                     WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
     FROM db_manaus.dbprod p WHERE p.codprod = $1`;
@@ -49,16 +49,17 @@ async function auditar(
           $1, $2, NOW(),
           $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 2)`,
       [
-        user.codusr,
-        user.nomeusr,
+        // trunca para o tamanho das colunas (ver comentário em substituir.ts)
+        String(user.codusr ?? '').slice(0, 4),
+        String(user.nomeusr ?? '').slice(0, 20),
         orig?.codprod ?? '',
-        orig?.ref ?? '',
-        orig?.marca_nome ?? '',
+        String(orig?.ref ?? '').slice(0, 20),
+        String(orig?.codmarca ?? '').slice(0, 5), // CÓDIGO da marca (5), não o nome
         orig?.qtest ?? 0,
         orig?.inf ?? '',
         subs?.codprod ?? '',
-        subs?.ref ?? '',
-        subs?.marca_nome ?? '',
+        String(subs?.ref ?? '').slice(0, 20),
+        String(subs?.codmarca ?? '').slice(0, 5),
         subs?.qtest ?? 0,
         subs?.inf ?? '',
       ],
@@ -99,8 +100,16 @@ export default async function handle(
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Substituição não encontrada.' });
     }
-    await auditar(client, user, po.rows[0], ps.rows[0]);
+    // Reativa o original: sai de SUBSTITUÍDO ('S') para SEM INFORMATIVO ('-'),
+    // mesma convenção do Ativar. Só mexe se estiver em 'S' (marca da
+    // substituição), para não clobber um inf mudado por outro motivo.
+    await client.query(
+      `UPDATE db_manaus.dbprod SET inf = '-' WHERE codprod = $1 AND inf = 'S'`,
+      [original],
+    );
     await client.query('COMMIT');
+    // Auditoria FORA da transação (ver substituir.ts).
+    await auditar(client, user, po.rows[0], ps.rows[0]);
 
     res.status(200).json({ message: 'Operação realizada com sucesso.' });
   } catch (e: any) {

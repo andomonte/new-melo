@@ -65,16 +65,18 @@ async function auditar(
           $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12, $13)`,
       [
-        user.codusr,
-        user.nomeusr,
+        // trunca para o tamanho das colunas (evita "valor muito longo" — que,
+        // rodando DENTRO da transação, abortava tudo e revertia a substituição)
+        String(user.codusr ?? '').slice(0, 4),
+        String(user.nomeusr ?? '').slice(0, 20),
         orig.codprod,
-        orig.ref,
-        orig.marca_nome,
+        String(orig.ref ?? '').slice(0, 20),
+        String(orig.codmarca ?? '').slice(0, 5), // coluna é o CÓDIGO da marca (5), não o nome
         orig.qtest,
         orig.inf ?? '',
         subs.codprod,
-        subs.ref,
-        subs.marca_nome,
+        String(subs.ref ?? '').slice(0, 20),
+        String(subs.codmarca ?? '').slice(0, 5),
         subs.qtest,
         subs.inf ?? '',
         operacao,
@@ -151,8 +153,17 @@ export default async function handle(
        VALUES ($1, $2)`,
       [original, substituto],
     );
-    await auditar(client, user, prodOrig, prodSubs, 1);
+    // Marca o original como SUBSTITUÍDO (inf='S'), igual ao Delphi — assim ele
+    // é bloqueado ao ser adicionado em requisição. Ver memória
+    // produto-status-ativo-inativo.
+    await client.query(
+      `UPDATE db_manaus.dbprod SET inf = 'S' WHERE codprod = $1`,
+      [original],
+    );
     await client.query('COMMIT');
+    // Auditoria FORA da transação: se falhar, não reverte a substituição
+    // (antes rodava dentro do BEGIN e um erro abortava tudo).
+    await auditar(client, user, prodOrig, prodSubs, 1);
 
     res.status(200).json({ message: 'Operação realizada com sucesso.' });
   } catch (e: any) {
