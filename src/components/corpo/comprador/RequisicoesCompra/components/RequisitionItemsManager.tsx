@@ -214,7 +214,7 @@ export const RequisitionItemsManager: React.FC<RequisitionItemsManagerProps> = (
   const canEditItems = !readOnly && ['pending', 'rascunho', 'p', 'r', 'draft', ''].includes(currentRequisitionData?.req_status?.toLowerCase() || '');
 
   return (
-    <div className="h-screen w-full flex flex-col bg-gray-50 dark:bg-gray-800 overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-gray-50 dark:bg-gray-800 overflow-hidden">
       {/* Header */}
       <div className="bg-white dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 p-6">
         <div className="flex items-center justify-between">
