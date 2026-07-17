@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import { AuthContext } from '@/contexts/authContexts';
 import { X, Building2, User, Calendar, Package, MapPin, Plus, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { CompradorAutocomplete } from '../components/CompradorAutocomplete';
 import api from '@/components/services/api';
 import type { RequisitionDTO } from '@/data/requisicoesCompra/types/requisition';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { Toaster } from '@/components/ui/toaster';
 import FormFooter2 from '@/components/common/FormFooter2';
 import { AdicionarProdutosModal } from '../components/AdicionarProdutosModal';
@@ -53,6 +54,10 @@ export default function EditRequisitionModal({
   onSuccess,
 }: EditRequisitionModalProps) {
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar',
+    message: '',
+  });
   const { user } = useContext(AuthContext);
   const [formData, setFormData] = useState<FormData>({
     tipo: '',
@@ -114,12 +119,6 @@ export default function EditRequisitionModal({
     }
   };
 
-  // Carregar dados quando modal abrir
-  useEffect(() => {
-    if (isOpen && requisition) {
-      loadInitialData();
-    }
-  }, [isOpen, requisition, loadInitialData]);
   const loadRequisitionItems = useCallback(async () => {
     if (!requisition?.requisicao) return;
 
@@ -203,8 +202,17 @@ export default function EditRequisitionModal({
       destinoId = requisition.destinoId.toString();
     }
 
+    // req_tipo é a SIGLA (varchar 2, ex.: 'RE'). requisition.tipo costuma vir
+    // como DESCRIÇÃO ("REPOSICAO") — resolvemos para o id/sigla usando a lista
+    // de tipos, senão o UPDATE estoura o varchar(2) e dá 500.
+    const tipoSigla =
+      tipos.find((t) => t.id === requisition.tipo)?.id ||
+      tipos.find((t) => t.nome === requisition.tipo)?.id ||
+      (requisition as any).tipoSigla ||
+      '';
+
     const formDataMapeado = {
-      tipo: requisition.tipo || '',
+      tipo: tipoSigla,
       fornecedor: fornecedorData,
       comprador_codigo: requisition.compradorCodigo || '',
       comprador_nome: requisition.compradorNome || '',
@@ -265,22 +273,25 @@ export default function EditRequisitionModal({
       !formData.entrega_em ||
       !formData.destinado_para
     ) {
-      toast({
+      pedirConfirmacao(() => {}, {
         title: 'Campos obrigatórios',
-        description:
-          'Preencha todos os campos obrigatórios antes de continuar.',
-        variant: 'destructive',
+        message: 'Preencha todos os campos obrigatórios antes de continuar.',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
       });
       return;
     }
 
     // Validação de produtos
     if (produtosSelecionados.length === 0) {
-      toast({
+      pedirConfirmacao(() => {}, {
         title: 'Produtos obrigatórios',
-        description:
+        message:
           'Adicione pelo menos um produto à requisição antes de salvar.',
-        variant: 'destructive',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
       });
       return;
     }
@@ -306,10 +317,12 @@ export default function EditRequisitionModal({
     if (formData.fornecedor?.cpf_cnpj) {
       const documento = formData.fornecedor.cpf_cnpj.replace(/[^0-9]/g, '');
       if (documento.length !== 11 && documento.length !== 14) {
-        toast({
+        pedirConfirmacao(() => {}, {
           title: 'Documento inválido',
-          description: 'CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos.',
-          variant: 'destructive',
+          message: 'CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos.',
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
         });
         return;
       }
@@ -325,15 +338,29 @@ export default function EditRequisitionModal({
     );
 
     if (itemsInvalidos.length > 0) {
-      toast({
+      pedirConfirmacao(() => {}, {
         title: 'Itens inválidos',
-        description:
+        message:
           'Todos os itens devem ter quantidade maior que zero e preço válido.',
-        variant: 'destructive',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
       });
       return;
     }
 
+    // Confirmação antes de salvar (modal central, como no Produto).
+    pedirConfirmacao(salvarRequisicao, {
+      title: 'Salvar alterações da requisição?',
+      message: 'As alterações desta requisição serão salvas.',
+      type: 'info',
+      confirmText: 'Sim, salvar',
+      cancelText: 'Não',
+    });
+  };
+
+  const salvarRequisicao = async () => {
+    if (!requisition) return;
     setSubmitting(true);
     try {
       const payload = {
@@ -809,6 +836,7 @@ export default function EditRequisitionModal({
           </div>
         </div>
       )}
+      {ConfirmacaoSalvarModal}
     </div>
   );
 }
