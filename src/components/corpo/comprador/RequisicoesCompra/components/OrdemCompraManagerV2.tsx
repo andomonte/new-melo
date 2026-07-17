@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useMemo } from 'react';
+import SelectInput from '@/components/common/SelectPadrao';
 import type { RequisitionDTO } from '@/data/requisicoesCompra/types/requisition';
 import { useOrdens } from '../hooks/useOrdens';
 import { useOrdensTableImproved } from '../hooks/useOrdensTableImproved';
@@ -181,55 +182,56 @@ export default function OrdensComprasListImproved({
     handleFiltroChange,
   } = useOrdensTableImproved(colunasDbOrdem);
 
+  // Filtro por status via Select (mesmo motivo das requisições: o filtro rápido
+  // de coluna usa "contém" com o rótulo, que não bate com o código 'A'/'F'/'C').
+  const [statusFiltro, setStatusFiltro] = useState<string>('');
+  const filtrosComStatus = useMemo(() => {
+    const base = (filtros || []).filter((f: any) => f.campo !== 'statusOrdem');
+    return statusFiltro
+      ? [...base, { campo: 'statusOrdem', tipo: 'igual', valor: statusFiltro }]
+      : base;
+  }, [filtros, statusFiltro]);
+
   const { data, meta, loading, error, refetch } = useOrdens({
     page,
     perPage,
     search,
-    filtros,
+    filtros: filtrosComStatus,
   });
 
   const toggleDropdown = (ordemId: number, buttonElement: HTMLButtonElement) => {
-
-    setDropdownStates(prevStates => ({
-      ...prevStates,
-      [ordemId]: !prevStates[ordemId]
-    }));
-
-    setIconRotations(prevRotations => ({
-      ...prevRotations,
-      [ordemId]: !prevRotations[ordemId]
-    }));
-
-    if (!dropdownStates[ordemId]) {
-      const rect = buttonElement.getBoundingClientRect();
-      const dropdownWidth = 180; // largura aproximada do dropdown
-
-      // Calcular left: se não houver espaço à esquerda, abre à direita
-      let leftPosition = rect.left - (dropdownWidth - rect.width) + window.scrollX;
-
-      // Se o dropdown sairia da tela pela esquerda, posiciona à direita do botão
-      if (leftPosition < 10) {
-        leftPosition = rect.left + window.scrollX;
-      }
-
-      // Se sairia pela direita, ajusta para caber
-      if (leftPosition + dropdownWidth > window.innerWidth - 10) {
-        leftPosition = window.innerWidth - dropdownWidth - 10;
-      }
-
-      setDropdownPositions(prevPositions => ({
-        ...prevPositions,
-        [ordemId]: {
-          top: rect.bottom + 4 + window.scrollY, // Abre abaixo do botão
-          left: leftPosition
-        }
-      }));
-    } else {
-      setDropdownPositions(prevPositions => ({
-        ...prevPositions,
-        [ordemId]: null
-      }));
+    // Se este já está aberto, fecha. Senão, abre SÓ este (fechando os demais —
+    // antes usava ...prevStates e deixava vários menus abertos ao mesmo tempo).
+    if (dropdownStates[ordemId]) {
+      closeAllDropdowns();
+      return;
     }
+
+    const rect = buttonElement.getBoundingClientRect();
+    const dropdownWidth = 180; // largura aproximada do dropdown
+
+    // Calcular left: se não houver espaço à esquerda, abre à direita
+    let leftPosition = rect.left - (dropdownWidth - rect.width) + window.scrollX;
+
+    // Se o dropdown sairia da tela pela esquerda, posiciona à direita do botão
+    if (leftPosition < 10) {
+      leftPosition = rect.left + window.scrollX;
+    }
+
+    // Se sairia pela direita, ajusta para caber
+    if (leftPosition + dropdownWidth > window.innerWidth - 10) {
+      leftPosition = window.innerWidth - dropdownWidth - 10;
+    }
+
+    // Estados só com a linha atual — garante um único menu aberto.
+    setDropdownStates({ [ordemId]: true });
+    setIconRotations({ [ordemId]: true });
+    setDropdownPositions({
+      [ordemId]: {
+        top: rect.bottom + 4 + window.scrollY, // Abre abaixo do botão
+        left: leftPosition,
+      },
+    });
   };
 
   const closeAllDropdowns = () => {
@@ -809,6 +811,24 @@ export default function OrdensComprasListImproved({
         onSearchBlur={handleSearchBlur}
         onSearchKeyDown={handleSearchKeyDown}
         searchInputPlaceholder="Pesquisar por ordem, requisição, fornecedor..."
+        searchRightSlot={
+          <div className="w-48 flex-shrink-0">
+            <SelectInput
+              name="statusOrdem"
+              options={[
+                { value: 'todos', label: 'Todos os status' },
+                { value: 'A', label: 'Aberta' },
+                { value: 'F', label: 'Fechada' },
+                { value: 'C', label: 'Cancelada' },
+              ]}
+              value={statusFiltro || 'todos'}
+              onValueChange={(v) => {
+                setStatusFiltro(v === 'todos' ? '' : v);
+                setPage(1);
+              }}
+            />
+          </div>
+        }
         colunasFiltro={colunasDbOrdem.map((c) => c.campo)}
         limiteColunas={limiteColunas}
         onLimiteColunasChange={handleLimiteColunasChange}

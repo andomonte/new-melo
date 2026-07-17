@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import type { RequisitionDTO } from '@/data/requisicoesCompra/types/requisition';
 import { useRequisitions } from '../hooks/useRequisitions';
@@ -6,6 +6,7 @@ import { useRequisicoesTable } from '../hooks/useRequisicoesTable';
 import { colunasDbRequisicao } from '../colunasDbRequisicao';
 import { formatTableData } from '../utils/tableHelpers';
 import DataTableFiltroV3 from '@/components/common/DataTableFiltroV3';
+import SelectInput from '@/components/common/SelectPadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 // OrdensComprasListImproved removed - managed by ComprasTabManager
 import { PlusIcon, CircleChevronDown, Package, Send, CheckCircle, XCircle, Eye, Edit3, Trash2, Ban, FileDown, DollarSign, ChevronDown, Copy, History, FileSpreadsheet } from 'lucide-react';
@@ -116,11 +117,22 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
     handleFiltroChange,
   } = useRequisicoesTable(colunasDbRequisicao);
 
+  // Filtro por status via Select (o filtro rápido de coluna usava "contém" com
+  // o rótulo digitado, que não bate com o código 'A'/'S'/...). Aqui injetamos
+  // um filtro igual pelo código, combinando com os demais filtros de coluna.
+  const [statusFiltro, setStatusFiltro] = useState<string>('');
+  const filtrosComStatus = useMemo(() => {
+    const base = (filtros || []).filter((f) => f.campo !== 'statusRequisicao');
+    return statusFiltro
+      ? [...base, { campo: 'statusRequisicao', tipo: 'igual', valor: statusFiltro }]
+      : base;
+  }, [filtros, statusFiltro]);
+
   const { data, meta, loading, error, refetch } = useRequisitions({
     page,
     perPage,
     search,
-    filtros,
+    filtros: filtrosComStatus,
   });
 
   // Debounced refetch para evitar múltiplas chamadas
@@ -734,47 +746,38 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
   };
 
   const toggleDropdown = (requisitionId: number, buttonElement: HTMLButtonElement) => {
-
-    setDropdownStates(prevStates => ({
-      ...prevStates,
-      [requisitionId]: !prevStates[requisitionId]
-    }));
-
-    setIconRotations(prevRotations => ({
-      ...prevRotations,
-      [requisitionId]: !prevRotations[requisitionId]
-    }));
-
-    if (!dropdownStates[requisitionId]) {
-      const rect = buttonElement.getBoundingClientRect();
-      const dropdownWidth = 180; // largura aproximada do dropdown
-
-      // Calcular left: se não houver espaço à esquerda, abre à direita
-      let leftPosition = rect.left - (dropdownWidth - rect.width) + window.scrollX;
-
-      // Se o dropdown sairia da tela pela esquerda, posiciona à direita do botão
-      if (leftPosition < 10) {
-        leftPosition = rect.left + window.scrollX;
-      }
-
-      // Se sairia pela direita, ajusta para caber
-      if (leftPosition + dropdownWidth > window.innerWidth - 10) {
-        leftPosition = window.innerWidth - dropdownWidth - 10;
-      }
-
-      setDropdownPositions(prevPositions => ({
-        ...prevPositions,
-        [requisitionId]: {
-          top: rect.bottom + 4 + window.scrollY, // Abre abaixo do botão
-          left: leftPosition
-        }
-      }));
-    } else {
-      setDropdownPositions(prevPositions => ({
-        ...prevPositions,
-        [requisitionId]: null
-      }));
+    // Se este já está aberto, fecha. Senão, abre SÓ este (fechando os demais —
+    // antes usava ...prevStates e deixava vários menus abertos ao mesmo tempo).
+    if (dropdownStates[requisitionId]) {
+      closeAllDropdowns();
+      return;
     }
+
+    const rect = buttonElement.getBoundingClientRect();
+    const dropdownWidth = 180; // largura aproximada do dropdown
+
+    // Calcular left: se não houver espaço à esquerda, abre à direita
+    let leftPosition = rect.left - (dropdownWidth - rect.width) + window.scrollX;
+
+    // Se o dropdown sairia da tela pela esquerda, posiciona à direita do botão
+    if (leftPosition < 10) {
+      leftPosition = rect.left + window.scrollX;
+    }
+
+    // Se sairia pela direita, ajusta para caber
+    if (leftPosition + dropdownWidth > window.innerWidth - 10) {
+      leftPosition = window.innerWidth - dropdownWidth - 10;
+    }
+
+    // Estados só com a linha atual — garante um único menu aberto.
+    setDropdownStates({ [requisitionId]: true });
+    setIconRotations({ [requisitionId]: true });
+    setDropdownPositions({
+      [requisitionId]: {
+        top: rect.bottom + 4 + window.scrollY, // Abre abaixo do botão
+        left: leftPosition,
+      },
+    });
   };
 
   const closeAllDropdowns = () => {
@@ -1267,6 +1270,27 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
             onSearchBlur={handleSearchBlur}
             onSearchKeyDown={handleSearchKeyDown}
             searchInputPlaceholder="Pesquisar por requisição, fornecedor, comprador..."
+            searchRightSlot={
+              <div className="w-48 flex-shrink-0">
+                <SelectInput
+                  name="statusRequisicao"
+                  options={[
+                    { value: 'todos', label: 'Todos os status' },
+                    { value: 'P', label: 'Pendente' },
+                    { value: 'S', label: 'Submetida' },
+                    { value: 'A', label: 'Aprovada' },
+                    { value: 'R', label: 'Rejeitada' },
+                    { value: 'C', label: 'Cancelada' },
+                    { value: 'L', label: 'Liberada' },
+                  ]}
+                  value={statusFiltro || 'todos'}
+                  onValueChange={(v) => {
+                    setStatusFiltro(v === 'todos' ? '' : v);
+                    setPage(1);
+                  }}
+                />
+              </div>
+            }
             colunasFiltro={colunasDbRequisicao.map((c) => c.campo)}
             limiteColunas={limiteColunas}
             onLimiteColunasChange={handleLimiteColunasChange}
