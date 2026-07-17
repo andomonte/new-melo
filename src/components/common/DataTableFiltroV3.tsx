@@ -59,6 +59,11 @@ interface DataTableProps {
   onSearchKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSearchBlur?: () => void;
   searchInputPlaceholder?: string;
+  /** Conteúdo opcional renderizado ao lado da barra de busca (ex.: Select de
+   *  status). Nada por padrão — não afeta as telas que não usam. */
+  searchRightSlot?: React.ReactNode;
+  /** Aceito por compatibilidade com chamadas existentes (não utilizado aqui). */
+  showAdvancedFilters?: boolean;
   onFiltroChange?: (
     filtros: { campo: string; tipo: string; valor: string }[],
   ) => void;
@@ -97,6 +102,7 @@ export default function DataTable({
   onSearch,
   onSearchKeyDown,
   onSearchBlur,
+  searchRightSlot,
   searchInputPlaceholder,
   onFiltroChange,
   colunasFiltro = [],
@@ -267,6 +273,8 @@ export default function DataTable({
             onKeyDown={onSearchKeyDown}
             onBlur={onSearchBlur}
           />
+
+          {searchRightSlot}
 
           <div className="flex items-center gap-2">
             <Dialog

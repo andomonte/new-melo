@@ -747,7 +747,9 @@ export default function DataTablePadrao({
                             <RadixSelectItem value="false">Não</RadixSelectItem>
                           </RadixSelectContent>
                         </RadixSelect>
-                      ) : header !== 'Ações' ? (
+                      ) : !['selecionar', 'ações', 'acoes'].includes(header.toLowerCase()) ? (
+                        // Colunas utilitárias (Selecionar/Ações) não têm o que
+                        // filtrar — sem campo, para não alargar a coluna à toa.
                         (() => {
                           const chave = header.toLowerCase();
                           const atual = filtrosColuna[chave];
