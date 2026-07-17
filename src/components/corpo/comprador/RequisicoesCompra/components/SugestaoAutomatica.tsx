@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import {
   Card,
   CardContent,
@@ -53,9 +54,12 @@ export interface ItemSugestao {
 }
 
 interface SugestaoAutomaticaProps {
-  reqId: number;
-  reqVersao: number;
+  reqId?: number;
+  reqVersao?: number;
   onItensImportados?: (qtd: number) => void;
+  /** Quando fornecido, os itens marcados são entregues via callback (para o
+   *  carrinho de Adicionar Produtos) em vez de importados direto na requisição. */
+  onAdicionarSelecionados?: (itens: ItemSugestao[]) => void;
 }
 
 type TipoSugestao = 'DEMANDA_30D' | 'DEMANDA_60D' | 'ESTOQUE_MIN' | 'ESTOQUE_MAX';
@@ -64,12 +68,40 @@ type TipoFiltro = 'marca' | 'grupo';
 export default function SugestaoAutomatica({
   reqId,
   reqVersao,
-  onItensImportados
+  onItensImportados,
+  onAdicionarSelecionados,
 }: SugestaoAutomaticaProps) {
   // Estados
   const [tipoSugestao, setTipoSugestao] = useState<TipoSugestao>('DEMANDA_30D');
   const [tipoFiltro, setTipoFiltro] = useState<TipoFiltro>('marca');
   const [codigoFiltro, setCodigoFiltro] = useState('');
+  // Combobox de marca (pesquisável por código OU nome; limpável e re-pesquisável)
+  const [marcaSel, setMarcaSel] = useState<{ codmarca: string; descr: string } | null>(null);
+  const [marcaBusca, setMarcaBusca] = useState('');
+  const [marcaResultados, setMarcaResultados] = useState<{ codmarca: string; descr: string }[]>([]);
+  const [marcaAberto, setMarcaAberto] = useState(false);
+  const buscarMarcas = useDebouncedCallback(async (termo: string) => {
+    if (!termo || termo.trim().length < 1) {
+      setMarcaResultados([]);
+      return;
+    }
+    try {
+      const r = await fetch(
+        `/api/marcas/get?perPage=30&search=${encodeURIComponent(termo.trim())}`,
+      );
+      const d = r.ok ? await r.json() : { data: [] };
+      setMarcaResultados(d.data || []);
+    } catch {
+      setMarcaResultados([]);
+    }
+  }, 300);
+  const limparMarca = () => {
+    setMarcaSel(null);
+    setCodigoFiltro('');
+    setMarcaBusca('');
+    setMarcaResultados([]);
+    setMarcaAberto(false);
+  };
   const [sugestoes, setSugestoes] = useState<ItemSugestao[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
@@ -195,6 +227,42 @@ export default function SugestaoAutomatica({
     }
   };
 
+  // Entrega os itens marcados ao carrinho (Adicionar Produtos) em vez de
+  // importar direto na requisição.
+  const handleAdicionarAoCarrinho = () => {
+    const itensSelecionados = sugestoes.filter((s) => s.selecionado);
+    if (itensSelecionados.length === 0) {
+      setErro('Selecione pelo menos um item para adicionar');
+      return;
+    }
+    onAdicionarSelecionados?.(itensSelecionados);
+    setSucesso(`${itensSelecionados.length} item(ns) enviado(s) para o carrinho.`);
+    setSugestoes((prev) => prev.filter((s) => !s.selecionado));
+  };
+
+  // Edição de quantidade/preço direto nos resultados
+  const atualizarItem = (
+    codprod: string,
+    campo: 'qtdSugerida' | 'preco',
+    valor: number,
+  ) => {
+    setSugestoes((prev) =>
+      prev.map((s) =>
+        s.codprod === codprod ? { ...s, [campo]: isNaN(valor) ? 0 : valor } : s,
+      ),
+    );
+  };
+
+  // Busca dentro dos resultados (por referência ou descrição)
+  const [filtroTexto, setFiltroTexto] = useState('');
+  const sugestoesFiltradas = filtroTexto.trim()
+    ? sugestoes.filter((s) =>
+        `${s.ref} ${s.descr}`
+          .toLowerCase()
+          .includes(filtroTexto.trim().toLowerCase()),
+      )
+    : sugestoes;
+
   const qtdSelecionados = sugestoes.filter(s => s.selecionado).length;
 
   return (
@@ -242,14 +310,66 @@ export default function SugestaoAutomatica({
               </Select>
             </div>
 
-            {/* Código */}
+            {/* Código / Marca (combobox pesquisável para marca) */}
             <div className="space-y-2">
-              <Label>{tipoFiltro === 'marca' ? 'Código da Marca' : 'Código do Grupo'}</Label>
-              <Input
-                value={codigoFiltro}
-                onChange={(e) => setCodigoFiltro(e.target.value)}
-                placeholder="Ex: 00001"
-              />
+              <Label>{tipoFiltro === 'marca' ? 'Marca' : 'Código do Grupo'}</Label>
+              {tipoFiltro === 'marca' ? (
+                <div className="relative">
+                  <div className="flex items-center rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-sm">
+                    <input
+                      className="flex-1 bg-transparent px-3 py-[6px] text-sm text-gray-900 dark:text-white outline-none"
+                      placeholder="Digite código ou nome da marca..."
+                      value={marcaSel ? `${marcaSel.codmarca} - ${marcaSel.descr}` : marcaBusca}
+                      onChange={(e) => {
+                        if (marcaSel) {
+                          setMarcaSel(null);
+                          setCodigoFiltro('');
+                        }
+                        setMarcaBusca(e.target.value);
+                        buscarMarcas(e.target.value);
+                        setMarcaAberto(true);
+                      }}
+                      onFocus={() => setMarcaAberto(true)}
+                      onBlur={() => setTimeout(() => setMarcaAberto(false), 150)}
+                    />
+                    {(marcaSel || marcaBusca) && (
+                      <button
+                        type="button"
+                        onClick={limparMarca}
+                        title="Limpar marca"
+                        className="px-2 text-gray-400 hover:text-red-500"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {marcaAberto && !marcaSel && marcaResultados.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full max-h-52 overflow-auto rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-md">
+                      {marcaResultados.map((m) => (
+                        <button
+                          key={m.codmarca}
+                          type="button"
+                          onClick={() => {
+                            setMarcaSel(m);
+                            setCodigoFiltro(m.codmarca);
+                            setMarcaBusca('');
+                            setMarcaAberto(false);
+                          }}
+                          className="block w-full text-left px-3 py-1.5 text-sm text-gray-900 dark:text-white hover:bg-blue-50 dark:hover:bg-zinc-700"
+                        >
+                          {m.codmarca} - {m.descr}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Input
+                  value={codigoFiltro}
+                  onChange={(e) => setCodigoFiltro(e.target.value)}
+                  placeholder="Ex: 00001"
+                />
+              )}
             </div>
 
             {/* Botão Gerar */}
@@ -291,7 +411,13 @@ export default function SugestaoAutomatica({
       {/* Tabela de Resultados */}
       {sugestoes.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-3">
+            {/* Busca dentro dos resultados (referência ou descrição) */}
+            <Input
+              value={filtroTexto}
+              onChange={(e) => setFiltroTexto(e.target.value)}
+              placeholder="Buscar nos resultados por referência ou descrição..."
+            />
             <div className="flex justify-between items-center">
               <div>
                 <Button
@@ -312,12 +438,17 @@ export default function SugestaoAutomatica({
               </div>
 
               <Button
-                onClick={handleImportar}
+                onClick={
+                  onAdicionarSelecionados
+                    ? handleAdicionarAoCarrinho
+                    : handleImportar
+                }
                 disabled={qtdSelecionados === 0 || loading}
                 className="bg-green-600 hover:bg-green-700"
               >
                 <CheckCircle className="mr-2 h-4 w-4" />
-                Importar {qtdSelecionados > 0 && `(${qtdSelecionados})`}
+                {onAdicionarSelecionados ? 'Adicionar Selecionados' : 'Importar'}{' '}
+                {qtdSelecionados > 0 && `(${qtdSelecionados})`}
               </Button>
             </div>
           </CardHeader>
@@ -342,7 +473,7 @@ export default function SugestaoAutomatica({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sugestoes.map((item) => (
+                    {sugestoesFiltradas.map((item) => (
                       <TableRow
                         key={item.codprod}
                         className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -369,8 +500,24 @@ export default function SugestaoAutomatica({
                             {item.curvaABC}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-bold">
-                          {item.qtdSugerida}
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={item.qtdSugerida}
+                            onChange={(e) =>
+                              atualizarItem(
+                                item.codprod,
+                                'qtdSugerida',
+                                parseFloat(e.target.value),
+                              )
+                            }
+                            className="w-20 text-right rounded border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 text-sm font-bold text-gray-900 dark:text-white"
+                          />
                         </TableCell>
                         <TableCell className="text-right text-blue-600 font-medium">
                           {item.multiploCompra || 1}
@@ -379,8 +526,27 @@ export default function SugestaoAutomatica({
                         <TableCell className="text-right">{item.transito}</TableCell>
                         <TableCell className="text-right">{item.demanda30d}</TableCell>
                         <TableCell className="text-right">{item.demandaTrimestre}</TableCell>
-                        <TableCell className="text-right">
-                          R$ {item.preco.toFixed(2)}
+                        <TableCell
+                          className="text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-xs text-gray-500">R$</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={item.preco}
+                              onChange={(e) =>
+                                atualizarItem(
+                                  item.codprod,
+                                  'preco',
+                                  parseFloat(e.target.value),
+                                )
+                              }
+                              className="w-24 text-right rounded border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

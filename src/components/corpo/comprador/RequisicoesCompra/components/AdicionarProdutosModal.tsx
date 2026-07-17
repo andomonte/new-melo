@@ -10,6 +10,7 @@ import { formataMoedaBR } from '@/components/common/InputMoeda';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { motivoBloqueioRequisicao, rotuloStatus } from '../statusRequisicao';
+import SugestaoAutomatica, { ItemSugestao } from './SugestaoAutomatica';
 
 interface ProdutoSelecionado extends Produto {
   quantidade: number;
@@ -38,6 +39,63 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   });
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosSelecionados, setProdutosSelecionados] = useState<ProdutoSelecionado[]>([]);
+  const [abaAdd, setAbaAdd] = useState<'buscar' | 'sugestao'>('buscar');
+
+  // Itens vindos da Sugestão Automática entram no MESMO carrinho, usando a
+  // quantidade sugerida e o preço da sugestão. Bloqueia D/S/N como no manual.
+  const adicionarSugeridos = (itens: ItemSugestao[]) => {
+    const bloqueados: string[] = [];
+    const semValor: string[] = [];
+    setProdutosSelecionados((prev) => {
+      const mapa = new Map(prev.map((p) => [p.codprod, p]));
+      itens.forEach((it) => {
+        if (motivoBloqueioRequisicao((it as any).inf)) {
+          bloqueados.push(it.ref || it.codprod);
+          return;
+        }
+        const preco = Number(it.preco) || 0;
+        // Não permite entrar com valor 0 — o preço é editável na lista da
+        // sugestão; informe antes de adicionar.
+        if (!(preco > 0)) {
+          semValor.push(it.ref || it.codprod);
+          return;
+        }
+        const qtd = Number(it.qtdSugerida) || 1;
+        mapa.set(it.codprod, {
+          ...(mapa.get(it.codprod) as any),
+          codprod: it.codprod,
+          descr: it.descr,
+          marca: it.marca,
+          ref: it.ref,
+          quantidade: qtd,
+          preco_unitario: preco,
+          preco_total: qtd * preco,
+          observacao: '',
+        } as ProdutoSelecionado);
+      });
+      return Array.from(mapa.values());
+    });
+    const avisos: string[] = [];
+    if (bloqueados.length) {
+      avisos.push(
+        `Desativados/substituídos/sem giro: ${bloqueados.slice(0, 5).join(', ')}${bloqueados.length > 5 ? '…' : ''}`,
+      );
+    }
+    if (semValor.length) {
+      avisos.push(
+        `Sem preço (valor 0) — informe o preço na lista antes de adicionar: ${semValor.slice(0, 5).join(', ')}${semValor.length > 5 ? '…' : ''}`,
+      );
+    }
+    if (avisos.length) {
+      pedirConfirmacao(() => {}, {
+        title: 'Alguns itens não foram adicionados',
+        message: avisos.join('\n'),
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+  };
   const [busca, setBusca] = useState('');
   const [debouncedBusca] = useDebounce(busca, 500);
   const [loading, setLoading] = useState(false);
@@ -219,13 +277,15 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
       (p) => !(Number(p.preco_unitario) > 0),
     );
     if (semValor.length > 0) {
-      toast({
+      pedirConfirmacao(() => {}, {
         title: 'Informe um valor maior que 0',
-        description: `${semValor.length} item(ns) estão com valor 0: ${semValor
+        message: `${semValor.length} item(ns) estão com valor 0:\n${semValor
           .map((p) => p.ref || p.codprod)
           .slice(0, 5)
           .join(', ')}${semValor.length > 5 ? '…' : ''}`,
-        variant: 'destructive',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
       });
       return;
     }
@@ -274,7 +334,30 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
 
         <div className="flex-grow overflow-y-auto px-6 py-6 text-gray-800 dark:text-gray-100">
           <div className="bg-white dark:bg-zinc-700 rounded-lg p-6 shadow space-y-6 w-full mx-auto">
-            
+
+            {/* Abas: Buscar Produtos | Sugestão Automática */}
+            <div className="flex gap-2 border-b border-gray-200 dark:border-gray-600">
+              {([
+                ['buscar', 'Buscar Produtos'],
+                ['sugestao', 'Sugestão Automática'],
+              ] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setAbaAdd(val)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                    abaAdd === val
+                      ? 'border-[#347AB6] text-[#347AB6]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {abaAdd === 'buscar' && (
+            <>
             {/* Campo de busca */}
             <div className="flex gap-4">
               <div className="flex-1 relative">
@@ -507,6 +590,65 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                 )}
               </div>
             </div>
+            </>
+            )}
+
+            {abaAdd === 'sugestao' && (
+              <SugestaoAutomatica onAdicionarSelecionados={adicionarSugeridos} />
+            )}
+
+            {/* Carrinho — visível nas duas abas, para acompanhar e remover */}
+            {produtosSelecionados.length > 0 && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-zinc-700 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-sm font-bold text-[#347AB6]">
+                    Itens no Carrinho ({produtosSelecionados.length})
+                  </h5>
+                  <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                    Total: R${' '}
+                    {produtosSelecionados
+                      .reduce((t, p) => t + (p.preco_total || 0), 0)
+                      .toFixed(2)}
+                  </span>
+                </div>
+                <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-600">
+                  {produtosSelecionados.map((p) => (
+                    <div
+                      key={p.codprod}
+                      className="flex items-center gap-3 py-2 text-sm"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate text-gray-900 dark:text-gray-100">
+                          {p.ref ? `${p.ref} — ` : ''}
+                          {p.descr}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Cód: {p.codprod}
+                          {p.marca ? ` · Marca: ${p.marca}` : ''}
+                        </div>
+                      </div>
+                      <div className="text-right whitespace-nowrap">
+                        <span className="text-gray-600 dark:text-gray-300">
+                          {p.quantidade} × R${' '}
+                          {Number(p.preco_unitario || 0).toFixed(2)}
+                        </span>
+                        <span className="ml-2 font-bold text-green-600 dark:text-green-400">
+                          R$ {Number(p.preco_total || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removerProduto(p.codprod)}
+                        title="Remover do carrinho"
+                        className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded bg-red-500 hover:bg-red-600 text-white"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
