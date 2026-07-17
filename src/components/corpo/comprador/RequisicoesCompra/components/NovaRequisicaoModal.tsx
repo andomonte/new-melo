@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { ToastAction } from '@/components/ui/toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import FormFooter2 from '@/components/common/FormFooter2';
 import { AdicionarProdutosModal } from './AdicionarProdutosModal';
 import { TiShoppingCart } from 'react-icons/ti';
@@ -46,6 +47,10 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
   initialData
 }) => {
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar',
+    message: '',
+  });
   const router = useRouter();
   const { user } = useContext(AuthContext);
   
@@ -292,10 +297,12 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
     }
 
     if (errors.length > 0) {
-      toast({
-        title: "Campos obrigatórios não preenchidos",
-        description: errors.join(', '),
-        variant: "destructive",
+      pedirConfirmacao(() => {}, {
+        title: 'Campos obrigatórios não preenchidos',
+        message: errors.join('\n'),
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
       });
       return false;
     }
@@ -309,41 +316,25 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
     );
 
     if (hasData) {
-      toast({
-        title: "Descartar alterações?",
-        description: "Todas as informações não salvas serão perdidas.",
-        variant: "destructive",
-        action: (
-          <ToastAction 
-            altText="Confirmar"
-            onClick={() => {
-              resetForm();
-              onClose();
-            }}
-          >
-            Confirmar
-          </ToastAction>
-        ),
-      });
+      pedirConfirmacao(
+        () => {
+          resetForm();
+          onClose();
+        },
+        {
+          title: 'Descartar alterações?',
+          message: 'Todas as informações não salvas serão perdidas.',
+          type: 'warning',
+          confirmText: 'Sim, descartar',
+          cancelText: 'Não',
+        },
+      );
     } else {
       onClose();
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
-    toast({
-      title: "Confirmar criação da requisição?",
-      description: "Uma nova requisição de compra será criada com os dados informados.",
-      action: (
-        <ToastAction 
-          altText="Confirmar"
-          onClick={async () => {
+  const criarRequisicao = async () => {
             setSubmitting(true);
             try {
               const payload = mapFormToApiPayload(formData);
@@ -447,11 +438,17 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
             } finally {
               setSubmitting(false);
             }
-          }}
-        >
-          Confirmar
-        </ToastAction>
-      ),
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    pedirConfirmacao(criarRequisicao, {
+      title: 'Confirmar criação da requisição?',
+      message: 'Uma nova requisição de compra será criada com os dados informados.',
+      type: 'info',
+      confirmText: 'Sim, criar',
+      cancelText: 'Não',
     });
   };
 
@@ -914,6 +911,7 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
           </div>
         </div>
       )}
+      {ConfirmacaoSalvarModal}
     </div>
   );
 };
