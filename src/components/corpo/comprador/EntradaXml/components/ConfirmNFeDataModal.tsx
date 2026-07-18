@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Building2, User, Package, Truck, Save, ArrowRight, Search, ChevronDown } from 'lucide-react';
+import { X, FileText, Building2, User, Package, Truck, Save, ArrowRight, Search, ChevronDown, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ import { formatCurrency, formatDateTime } from '../utils/formatters';
 import { FornecedorAutocomplete } from '../../RequisicoesCompra/components/FornecedorAutocomplete';
 import { CompradorAutocomplete } from '../../RequisicoesCompra/components/CompradorAutocomplete';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { useDebounce } from 'use-debounce';
 import api from '@/components/services/api';
 
@@ -81,6 +82,10 @@ interface Fornecedor {
 
 // Interface para dados de transportadora do XML
 interface TransportadoraXml {
+  cpf_cnpj?: string;
+  xnome?: string;
+  ie?: string;
+  uf?: string;
   especie?: string;
   marca?: string;
   numeracao?: string;
@@ -272,8 +277,19 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   loading = false
 }) => {
   const { toast } = useToast();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+    title: 'Confirmar',
+    message: '',
+  });
   const [saving, setSaving] = useState(false);
   const [transportadoraXml, setTransportadoraXml] = useState<TransportadoraXml | null>(null);
+  // Status do casamento automático por CNPJ (espelha CON_FORNECEDOR/CON_TRANSP
+  // do Delphi): null=não avaliado, 'auto'=vinculado sozinho, 'salvo'=veio de
+  // associação já gravada, 'multiplos'=vários cadastros com o CNPJ (escolher),
+  // 'nao_encontrado'=CNPJ ausente no cadastro.
+  type MatchStatus = null | 'auto' | 'salvo' | 'multiplos' | 'nao_encontrado';
+  const [matchFornec, setMatchFornec] = useState<MatchStatus>(null);
+  const [matchTransp, setMatchTransp] = useState<MatchStatus>(null);
 
   const [formData, setFormData] = useState<FormDataState>({
     operacao: 0,
@@ -323,22 +339,80 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
         usarTransportadoraNfe: true,
       });
       setTransportadoraXml(null);
+      setMatchFornec(null);
+      setMatchTransp(null);
 
-      // Carregar dados salvos
-      fetchTransportadoraXml();
-      fetchDadosAuxExistentes();
+      // 1) carrega dados do XML e associação salva; 2) para o que não veio
+      // salvo, casa o CNPJ com o cadastro (auto-vincula se achar exatamente 1).
+      (async () => {
+        const transp = await fetchTransportadoraXml();
+        const aux = await fetchDadosAuxExistentes();
+
+        if (aux?.codcredor) {
+          setMatchFornec('salvo');
+        } else if (nfe.cnpjEmitente) {
+          await autoMatchCredor(nfe.cnpjEmitente, 'fornecedor');
+        }
+
+        if (aux?.codtransp) {
+          setMatchTransp('salvo');
+        } else if (transp?.cpf_cnpj) {
+          await autoMatchCredor(transp.cpf_cnpj, 'transportadora');
+        }
+      })();
     }
   }, [isOpen, nfe?.id]);
 
-  const fetchTransportadoraXml = async () => {
+  // Busca no cadastro (dbcredor) o credor com o CNPJ da NFe. Se achar exatamente
+  // 1, vincula sozinho; se achar vários, sinaliza para o usuário escolher; se
+  // não achar, sinaliza ausência (para etapa de cadastrar na hora).
+  const autoMatchCredor = async (
+    cnpj: string,
+    tipo: 'fornecedor' | 'transportadora',
+  ) => {
+    const setMatch = tipo === 'fornecedor' ? setMatchFornec : setMatchTransp;
+    try {
+      const r = await api.get('/api/entrada-xml/credor-por-cnpj', {
+        params: { cnpj },
+      });
+      const matches: any[] = r.data?.data || [];
+      if (matches.length === 1) {
+        const m = matches[0];
+        if (tipo === 'fornecedor') {
+          setFormData((prev) => ({
+            ...prev,
+            fornecedor: m,
+            usarFornecedorNfe: false,
+          }));
+        } else {
+          setFormData((prev) => ({
+            ...prev,
+            transportadora: m,
+            usarTransportadoraNfe: false,
+          }));
+        }
+        setMatch('auto');
+      } else if (matches.length === 0) {
+        setMatch('nao_encontrado');
+      } else {
+        setMatch('multiplos');
+      }
+    } catch {
+      // Silencioso — mantém o comportamento manual atual.
+    }
+  };
+
+  const fetchTransportadoraXml = async (): Promise<TransportadoraXml | null> => {
     try {
       const response = await api.get(`/api/entrada-xml/transportadora-xml/${nfe.id}`);
       if (response.data.success && response.data.data) {
         setTransportadoraXml(response.data.data);
+        return response.data.data as TransportadoraXml;
       }
     } catch (error) {
       // Dados de transportadora do XML não disponíveis
     }
+    return null;
   };
 
   const fetchDadosAuxExistentes = async () => {
@@ -419,10 +493,12 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
           usarFornecedorNfe: !dados.codcredor,
           usarTransportadoraNfe: !dados.codtransp,
         }));
+        return { codcredor: dados.codcredor, codtransp: dados.codtransp };
       }
     } catch (error) {
       // Dados auxiliares ainda não existem
     }
+    return null;
   };
 
   const handleInputChange = (field: keyof FormDataState, value: any) => {
@@ -430,6 +506,35 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
       ...prev,
       [field]: value
     }));
+  };
+
+  // Selo do resultado do casamento por CNPJ, mostrado em cada seção.
+  const renderMatchBadge = (status: MatchStatus, label: string) => {
+    if (status === 'auto') {
+      return (
+        <div className="mb-3 flex items-center gap-2 rounded-md bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 px-3 py-1.5 text-xs text-green-800 dark:text-green-200">
+          <CheckCircle2 size={14} />
+          {label} vinculado automaticamente pelo CNPJ da nota.
+        </div>
+      );
+    }
+    if (status === 'multiplos') {
+      return (
+        <div className="mb-3 flex items-center gap-2 rounded-md bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 px-3 py-1.5 text-xs text-blue-800 dark:text-blue-200">
+          <AlertTriangle size={14} />
+          Vários cadastros com esse CNPJ — selecione o {label.toLowerCase()} correto abaixo.
+        </div>
+      );
+    }
+    if (status === 'nao_encontrado') {
+      return (
+        <div className="mb-3 flex items-center gap-2 rounded-md bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+          <AlertTriangle size={14} />
+          CNPJ da nota não encontrado no cadastro de {label.toLowerCase()}.
+        </div>
+      );
+    }
+    return null;
   };
 
   const handleCompradorChange = (codigo: string, nome: string) => {
@@ -482,7 +587,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }
   };
 
-  const handleConfirm = () => {
+  const prosseguirConfirmacao = () => {
     const payload: NFeConfirmationData = {
       operacao: formData.operacao,
       compradorId: formData.comprador?.codigo || '',
@@ -505,6 +610,62 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     onConfirm(payload);
   };
 
+  // Etapa 2: valida a associação de fornecedor/transportadora antes de avançar
+  // (espelha as travas do Delphi). Erros claros bloqueiam; casos "sem vínculo"
+  // pedem confirmação para prosseguir.
+  const handleConfirm = () => {
+    const soDigitos = (s?: string) => (s || '').replace(/\D/g, '');
+    const cnpjNota = soDigitos(nfe.cnpjEmitente);
+
+    // Fornecedor: escolheu "Buscar do cadastro" mas não selecionou.
+    if (!formData.usarFornecedorNfe && !formData.fornecedor) {
+      return pedirConfirmacao(() => {}, {
+        title: 'Fornecedor não selecionado',
+        message: 'Selecione o fornecedor no cadastro ou marque "Usar dados da NFe".',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+
+    // Fornecedor do cadastro com CNPJ diferente do emitente da nota.
+    const cnpjForn = soDigitos(formData.fornecedor?.cpf_cgc);
+    if (!formData.usarFornecedorNfe && cnpjForn && cnpjNota && cnpjForn !== cnpjNota) {
+      return pedirConfirmacao(prosseguirConfirmacao, {
+        title: 'CNPJ do fornecedor diverge da nota',
+        message: `O CNPJ do fornecedor selecionado (${formData.fornecedor?.cpf_cgc}) é diferente do emitente da nota (${nfe.cnpjEmitente}). Deseja prosseguir mesmo assim?`,
+        type: 'warning',
+        confirmText: 'Sim, prosseguir',
+        cancelText: 'Revisar',
+      });
+    }
+
+    // Transportadora: escolheu "Buscar do cadastro" mas não selecionou.
+    if (!formData.usarTransportadoraNfe && !formData.transportadora) {
+      return pedirConfirmacao(() => {}, {
+        title: 'Transportadora não selecionada',
+        message: 'Selecione a transportadora no cadastro ou marque "Usar dados da NFe".',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+
+    // A nota tem transportadora, mas ela não foi vinculada ao cadastro.
+    const cnpjTransp = soDigitos(transportadoraXml?.cpf_cnpj);
+    if (formData.usarTransportadoraNfe && cnpjTransp) {
+      return pedirConfirmacao(prosseguirConfirmacao, {
+        title: 'Transportadora não vinculada',
+        message: `A transportadora da nota (${transportadoraXml?.xnome || cnpjTransp}) não está vinculada a um cadastro. Deseja prosseguir mesmo assim?`,
+        type: 'warning',
+        confirmText: 'Sim, prosseguir',
+        cancelText: 'Revisar',
+      });
+    }
+
+    prosseguirConfirmacao();
+  };
+
   // Mapear finalidade NFe
   const getFinalidadeNFe = (finnfe?: number): string => {
     switch (finnfe) {
@@ -520,7 +681,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-[92vw] w-full mx-4 max-h-[95vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
           <div className="flex items-center space-x-3">
@@ -538,7 +699,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(95vh-140px)]">
           {/* Dados da Nota Fiscal (Read-only) */}
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
             <h3 className="text-lg font-medium text-blue-800 dark:text-blue-200 mb-4 flex items-center">
@@ -997,6 +1158,8 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
               </div>
             </div>
 
+            {renderMatchBadge(matchFornec, 'Fornecedor')}
+
             {/* Busca do fornecedor cadastrado */}
             {!formData.usarFornecedorNfe && (
               <div className="mb-4">
@@ -1072,6 +1235,8 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                 <Label htmlFor="transp-cadastro" className="text-sm">Buscar do cadastro</Label>
               </div>
             </div>
+
+            {renderMatchBadge(matchTransp, 'Transportadora')}
 
             {/* Busca da transportadora cadastrada */}
             {!formData.usarTransportadoraNfe && (
@@ -1251,6 +1416,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
           </div>
         </div>
       </div>
+      {ConfirmacaoSalvarModal}
     </div>
   );
 };
