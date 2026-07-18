@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { CaretSortIcon, CheckIcon } from '@radix-ui/react-icons';
@@ -54,6 +55,7 @@ export default function ComboboxInput({
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialRef = useRef<string | undefined>(undefined);
 
@@ -66,10 +68,15 @@ export default function ComboboxInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, selectedLabel]);
 
-  // Fecha ao clicar fora
+  // Fecha ao clicar fora — considera o wrapper E o dropdown (que fica em portal
+  // no body, então não está dentro do wrapper).
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      const alvo = e.target as Node;
+      const dentro =
+        (wrapperRef.current && wrapperRef.current.contains(alvo)) ||
+        (dropdownRef.current && dropdownRef.current.contains(alvo));
+      if (!dentro) {
         setOpen(false);
         setSelectedIndex(-1);
         setSearch(selectedLabel); // volta a mostrar o selecionado
@@ -79,22 +86,37 @@ export default function ComboboxInput({
     return () => document.removeEventListener('mousedown', onClick);
   }, [selectedLabel]);
 
-  // Posição fixa (funciona dentro de scroll/modal)
+  // Recalcula a posição a partir do campo (viewport). Precisa rodar não só ao
+  // abrir, mas também em scroll/resize: ao focar o input o container do modal
+  // pode rolar para trazê-lo à vista, e sem recalcular o dropdown ficava
+  // ancorado na posição antiga (aparecia lá embaixo, sobre outro campo).
+  const atualizarPosicao = useCallback(() => {
+    if (!wrapperRef.current) return;
+    const rect = wrapperRef.current.getBoundingClientRect();
+    const abrirCima = window.innerHeight - rect.bottom < 220;
+    setDropdownStyle({
+      position: 'fixed',
+      width: rect.width,
+      left: rect.left,
+      ...(abrirCima
+        ? { bottom: window.innerHeight - rect.top + 4 }
+        : { top: rect.bottom + 4 }),
+      zIndex: 9999,
+    });
+  }, []);
+
+  // Posição fixa (funciona dentro de scroll/modal) + mantém alinhado no scroll
   useEffect(() => {
-    if (open && wrapperRef.current) {
-      const rect = wrapperRef.current.getBoundingClientRect();
-      const abrirCima = window.innerHeight - rect.bottom < 220;
-      setDropdownStyle({
-        position: 'fixed',
-        width: rect.width,
-        left: rect.left,
-        ...(abrirCima
-          ? { bottom: window.innerHeight - rect.top + 4 }
-          : { top: rect.bottom + 4 }),
-        zIndex: 9999,
-      });
-    }
-  }, [open]);
+    if (!open) return;
+    atualizarPosicao();
+    // capture:true pega o scroll de qualquer container ancestral, não só o da janela
+    window.addEventListener('scroll', atualizarPosicao, true);
+    window.addEventListener('resize', atualizarPosicao);
+    return () => {
+      window.removeEventListener('scroll', atualizarPosicao, true);
+      window.removeEventListener('resize', atualizarPosicao);
+    };
+  }, [open, atualizarPosicao]);
 
   // Filtra: enquanto digita (search != selecionado) filtra por contém; senão lista tudo
   const termo = open && search !== selectedLabel ? search.trim() : '';
@@ -182,6 +204,19 @@ export default function ComboboxInput({
             setOpen(true);
             e.currentTarget.select();
           }}
+          onBlur={(e) => {
+            // Fecha ao sair do campo (Tab ou clicar em outro campo/botão). Sem
+            // isto, navegar por teclado deixava vários combos abertos ao mesmo
+            // tempo. Clique numa opção não tira o foco do input (div não-focável),
+            // então não fecha aqui — é tratado pelo onClick da opção.
+            const rel = e.relatedTarget as Node | null;
+            if (rel && dropdownRef.current?.contains(rel)) return;
+            if (rel) {
+              setOpen(false);
+              setSelectedIndex(-1);
+              setSearch(selectedLabel);
+            }
+          }}
           className={cn(
             'flex h-9 w-full items-center rounded-md border px-3 py-2 pr-14 text-sm shadow-sm transition-colors',
             modified
@@ -198,6 +233,7 @@ export default function ComboboxInput({
             <button
               type="button"
               tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={limpar}
               className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
             >
@@ -207,6 +243,7 @@ export default function ComboboxInput({
           <button
             type="button"
             tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => !disabled && setOpen((o) => !o)}
             className="text-gray-400 dark:text-gray-300"
             disabled={disabled}
@@ -215,8 +252,9 @@ export default function ComboboxInput({
           </button>
         </div>
 
-        {open && (
+        {open && typeof document !== 'undefined' && createPortal(
           <div
+            ref={dropdownRef}
             className="rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg"
             style={dropdownStyle}
           >
@@ -261,7 +299,8 @@ export default function ComboboxInput({
                   ))
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
       {error && <p className="text-sm text-red-500">{error}</p>}
