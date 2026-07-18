@@ -15,6 +15,7 @@ import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import CadastrarProduto from './modalCadastrar';
 import EditarProduto from './modalEditar';
 import { ProdutoZoomModal } from './ProdutoZoomModal';
+import { ProdutoDetalheExpandido } from './ProdutoDetalheExpandido';
 import { CopiarProdutoModal } from './CopiarProdutoModal';
 import { AlteracaoMassaModal } from './AlteracaoMassaModal';
 import { AlterarCamposListaModal } from './AlterarCamposListaModal';
@@ -1324,6 +1325,9 @@ const ProdutosPage = () => {
     // Código oculto para recuperar a ordem exibida na navegação de registros
     // (não é uma coluna — não aparece na grade).
     (linha as any).__codprod = id;
+    // Produto completo anexado à linha para o painel expansível (equivalentes,
+    // relacionados, estoque por armazém/locação).
+    (linha as any).__produto = produto;
     return linha;
   });
 
@@ -1386,6 +1390,9 @@ const ProdutosPage = () => {
           rows={rows || []}
           semColunaDeAcaoPadrao={true}
           nonsortableColumns={['Ações', 'selecionar']}
+          expandableRowRender={(row) => (
+            <ProdutoDetalheExpandido produto={(row as any).__produto} />
+          )}
           onOrderedRowsChange={(ordered) => {
             const ids = ordered
               .map((r) => (r as any).__codprod)

@@ -78,6 +78,15 @@ interface DataTablePadraoProps {
       ordenação por coluna). Usado para navegar registros na mesma sequência
       que o usuário vê na grade. */
   onOrderedRowsChange?: (rows: any[]) => void;
+  /** Opt-in: quando informado, clicar numa linha expande um painel logo abaixo
+      dela com este conteúdo (uma linha aberta por vez, tipo acordeão). Não
+      afeta telas que não passam a prop. */
+  expandableRowRender?: (row: any) => React.ReactNode;
+  /** Chave estável da linha para controlar a expansão (default: __codprod). */
+  getRowKey?: (row: any) => string;
+  /** Aceito por compatibilidade com telas existentes (gerenciador de colunas
+      externo); não é usado internamente aqui. */
+  onColunaSubstituida?: (colA: string, colB: string, tipo?: 'replace' | 'swap') => void;
 }
 
 export default function DataTablePadrao({
@@ -114,6 +123,8 @@ export default function DataTablePadrao({
   columnLabels,
   searchValue,
   onOrderedRowsChange,
+  expandableRowRender,
+  getRowKey,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
@@ -121,6 +132,10 @@ export default function DataTablePadrao({
   const rotulo = (h: string) => columnLabels?.[h] ?? obterNomeAmigavel(h);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  // Linha expandida (acordeão de uma por vez). Guardamos a chave da linha.
+  const [linhaExpandida, setLinhaExpandida] = useState<string | null>(null);
+  const chaveDaLinha = (row: any, idx: number) =>
+    getRowKey ? getRowKey(row) : String(row?.__codprod ?? row?.codprod ?? idx);
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});
@@ -834,11 +849,25 @@ export default function DataTablePadrao({
               rows?.length === 0 ? (
                 null
               ) : (
-                linhasOrdenadas.map((row, rowIndex) => (
+                linhasOrdenadas.map((row, rowIndex) => {
+                  const rowKey = chaveDaLinha(row, rowIndex);
+                  const estaExpandida = !!expandableRowRender && linhaExpandida === rowKey;
+                  const colSpanTotal = ordemColunas.filter(
+                    (h) => colunasVisiveis.includes(h) && headers.indexOf(h) !== -1,
+                  ).length;
+                  return (
+                  <React.Fragment key={rowKey}>
                   <tr
-                    key={rowIndex}
-                    className={`hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
-                    onClick={() => onRowClick?.(row)}
+                    className={`hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors ${onRowClick || expandableRowRender ? 'cursor-pointer' : ''} ${estaExpandida ? 'bg-blue-50 dark:bg-zinc-800' : ''}`}
+                    onClick={(e) => {
+                      onRowClick?.(row);
+                      if (!expandableRowRender) return;
+                      // Não alterna ao clicar em controles interativos (Ações,
+                      // checkbox de seleção, links).
+                      const alvo = e.target as HTMLElement;
+                      if (alvo.closest('button, input, a, select, [role="menuitem"], [role="menu"]')) return;
+                      setLinhaExpandida((k) => (k === rowKey ? null : rowKey));
+                    }}
                   >
                     {ordemColunas.map((header) => {
                       const cellIndex = headers.indexOf(header);
@@ -860,7 +889,16 @@ export default function DataTablePadrao({
                       );
                     })}
                   </tr>
-                ))
+                  {estaExpandida && (
+                    <tr>
+                      <td colSpan={colSpanTotal} className="p-0 bg-gray-50 dark:bg-zinc-950/40 border-b border-gray-200 dark:border-zinc-700">
+                        {expandableRowRender!(row)}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
