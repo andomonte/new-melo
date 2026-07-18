@@ -24,8 +24,42 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
   produto,
 }) => {
   const [loading, setLoading] = useState(false);
+  // Detalhe completo do produto (SELECT * dbprod) — traz datas de movimento
+  // (dtcompra/dtvenda/dtinventario/dtprcustoatual) que a linha da lista pode
+  // não ter. Estava faltando no web em relação ao zoom do Delphi.
+  const [detalhes, setDetalhes] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isOpen || !produto?.codprod) return;
+    let ativo = true;
+    setLoading(true);
+    setDetalhes(null);
+    fetch(`/api/produtos/get/${p.codprod}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((row) => {
+        if (ativo && row && !row.error) setDetalhes(row);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (ativo) setLoading(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [isOpen, produto?.codprod]);
 
   if (!produto) return null;
+
+  // Dados exibidos: detalhe do banco quando disponível, senão a linha recebida.
+  const p: any = detalhes ?? produto;
+
+  const formatDate = (value: any) => {
+    if (!value) return '-';
+    // Pega só YYYY-MM-DD para não deslocar o dia por fuso horário.
+    const s = String(value).slice(0, 10);
+    const [y, m, d] = s.split('-');
+    return d && m && y ? `${d}/${m}/${y}` : '-';
+  };
 
   const formatCurrency = (value: any) => {
     if (value === null || value === undefined || value === '') return 'R$ 0,00';
@@ -60,16 +94,16 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Código</p>
-                <p className="font-semibold text-lg">{produto.codprod}</p>
+                <p className="font-semibold text-lg">{p.codprod}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Referência</p>
-                <p className="font-semibold text-lg">{produto.ref || '-'}</p>
+                <p className="font-semibold text-lg">{p.ref || '-'}</p>
               </div>
             </div>
             <div className="mt-3">
               <p className="text-sm text-muted-foreground">Descrição</p>
-              <p className="font-semibold">{produto.descr || '-'}</p>
+              <p className="font-semibold">{p.descr || '-'}</p>
             </div>
           </div>
 
@@ -84,69 +118,69 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
             {/* Tab Dados Cadastrais */}
             <TabsContent value="cadastrais" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <InfoField label="Referência Original" value={produto.reforiginal} />
-                <InfoField label="Código de Barras" value={produto.codbar} />
-                <InfoField label="Marca" value={produto.codmarca} />
-                <InfoField label="Grupo Função" value={produto.codgpf} />
-                <InfoField label="Grupo Produto" value={produto.codgpp} />
-                <InfoField label="Unidade Medida" value={produto.unimed} />
-                <InfoField label="Curva ABC" value={produto.curva} />
-                <InfoField label="Info" value={produto.inf} />
-                <InfoField label="Múltiplo" value={produto.multiplo} />
-                <InfoField label="Múltiplo Compra" value={produto.multiplocompra} />
-                <InfoField label="Peso Líquido" value={produto.pesoliq} />
-                <InfoField label="Qtd Embalagem" value={produto.qtembal} />
-                <InfoField label="Tipo" value={produto.tipo} />
+                <InfoField label="Referência Original" value={p.reforiginal} />
+                <InfoField label="Código de Barras" value={p.codbar} />
+                <InfoField label="Marca" value={p.codmarca} />
+                <InfoField label="Grupo Função" value={p.codgpf} />
+                <InfoField label="Grupo Produto" value={p.codgpp} />
+                <InfoField label="Unidade Medida" value={p.unimed} />
+                <InfoField label="Curva ABC" value={p.curva} />
+                <InfoField label="Info" value={p.inf} />
+                <InfoField label="Múltiplo" value={p.multiplo} />
+                <InfoField label="Múltiplo Compra" value={p.multiplocompra} />
+                <InfoField label="Peso Líquido" value={p.pesoliq} />
+                <InfoField label="Qtd Embalagem" value={p.qtembal} />
+                <InfoField label="Tipo" value={p.tipo} />
                 <InfoField
                   label="Tabelado"
-                  value={produto.tabelado === 1 || produto.tabelado === '1' ? 'Sim' : 'Não'}
+                  value={p.tabelado === 1 || p.tabelado === '1' ? 'Sim' : 'Não'}
                 />
                 <InfoField
                   label="Compra Direta"
-                  value={produto.compradireta === 'S' ? 'Sim' : 'Não'}
+                  value={p.compradireta === 'S' ? 'Sim' : 'Não'}
                 />
                 <InfoField
                   label="Moeda Compra"
-                  value={produto.dolar === 'S' ? 'Dólar (US$)' : 'Real (R$)'}
+                  value={p.dolar === 'S' ? 'Dólar (US$)' : 'Real (R$)'}
                 />
               </div>
               <div>
-                <InfoField label="Observações" value={produto.obs} fullWidth />
-                <InfoField label="Aplicação Estendida" value={produto.aplic_extendida} fullWidth />
-                <InfoField label="Descrição Importação" value={produto.descr_importacao} fullWidth />
+                <InfoField label="Observações" value={p.obs} fullWidth />
+                <InfoField label="Aplicação Estendida" value={p.aplic_extendida} fullWidth />
+                <InfoField label="Descrição Importação" value={p.descr_importacao} fullWidth />
               </div>
             </TabsContent>
 
             {/* Tab Dados Fiscais */}
             <TabsContent value="fiscais" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <InfoField label="NCM/Classificação Fiscal" value={produto.clasfiscal} />
-                <InfoField label="CEST" value={produto.cest} />
-                <InfoField label="Situação Tributária" value={produto.strib} />
+                <InfoField label="NCM/Classificação Fiscal" value={p.clasfiscal} />
+                <InfoField label="CEST" value={p.cest} />
+                <InfoField label="Situação Tributária" value={p.strib} />
                 <InfoField
                   label="Tributado"
-                  value={produto.trib === 'S' ? 'Sim' : 'Não'}
+                  value={p.trib === 'S' ? 'Sim' : 'Não'}
                 />
-                <InfoField label="Nº DI" value={produto.nrodi} />
-                <InfoField label="Data DI" value={produto.dtdi} />
-                <InfoField label="% Substituição" value={formatPercent(produto.percsubst)} />
-                <InfoField label="ICMS (%)" value={formatPercent(produto.icms)} />
-                <InfoField label="IPI (%)" value={formatPercent(produto.ipi)} />
+                <InfoField label="Nº DI" value={p.nrodi} />
+                <InfoField label="Data DI" value={p.dtdi} />
+                <InfoField label="% Substituição" value={formatPercent(p.percsubst)} />
+                <InfoField label="ICMS (%)" value={formatPercent(p.icms)} />
+                <InfoField label="IPI (%)" value={formatPercent(p.ipi)} />
                 <InfoField
                   label="Isento IPI"
-                  value={produto.isentoipi === 'S' ? 'Sim' : 'Não'}
+                  value={p.isentoipi === 'S' ? 'Sim' : 'Não'}
                 />
-                <InfoField label="PIS (%)" value={formatPercent(produto.pis)} />
-                <InfoField label="COFINS (%)" value={formatPercent(produto.cofins)} />
+                <InfoField label="PIS (%)" value={formatPercent(p.pis)} />
+                <InfoField label="COFINS (%)" value={formatPercent(p.cofins)} />
                 <InfoField
                   label="Isento PIS/COFINS"
-                  value={produto.isentopiscofins === 'S' ? 'Sim' : 'Não'}
+                  value={p.isentopiscofins === 'S' ? 'Sim' : 'Não'}
                 />
                 <InfoField
                   label="Desconto PIS/COFINS"
-                  value={produto.descontopiscofins === 'S' ? 'Sim' : 'Não'}
+                  value={p.descontopiscofins === 'S' ? 'Sim' : 'Não'}
                 />
-                <InfoField label="II (%)" value={formatPercent(produto.ii)} />
+                <InfoField label="II (%)" value={formatPercent(p.ii)} />
               </div>
             </TabsContent>
 
@@ -155,12 +189,12 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
               <div>
                 <h4 className="font-semibold mb-2">Preços de Compra</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <InfoField label="Preço Compra" value={formatCurrency(produto.prcompra)} />
-                  <InfoField label="Preço Fábrica" value={formatCurrency(produto.prfabr)} />
-                  <InfoField label="Preço s/ ST" value={formatCurrency(produto.prcomprasemst)} />
-                  <InfoField label="Preço Atual Desp" value={formatCurrency(produto.pratualdesp)} />
-                  <InfoField label="Preço Custo Atual" value={formatCurrency(produto.prcustoatual)} />
-                  <InfoField label="Preço Médio" value={formatCurrency(produto.prmedio)} />
+                  <InfoField label="Preço Compra" value={formatCurrency(p.prcompra)} />
+                  <InfoField label="Preço Fábrica" value={formatCurrency(p.prfabr)} />
+                  <InfoField label="Preço s/ ST" value={formatCurrency(p.prcomprasemst)} />
+                  <InfoField label="Preço Atual Desp" value={formatCurrency(p.pratualdesp)} />
+                  <InfoField label="Preço Custo Atual" value={formatCurrency(p.prcustoatual)} />
+                  <InfoField label="Preço Médio" value={formatCurrency(p.prmedio)} />
                 </div>
               </div>
 
@@ -169,11 +203,11 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
               <div>
                 <h4 className="font-semibold mb-2">Preços de Venda</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <InfoField label="Preço Venda" value={formatCurrency(produto.prvenda)} />
-                  <InfoField label="Preço Importação" value={formatCurrency(produto.primp)} />
-                  <InfoField label="Preço NF" value={formatCurrency(produto.preconf)} />
-                  <InfoField label="Preço s/ NF" value={formatCurrency(produto.precosnf)} />
-                  <InfoField label="Concorrência" value={formatCurrency(produto.concor)} />
+                  <InfoField label="Preço Venda" value={formatCurrency(p.prvenda)} />
+                  <InfoField label="Preço Importação" value={formatCurrency(p.primp)} />
+                  <InfoField label="Preço NF" value={formatCurrency(p.preconf)} />
+                  <InfoField label="Preço s/ NF" value={formatCurrency(p.precosnf)} />
+                  <InfoField label="Concorrência" value={formatCurrency(p.concor)} />
                 </div>
               </div>
 
@@ -182,10 +216,10 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
               <div>
                 <h4 className="font-semibold mb-2">Importação</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <InfoField label="Importação Fatura" value={formatCurrency(produto.impfat)} />
-                  <InfoField label="Importação Fábrica" value={formatCurrency(produto.impfab)} />
-                  <InfoField label="Taxa Dólar Compra" value={formatCurrency(produto.txdolarcompra)} />
-                  <InfoField label="Taxa Dólar Venda" value={formatCurrency(produto.txdolarvenda)} />
+                  <InfoField label="Importação Fatura" value={formatCurrency(p.impfat)} />
+                  <InfoField label="Importação Fábrica" value={formatCurrency(p.impfab)} />
+                  <InfoField label="Taxa Dólar Compra" value={formatCurrency(p.txdolarcompra)} />
+                  <InfoField label="Taxa Dólar Venda" value={formatCurrency(p.txdolarvenda)} />
                 </div>
               </div>
 
@@ -194,12 +228,12 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
               <div>
                 <h4 className="font-semibold mb-2">Margens</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <InfoField label="Margem Nacional" value={formatPercent(produto.margem)} />
-                  <InfoField label="Margem Promo" value={formatPercent(produto.margempromo)} />
-                  <InfoField label="Margem Fora Estado" value={formatPercent(produto.margemfe)} />
-                  <InfoField label="Margem Promo FE" value={formatPercent(produto.margempromofe)} />
-                  <InfoField label="Margem Zona Franca" value={formatPercent(produto.margemzf)} />
-                  <InfoField label="Margem Promo ZF" value={formatPercent(produto.margempromozf)} />
+                  <InfoField label="Margem Nacional" value={formatPercent(p.margem)} />
+                  <InfoField label="Margem Promo" value={formatPercent(p.margempromo)} />
+                  <InfoField label="Margem Fora Estado" value={formatPercent(p.margemfe)} />
+                  <InfoField label="Margem Promo FE" value={formatPercent(p.margempromofe)} />
+                  <InfoField label="Margem Zona Franca" value={formatPercent(p.margemzf)} />
+                  <InfoField label="Margem Promo ZF" value={formatPercent(p.margempromozf)} />
                 </div>
               </div>
             </TabsContent>
@@ -207,12 +241,29 @@ export const ProdutoZoomModal: React.FC<ProdutoZoomModalProps> = ({
             {/* Tab Estoque */}
             <TabsContent value="estoque" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <InfoField label="Estoque Atual" value={produto.qtest} />
-                <InfoField label="Estoque Reservado" value={produto.qtdreservada} />
-                <InfoField label="Estoque Filial" value={produto.qtest_filial} />
-                <InfoField label="Estoque Mínimo" value={produto.qtestmin} />
-                <InfoField label="Estoque Máximo" value={produto.qtestmax} />
-                <InfoField label="Estoque Máx Sugerido" value={produto.qtestmax_sugerido} />
+                <InfoField label="Estoque Atual" value={p.qtest} />
+                <InfoField label="Estoque Reservado" value={p.qtdreservada} />
+                <InfoField label="Estoque Filial" value={p.qtest_filial} />
+                <InfoField label="Estoque Mínimo" value={p.qtestmin} />
+                <InfoField label="Estoque Máximo" value={p.qtestmax} />
+                <InfoField label="Estoque Máx Sugerido" value={p.qtestmax_sugerido} />
+              </div>
+
+              <Separator />
+
+              {/* Datas de movimento e disponibilidade — mesmos campos em
+                  vermelho no zoom do Delphi, que faltavam no web. */}
+              <div>
+                <h4 className="font-semibold mb-2">Movimentação e Disponibilidade</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <InfoField label="Dt. Última Entrada" value={formatDate(p.dtcompra)} />
+                  <InfoField label="Dt. Última Venda" value={formatDate(p.dtvenda)} />
+                  <InfoField label="Última Alteração (custo)" value={formatDate(p.dtprcustoatual)} />
+                  <InfoField label="Data Último Inventário" value={formatDate(p.dtinventario)} />
+                  <InfoField label="Qtd. Ent. Aberta" value={p.qtdreservada ?? 0} />
+                  <InfoField label="Qtd. Transferência" value={p.qtest_filial ?? 0} />
+                  <InfoField label="Est. Disponível" value={p.qtest ?? 0} />
+                </div>
               </div>
             </TabsContent>
           </Tabs>
