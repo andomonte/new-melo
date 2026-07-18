@@ -545,6 +545,9 @@ export default function DataTablePadrao({
                 <FiltroDinamicoDeClientes
                   colunas={colunasFiltro}
                   onChange={handleFiltroAvancado}
+                  rotulos={Object.fromEntries(
+                    (colunasFiltro || []).map((c) => [c, rotulo(c)]),
+                  )}
                 />
               </DialogContent>
             </Dialog>

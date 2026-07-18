@@ -1,10 +1,28 @@
 import React, { useState, useRef } from 'react';
 import Select from 'react-select';
+import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 
 interface FiltroDinamicoProps {
   colunas: string[];
   onChange: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
+  /** Rótulos amigáveis por coluna (override do mapa global). Opcional. */
+  rotulos?: Record<string, string>;
 }
+
+// Nome amigável da coluna (ex.: codmarca -> Marca), igual à listagem. Faz
+// fallback case-insensitive porque as chaves do mapa são minúsculas.
+const rotuloColuna = (
+  coluna: string,
+  rotulos?: Record<string, string>,
+): string => {
+  if (rotulos?.[coluna] && rotulos[coluna] !== coluna) return rotulos[coluna];
+  const amig = obterNomeAmigavel(coluna);
+  if (amig !== coluna) return amig;
+  const lc = String(coluna).toLowerCase();
+  const amigLc = obterNomeAmigavel(lc);
+  if (amigLc !== lc) return amigLc;
+  return String(coluna).toUpperCase(); // não mapeado — mantém o visual atual
+};
 const customStyles = {
   control: (provided: any) => ({
     ...provided,
@@ -78,6 +96,7 @@ const tiposDeFiltro = [
 const FiltroDinamicoDeClientes: React.FC<FiltroDinamicoProps> = ({
   colunas,
   onChange,
+  rotulos,
 }) => {
   const [filtros, setFiltros] = useState<
     { campo: string; tipo: string; valor: string }[]
@@ -163,10 +182,12 @@ const FiltroDinamicoDeClientes: React.FC<FiltroDinamicoProps> = ({
                 tipoSelectRef.current?.focus();
               }, 100);
             }}
-            options={colunas.sort().map((coluna) => ({
-              label: coluna.toUpperCase(),
-              value: coluna,
-            }))}
+            options={colunas
+              .map((coluna) => ({
+                label: rotuloColuna(coluna, rotulos),
+                value: coluna,
+              }))
+              .sort((a, b) => a.label.localeCompare(b.label))}
             className="text-sm"
             styles={customStyles}
           />
@@ -228,7 +249,7 @@ const FiltroDinamicoDeClientes: React.FC<FiltroDinamicoProps> = ({
               className="flex justify-between items-center p-2 border border-gray-300 dark:border-zinc-700 rounded"
             >
               <span className="text-sm">
-                <strong>{filtro.campo.toUpperCase()}</strong> — {filtro.tipo} —{' '}
+                <strong>{rotuloColuna(filtro.campo, rotulos)}</strong> — {filtro.tipo} —{' '}
                 {filtro.valor || 'NULO'}
               </span>
               <button
