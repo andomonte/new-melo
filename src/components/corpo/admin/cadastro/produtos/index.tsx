@@ -131,6 +131,26 @@ const ProdutosPage = () => {
   // Colunas prioritárias na ordem do Delphi
   const colunasPrioritarias = ['codprod', 'ref', 'descr', 'codmarca', 'qtest', 'prvenda', 'prcompra', 'unimed', 'codbar', 'obs'];
 
+  // Semeia as colunas do dbprod ao abrir a tela, para o Filtro Avançado por
+  // coluna ter os campos disponíveis MESMO sem produtos carregados (o filtro é
+  // o ponto de partida da busca). Ao carregar produtos, a lista é substituída
+  // pelas colunas reais dos dados.
+  useEffect(() => {
+    let ativo = true;
+    fetch('/api/produtos/colunas')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        const cols: string[] = res?.data || [];
+        if (ativo && cols.length) {
+          setColunasDbProd((prev) => (prev.length ? prev : cols));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
   // Estados de modais
   const [cadastrarOpen, setCadastrarOpen] = useState(false);
   const [editarOpen, setEditarOpen] = useState(false);
