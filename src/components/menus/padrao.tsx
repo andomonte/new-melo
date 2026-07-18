@@ -446,12 +446,6 @@ export const menus = [
             corpo: DashBoardCompras,
           },
           {
-            name: 'Nova Requisição',
-            href: '/compras/novaCompra',
-            icon: Plus,
-            corpo: NovaCompra,
-          },
-          {
             name: 'Requisições de Compra',
             href: '/compras/requisicoes-compra',
             icon: ListCheckIcon,
@@ -764,6 +758,18 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
         'Transportadoras',
         'Produtos',
       ];
+      // Compras tem ordem definida pelo negócio (não alfabética).
+      const ORDEM_COMPRAS = [
+        'Dashboard',
+        'Requisições de Compra',
+        'Entrada por XML',
+        'Entradas',
+        'Importação',
+        'Recebimento',
+        'Alocação',
+        'Devolução',
+        'Histórico de Compras',
+      ];
       itensFiltrados.forEach((it) => {
         if (!it.subItems?.length) return;
         if (it.name === 'Cadastro') {
@@ -773,6 +779,15 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
             if (ia !== -1 || ib !== -1) {
               return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
             }
+            return (a.name || '').localeCompare(b.name || '');
+          });
+        } else if (it.name === 'Compras') {
+          it.subItems.sort((a, b) => {
+            const ia = ORDEM_COMPRAS.indexOf(a.name || '');
+            const ib = ORDEM_COMPRAS.indexOf(b.name || '');
+            const va = ia === -1 ? 999 : ia;
+            const vb = ib === -1 ? 999 : ib;
+            if (va !== vb) return va - vb;
             return (a.name || '').localeCompare(b.name || '');
           });
         } else {

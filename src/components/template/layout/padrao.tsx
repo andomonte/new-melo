@@ -37,12 +37,23 @@ const LayoutPadrao: React.FC<LayoutPaginaProps> = ({
   setTelaMudou,
   tela,
 }) => {
-  const [ampliar, setAmpliar] = useState<boolean>(false);
+  // Mantém o menu expandido entre navegações (antes resetava a cada página, o
+  // que "ocultava" o menu ao clicar num item). Os submenus abertos já são
+  // persistidos em open_submenus (navBar).
+  const [ampliar, setAmpliar] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('menu_ampliado') === '1';
+    }
+    return false;
+  });
   const [open, setOpen] = useState<boolean>(false);
 
   const handleAmpliar = (statusAmpliar: boolean) => {
     setAmpliar(statusAmpliar);
     setOpen(statusAmpliar);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('menu_ampliado', statusAmpliar ? '1' : '0');
+    }
   };
 
   React.useEffect(() => {
