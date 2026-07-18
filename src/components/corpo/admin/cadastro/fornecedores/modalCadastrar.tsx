@@ -41,6 +41,9 @@ interface ModalProps {
   onSuccess?: (busca?: string) => void;
   /** Quando o documento já existe como fornecedor, abre esse fornecedor para edição */
   onEditarFornecedor?: (codCredor: string) => void;
+  /** Pré-preenche o cadastro (ex.: dados vindos de uma NFe). Opcional — quando
+   *  ausente, o modal abre em branco como sempre. */
+  dadosIniciais?: Partial<Fornecedor>;
 }
 
 export default function CustomModal({
@@ -48,6 +51,7 @@ export default function CustomModal({
   onClose,
   onSuccess,
   onEditarFornecedor,
+  dadosIniciais,
 }: ModalProps) {
   const [fornecedor, setFornecedor] = useState({} as Fornecedor);
   const [openInfo, setOpenInfo] = useState(false);
@@ -86,15 +90,17 @@ export default function CustomModal({
   const [dupMatches, setDupMatches] = useState<DocumentoMatch[]>([]);
   const [showDup, setShowDup] = useState(false);
 
-  // Sempre abrir o cadastro em branco (não traz dados de uma abertura anterior)
+  // Abre em branco (padrão) ou pré-preenchido quando dadosIniciais é informado
+  // (ex.: cadastrar fornecedor a partir de uma NFe).
   useEffect(() => {
     if (isOpen) {
-      setFornecedor({} as Fornecedor);
+      setFornecedor((dadosIniciais ?? {}) as Fornecedor);
       setErrors({});
       setActiveTab('dadosCadastrais');
       setShowDup(false);
       setDupMatches([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const camposObrigatoriosPorAba: Record<string, string[]> = {

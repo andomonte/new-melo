@@ -28,6 +28,8 @@ interface ModalProps {
   onSuccess?: (busca?: string) => void;
   /** Quando o documento já existe como transportadora, abre para edição */
   onEditarTransportadora?: (codtransp: string) => void;
+  /** Pré-preenche o cadastro (ex.: dados vindos de uma NFe). Opcional. */
+  dadosIniciais?: Partial<Transportadora>;
 }
 
 const tabs = [
@@ -41,6 +43,7 @@ export default function CustomModal({
   onClose,
   onSuccess,
   onEditarTransportadora,
+  dadosIniciais,
 }: ModalProps) {
   const [transportadora, setTransportadora] = useState({} as Transportadora);
   const [openInfo, setOpenInfo] = useState(false);
@@ -56,15 +59,16 @@ export default function CustomModal({
     message: 'Deseja realmente cadastrar esta transportadora?',
   });
 
-  // Sempre abrir o cadastro em branco (evita trazer dados de uma abertura anterior)
+  // Abre em branco (padrão) ou pré-preenchido quando dadosIniciais é informado.
   useEffect(() => {
     if (isOpen) {
-      setTransportadora({ tipo: 'J' } as Transportadora);
+      setTransportadora({ tipo: 'J', ...(dadosIniciais || {}) } as Transportadora);
       setErrors({});
       setActiveTab('dadosCadastrais');
       setShowDup(false);
       setDupMatches([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const [modalConfirmAba, setModalConfirmAba] = useState(false);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Building2, User, Package, Truck, Save, ArrowRight, Search, ChevronDown, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, FileText, Building2, User, Package, Truck, Save, ArrowRight, Search, ChevronDown, CheckCircle2, AlertTriangle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,8 @@ import { FornecedorAutocomplete } from '../../RequisicoesCompra/components/Forne
 import { CompradorAutocomplete } from '../../RequisicoesCompra/components/CompradorAutocomplete';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
+import CadastroFornecedorModal from '@/components/corpo/admin/cadastro/fornecedores/modalCadastrar';
+import CadastroTransportadoraModal from '@/components/corpo/admin/cadastro/transportadoras/modalCadastrar';
 import { useDebounce } from 'use-debounce';
 import api from '@/components/services/api';
 
@@ -290,6 +292,9 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   type MatchStatus = null | 'auto' | 'salvo' | 'multiplos' | 'nao_encontrado';
   const [matchFornec, setMatchFornec] = useState<MatchStatus>(null);
   const [matchTransp, setMatchTransp] = useState<MatchStatus>(null);
+  // Cadastro rápido (na hora) de fornecedor/transportadora ausente no cadastro.
+  const [cadFornecAberto, setCadFornecAberto] = useState(false);
+  const [cadTranspAberto, setCadTranspAberto] = useState(false);
 
   const [formData, setFormData] = useState<FormDataState>({
     operacao: 0,
@@ -509,7 +514,11 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   };
 
   // Selo do resultado do casamento por CNPJ, mostrado em cada seção.
-  const renderMatchBadge = (status: MatchStatus, label: string) => {
+  const renderMatchBadge = (
+    status: MatchStatus,
+    label: string,
+    onCadastrar?: () => void,
+  ) => {
     if (status === 'auto') {
       return (
         <div className="mb-3 flex items-center gap-2 rounded-md bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 px-3 py-1.5 text-xs text-green-800 dark:text-green-200">
@@ -528,9 +537,20 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }
     if (status === 'nao_encontrado') {
       return (
-        <div className="mb-3 flex items-center gap-2 rounded-md bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200">
-          <AlertTriangle size={14} />
-          CNPJ da nota não encontrado no cadastro de {label.toLowerCase()}.
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-md bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+          <span className="flex items-center gap-2">
+            <AlertTriangle size={14} />
+            CNPJ da nota não encontrado no cadastro de {label.toLowerCase()}.
+          </span>
+          {onCadastrar && (
+            <button
+              type="button"
+              onClick={onCadastrar}
+              className="flex-shrink-0 inline-flex items-center gap-1 rounded bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 font-medium"
+            >
+              <Plus size={12} /> Cadastrar {label.toLowerCase()}
+            </button>
+          )}
         </div>
       );
     }
@@ -545,32 +565,35 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }
   };
 
+  // Monta o payload da tabela auxiliar (dbnfe_ent_aux) a partir do formulário.
+  const montarPayloadAux = () => ({
+    nfeId: nfe.id,
+    operacao: formData.operacao,
+    codcomprador: formData.comprador?.codigo || '',
+    codcredor: formData.usarFornecedorNfe ? '' : formData.fornecedor?.cod_credor || '',
+    codtransp: formData.usarTransportadoraNfe ? '' : formData.transportadora?.cod_credor || '',
+    custofin: formData.custoFinanceiro,
+    desconto: formData.desconto,
+    acrescimo: formData.acrescimo,
+    verba_tmk: formData.verbaTmk,
+    cfop: formData.cfop ? parseInt(formData.cfop) : null,
+    desconto_icms: formData.descontoIcms ? 'S' : 'N',
+    desconto_st: formData.descontoSt ? 'S' : 'N',
+    zerar_ipi: formData.zerarIpi ? 'S' : 'N',
+    zerar_st: formData.zerarSt ? 'S' : 'N',
+    temcusto: formData.calculoCusto ? 'S' : 'N',
+    complementar: formData.nfeComplementar ? 1 : 0,
+    devolucao: formData.devolucao ? 1 : 0,
+    dev_codfat: formData.devCodfat || null,
+  });
+
+  const salvarDadosAux = () =>
+    api.post('/api/entrada-xml/salvar-dados-confirmacao', montarPayloadAux());
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = {
-        nfeId: nfe.id,
-        operacao: formData.operacao,
-        codcomprador: formData.comprador?.codigo || '',
-        codcredor: formData.usarFornecedorNfe ? '' : formData.fornecedor?.cod_credor || '',
-        codtransp: formData.usarTransportadoraNfe ? '' : formData.transportadora?.cod_credor || '',
-        custofin: formData.custoFinanceiro,
-        desconto: formData.desconto,
-        acrescimo: formData.acrescimo,
-        verba_tmk: formData.verbaTmk,
-        cfop: formData.cfop ? parseInt(formData.cfop) : null,
-        desconto_icms: formData.descontoIcms ? 'S' : 'N',
-        desconto_st: formData.descontoSt ? 'S' : 'N',
-        zerar_ipi: formData.zerarIpi ? 'S' : 'N',
-        zerar_st: formData.zerarSt ? 'S' : 'N',
-        temcusto: formData.calculoCusto ? 'S' : 'N',
-        complementar: formData.nfeComplementar ? 1 : 0,
-        devolucao: formData.devolucao ? 1 : 0,
-        dev_codfat: formData.devCodfat || null,
-      };
-
-      await api.post('/api/entrada-xml/salvar-dados-confirmacao', payload);
-
+      await salvarDadosAux();
       toast({
         title: "Sucesso",
         description: "Dados de confirmação salvos com sucesso!",
@@ -587,7 +610,26 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }
   };
 
-  const prosseguirConfirmacao = () => {
+  // Ao avançar: PERSISTE fornecedor/transportadora/dados no dbnfe_ent_aux antes
+  // de seguir. Antes, o "Avançar" não salvava — a associação (inclusive o
+  // vínculo automático por CNPJ) se perdia se o usuário não clicasse "Salvar".
+  const prosseguirConfirmacao = async () => {
+    setSaving(true);
+    try {
+      await salvarDadosAux();
+    } catch (error: any) {
+      setSaving(false);
+      return pedirConfirmacao(() => {}, {
+        title: 'Erro ao salvar',
+        message:
+          error.response?.data?.error ||
+          'Não foi possível salvar os dados da confirmação. Tente novamente.',
+        type: 'danger',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+    setSaving(false);
     const payload: NFeConfirmationData = {
       operacao: formData.operacao,
       compradorId: formData.comprador?.codigo || '',
@@ -1158,7 +1200,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
               </div>
             </div>
 
-            {renderMatchBadge(matchFornec, 'Fornecedor')}
+            {renderMatchBadge(matchFornec, 'Fornecedor', () => setCadFornecAberto(true))}
 
             {/* Busca do fornecedor cadastrado */}
             {!formData.usarFornecedorNfe && (
@@ -1236,7 +1278,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
               </div>
             </div>
 
-            {renderMatchBadge(matchTransp, 'Transportadora')}
+            {renderMatchBadge(matchTransp, 'Transportadora', () => setCadTranspAberto(true))}
 
             {/* Busca da transportadora cadastrada */}
             {!formData.usarTransportadoraNfe && (
@@ -1417,6 +1459,52 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
         </div>
       </div>
       {ConfirmacaoSalvarModal}
+
+      {/* Etapa 3: cadastrar na hora o fornecedor/transportadora ausente,
+          pré-preenchido com os dados da NFe. Ao salvar, re-casa pelo CNPJ. */}
+      {cadFornecAberto && (
+        <CadastroFornecedorModal
+          isOpen={cadFornecAberto}
+          onClose={() => setCadFornecAberto(false)}
+          onSuccess={() => {
+            setCadFornecAberto(false);
+            if (nfe.cnpjEmitente) autoMatchCredor(nfe.cnpjEmitente, 'fornecedor');
+          }}
+          dadosIniciais={{
+            tipo: 'J',
+            nome: nfe.emitente,
+            cpf_cgc: nfe.cnpjEmitente,
+            iest: nfe.emitenteIE,
+            endereco: nfe.emitenteLogradouro,
+            numero: nfe.emitenteNumero,
+            bairro: nfe.emitenteBairro,
+            cidade: nfe.emitenteMunicipio,
+            uf: nfe.emitenteUf,
+            cep: nfe.emitenteCep,
+          } as any}
+        />
+      )}
+
+      {cadTranspAberto && (
+        <CadastroTransportadoraModal
+          isOpen={cadTranspAberto}
+          onClose={() => setCadTranspAberto(false)}
+          onSuccess={() => {
+            setCadTranspAberto(false);
+            const cnpj = transportadoraXml?.cpf_cnpj;
+            if (cnpj) autoMatchCredor(cnpj, 'transportadora');
+          }}
+          dadosIniciais={{
+            // O modal de transportadora usa cpfcgc/ender (sem underscore).
+            tipo: 'J',
+            nome: transportadoraXml?.xnome,
+            cpfcgc: transportadoraXml?.cpf_cnpj,
+            ender: (transportadoraXml as any)?.xender,
+            cidade: (transportadoraXml as any)?.xmun,
+            uf: transportadoraXml?.uf,
+          } as any}
+        />
+      )}
     </div>
   );
 };
