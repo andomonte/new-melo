@@ -1602,6 +1602,7 @@ const ProdutosPage = () => {
           onExportarPDF={handleExportarPDF}
           onColunasVisiveisChange={setColunasExportacao}
           mostrarFiltrosSempre
+          filtrarSomenteAoConfirmar
           dicaFiltro={
             <div className="space-y-2">
               <div className="font-semibold text-gray-900 dark:text-white">

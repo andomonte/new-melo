@@ -95,6 +95,10 @@ interface DataTablePadraoProps {
   /** Conteúdo da dica (ⓘ) de como filtrar, mostrado ao lado de "Opções".
       Opcional — só as telas cujo backend entende a sintaxe devem passar. */
   dicaFiltro?: React.ReactNode;
+  /** Quando true, o filtro rápido NÃO busca enquanto digita (sem debounce):
+      aplica só no Enter ou ao sair do campo. Útil em grades grandes, onde
+      buscar a cada tecla atrapalha textos longos. */
+  filtrarSomenteAoConfirmar?: boolean;
   /** Notifica o pai com as colunas VISÍVEIS na ordem exibida (com o rótulo
       amigável do cabeçalho). Fonte única para exportações (Excel/PDF) usarem
       exatamente o que está na grade. */
@@ -141,6 +145,7 @@ export default function DataTablePadrao({
   onColunasVisiveisChange,
   mostrarFiltrosSempre,
   dicaFiltro,
+  filtrarSomenteAoConfirmar,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
@@ -236,9 +241,18 @@ export default function DataTablePadrao({
     }
   }, [colunasVisiveis, ordemColunas, sortColumn, sortDirection, mostrarFiltros]);
 
+  /** Colunas utilitárias (não são dados: seleção/ações). */
+  const EH_UTILITARIA = (h: string) =>
+    ['selecionar', 'ações', 'acoes', '☑️'].includes(h.toLowerCase());
+
   // Sincronizar ordemColunas e colunasVisiveis quando headers ou prefsCarregadas mudar
   useEffect(() => {
     if (!prefsCarregadas || headers.length === 0) return;
+
+    // Enquanto só existirem as colunas utilitárias (estado transitório antes de
+    // carregar/semear as colunas de dados), NÃO sincroniza: sincronizar aqui
+    // destruía a preferência salva do usuário (ficava só com Selecionar/Ações).
+    if (!headers.some((h) => !EH_UTILITARIA(h))) return;
 
     // Sincronizar ordemColunas com headers disponíveis
     const colunasAtuais = new Set(ordemColunas);
@@ -253,12 +267,18 @@ export default function DataTablePadrao({
 
     // Sincronizar colunasVisiveis
     const visiveisValidas = colunasVisiveis.filter(h => headers.includes(h));
+    const visiveisComDados = visiveisValidas.filter((h) => !EH_UTILITARIA(h));
 
-    if (visiveisValidas.length === 0) {
-      // Sem colunas visíveis válidas: mostra as 10 primeiras
+    if (visiveisValidas.length === 0 || visiveisComDados.length === 0) {
+      // Sem colunas visíveis válidas — ou só as utilitárias (Selecionar/Ações),
+      // que é uma preferência inútil e possivelmente gravada por engano:
+      // volta ao padrão das 10 primeiras.
       setColunasVisiveis(headers.slice(0, Math.min(10, headers.length)));
-    } else if (headers.length > visiveisValidas.length * 3) {
-      // Headers cresceu muito vs preferências salvas (API mudou): resetar
+    } else if (visiveisValidas.length < colunasVisiveis.length / 2) {
+      // A MAIORIA das colunas salvas sumiu dos headers (API mudou de verdade):
+      // resetar. Antes comparava com headers.length, o que apagava a preferência
+      // em grades largas — produtos tem 106 colunas com 10 visíveis (106 > 30),
+      // então a escolha do usuário era zerada a cada abertura da tela.
       setColunasVisiveis(headers.slice(0, Math.min(10, headers.length)));
     } else if (visiveisValidas.length !== colunasVisiveis.length) {
       // Algumas colunas sumiram dos headers: limpar as inválidas
@@ -434,6 +454,9 @@ export default function DataTablePadrao({
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
+    // Com filtrarSomenteAoConfirmar, não busca enquanto digita — o Enter e o
+    // onBlur do input é que aplicam (evita filtrar texto pela metade).
+    if (filtrarSomenteAoConfirmar) return;
     debounceRef.current = setTimeout(() => {
       aplicarFiltro(novos);
     }, 300);
