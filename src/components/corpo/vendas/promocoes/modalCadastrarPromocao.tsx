@@ -43,7 +43,6 @@ const ProdutoCellRenderer = (props: any) => {
       <div style={{ fontWeight: 600, fontSize: 14 }}>{d.descricao || '-'}</div>
       <div style={{ fontSize: 12, color: '#6b7280' }}>
         Cód: <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
-        <span style={{ margin: '0 4px' }}>|</span>Marca: {d.marca || '-'}
       </div>
     </div>
   );
@@ -326,6 +325,15 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
         row = recalcularDePercentual(row, Number(event.newValue) || 0);
       } else if (field === '_valor_promocao') {
         row = recalcularDePreco(row, Number(event.newValue) || 0);
+      } else if (field === '_margem_compra') {
+        // Margem editada: precoPromo = prcompra * (1 + margem/100)
+        const prcompra = Number(row.prcompra) || 0;
+        const novaMargem = Number(event.newValue) || 0;
+        if (prcompra > 0) {
+          const novoPreco = prcompra * (1 + novaMargem / 100);
+          row = recalcularDePreco(row, novoPreco);
+          row._margem_compra = novaMargem;
+        }
       } else {
         row = { ...row, [field]: event.newValue };
       }
@@ -448,7 +456,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
 
   // ---------- AG Grid: colunas ----------
   const fmtMoeda = (v: any) => v != null ? `R$ ${Number(v).toFixed(2)}` : '-';
-  const fmtPerc = (v: any) => v != null ? `${Number(v).toFixed(2)}%` : '-';
+  const fmtPerc = (v: any) => v != null ? `${parseFloat(Number(v).toFixed(2))}%` : '-';
 
   const DeleteCellRenderer = useCallback((props: any) => {
     const codprod = props.data?.codprod;
@@ -483,11 +491,16 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
     {
       headerName: 'Produto',
       field: 'descricao',
-      minWidth: 160,
-      flex: 4,
+      minWidth: 140,
+      flex: 3,
       autoHeight: true,
       cellStyle: { textAlign: 'left', justifyContent: 'flex-start' },
       cellRendererSelector: () => ({ component: ProdutoCellRenderer }),
+    },
+    {
+      headerName: 'Marca',
+      field: 'marca',
+      width: 80,
     },
     {
       headerName: 'Estoque',
@@ -520,7 +533,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       type: 'numericColumn',
       editable: true,
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
-      valueFormatter: (p: any) => p.value != null ? `${Number(p.value).toFixed(2)}%` : '',
+      valueFormatter: (p: any) => p.value != null ? `${parseFloat(Number(p.value).toFixed(2))}%` : '',
       valueParser: (p: any) => parseFloat(String(p.newValue).replace('%', '').replace(',', '.').trim()) || 0,
     },
     {
@@ -540,11 +553,19 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       flex: 1,
       minWidth: 70,
       type: 'numericColumn',
+      editable: true,
       valueFormatter: (p: any) => fmtPerc(p.value),
-      cellStyle: (p: any) => ({
-        color: (p.value ?? 0) < 0 ? '#dc2626' : (p.value ?? 0) < 20 ? '#d97706' : '#16a34a',
-        fontWeight: 600 as const,
-      }),
+      valueParser: (p: any) => parseFloat(String(p.newValue).replace('%', '').replace(',', '.').trim()) || 0,
+      cellStyle: (p: any) => {
+        const margem = p.value ?? 0;
+        const isImportado = p.data?.origem !== 'N';
+        const limitePositivo = isImportado ? 40 : 20;
+        return {
+          color: margem < 0 ? '#dc2626' : margem < limitePositivo ? '#d97706' : '#16a34a',
+          fontWeight: 600 as const,
+          backgroundColor: '#dbeafe',
+        };
+      },
     },
     {
       headerName: 'Qtd',
@@ -575,6 +596,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       editable: true,
       cellStyle: { backgroundColor: '#fee2e2' },
       valueParser: (p: any) => parseInt(String(p.newValue)) || 0,
+      hide: true,
     },
   ], [DeleteCellRenderer]);
 
