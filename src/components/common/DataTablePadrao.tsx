@@ -1,6 +1,6 @@
 import React, { ChangeEvent, KeyboardEvent, useState, useRef, useEffect } from 'react';
 import { Meta } from '@/data/common/meta';
-import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical, Info } from 'lucide-react';
 import { RiFileExcel2Line, RiFilePdf2Line } from 'react-icons/ri';
 import {
   DropdownMenu,
@@ -87,6 +87,18 @@ interface DataTablePadraoProps {
   /** Aceito por compatibilidade com telas existentes (gerenciador de colunas
       externo); não é usado internamente aqui. */
   onColunaSubstituida?: (colA: string, colB: string, tipo?: 'replace' | 'swap') => void;
+  /** Exportar para PDF (mesma lógica de colunas/filtros do Excel). */
+  onExportarPDF?: () => void;
+  /** Quando true, a linha de filtros rápidos já nasce visível e a preferência
+      salva não a esconde no load (o toggle continua funcionando na sessão). */
+  mostrarFiltrosSempre?: boolean;
+  /** Conteúdo da dica (ⓘ) de como filtrar, mostrado ao lado de "Opções".
+      Opcional — só as telas cujo backend entende a sintaxe devem passar. */
+  dicaFiltro?: React.ReactNode;
+  /** Notifica o pai com as colunas VISÍVEIS na ordem exibida (com o rótulo
+      amigável do cabeçalho). Fonte única para exportações (Excel/PDF) usarem
+      exatamente o que está na grade. */
+  onColunasVisiveisChange?: (colunas: { key: string; label: string }[]) => void;
 }
 
 export default function DataTablePadrao({
@@ -125,6 +137,10 @@ export default function DataTablePadrao({
   onOrderedRowsChange,
   expandableRowRender,
   getRowKey,
+  onExportarPDF,
+  onColunasVisiveisChange,
+  mostrarFiltrosSempre,
+  dicaFiltro,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
@@ -136,7 +152,7 @@ export default function DataTablePadrao({
   const [linhaExpandida, setLinhaExpandida] = useState<string | null>(null);
   const chaveDaLinha = (row: any, idx: number) =>
     getRowKey ? getRowKey(row) : String(row?.__codprod ?? row?.codprod ?? idx);
-  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [mostrarFiltros, setMostrarFiltros] = useState(mostrarFiltrosSempre === true);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});
   const [termoBuscaGlobal, setTermoBuscaGlobal] = useState(searchValue ?? '');
@@ -181,7 +197,8 @@ export default function DataTablePadrao({
           if (p.sortColumn) setSortColumn(p.sortColumn);
           if (p.sortDirection) setSortDirection(p.sortDirection);
           if (p.perPage && onPerPageChange) onPerPageChange(Number(p.perPage));
-          if (typeof p.mostrarFiltros === 'boolean') setMostrarFiltros(p.mostrarFiltros);
+          // Com mostrarFiltrosSempre, a preferência salva não pode escondê-la no load.
+          if (!mostrarFiltrosSempre && typeof p.mostrarFiltros === 'boolean') setMostrarFiltros(p.mostrarFiltros);
         }
       })
       .catch((err) => console.error('Erro ao carregar preferências:', err))
@@ -248,6 +265,22 @@ export default function DataTablePadrao({
       setColunasVisiveis(visiveisValidas);
     }
   }, [headers, prefsCarregadas]);
+
+  // Emite ao pai as colunas VISÍVEIS na ordem da grade (com rótulo amigável),
+  // fora as utilitárias — fonte única para o Excel/PDF exportarem o que está
+  // na tela. `onColunasVisiveisChange` deve ser estável (ex.: um setState).
+  useEffect(() => {
+    if (!onColunasVisiveisChange) return;
+    const visiveisOrdenadas = ordemColunas
+      .filter(
+        (h) =>
+          colunasVisiveis.includes(h) &&
+          !['selecionar', 'ações', 'acoes', '☑️'].includes(h.toLowerCase()),
+      )
+      .map((h) => ({ key: h, label: rotulo(h) }));
+    onColunasVisiveisChange(visiveisOrdenadas);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordemColunas, colunasVisiveis, columnLabels]);
 
   // Linhas na ordem exibida (filtro rápido do ☑️ + ordenação por coluna).
   // Mesma lógica usada no <tbody>, extraída para poder informar o pai.
@@ -552,6 +585,23 @@ export default function DataTablePadrao({
               </DialogContent>
             </Dialog>
 
+            {/* Dica (ⓘ) de como filtrar — só aparece se a tela passar dicaFiltro */}
+            {dicaFiltro && (
+              <div
+                className="group relative flex items-center"
+                tabIndex={0}
+                aria-label="Como filtrar"
+              >
+                <Info
+                  size={18}
+                  className="text-blue-500 dark:text-blue-400 cursor-help"
+                />
+                <div className="pointer-events-none absolute right-0 top-full mt-1 z-50 hidden w-80 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 p-3 text-left text-[0.72rem] font-normal normal-case leading-relaxed text-gray-700 dark:text-gray-200 shadow-xl group-hover:block group-focus-within:block">
+                  {dicaFiltro}
+                </div>
+              </div>
+            )}
+
             {/* Botão Opções com Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -560,7 +610,10 @@ export default function DataTablePadrao({
                 </button>
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent className="w-44 bg-white dark:bg-zinc-900 shadow-md border border-gray-300 dark:border-zinc-600 text-xs text-gray-700 dark:text-white cursor-pointer">
+              <DropdownMenuContent
+                collisionPadding={8}
+                className="w-44 bg-white dark:bg-zinc-900 shadow-md border border-gray-300 dark:border-zinc-600 text-xs text-gray-700 dark:text-white cursor-pointer max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto overflow-x-hidden"
+              >
                 {/* Toggle Filtros rápidos */}
                 <DropdownMenuItem
                   onClick={() => {
@@ -606,6 +659,17 @@ export default function DataTablePadrao({
                   >
                     <RiFileExcel2Line className="mr-2 size-4 text-green-600 dark:text-green-400" />
                     Exportar para Excel
+                  </DropdownMenuItem>
+                )}
+
+                {/* Exportar para PDF */}
+                {onExportarPDF && (
+                  <DropdownMenuItem
+                    onClick={onExportarPDF}
+                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
+                  >
+                    <RiFilePdf2Line className="mr-2 size-4 text-red-600 dark:text-red-400" />
+                    Exportar para PDF
                   </DropdownMenuItem>
                 )}
 

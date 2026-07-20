@@ -6,6 +6,7 @@ import React, {
   useCallback,
 } from 'react';
 import { Produtos, getProdutos } from '@/data/produtos/produtos';
+import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 import { useDebouncedCallback } from 'use-debounce';
 import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
@@ -123,6 +124,11 @@ const ProdutosPage = () => {
   }, [statusFiltro]);
   const [colunasDbProd, setColunasDbProd] = useState<string[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  // Colunas VISÍVEIS na ordem da grade (com rótulo amigável), emitidas pelo
+  // DataTable — fonte única para as exportações Excel/PDF.
+  const [colunasExportacao, setColunasExportacao] = useState<
+    { key: string; label: string }[]
+  >([]);
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const salvo = localStorage.getItem('limiteColunasProutos');
     return salvo ? parseInt(salvo, 10) : 10;
@@ -131,10 +137,11 @@ const ProdutosPage = () => {
   // Colunas prioritárias na ordem do Delphi
   const colunasPrioritarias = ['codprod', 'ref', 'descr', 'codmarca', 'qtest', 'prvenda', 'prcompra', 'unimed', 'codbar', 'obs'];
 
-  // Semeia as colunas do dbprod ao abrir a tela, para o Filtro Avançado por
-  // coluna ter os campos disponíveis MESMO sem produtos carregados (o filtro é
-  // o ponto de partida da busca). Ao carregar produtos, a lista é substituída
-  // pelas colunas reais dos dados.
+  // Semeia as colunas do dbprod ao abrir a tela, para o Filtro Avançado E a
+  // linha de filtros rápidos por coluna (FILTRAR MARCA...) terem os campos
+  // disponíveis MESMO sem produtos carregados — permite busca cirúrgica por
+  // coluna já de cara. Ao carregar produtos, a lista é substituída pelas colunas
+  // reais dos dados.
   useEffect(() => {
     let ativo = true;
     fetch('/api/produtos/colunas')
@@ -143,12 +150,22 @@ const ProdutosPage = () => {
         const cols: string[] = res?.data || [];
         if (ativo && cols.length) {
           setColunasDbProd((prev) => (prev.length ? prev : cols));
+          // Semeia os headers (prioritárias primeiro) só se ainda não houver
+          // colunas de dados — assim os inputs de filtro por coluna já aparecem.
+          const ordenadas = [
+            ...colunasPrioritarias.filter((c) => cols.includes(c)),
+            ...cols.filter((c) => !colunasPrioritarias.includes(c)),
+          ];
+          setHeaders((prev) =>
+            prev && prev.length > 2 ? prev : ['selecionar', 'ações', ...ordenadas],
+          );
         }
       })
       .catch(() => {});
     return () => {
       ativo = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Estados de modais
@@ -264,13 +281,28 @@ const ProdutosPage = () => {
       // pesquisa com 3+ caracteres OU filtros avançados ativos. Sem isso, o
       // grid não carrega todos os produtos por padrão.
       const temBusca = !!search && search.trim().length >= 3;
-      const temFiltros = !!novosFiltros && novosFiltros.length > 0;
+      // Só conta como filtro ativo o que tem VALOR (ou os operadores sem valor
+      // nulo/nao_nulo). Assim, ao limpar o filtro de coluna a grade volta ao
+      // estado inicial (vazio) em vez de trazer todos os produtos.
+      const temFiltros =
+        !!novosFiltros &&
+        novosFiltros.some(
+          (f: any) =>
+            f?.tipo === 'nulo' ||
+            f?.tipo === 'nao_nulo' ||
+            String(f?.valor ?? '').trim() !== '',
+        );
       if (!temBusca && !temFiltros) {
         setProdutos({
           data: [],
           meta: { total: 0, lastPage: 1, currentPage: 1, perPage },
         } as any);
-        setHeaders(['selecionar', 'ações']);
+        // Mantém as colunas já conhecidas (semeadas no mount) para a linha de
+        // filtros por coluna continuar disponível no estado inicial; só cai para
+        // o mínimo se ainda não houver colunas de dados.
+        setHeaders((prev) =>
+          prev && prev.length > 2 ? prev : ['selecionar', 'ações'],
+        );
         setLoading(false);
         // zera o cache da última chamada para permitir buscar de novo depois
         ultimaChamada.current = {
@@ -607,29 +639,85 @@ const ProdutosPage = () => {
     [perPage, fetchProdutosUnico, recarregarLista],
   );
 
-  // Exportar lista de produtos para Excel
+  // Colunas a exportar: as VISÍVEIS da grade (mesma ordem/rótulos). Fallback
+  // para os headers se o DataTable ainda não emitiu.
+  const colunasParaExport = useCallback((): { key: string; label: string }[] => {
+    if (colunasExportacao.length > 0) return colunasExportacao;
+    return headers
+      .filter((h) => !['selecionar', 'ações', 'acoes'].includes(h.toLowerCase()))
+      .map((h) => ({ key: h, label: obterNomeAmigavel(h) }));
+  }, [colunasExportacao, headers]);
+
+  // Classifica a coluna para formatar como na tela (preço 2 casas, qtd inteiro).
+  const tipoColuna = (key: string): 'moeda' | 'inteiro' | 'texto' => {
+    const k = key.toLowerCase();
+    if (/^pr[a-z]/.test(k) || k.includes('preco') || k.includes('custo') || k === 'concor' || k.startsWith('impf') || k.startsWith('txdolar')) return 'moeda';
+    if (k.startsWith('qt') || k.includes('estoque') || k.startsWith('multiplo')) return 'inteiro';
+    return 'texto';
+  };
+
+  // Busca TODAS as linhas do filtro atual (busca + filtros por coluna + status),
+  // não só a página visível — reaproveita os mesmos endpoints/params da grade.
+  const buscarLinhasParaExport = useCallback(async (): Promise<any[]> => {
+    const total = (produtos.meta as any)?.total || produtos.data?.length || 0;
+    if (total === 0) return [];
+    const perPageAll = Math.max(total, 1);
+    if (filtros && filtros.length > 0) {
+      const resp = await fetch('/api/produtos/buscaComFiltro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page: 1, perPage: perPageAll, productSearch: search, filtros, status: statusFiltroRef.current }),
+      });
+      if (!resp.ok) throw new Error('Erro na busca com filtros');
+      const d = await resp.json();
+      return d.data || [];
+    }
+    const d = await getProdutos({ page: 1, perPage: perPageAll, search, filtros, status: statusFiltroRef.current });
+    return d.data || [];
+  }, [produtos.meta, produtos.data, filtros, search]);
+
+  // Exportar para Excel (exceljs) — colunas visíveis, rótulos amigáveis, todas
+  // as linhas do filtro, preço/estoque como número formatado.
   const handleExportarExcel = useCallback(async () => {
-    if (!produtos.data || produtos.data.length === 0) {
-      toast({ description: 'Nenhum produto para exportar', variant: 'destructive' });
+    const cols = colunasParaExport();
+    if (cols.length === 0) {
+      toast({ description: 'Nenhuma coluna visível para exportar', variant: 'destructive' });
       return;
     }
     try {
+      const linhas = await buscarLinhasParaExport();
+      if (linhas.length === 0) {
+        toast({ description: 'Nenhum produto para exportar', variant: 'destructive' });
+        return;
+      }
       const ExcelJS = await import('exceljs');
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Produtos');
 
-      // Headers baseados nas colunas visíveis (exceto selecionar e ações)
-      const colunasExport = headers.filter(h => !['selecionar', 'ações'].includes(h.toLowerCase()));
-      ws.columns = colunasExport.map(col => ({ header: col, key: col, width: 20 }));
+      ws.columns = cols.map((c) => {
+        const t = tipoColuna(c.key);
+        return {
+          header: c.label,
+          key: c.key,
+          width: 20,
+          style: t === 'moeda' ? { numFmt: '#,##0.00' } : t === 'inteiro' ? { numFmt: '#,##0' } : {},
+        };
+      });
 
-      // Estilo do header
       ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
       ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
 
-      // Dados
-      produtos.data.forEach((prod: any) => {
+      linhas.forEach((prod: any) => {
         const row: Record<string, any> = {};
-        colunasExport.forEach(col => { row[col] = prod[col] ?? ''; });
+        cols.forEach((c) => {
+          const t = tipoColuna(c.key);
+          const raw = prod[c.key];
+          if ((t === 'moeda' || t === 'inteiro') && raw !== null && raw !== undefined && raw !== '' && !isNaN(Number(raw))) {
+            row[c.key] = Number(raw);
+          } else {
+            row[c.key] = raw ?? '';
+          }
+        });
         ws.addRow(row);
       });
 
@@ -644,12 +732,70 @@ const ProdutosPage = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      toast({ description: 'Produtos exportados com sucesso!' });
+      toast({ description: `Exportados ${linhas.length} produto(s) para Excel!` });
     } catch (error) {
-      console.error('Erro ao exportar:', error);
-      toast({ description: 'Erro ao exportar produtos', variant: 'destructive' });
+      console.error('Erro ao exportar Excel:', error);
+      toast({ description: 'Erro ao exportar para Excel', variant: 'destructive' });
     }
-  }, [produtos.data, headers, toast]);
+  }, [colunasParaExport, buscarLinhasParaExport, toast]);
+
+  // Exportar para PDF (jspdf + autotable) — paisagem, auto-ajuste com quebra;
+  // fonte diminui conforme o nº de colunas para caber na largura.
+  const handleExportarPDF = useCallback(async () => {
+    const cols = colunasParaExport();
+    if (cols.length === 0) {
+      toast({ description: 'Nenhuma coluna visível para exportar', variant: 'destructive' });
+      return;
+    }
+    try {
+      const linhas = await buscarLinhasParaExport();
+      if (linhas.length === 0) {
+        toast({ description: 'Nenhum produto para exportar', variant: 'destructive' });
+        return;
+      }
+      const { jsPDF } = await import('jspdf');
+      const autoTable = (await import('jspdf-autotable')).default;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+
+      const fmt = (key: string, raw: any) => {
+        const t = tipoColuna(key);
+        if (raw === null || raw === undefined || raw === '') return '';
+        if ((t === 'moeda' || t === 'inteiro') && !isNaN(Number(raw))) {
+          return t === 'moeda' ? Number(raw).toFixed(2) : String(Math.trunc(Number(raw)));
+        }
+        return String(raw);
+      };
+
+      // Fonte proporcional ao nº de colunas (auto-ajuste com quebra).
+      const fs = cols.length > 22 ? 5 : cols.length > 14 ? 6 : 7;
+
+      autoTable(doc, {
+        head: [cols.map((c) => c.label)],
+        body: linhas.map((prod: any) => cols.map((c) => fmt(c.key, prod[c.key]))),
+        startY: 40,
+        margin: { top: 40, left: 16, right: 16, bottom: 20 },
+        styles: { fontSize: fs, cellPadding: 2, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', fontSize: fs },
+        tableWidth: 'auto',
+        didParseCell: (data: any) => {
+          if (data.section === 'body') {
+            const t = tipoColuna(cols[data.column.index]?.key || '');
+            if (t !== 'texto') data.cell.styles.halign = 'right';
+          }
+        },
+        didDrawPage: (data: any) => {
+          doc.setFontSize(10);
+          doc.text('Produtos', data.settings.margin.left, 26);
+        },
+      });
+
+      doc.save('produtos.pdf');
+      toast({ description: `Exportados ${linhas.length} produto(s) para PDF!` });
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
+      toast({ description: 'Erro ao exportar para PDF', variant: 'destructive' });
+    }
+  }, [colunasParaExport, buscarLinhasParaExport, toast]);
 
   /**
    * ZOOM - Inspeção detalhada do produto
@@ -1453,6 +1599,44 @@ const ProdutosPage = () => {
           ) : 'Nenhum produto encontrado'}
           colunasFiltro={colunasDbProd}
           onExportarExcel={handleExportarExcel}
+          onExportarPDF={handleExportarPDF}
+          onColunasVisiveisChange={setColunasExportacao}
+          mostrarFiltrosSempre
+          dicaFiltro={
+            <div className="space-y-2">
+              <div className="font-semibold text-gray-900 dark:text-white">
+                Dicas de Busca
+              </div>
+              <div>
+                <b>Para buscar palavras juntas:</b> Use espaço.
+                <br />
+                <span className="text-gray-500 dark:text-gray-400">
+                  (Ex: <span className="font-mono">alavanca fiat</span> encontra
+                  itens com ambas as palavras).
+                </span>
+              </div>
+              <div>
+                <b>Para buscar uma palavra OU outra:</b> Use ponto e vírgula (;).
+                <br />
+                <span className="text-gray-500 dark:text-gray-400">
+                  (Ex: <span className="font-mono">melo;imbo</span> encontra
+                  qualquer uma das opções).
+                </span>
+              </div>
+              <div>
+                <b>Combinações:</b> Você pode misturar as regras!
+                <br />
+                <span className="text-gray-500 dark:text-gray-400">
+                  (Ex: <span className="font-mono">alavanca fiat;retentor</span>).
+                </span>
+              </div>
+              <div className="border-t border-gray-200 dark:border-zinc-700 pt-1.5 text-gray-500 dark:text-gray-400">
+                <b>Nota:</b> Preencher os filtros de duas ou mais colunas ao mesmo
+                tempo fará com que o sistema busque resultados que atendam a todas
+                as condições.
+              </div>
+            </div>
+          }
           onFiltroChange={(novosFiltros) => {
             setFiltros(novosFiltros);
             fetchProdutos({ page: 1, perPage, search, filtros: novosFiltros });
@@ -1465,27 +1649,8 @@ const ProdutosPage = () => {
           // Ações customizadas no header
           customHeaderActions={
             <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                Exibir
-              </DropdownMenuLabel>
-              {([
-                ['ativo', 'Ativos'],
-                ['inativo', 'Inativos'],
-                ['todos', 'Todos'],
-              ] as const).map(([valor, rotulo]) => (
-                <DropdownMenuItem
-                  key={valor}
-                  onClick={() => mudarStatusFiltro(valor)}
-                  className={statusFiltro === valor ? 'font-bold text-blue-600 dark:text-blue-400' : ''}
-                >
-                  <span className="mr-2 w-4 inline-flex justify-center">
-                    {statusFiltro === valor ? '●' : ''}
-                  </span>
-                  {rotulo}
-                </DropdownMenuItem>
-              ))}
-
+              {/* Filtro Ativos/Inativos/Todos fica só na barra principal
+                  (o SelectInput acima) — removido daqui para não duplicar. */}
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                 Ações Coletivas
