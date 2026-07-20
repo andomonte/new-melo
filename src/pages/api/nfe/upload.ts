@@ -71,6 +71,21 @@ interface NFDataExtracted {
     dVenc: string;
     vDup: number;
   }>;
+  transportadora?: {
+    cpf_cnpj: string | null;
+    xnome: string | null;
+    ie: string | null;
+    xender: string | null;
+    xmun: string | null;
+    uf: string | null;
+    rntc: string | null;
+    placa: string | null;
+    uf_placa: string | null;
+    especie: string | null;
+    marca: string | null;
+    numeracao: string | null;
+    lacre: string | null;
+  };
 }
 
 export default async function handle(
@@ -133,14 +148,20 @@ export default async function handle(
           continue;
         }
 
-        // Gerar c\u00f3digo sequencial para a NFe
+        // Gerar c\u00f3digo sequencial para a NFe.
+        // codnfe_ent \u00e9 varchar(9) e h\u00e1 registros legados com 4 d\u00edgitos ('1021').
+        // Ordenar por TEXTO trazia '1021' como "maior" (pois '1' > '0') em vez de
+        // '000049597', e o +1 ca\u00eda sobre um c\u00f3digo existente \u2014 violando a
+        // pk_nfe_ent_cod. Aqui pegamos o MAIOR NUM\u00c9RICO, ignorando n\u00e3o num\u00e9ricos.
         const lastNFeResult = await pgClient.query(
-          'SELECT codnfe_ent FROM dbnfe_ent ORDER BY codnfe_ent DESC LIMIT 1'
+          `SELECT COALESCE(MAX(codnfe_ent::bigint), 0) AS ultimo
+             FROM dbnfe_ent
+            WHERE codnfe_ent ~ '^[0-9]+$'`
         );
 
-        const nextCode = lastNFeResult.rows.length > 0
-          ? (parseInt(lastNFeResult.rows[0].codnfe_ent) + 1).toString().padStart(9, '0')
-          : '000000001';
+        const nextCode = (Number(lastNFeResult.rows[0]?.ultimo || 0) + 1)
+          .toString()
+          .padStart(9, '0');
 
         // Iniciar transa\u00e7\u00e3o
         await pgClient.query('BEGIN');
@@ -200,6 +221,24 @@ export default async function handle(
               nextCode, item.nitem, item.cprod, item.xprod,
               item.qcom, item.vuncom, item.vprod, item.ncm, item.cfop
             ]);
+          }
+
+          // Inserir dados de transporte/transportadora (dbnfe_ent_tran).
+          // Sem isso a tela "Confirmação dos Dados da Nota" mostra tudo como
+          // "NÃO INFORMADO" e o vínculo automático da transportadora por CNPJ
+          // nunca roda.
+          if (nfeData.transportadora) {
+            const t = nfeData.transportadora;
+            await pgClient.query(
+              `INSERT INTO dbnfe_ent_tran (
+                 codnfe_ent, cpf_cnpj, xnome, ie, xender, xmun, uf,
+                 rntc, placa, uf_placa, especie, marca, numeracao, lacre
+               ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+              [
+                nextCode, t.cpf_cnpj, t.xnome, t.ie, t.xender, t.xmun, t.uf,
+                t.rntc, t.placa, t.uf_placa, t.especie, t.marca, t.numeracao, t.lacre,
+              ],
+            );
           }
 
           // Inserir parcelas se existirem
@@ -272,6 +311,10 @@ function extractNFeData(xmlData: any, xmlContent: string): NFDataExtracted {
   const det = nfe.det || [];
   const cobr = nfe.cobr?.[0]; // Tag de cobran\u00e7a
   const dup = cobr?.dup || []; // Duplicatas/Parcelas
+  const transp = nfe.transp?.[0]; // Transporte
+  const transporta = transp?.transporta?.[0]; // Transportadora
+  const veicTransp = transp?.veicTransp?.[0]; // Ve\u00edculo
+  const vol = transp?.vol?.[0]; // Volumes
 
   return {
     chave: nfe.$.Id?.replace('NFe', '') || '',
@@ -336,5 +379,22 @@ function extractNFeData(xmlData: any, xmlContent: string): NFDataExtracted {
       dVenc: duplicata?.dVenc?.[0] || '',
       vDup: parseFloat(duplicata?.vDup?.[0] || '0'),
     })) : undefined,
+    // Transportadora + dados do transporte (usados na Confirmação dos Dados
+    // da Nota e no vínculo automático por CNPJ).
+    transportadora: transporta ? {
+      cpf_cnpj: transporta?.CNPJ?.[0] || transporta?.CPF?.[0] || null,
+      xnome: transporta?.xNome?.[0] || null,
+      ie: transporta?.IE?.[0] || null,
+      xender: transporta?.xEnder?.[0] || null,
+      xmun: transporta?.xMun?.[0] || null,
+      uf: transporta?.UF?.[0] || null,
+      rntc: veicTransp?.RNTC?.[0] || null,
+      placa: veicTransp?.placa?.[0] || null,
+      uf_placa: veicTransp?.UF?.[0] || null,
+      especie: vol?.esp?.[0] || null,
+      marca: vol?.marca?.[0] || null,
+      numeracao: vol?.nVol?.[0] || null,
+      lacre: vol?.lacres?.[0]?.nLacre?.[0] || null,
+    } : undefined,
   };
 }

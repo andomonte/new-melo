@@ -30,13 +30,15 @@ const filtroParaColunaSQL: Record<string, string> = {
 };
 
 // Mapeamento de status legivel para codigo do banco
+// 'N' = importada/não executada (é o que o upload grava e o legado usa).
+// Antes estava mapeada como "erro", fazendo toda NFe recém-importada aparecer
+// como Erro na listagem.
 const statusParaCodigo: Record<string, string> = {
-  'recebida': 'R',
+  'recebida': 'N',
   'processada': 'S',
   'em_andamento': 'A',
   'em andamento': 'A',
   'associacao_concluida': 'C',
-  'erro': 'N',
 };
 
 export default async function handler(
@@ -288,7 +290,8 @@ export default async function handler(
         status = 'EM_ANDAMENTO';
       } else if (nfe.exec === 'C') {
         status = 'ASSOCIACAO_CONCLUIDA';
-      } else if (nfe.exec === 'R') {
+      } else if (nfe.exec === 'R' || nfe.exec === 'N') {
+        // 'N' = importada, ainda não processada (grava assim no upload).
         status = 'RECEBIDA';
       } else if (!nfe.nprot) {
         status = 'ERRO';

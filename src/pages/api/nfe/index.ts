@@ -193,7 +193,8 @@ export default async function handle(
         status = 'EM_ANDAMENTO'; // FIXED: Era EM_PROCESSAMENTO
       } else if (nfe.exec === 'C') {
         status = 'ASSOCIACAO_CONCLUIDA';
-      } else if (nfe.exec === 'R') {
+      } else if (nfe.exec === 'R' || nfe.exec === 'N') {
+        // 'N' = importada, ainda não processada (grava assim no upload).
         status = 'RECEBIDA';
       } else if (!nfe.nprot) {
         status = 'ERRO';
