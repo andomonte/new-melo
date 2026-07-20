@@ -41,13 +41,18 @@ export default async function handler(
     const params: Array<string | number> = [];
 
     if (search) {
+      // O CNPJ está gravado em formatos diferentes ('45.990.181/0001-89' e
+      // '45990181000189'). Comparar só com ILIKE encontrava apenas os sem
+      // pontuação — por isso a tela avisava "vários cadastros" mas a busca
+      // trazia um só. Aqui comparamos também os dígitos normalizados.
       whereSQL = `
-        WHERE cod_credor ILIKE $1 
-           OR nome ILIKE $1 
-           OR nome_fant ILIKE $1 
+        WHERE cod_credor ILIKE $1
+           OR nome ILIKE $1
+           OR nome_fant ILIKE $1
            OR cpf_cgc ILIKE $1
+           OR ($2 <> '' AND regexp_replace(COALESCE(cpf_cgc, ''), '[^0-9]', '', 'g') LIKE '%' || $2 || '%')
       `;
-      params.push(`%${search}%`);
+      params.push(`%${search}%`, search.replace(/\D/g, ''));
     }
 
     // Query principal
@@ -79,7 +84,7 @@ export default async function handler(
     // Executar queries
     const [fornecedoresResult, countResult] = await Promise.all([
       client.query<Fornecedor>(fornecedoresQuery, params),
-      client.query<{ total: string }>(countQuery, search ? [params[0]] : [])
+      client.query<{ total: string }>(countQuery, search ? [params[0], params[1]] : [])
     ]);
     
     client.release();

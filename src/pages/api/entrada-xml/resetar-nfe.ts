@@ -97,6 +97,7 @@ export default async function handler(
       operacoesLog: 0,
       romaneio: 0,
       quantidadeAtendidaResetada: 0,
+      ordensReabertas: 0,
       estoqueRevertido: 0,
       estoqueArmazemRevertido: 0,
       pagamentos: 0,
@@ -209,6 +210,28 @@ export default async function handler(
         }
       }
       console.log(`📋 Quantidade atendida resetada em ${dadosRemovidos.quantidadeAtendidaResetada} itens de OC`);
+
+      // 2.2.1 Reabrir as OCs fechadas ao gerar a entrada. Sem isso o reset
+      // deixava a ordem em 'F' (Fechada) e ela não voltava a ser encontrada
+      // pela associação — impossibilitando reprocessar a mesma NFe.
+      const ocIdsEnvolvidas = Array.from(
+        new Set(
+          itensEntradaResult.rows
+            .map((i: any) => i.req_id)
+            .filter((id: any) => id !== null && id !== undefined),
+        ),
+      );
+      if (ocIdsEnvolvidas.length > 0) {
+        const reabertas = await client.query(
+          `UPDATE cmp_ordem_compra
+              SET orc_status = 'A'
+            WHERE orc_id = ANY($1::bigint[])
+              AND orc_status = 'F'`,
+          [ocIdsEnvolvidas],
+        );
+        dadosRemovidos.ordensReabertas = reabertas.rowCount || 0;
+        console.log(`📋 ${dadosRemovidos.ordensReabertas} ordem(ns) de compra reaberta(s)`);
+      }
 
       // 2.3 Reverter estoque por armazém (cad_armazem_produto) e deletar romaneio (dbitent_armazem)
       if (numerosEntrada.length > 0) {
