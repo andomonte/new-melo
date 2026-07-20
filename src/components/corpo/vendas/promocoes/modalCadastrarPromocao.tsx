@@ -40,11 +40,10 @@ const ProdutoCellRenderer = (props: any) => {
   if (!d) return null;
   return (
     <div style={{ lineHeight: 1.4, padding: '4px 0' }}>
-      <div style={{ fontWeight: 600, fontSize: 12 }}>{d.descricao || '-'}</div>
-      <div style={{ fontSize: 10, color: '#6b7280' }}>
-        <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
-        <span style={{ margin: '0 4px' }}>|</span>Ref: {d.ref || '-'}
-        <span style={{ margin: '0 4px' }}>|</span>{d.marca || '-'}
+      <div style={{ fontWeight: 600, fontSize: 14 }}>{d.descricao || '-'}</div>
+      <div style={{ fontSize: 12, color: '#6b7280' }}>
+        Cód: <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
+        <span style={{ margin: '0 4px' }}>|</span>Marca: {d.marca || '-'}
       </div>
     </div>
   );
@@ -57,10 +56,10 @@ const PrecosCellRenderer = (props: any) => {
   const compra = Number(d.prcompra) || 0;
   return (
     <div style={{ lineHeight: 1.4, padding: '4px 0', textAlign: 'right' }}>
-      <div style={{ fontSize: 11 }}>
+      <div style={{ fontSize: 13 }}>
         <span style={{ color: '#6b7280' }}>Tabela:</span> <b>R$ {tabela.toFixed(2)}</b>
       </div>
-      <div style={{ fontSize: 10, color: '#6b7280' }}>Compra: R$ {compra.toFixed(2)}</div>
+      <div style={{ fontSize: 12, color: '#6b7280' }}>Compra: R$ {compra.toFixed(2)}</div>
     </div>
   );
 };
@@ -476,10 +475,16 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       cellRendererSelector: () => ({ component: DeleteCellRenderer }),
     },
     {
+      headerName: 'Referência',
+      field: 'ref',
+      width: 120,
+      cellStyle: { fontWeight: 500 },
+    },
+    {
       headerName: 'Produto',
       field: 'descricao',
-      minWidth: 200,
-      flex: 6,
+      minWidth: 160,
+      flex: 4,
       autoHeight: true,
       cellStyle: { textAlign: 'left', justifyContent: 'flex-start' },
       cellRendererSelector: () => ({ component: ProdutoCellRenderer }),
@@ -492,13 +497,20 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       type: 'numericColumn',
     },
     {
-      headerName: 'Preços',
+      headerName: 'Custo',
+      field: 'prcompra',
+      flex: 1.2,
+      minWidth: 70,
+      type: 'numericColumn',
+      valueFormatter: (p: any) => fmtMoeda(p.value),
+    },
+    {
+      headerName: 'Pr. Tabela',
       field: '_preco_tabela',
-      flex: 2,
-      minWidth: 100,
-      autoHeight: true,
-      cellStyle: { textAlign: 'right', justifyContent: 'flex-end' },
-      cellRendererSelector: () => ({ component: PrecosCellRenderer }),
+      flex: 1.2,
+      minWidth: 70,
+      type: 'numericColumn',
+      valueFormatter: (p: any) => fmtMoeda(p.value),
     },
     {
       headerName: '% Desc',
@@ -808,10 +820,10 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
               .ag-promo-grid .ag-row { border-bottom: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell-resize { display: none !important; }
-              .ag-promo-grid .ag-cell-value { overflow: visible !important; text-overflow: unset !important; }
+              .ag-promo-grid .ag-cell-value { overflow: visible !important; text-overflow: unset !important; white-space: normal !important; word-break: break-word !important; }
               .ag-promo-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; }
-              .ag-promo-grid .ag-cell { display: flex !important; align-items: center !important; justify-content: center !important; font-size: 12px !important; }
-              .ag-promo-grid .ag-input-field-input, .ag-promo-grid .ag-text-field-input { font-size: 12px !important; text-align: center !important; }
+              .ag-promo-grid .ag-cell { display: flex !important; align-items: center !important; justify-content: center !important; font-size: 14px !important; }
+              .ag-promo-grid .ag-input-field-input, .ag-promo-grid .ag-text-field-input { font-size: 14px !important; text-align: center !important; }
             `}</style>
             <div className="h-full ag-promo-grid">
               <AgGridReact

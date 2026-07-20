@@ -100,7 +100,7 @@ export default async function handle(
                      pi.codprod                                    AS codprod_raw,
                      pi.codgpp                                     AS codgpp_raw,
                      COALESCE(pi.codprod::text, pi.codgpp::text)   AS codigo,
-                     COALESCE(dp.descr, dg.descr)                  AS descricao,
+                     COALESCE(dp.aplic_extendida, dp.descr, dg.descr) AS descricao,
                      dp.ref                                        AS ref,
                      pi.valor_desconto_item,
                      pi.tipo_desconto_item,

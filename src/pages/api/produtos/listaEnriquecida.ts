@@ -77,7 +77,7 @@ export default async function listaProdutosEnriquecida(
       const isNumericSearch = /^\d+$/.test(searchTerm);
       if (isNumericSearch) {
         whereConditions.push(
-          `(p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${
+          `(p.aplic_extendida ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${
             paramIndex + 1
           } OR p.codprod = $${paramIndex + 2})`,
         );
@@ -87,7 +87,7 @@ export default async function listaProdutosEnriquecida(
         paramIndex += 3;
       } else {
         whereConditions.push(
-          `(p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex + 1})`,
+          `(p.aplic_extendida ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex + 1})`,
         );
         params.push(`${searchTerm}%`);
         params.push(`${searchTerm}%`);
@@ -178,7 +178,7 @@ export default async function listaProdutosEnriquecida(
           p.ref AS ref,
           p.codgpe AS codgpf,
           p.codprod AS codprod,
-          p.descr AS descr,
+          COALESCE(p.aplic_extendida, p.descr) AS descr,
           p.qtest AS qtest,
           (p.qtest - p.qtdreservada) AS qtddisponivel,
           p.dolar AS dolar,
