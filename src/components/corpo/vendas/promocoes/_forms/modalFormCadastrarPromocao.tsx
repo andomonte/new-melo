@@ -79,11 +79,6 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
     }
   }, [isEstoqueControlActive]); // Execute este efeito sempre que isEstoqueControlActive mudar
 
-  const tipoDescontoOptions = [
-    { value: 'PERC', label: '% Percentual' },
-    { value: 'VALO', label: 'Valor Fixo' },
-    { value: 'PREF', label: 'Preço Final' },
-  ];
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
@@ -379,27 +374,9 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
                   )}
                 </div>
 
-                <div className=" w-full">
-                  {/* Tipo de Desconto */}
-                  <SelectInput searchable
-                    name="tipo_desconto"
-                    label="Tipo de Desconto"
-                    options={tipoDescontoOptions}
-                    value={promocao.tipo_desconto}
-                    onValueChange={(value) =>
-                      handlePromocaoChange({
-                        tipo_desconto: value as 'PERC' | 'VALO' | 'PREF',
-                      })
-                    }
-                    error={error.tipo_desconto}
-                    required
-                    disabled={isSaving}
-                  />
-                </div>
-
                 <div className="w-full">
                   <label className="text-sm font-medium">
-                    Valor do Desconto
+                    % Desconto Padrão
                   </label>
                   <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-md overflow-hidden h-[42px]">
                     <button
@@ -419,7 +396,7 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
 
                     <input
                       type="text"
-                      className="w-full h-full text-center appearance-none bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 outline-none "
+                      className="w-full h-full text-center appearance-none bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-gray-100 outline-none"
                       value={
                         promocao.valor_desconto !== null &&
                         promocao.valor_desconto !== undefined
@@ -435,6 +412,7 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
                           valor_desconto: onlyNumbers
                             ? parseFloat(onlyNumbers)
                             : undefined,
+                          tipo_desconto: 'PERC',
                         });
                       }}
                       onFocus={(e) => {
@@ -442,10 +420,12 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
                           if (e.target.value) e.target.select();
                         }, 0);
                       }}
+                      placeholder="0"
+                      disabled={isSaving}
                     />
 
                     <span className="px-2 text-sm text-gray-500 dark:text-gray-300">
-                      {promocao.tipo_desconto === 'PERC' ? '%' : 'R$'}
+                      %
                     </span>
 
                     <button
@@ -460,6 +440,9 @@ const ModalFormCadastrarPromocao: React.FC<ModalFormCadastrarPromocaoProps> = ({
                       +
                     </button>
                   </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Aplicado como padrão aos itens adicionados
+                  </p>
 
                   {error.valor_desconto && (
                     <p className="text-sm text-red-600 mt-1">

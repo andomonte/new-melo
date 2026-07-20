@@ -118,7 +118,8 @@ const queryPromocao = `
             dp.nome_promocao,
             dp.tipo_promocao,
             dp.valor_desconto AS valor_desconto_promocao_geral,
-            dp.tipo_desconto AS tipo_desconto_promocao_geral
+            dp.tipo_desconto AS tipo_desconto_promocao_geral,
+            COALESCE(dp.permite_balcao, false) AS permite_balcao
         FROM dbpromocao_item dpi
         JOIN dbpromocao dp ON dpi.id_promocao = dp.id_promocao
         WHERE dp.ativa = TRUE
@@ -174,10 +175,8 @@ export default async function Sec(
     // Normaliza colunas para CAIXA ALTA
     let payload = toUpperCaseRows(rows);
 
-    // PROMOÇÕES ATIVAS (inalterado)
-    if (tipoCliente !== '0') {
-      payload = await promocoesAtivas(payload, client);
-    }
+    // PROMOÇÕES ATIVAS - busca sempre, filtra balcão por promoção
+    payload = await promocoesAtivas(payload, client, tipoCliente);
 
     return res.status(200).json(payload);
   } catch (error) {
@@ -189,13 +188,18 @@ export default async function Sec(
     if (client) client.release();
   }
 
-  async function promocoesAtivas(payload: any[], clientArg?: PoolClient) {
+  async function promocoesAtivas(payload: any[], clientArg?: PoolClient, tipoPreco?: string) {
     const currentDateTime = new Date().toISOString();
 
     const promocaoResult = await clientArg!.query(queryPromocao, [
       currentDateTime,
     ]);
-    const promocoesAtivas = promocaoResult.rows.map((x) => serializeBigInt(x));
+    let promocoesAtivas = promocaoResult.rows.map((x) => serializeBigInt(x));
+
+    // Filtrar: se cliente é balcão (tipo 0), só mostra promoções com permite_balcao = true
+    if (tipoPreco === '0') {
+      promocoesAtivas = promocoesAtivas.filter((p) => p.permite_balcao === true);
+    }
 
     const promocoesMap = new Map<string, any[]>();
     promocoesAtivas.forEach((p) => {

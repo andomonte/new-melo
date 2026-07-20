@@ -60,7 +60,7 @@ input[type="number"] {
 }
 
 /* Padrão de focus para inputs e selects em forms */
-input:focus,
+input:not(.peer):focus,
 select:focus,
 textarea:focus,
 [role="combobox"]:focus {

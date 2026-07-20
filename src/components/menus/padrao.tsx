@@ -810,12 +810,12 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
 
   return (
     <div className="flex w-full flex-col bg-muted/40">
-      <Suspense fallback={<Carregamento texto="Carregando módulo..." />}>
+      <Suspense fallback={<div className="h-full w-full" />}>
         <Padrao
           setTelaMudou={handleTelaMudou}
           menus={valorF}
           tela={tela}
-          Corpo={telaMudou === tela ? corpoAtual : Carregamento}
+          Corpo={corpoAtual}
         />
       </Suspense>
     </div>

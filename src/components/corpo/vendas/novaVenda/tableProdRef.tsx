@@ -218,6 +218,9 @@ interface ChildProps {
   setKickbackMarcadoPorProduto: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   precosOriginais: Record<string, string>;
   setPrecosOriginais: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // Navegação entre grids
+  activeGrid: 'prod' | 'ref';
+  onActivateGrid: (grid: 'prod' | 'ref') => void;
 }
 
 const dataT: Payment[] = [
@@ -251,6 +254,9 @@ const DataTablecolumns: React.FC<ChildProps> = ({
   setKickbackMarcadoPorProduto,
   precosOriginais,
   setPrecosOriginais,
+  // Navegação entre grids
+  activeGrid,
+  onActivateGrid,
 }) => {
   const quantT = data2.map((val) => val.quantidade);
   const descT = data2.map((val) => val.desconto);
@@ -271,6 +277,10 @@ const DataTablecolumns: React.FC<ChildProps> = ({
   const [corFundo, setCorFundo] = React.useState(data2.map(() => 0));
   const [indexItem, setIndexItem] = React.useState(0);
   const [points, setPoints] = React.useState({ x: 0, y: 0 });
+
+  // Refs para navegação por teclado
+  const scrollContainerRefR = React.useRef<HTMLDivElement>(null);
+  const rowRefsR = React.useRef<(HTMLDivElement | null)[]>([]);
   const [promocaoSelecionada, setPromocaoSelecionada] = React.useState<
     any | null
   >(null);
@@ -466,6 +476,103 @@ const DataTablecolumns: React.FC<ChildProps> = ({
       setOpenContextMenu(true);
     }
   }, [points]);
+
+  // Navegação por teclado no grid de referências
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Só funciona quando este grid está ativo
+      if (activeGrid !== 'ref') return;
+
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (openConfirma || openContextMenu) return;
+
+      // Tab ou Escape → volta para o grid de produtos
+      if (e.key === 'Tab' || e.key === 'Escape') {
+        e.preventDefault();
+        onActivateGrid('prod');
+        return;
+      }
+
+      const rows = table.getRowModel().rows;
+      if (!rows?.length) return;
+
+      const pageSize = rows.length;
+      const canNextPage = table.getCanNextPage();
+      const canPrevPage = table.getCanPreviousPage();
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+
+        let currentPageIndex = -1;
+        for (let i = 0; i < pageSize; i++) {
+          if (corFundo[i + indexPagina]) {
+            currentPageIndex = i;
+            break;
+          }
+        }
+
+        // Se nenhum selecionado, seleciona o primeiro
+        if (currentPageIndex === -1 && e.key === 'ArrowDown') {
+          setCorFundo((old) => old.map((_, i) => i === indexPagina ? 1 : 0));
+          setTimeout(() => {
+            rowRefsR.current[0]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }, 0);
+          return;
+        }
+
+        if (e.key === 'ArrowDown') {
+          if (currentPageIndex < pageSize - 1) {
+            const newPageIndex = currentPageIndex + 1;
+            const absoluteIndex = newPageIndex + indexPagina;
+            setCorFundo((old) => old.map((_, i) => i === absoluteIndex ? 1 : 0));
+            setTimeout(() => {
+              rowRefsR.current[newPageIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+          } else if (canNextPage) {
+            table.nextPage();
+            const newPageSize = table.getState().pagination.pageSize;
+            const newIdx = (table.getState().pagination.pageIndex + 1) * newPageSize;
+            mudouPagina({ pagina: String(table.getState().pagination.pageIndex + 1), linhas: String(newPageSize) });
+            setTimeout(() => {
+              setCorFundo((old) => old.map((_, i) => i === newIdx ? 1 : 0));
+              setTimeout(() => {
+                rowRefsR.current[0]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              }, 0);
+            }, 50);
+          }
+        } else {
+          // ArrowUp
+          if (currentPageIndex > 0) {
+            const newPageIndex = currentPageIndex - 1;
+            const absoluteIndex = newPageIndex + indexPagina;
+            setCorFundo((old) => old.map((_, i) => i === absoluteIndex ? 1 : 0));
+            setTimeout(() => {
+              rowRefsR.current[newPageIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+          } else if (canPrevPage) {
+            table.previousPage();
+            const newPageSize = table.getState().pagination.pageSize;
+            const prevPageIndex = table.getState().pagination.pageIndex - 1;
+            mudouPagina({ pagina: String(prevPageIndex), linhas: String(newPageSize) });
+            setTimeout(() => {
+              const prevRows = table.getRowModel().rows;
+              const lastIdx = prevRows.length - 1;
+              const lastAbsoluteIndex = lastIdx + (prevPageIndex * newPageSize);
+              setCorFundo((old) => old.map((_, i) => i === lastAbsoluteIndex ? 1 : 0));
+              setTimeout(() => {
+                rowRefsR.current[lastIdx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              }, 0);
+            }, 50);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corFundo, indexPagina, table, openConfirma, openContextMenu, activeGrid]);
 
   const handleAtualizarDescF = (indexDesc: number, novoDesc: string) => {
     if (indexDesc === undefined || indexDesc === null) return;
@@ -683,19 +790,25 @@ const DataTablecolumns: React.FC<ChildProps> = ({
       onClick={() => {
         setOpenContextMenu(false);
         onCtxChange?.({ ...ctxGlobal, open: false });
+        onActivateGrid('ref');
       }}
-      className="w-[100%] select-none h-full text-[10px] lg:text-[12px]  "
+      className={`w-full select-none h-full text-[10px] lg:text-[12px] flex flex-col min-h-0 ${
+        activeGrid === 'ref' ? 'ring-2 ring-orange-400 ring-inset' : ''
+      }`}
     >
-      <div className=" h-[100%] border-b border-t border-gray-300 w-[100%] flex justify-center items-center ">
-        <div className=" w-[100%]  h-[98%]">
-          <div className="flex flex-col w-full h-[100%]  dark:border-gray-800">
-            <div className="flex-grow w-full h-[100%]   overflow-auto">
+      <div className="flex-1 min-h-0 border-b border-t border-gray-300 w-full">
+        <div className="w-full h-full">
+          <div className="flex flex-col w-full h-full dark:border-gray-800">
+            <div ref={scrollContainerRefR} className="flex-1 min-h-0 w-full overflow-auto">
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row, index) => (
                   <div
                     key={Number(index + indexPagina)}
+                    ref={(el) => { rowRefsR.current[index] = el; }}
                     className={` py-1  w-full ${
-                      corFundo[index + indexPagina] ? 'bg-yellow-100' : ''
+                      corFundo[index + indexPagina]
+                        ? activeGrid === 'ref' ? 'bg-orange-100' : 'bg-orange-50'
+                        : ''
                     }`}
                   >
                     {/*box 1 - 2 box um a direita e outro a esquerda  */}
@@ -1313,10 +1426,15 @@ const DataTablecolumns: React.FC<ChildProps> = ({
                                       quant[idx] ?? item?.quantidade ?? 0,
                                     );
 
+                                    // Verifica se item tem promoção ativa
+                                    const promoItem = item?.promocoes?.[0] ?? item?.promocao;
+                                    const promoAtiva = promoItem?.ativa === true || promoItem?.ativa === 'true';
+                                    const promoLock = promoAtiva && Array.isArray(item?.promocoes) && item.promocoes.length > 0;
+
                                     // Define as condições de desabilitação
                                     const isTrava = isEditedBelowAt(item);
                                     const isDisabled =
-                                      currentQuant === 0 || isTrava;
+                                      currentQuant === 0 || isTrava || promoLock;
 
                                     return (
                                       <>
@@ -1782,7 +1900,7 @@ const DataTablecolumns: React.FC<ChildProps> = ({
           </div>
         </div>
       </div>
-      <div className=" bg-blue-50 dark:bg-slate-700    flex h-10 border-b items-center  space-x-5 justify-center">
+      <div className="flex-none bg-blue-50 dark:bg-slate-700 flex h-10 border-b items-center space-x-5 justify-center">
         <DataTablePagination table={table} mudouPagina={mudouPagina} />
       </div>
       <div>
