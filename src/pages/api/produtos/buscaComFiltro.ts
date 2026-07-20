@@ -181,6 +181,38 @@ export default async function handle(
       // number aceita vírgula decimal do usuário
       const valorNum = ehNum ? String(valor).trim().replace(',', '.') : valor;
 
+      // Multi-termo por coluna, no estilo Delphi/novaVenda:
+      //   ESPAÇO = E (todas as palavras)  ex.: "alavanca fiat" -> tem ALAVANCA E FIAT
+      //   ';'    = OU (qualquer uma)      ex.: "melo;imbo"     -> marca melo OU imbo
+      // Combinável: "alavanca fiat;retentor" = (ALAVANCA E FIAT) OU RETENTOR.
+      // Cada palavra vira um ILIKE próprio (E independe da ordem das palavras).
+      // Limpa % que o usuário colocar por engano.
+      const aplicarIlikeMulti = (padrao: (t: string) => string) => {
+        const grupos = String(valor)
+          .split(';')
+          .map((g) =>
+            g
+              .trim()
+              .split(/\s+/)
+              .map((t) => t.replace(/^%+|%+$/g, '').trim())
+              .filter(Boolean),
+          )
+          .filter((g) => g.length > 0);
+        if (grupos.length === 0) return;
+        const orConds = grupos.map((termos) => {
+          const andConds = termos.map((t) => {
+            const cond = `${comoTexto} ILIKE $${paramIndex}`;
+            queryParams.push(padrao(t));
+            paramIndex++;
+            return cond;
+          });
+          return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
+        });
+        whereConditions.push(
+          orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0],
+        );
+      };
+
       switch (tipo) {
         case 'igual':
           whereConditions.push(`${campoAlias} = $${paramIndex}${castParam}`);
@@ -193,19 +225,13 @@ export default async function handle(
           paramIndex++;
           break;
         case 'contém':
-          whereConditions.push(`${comoTexto} ILIKE $${paramIndex}`);
-          queryParams.push(`%${valor}%`);
-          paramIndex++;
+          aplicarIlikeMulti((t) => `%${t}%`);
           break;
         case 'começa':
-          whereConditions.push(`${comoTexto} ILIKE $${paramIndex}`);
-          queryParams.push(`${valor}%`);
-          paramIndex++;
+          aplicarIlikeMulti((t) => `${t}%`);
           break;
         case 'termina':
-          whereConditions.push(`${comoTexto} ILIKE $${paramIndex}`);
-          queryParams.push(`%${valor}`);
-          paramIndex++;
+          aplicarIlikeMulti((t) => `%${t}`);
           break;
         case 'maior':
           whereConditions.push(`${campoAlias} > $${paramIndex}${castParam}`);
