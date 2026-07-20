@@ -81,16 +81,16 @@ export default async function listaProdutosEnriquecida(
             paramIndex + 1
           } OR p.codprod = $${paramIndex + 2})`,
         );
-        params.push(`%${searchTerm}%`);
-        params.push(`%${searchTerm}%`);
+        params.push(`${searchTerm}%`);
+        params.push(`${searchTerm}%`);
         params.push(searchTerm);
         paramIndex += 3;
       } else {
         whereConditions.push(
           `(p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex + 1})`,
         );
-        params.push(`%${searchTerm}%`);
-        params.push(`%${searchTerm}%`);
+        params.push(`${searchTerm}%`);
+        params.push(`${searchTerm}%`);
         paramIndex += 2;
       }
     }
@@ -182,6 +182,8 @@ export default async function listaProdutosEnriquecida(
           p.qtest AS qtest,
           (p.qtest - p.qtdreservada) AS qtddisponivel,
           p.dolar AS dolar,
+          COALESCE(p.prcompra, 0) AS prcompra,
+          COALESCE(p.prcustoatual, 0) AS prcustoatual,
           cp_filtered."MARCA" AS codmarca,
           fp_filtered.prvenda AS prvenda
       FROM dbprod p

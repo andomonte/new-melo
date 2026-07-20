@@ -9,7 +9,6 @@ import {
   ProdutosEnriquecidosResponse,
 } from '@/data/produtos/produtos';
 import { Meta } from '@/data/common/meta';
-import { useDebouncedCallback } from 'use-debounce';
 import DataTable from '@/components/common/DataTablePadrao';
 import { useToast } from '@/hooks/use-toast';
 
@@ -36,30 +35,31 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
   const [listaProd, setListaProd] = useState<ProdutoEnriquecido[]>([]);
   const [meta, setMeta] = useState<Meta>({ total: 0, lastPage: 1, currentPage: 1, perPage: 10 });
   const { toast } = useToast();
-  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+
+  // Map de produtos selecionados (persiste entre buscas/paginações)
+  const [selecionadosMap, setSelecionadosMap] = useState<Map<string, ProdutoEnriquecido>>(new Map());
+
   const [searchInput, setSearchInput] = useState('');
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
   const [filtros, setFiltros] = useState<Filtro[]>([]);
   const ignorarPrimeiro = useRef(true);
   const ultimaChamada = useRef({ page: 0, perPage: 0, search: '', filtros: '[]' });
 
-  const headers = ['ações', 'codprod', 'ref', 'descr', 'codmarca', 'qtest', 'prvenda', 'dolar'];
+  const headers = ['ações', 'cod_ref', 'descr', 'codmarca', 'qtest', 'prvenda'];
   const columnLabels: Record<string, string> = {
     ações: 'Sel',
-    codprod: 'Código',
-    ref: 'Referência',
+    cod_ref: 'Código / Ref',
     descr: 'Descrição',
     codmarca: 'Marca',
     qtest: 'Estoque',
     prvenda: 'Pr. Venda',
-    dolar: 'Origem',
   };
 
   useEffect(() => {
     if (isOpen) {
       ignorarPrimeiro.current = true;
       setListaProd([]);
-      setSelecionados(new Set());
+      setSelecionadosMap(new Map());
       setMeta({ total: 0, lastPage: 1, currentPage: 1, perPage: 10 });
       setSearchInput('');
       setCurrentSearchTerm('');
@@ -113,25 +113,25 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
     }
   }, [isOpen, meta.currentPage, meta.perPage, currentSearchTerm, filtros, fetchProdutos, clienteId]);
 
-  const debouncedSearch = useDebouncedCallback((value: string) => {
+  const executarBusca = useCallback((value: string) => {
     setCurrentSearchTerm(value);
     setMeta((prev) => ({ ...prev, currentPage: 1 }));
-  }, 400);
+  }, []);
 
-  const toggleSelecionado = useCallback((codprod: string) => {
-    setSelecionados((prev) => {
-      const novo = new Set(prev);
-      if (novo.has(codprod)) {
-        novo.delete(codprod);
+  const toggleSelecionado = useCallback((produto: ProdutoEnriquecido) => {
+    setSelecionadosMap((prev) => {
+      const novo = new Map(prev);
+      if (novo.has(produto.codprod)) {
+        novo.delete(produto.codprod);
       } else {
-        novo.add(codprod);
+        novo.set(produto.codprod, produto);
       }
       return novo;
     });
   }, []);
 
   const handleConfirmSelection = () => {
-    if (selecionados.size === 0) {
+    if (selecionadosMap.size === 0) {
       toast({ title: 'Nenhum produto selecionado', description: 'Selecione pelo menos um produto.', variant: 'destructive' });
       return;
     }
@@ -139,10 +139,7 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
     const descontoPadrao = Number(promocao?.valor_desconto) || 0;
     const itens: ItemPromocao[] = [];
 
-    selecionados.forEach((codprod) => {
-      const produto = listaProd.find((p) => p.codprod === codprod);
-      if (!produto) return;
-
+    selecionadosMap.forEach((produto) => {
       const precoVenda = Number(produto.precoFinalCalculado || produto.prvenda) || 0;
       const precoPromo = descontoPadrao > 0 ? precoVenda * (1 - descontoPadrao / 100) : precoVenda;
 
@@ -175,14 +172,14 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
   };
 
   const rows = listaProd.map((produto) => {
-    const isSelected = selecionados.has(produto.codprod);
+    const isSelected = selecionadosMap.has(produto.codprod);
     const row: Record<string, any> = {};
 
     headers.forEach((h) => {
       if (h === 'ações') {
         row[h] = (
           <button
-            onClick={() => toggleSelecionado(produto.codprod)}
+            onClick={() => toggleSelecionado(produto)}
             className="p-1"
             title={isSelected ? 'Remover seleção' : 'Selecionar produto'}
           >
@@ -193,11 +190,11 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
             )}
           </button>
         );
+      } else if (h === 'cod_ref') {
+        row[h] = `${produto.codprod} / ${produto.ref || '-'}`;
       } else if (h === 'prvenda') {
         const preco = Number(produto.precoFinalCalculado || produto.prvenda) || 0;
         row[h] = `R$ ${preco.toFixed(2)}`;
-      } else if (h === 'dolar') {
-        row[h] = (produto as any).dolar === 'S' ? 'Importado' : 'Nacional';
       } else {
         row[h] = (produto as any)[h] ?? '';
       }
@@ -214,14 +211,18 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
         <div className="flex items-center justify-between px-4 py-2.5 border-b dark:border-zinc-700">
           <h2 className="text-lg font-bold text-[#347AB6]">Adicionar Produtos à Promoção</h2>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">{selecionados.size} selecionado(s)</span>
+            {selecionadosMap.size > 0 ? (
+              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 px-2 py-1 rounded-full font-medium">
+                {selecionadosMap.size} selecionado(s)
+              </span>
+            ) : null}
             <Button
               className="bg-green-600 text-white hover:bg-green-700"
               size="sm"
-              disabled={selecionados.size === 0}
+              disabled={selecionadosMap.size === 0}
               onClick={handleConfirmSelection}
             >
-              Confirmar Seleção
+              Confirmar ({selecionadosMap.size})
             </Button>
             <Button size="icon" variant="ghost" onClick={onClose}>
               <X className="h-5 w-5" />
@@ -244,15 +245,16 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
             searchValue={searchInput}
             onSearch={(e) => {
               setSearchInput(e.target.value);
-              debouncedSearch(e.target.value);
             }}
             onSearchKeyDown={(e) => {
               if (e.key === 'Enter') {
-                setCurrentSearchTerm(searchInput);
-                setMeta((prev) => ({ ...prev, currentPage: 1 }));
+                executarBusca(searchInput);
               }
             }}
-            searchInputPlaceholder="Digite pelo menos 3 caracteres para buscar produto..."
+            onSearchBlur={() => {
+              if (searchInput.trim().length >= 3) executarBusca(searchInput);
+            }}
+            searchInputPlaceholder="Digite e pressione Enter para buscar..."
             noDataMessage={!currentSearchTerm || currentSearchTerm.length < 3
               ? 'Digite pelo menos 3 caracteres e pressione Enter para buscar...'
               : 'Nenhum produto encontrado.'
