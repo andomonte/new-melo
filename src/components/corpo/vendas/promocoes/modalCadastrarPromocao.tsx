@@ -40,8 +40,13 @@ const ProdutoCellRenderer = (props: any) => {
   if (!d) return null;
   return (
     <div style={{ lineHeight: 1.4, padding: '4px 0' }}>
-      <div style={{ fontWeight: 600, fontSize: 14 }}>{d.descricao || '-'}</div>
-      <div style={{ fontSize: 12, color: '#6b7280' }}>
+      <div title={d.descricao || ''} style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word' }}>{d.descricao || '-'}</div>
+      <div style={{ fontSize: 12, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <img
+          src={d.origem === 'N' ? '/images/brasil.png' : '/images/importado.png'}
+          alt={d.origem === 'N' ? 'Nacional' : 'Importado'}
+          style={{ width: 16, height: 11, objectFit: 'contain' }}
+        />
         Cód: <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
       </div>
     </div>
@@ -842,9 +847,9 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
               .ag-promo-grid .ag-row { border-bottom: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell-resize { display: none !important; }
-              .ag-promo-grid .ag-cell-value { overflow: visible !important; text-overflow: unset !important; white-space: normal !important; word-break: break-word !important; }
+              .ag-promo-grid .ag-cell-value { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
               .ag-promo-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; }
-              .ag-promo-grid .ag-cell { display: flex !important; align-items: center !important; justify-content: center !important; font-size: 14px !important; }
+              .ag-promo-grid .ag-cell { display: flex !important; align-items: center !important; justify-content: center !important; font-size: 13px !important; }
               .ag-promo-grid .ag-input-field-input, .ag-promo-grid .ag-text-field-input { font-size: 14px !important; text-align: center !important; }
             `}</style>
             <div className="h-full ag-promo-grid">

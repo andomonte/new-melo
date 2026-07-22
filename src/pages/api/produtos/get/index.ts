@@ -44,16 +44,70 @@ export default async function handle(
     const queryParams: any[] = [];
     let paramIndex = 1;
 
-    // Busca geral
+    // Busca geral com regras:
+    // Uma palavra = prefixo em aplic_extendida e ref
+    // Múltiplas palavras = primeira prefixo + demais contém em aplic_extendida
+    // % na frente = contém | ; ou , = OR | | = marca (não aplicável aqui) | "aspas" = frase exata
+    // Número puro = codprod e ref | Letras+números = ref e codprod
     if (search && typeof search === 'string' && search.trim()) {
-      whereConditions.push(
-        `(p.codprod ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex})`,
-      );
-      whereConditionsCount.push(
-        `(codprod ILIKE $${paramIndex} OR descr ILIKE $${paramIndex} OR ref ILIKE $${paramIndex})`,
-      );
-      queryParams.push(`%${search.trim()}%`);
-      paramIndex++;
+      const searchTerm = search.trim();
+      const isNumerico = /^\d+$/.test(searchTerm);
+      const isRefMista = /^[A-Za-z]+\d+/.test(searchTerm) || /^\d+[A-Za-z]+/.test(searchTerm);
+
+      // Extrair frases entre aspas
+      const frases: string[] = [];
+      const semAspas = searchTerm.replace(/"([^"]+)"/g, (_m: string, f: string) => {
+        frases.push(f.trim());
+        return '';
+      }).trim();
+
+      const grupos = semAspas
+        .split(/[;,]/)
+        .map((g: string) => g.trim().split(/\s+/).filter(Boolean))
+        .filter((g: string[]) => g.length > 0);
+
+      frases.forEach((f: string) => { if (f) grupos.push([f]); });
+
+      if (grupos.length > 0) {
+        const colsGeral = isNumerico
+          ? ['p.codprod::text', 'p.ref']
+          : isRefMista
+            ? ['p.ref', 'p.codprod::text']
+            : ['p.aplic_extendida', 'p.ref'];
+
+        const orConds = grupos.map((termos: string[]) => {
+          if (termos.length === 1) {
+            const t = termos[0];
+            const contemMode = t.startsWith('%');
+            const termoLimpo = t.replace(/^%+|%+$/g, '').trim();
+            if (!termoLimpo) return '';
+            const like = contemMode ? `%${termoLimpo}%` : `${termoLimpo}%`;
+            const colConds = colsGeral.map((col: string) => `${col} ILIKE $${paramIndex}`);
+            queryParams.push(like);
+            paramIndex++;
+            return `(${colConds.join(' OR ')})`;
+          } else {
+            const colTexto = ['p.aplic_extendida'];
+            const andConds = termos.map((t: string, i: number) => {
+              const temPercent = t.startsWith('%');
+              const termoLimpo = t.replace(/^%+|%+$/g, '').trim();
+              if (!termoLimpo) return '';
+              const like = temPercent ? `%${termoLimpo}%` : (i === 0 ? `${termoLimpo}%` : `%${termoLimpo}%`);
+              const colConds = colTexto.map((col: string) => `${col} ILIKE $${paramIndex}`);
+              queryParams.push(like);
+              paramIndex++;
+              return `(${colConds.join(' OR ')})`;
+            }).filter(Boolean);
+            return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0] || '';
+          }
+        }).filter(Boolean);
+
+        const cond = orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0];
+        if (cond) {
+          whereConditions.push(cond);
+          whereConditionsCount.push(cond);
+        }
+      }
     }
 
     const whereClause = whereConditions.length
@@ -73,7 +127,13 @@ export default async function handle(
           SELECT COUNT(DISTINCT cap.arp_arm_id)
           FROM cad_armazem_produto cap
           WHERE cap.arp_codprod = p.codprod AND COALESCE(cap.arp_qtest, 0) > 0
-        ), 0) as qtd_armazens
+        ), 0) as qtd_armazens,
+        COALESCE((
+          SELECT SUM(cap.arp_qtest)
+          FROM cad_armazem_produto cap
+          WHERE cap.arp_codprod = p.codprod
+            AND COALESCE(cap.arp_bloqueado, 'N') <> 'S'
+        ), 0) as estoque_disponivel
       FROM db_manaus.dbprod p
       ${whereClause}
       ORDER BY p.descr
@@ -85,7 +145,7 @@ export default async function handle(
 
     // Contar o total
     const countQuery = `
-      SELECT COUNT(*) as total FROM db_manaus.dbprod
+      SELECT COUNT(*) as total FROM db_manaus.dbprod p
       ${whereClauseCount}
     `;
 

@@ -111,7 +111,12 @@ export default async function handle(
                      pi.qtd_total_item,
                      pi.origem,
                      cp."MARCA"                                    AS marca,
-                     (COALESCE(dp.qtest, 0) - COALESCE(dp.qtdreservada, 0)) AS qtddisponivel,
+                     COALESCE((
+                       SELECT SUM(cap.arp_qtest)
+                       FROM cad_armazem_produto cap
+                       WHERE cap.arp_codprod = pi.codprod
+                         AND COALESCE(cap.arp_bloqueado, 'N') <> 'S'
+                     ), 0) AS qtddisponivel,
                      fp1."PRECOVENDA"                              AS prvenda,
                      COALESCE(dp.prcompra, 0)                      AS prcompra,
                      COALESCE(dp.prcustoatual, 0)                  AS prcustoatual,

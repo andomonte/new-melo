@@ -1,13 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import { Button } from '@/components/ui/button';
 import { X, CheckSquare, Square } from 'lucide-react';
 import { Promocao, ItemPromocao } from '@/data/promocoes/promocoes';
-import {
-  Filtro,
-  getListaProdutosEnriquecidos,
-  ProdutoEnriquecido,
-  ProdutosEnriquecidosResponse,
-} from '@/data/produtos/produtos';
+import { AuthContext } from '@/contexts/authContexts';
+import { getProdutos } from '@/data/produtos/produtos';
 import { Meta } from '@/data/common/meta';
 import DataTable from '@/components/common/DataTablePadrao';
 import { useToast } from '@/hooks/use-toast';
@@ -31,27 +27,28 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
   clienteId,
   promocao,
 }) => {
+  const { user } = useContext(AuthContext) as any;
   const [loadingProd, setLoadingProd] = useState(false);
-  const [listaProd, setListaProd] = useState<ProdutoEnriquecido[]>([]);
+  const [listaProd, setListaProd] = useState<any[]>([]);
   const [meta, setMeta] = useState<Meta>({ total: 0, lastPage: 1, currentPage: 1, perPage: 10 });
   const { toast } = useToast();
 
   // Map de produtos selecionados (persiste entre buscas/paginações)
-  const [selecionadosMap, setSelecionadosMap] = useState<Map<string, ProdutoEnriquecido>>(new Map());
+  const [selecionadosMap, setSelecionadosMap] = useState<Map<string, any>>(new Map());
 
   const [searchInput, setSearchInput] = useState('');
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
-  const [filtros, setFiltros] = useState<Filtro[]>([]);
   const ignorarPrimeiro = useRef(true);
-  const ultimaChamada = useRef({ page: 0, perPage: 0, search: '', filtros: '[]' });
+  const ultimaChamada = useRef({ page: 0, perPage: 0, search: '' });
 
-  const headers = ['ações', 'cod_ref', 'descr', 'codmarca', 'qtest', 'prvenda'];
+  const headers = ['ações', 'codprod', 'ref', 'descr', 'codmarca', 'estoque_disponivel', 'prvenda'];
   const columnLabels: Record<string, string> = {
     ações: 'Sel',
-    cod_ref: 'Código / Ref',
+    codprod: 'Código',
+    ref: 'Referência',
     descr: 'Descrição',
     codmarca: 'Marca',
-    qtest: 'Estoque',
+    estoque_disponivel: 'Estoque',
     prvenda: 'Pr. Venda',
   };
 
@@ -63,30 +60,23 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
       setMeta({ total: 0, lastPage: 1, currentPage: 1, perPage: 10 });
       setSearchInput('');
       setCurrentSearchTerm('');
-      setFiltros([]);
-      ultimaChamada.current = { page: 0, perPage: 0, search: '', filtros: '[]' };
+      ultimaChamada.current = { page: 0, perPage: 0, search: '' };
     }
   }, [isOpen]);
 
-  const fetchProdutos = useCallback(async ({
-    page, perPage, productSearch, filtrosParam, cliId,
-  }: {
-    page: number; perPage: number; productSearch: string; filtrosParam: Filtro[]; cliId?: string;
-  }) => {
-    const key = `${page}-${perPage}-${productSearch}-${JSON.stringify(filtrosParam)}`;
-    const lastKey = `${ultimaChamada.current.page}-${ultimaChamada.current.perPage}-${ultimaChamada.current.search}-${ultimaChamada.current.filtros}`;
+  const fetchProdutos = useCallback(async (page: number, perPage: number, search: string) => {
+    const key = `${page}-${perPage}-${search}`;
+    const lastKey = `${ultimaChamada.current.page}-${ultimaChamada.current.perPage}-${ultimaChamada.current.search}`;
     if (key === lastKey) return;
 
-    ultimaChamada.current = { page, perPage, search: productSearch, filtros: JSON.stringify(filtrosParam) };
+    ultimaChamada.current = { page, perPage, search };
     setLoadingProd(true);
 
     try {
-      const data: ProdutosEnriquecidosResponse = await getListaProdutosEnriquecidos({
-        page, perPage, productSearch, tipoPreco: tipoPrecoCliente, filtros: filtrosParam, clienteId: cliId,
-      });
+      const data = await getProdutos({ page, perPage, search });
 
       if (data?.data?.length > 0) {
-        setListaProd(data.data as ProdutoEnriquecido[]);
+        setListaProd(data.data);
         setMeta(data.meta);
       } else {
         setListaProd([]);
@@ -98,27 +88,27 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
     } finally {
       setLoadingProd(false);
     }
-  }, [tipoPrecoCliente]);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
     if (ignorarPrimeiro.current) { ignorarPrimeiro.current = false; return; }
 
     const termo = currentSearchTerm.trim();
-    if (termo.length >= 3 || filtros.length > 0) {
-      fetchProdutos({ page: meta.currentPage, perPage: meta.perPage, productSearch: termo, filtrosParam: filtros, cliId: clienteId });
+    if (termo.length >= 3) {
+      fetchProdutos(meta.currentPage, meta.perPage, termo);
     } else {
       setListaProd([]);
       setLoadingProd(false);
     }
-  }, [isOpen, meta.currentPage, meta.perPage, currentSearchTerm, filtros, fetchProdutos, clienteId]);
+  }, [isOpen, meta.currentPage, meta.perPage, currentSearchTerm, fetchProdutos]);
 
   const executarBusca = useCallback((value: string) => {
     setCurrentSearchTerm(value);
     setMeta((prev) => ({ ...prev, currentPage: 1 }));
   }, []);
 
-  const toggleSelecionado = useCallback((produto: ProdutoEnriquecido) => {
+  const toggleSelecionado = useCallback((produto: any) => {
     setSelecionadosMap((prev) => {
       const novo = new Map(prev);
       if (novo.has(produto.codprod)) {
@@ -140,7 +130,7 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
     const itens: ItemPromocao[] = [];
 
     selecionadosMap.forEach((produto) => {
-      const precoVenda = Number(produto.precoFinalCalculado || produto.prvenda) || 0;
+      const precoVenda = Number(produto.prvenda) || 0;
       const precoPromo = descontoPadrao > 0 ? precoVenda * (1 - descontoPadrao / 100) : precoVenda;
 
       itens.push({
@@ -151,7 +141,7 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
         descricao: produto.descr || '',
         ref: produto.ref || '',
         marca: produto.codmarca || '',
-        qtddisponivel: produto.qtest || 0,
+        qtddisponivel: Number(produto.estoque_disponivel) || produto.qtest || 0,
         preco: precoVenda,
         prcompra: Number((produto as any).prcompra) || 0,
         prcustoatual: Number((produto as any).prcustoatual) || 0,
@@ -190,11 +180,16 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
             )}
           </button>
         );
-      } else if (h === 'cod_ref') {
-        row[h] = `${produto.codprod} / ${produto.ref || '-'}`;
       } else if (h === 'prvenda') {
-        const preco = Number(produto.precoFinalCalculado || produto.prvenda) || 0;
+        const preco = Number(produto.prvenda) || 0;
         row[h] = `R$ ${preco.toFixed(2)}`;
+      } else if (h === 'descr') {
+        const texto = (produto as any).descr || '';
+        row[h] = (
+          <div title={texto} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.3', whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'left' }}>
+            {texto}
+          </div>
+        );
       } else {
         row[h] = (produto as any)[h] ?? '';
       }
@@ -231,12 +226,17 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
         </div>
 
         {/* DataTable */}
-        <div className="flex-1 min-h-0 flex flex-col p-2">
+        <style>{`
+          .promo-busca-grid .min-w-max { min-width: 0 !important; width: 100% !important; }
+        `}</style>
+        <div className="flex-1 min-h-0 flex flex-col p-2 overflow-hidden promo-busca-grid">
           <DataTable
             headers={headers}
             rows={rows}
             meta={meta}
             columnLabels={columnLabels}
+            screenKey="promocao-adicionar-itens"
+            userName={user?.usuario}
             carregando={loadingProd}
             semColunaDeAcaoPadrao={true}
             nonsortableColumns={['ações']}
@@ -252,17 +252,16 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
               }
             }}
             onSearchBlur={() => {
-              if (searchInput.trim().length >= 3) executarBusca(searchInput);
+              if (searchInput.trim().length >= 3 && searchInput.trim() !== currentSearchTerm) {
+                executarBusca(searchInput);
+              }
             }}
+            filtrarSomenteAoConfirmar={true}
             searchInputPlaceholder="Digite e pressione Enter para buscar..."
             noDataMessage={!currentSearchTerm || currentSearchTerm.length < 3
               ? 'Digite pelo menos 3 caracteres e pressione Enter para buscar...'
               : 'Nenhum produto encontrado.'
             }
-            onFiltroChange={(novosFiltros) => {
-              setFiltros(novosFiltros);
-              setMeta((prev) => ({ ...prev, currentPage: 1 }));
-            }}
           />
         </div>
       </div>

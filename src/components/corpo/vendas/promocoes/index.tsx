@@ -888,11 +888,22 @@ const PromocoesPage = () => {
           }}
           searchValue={search}
           onSearch={(e) => {
-            const valor = e.target.value;
-            setSearch(valor);
-            debouncedSearch(valor);
+            setSearch(e.target.value);
           }}
-          searchInputPlaceholder="Pesquisar nome da promoção..."
+          onSearchKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handlePromocoes(1, perPage, search);
+              setPage(1);
+            }
+          }}
+          onSearchBlur={() => {
+            if (search.trim().length >= 3 && search.trim() !== promocoes.data?.[0]?.nome_promocao) {
+              handlePromocoes(1, perPage, search);
+              setPage(1);
+            }
+          }}
+          filtrarSomenteAoConfirmar={true}
+          searchInputPlaceholder="Pesquisar e pressione Enter..."
           noDataMessage="Nenhuma promoção ativa encontrada."
           onExportarExcel={handleExportarExcel}
           rowClassName={(_row, idx) => idx === linhaSelecionada ? 'bg-blue-50 dark:bg-blue-950' : ''}

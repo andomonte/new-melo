@@ -72,26 +72,100 @@ export default async function listaProdutosEnriquecida(
     // e selecione o preço certo ANTES do JOIN.
     // A condição "PRECOVENDA > 0" também será aplicada dentro da CTE.
 
-    // Adicionar termo de busca geral (productSearch)
+    // Busca geral com regras:
+    // espaço = AND | ; ou , = OR | | = marca | % na frente = contém
     if (searchTerm) {
-      const isNumericSearch = /^\d+$/.test(searchTerm);
-      if (isNumericSearch) {
-        whereConditions.push(
-          `(p.aplic_extendida ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${
-            paramIndex + 1
-          } OR p.codprod = $${paramIndex + 2})`,
-        );
-        params.push(`${searchTerm}%`);
-        params.push(`${searchTerm}%`);
-        params.push(searchTerm);
-        paramIndex += 3;
-      } else {
-        whereConditions.push(
-          `(p.aplic_extendida ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex + 1})`,
-        );
-        params.push(`${searchTerm}%`);
-        params.push(`${searchTerm}%`);
-        paramIndex += 2;
+      // Detecta tipo de busca pra otimizar colunas
+      const parteAntesPipe = String(searchTerm).split('|')[0].trim();
+      const isNumerico = /^\d+$/.test(parteAntesPipe);
+      const isRefMista = /^[A-Za-z]+\d+/.test(parteAntesPipe) || /^\d+[A-Za-z]+/.test(parteAntesPipe);
+      const colsGeral = isNumerico
+        ? ['p.codprod::text', 'p.ref']
+        : isRefMista
+          ? ['p.ref', 'p.codprod::text']
+          : ['p.aplic_extendida', 'p.ref'];
+      const colMarca = 'cp_filtered."MARCA"';
+
+      // Separa parte geral e parte marca pelo |
+      const partes = String(searchTerm).split('|');
+      const parteGeral = (partes[0] || '').trim();
+      const parteMarca = (partes[1] || '').trim();
+
+      // Função: montar condição para um termo em colunas específicas
+      const montarTermoCond = (termo: string, colunas: string[]): string => {
+        const contemMode = termo.startsWith('%');
+        const termoLimpo = termo.replace(/^%+|%+$/g, '').trim();
+        if (!termoLimpo) return '';
+        const like = contemMode ? `%${termoLimpo}%` : `${termoLimpo}%`;
+        const colConds = colunas.map((col) => `${col} ILIKE $${paramIndex}`);
+        params.push(like);
+        paramIndex++;
+        return `(${colConds.join(' OR ')})`;
+      };
+
+      // Função: montar grupo OR (separado por ; ou ,) com AND interno (espaço)
+      // Aspas = frase exata: "mola grande" busca a frase completa como prefixo
+      const montarGrupos = (input: string, colunas: string[]): string => {
+        // Extrair frases entre aspas antes de splitar
+        const frases: string[] = [];
+        const semAspas = input.replace(/"([^"]+)"/g, (_match, frase) => {
+          frases.push(frase.trim());
+          return '';
+        }).trim();
+
+        const grupos = semAspas
+          .split(/[;,]/)
+          .map((g) => g.trim().split(/\s+/).filter(Boolean))
+          .filter((g) => g.length > 0);
+
+        // Adicionar frases exatas como grupos de uma palavra só (prefixo da frase)
+        frases.forEach((f) => {
+          if (f) grupos.push([f]);
+        });
+
+        if (grupos.length === 0) return '';
+
+        const orConds = grupos.map((termos) => {
+          if (termos.length === 1) {
+            return montarTermoCond(termos[0], colunas);
+          } else {
+            // Múltiplas palavras: busca só em aplic_extendida (texto descritivo)
+            // Primeira = prefixo, demais = contém
+            const colTexto = ['p.aplic_extendida'];
+            const andConds = termos.map((t, i) => {
+              const temPercent = t.startsWith('%');
+              const termoLimpo = t.replace(/^%+|%+$/g, '').trim();
+              if (!termoLimpo) return '';
+              const like = temPercent ? `%${termoLimpo}%` : (i === 0 ? `${termoLimpo}%` : `%${termoLimpo}%`);
+              const colConds = colTexto.map((col) => `${col} ILIKE $${paramIndex}`);
+              params.push(like);
+              paramIndex++;
+              return `(${colConds.join(' OR ')})`;
+            }).filter(Boolean);
+            return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0] || '';
+          }
+        }).filter(Boolean);
+
+        if (orConds.length === 0) return '';
+        return orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0];
+      };
+
+      const condicoes: string[] = [];
+
+      // Parte geral (antes do |)
+      if (parteGeral) {
+        const cond = montarGrupos(parteGeral, colsGeral);
+        if (cond) condicoes.push(cond);
+      }
+
+      // Parte marca (depois do |)
+      if (parteMarca) {
+        const cond = montarGrupos(parteMarca, [colMarca]);
+        if (cond) condicoes.push(cond);
+      }
+
+      if (condicoes.length > 0) {
+        whereConditions.push(condicoes.length > 1 ? `(${condicoes.join(' AND ')})` : condicoes[0]);
       }
     }
 
@@ -188,28 +262,24 @@ export default async function listaProdutosEnriquecida(
           fp_filtered.prvenda AS prvenda
       FROM dbprod p
       JOIN (
-          -- Seleciona uma única marca por CODPROD de cmp_produto
-          -- Prioriza 'ARTEB' ou a primeira marca em ordem alfabética se não for ARTEB
           SELECT DISTINCT ON ("CODPROD")
               "CODPROD",
               "MARCA"
           FROM cmp_produto
           ORDER BY "CODPROD",
-                   CASE WHEN "MARCA" = 'ARTEB' THEN 0 ELSE 1 END, -- Prioriza 'ARTEB'
-                   "MARCA" -- Desempate alfabético para outras marcas
+                   CASE WHEN "MARCA" = 'ARTEB' THEN 0 ELSE 1 END,
+                   "MARCA"
       ) cp_filtered ON p.codprod = cp_filtered."CODPROD"
       JOIN (
-          -- Seleciona um único preço por CODPROD e TIPOPRECO de dbformacaoprvenda
-          -- Prioriza a linha que tem o maior PRECOVENDA, ou outro critério se houver
           SELECT DISTINCT ON ("CODPROD", "TIPOPRECO")
               "CODPROD",
               "PRECOVENDA" AS prvenda,
               "TIPOPRECO"
           FROM dbformacaoprvenda
-          WHERE "PRECOVENDA" > 0 -- Mantém a condição de preço > 0 aqui
-            AND "TIPOPRECO" = $${paramIndex} -- Filtra o tipo de preço aqui
+          WHERE "PRECOVENDA" > 0
+            AND "TIPOPRECO" = $${paramIndex}
           ORDER BY "CODPROD", "TIPOPRECO",
-                   "PRECOVENDA" DESC -- Desempate: se houver múltiplos preços para o mesmo CODPROD/TIPOPRECO, pega o maior
+                   "PRECOVENDA" DESC
       ) fp_filtered ON p.codprod = fp_filtered."CODPROD"
       ${finalWhereClause}
       ORDER BY qtddisponivel DESC
@@ -232,7 +302,8 @@ export default async function listaProdutosEnriquecida(
       FROM dbprod p
       JOIN (
           SELECT DISTINCT ON ("CODPROD")
-              "CODPROD"
+              "CODPROD",
+              "MARCA"
           FROM cmp_produto
           ORDER BY "CODPROD",
                    CASE WHEN "MARCA" = 'ARTEB' THEN 0 ELSE 1 END,
@@ -245,22 +316,24 @@ export default async function listaProdutosEnriquecida(
               "TIPOPRECO"
           FROM dbformacaoprvenda
           WHERE "PRECOVENDA" > 0
-            AND "TIPOPRECO" = $${tipoClienteParamIndex} -- Referencia o parâmetro tipoCliente
+            AND "TIPOPRECO" = $${tipoClienteParamIndex}
           ORDER BY "CODPROD", "TIPOPRECO",
                    "PRECOVENDA" DESC
       ) fp_filtered ON p.codprod = fp_filtered."CODPROD"
       ${finalWhereClause};
     `;
 
-    const countQueryParams = params.slice(0, params.length - 2); // Remove LIMIT e OFFSET
-
-    const [dataResult, countResult] = await Promise.all([
-      client.query(dataQuerySql, params),
-      client.query(countQuerySql, countQueryParams),
-    ]);
-
-    const total = parseInt(countResult.rows[0].count, 10);
+    // Busca dados primeiro, count só se tiver resultados (performance)
+    const dataResult = await client.query(dataQuerySql, params);
     const products = dataResult.rows;
+
+    let total = products.length;
+    if (products.length >= itemsPerPage) {
+      // Só roda count se a página está cheia (pode ter mais)
+      const countQueryParams = params.slice(0, params.length - 2);
+      const countResult = await client.query(countQuerySql, countQueryParams);
+      total = parseInt(countResult.rows[0].count, 10);
+    }
 
     const lastPage = Math.ceil(total / itemsPerPage);
 
