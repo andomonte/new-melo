@@ -138,7 +138,7 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
         id_promocao: promocao?.id_promocao || 0,
         codprod: produto.codprod,
         codgpp: null,
-        descricao: produto.descr || '',
+        descricao: produto.aplic_extendida || produto.descr || '',
         ref: produto.ref || '',
         marca: produto.codmarca || '',
         qtddisponivel: Number(produto.estoque_disponivel) || produto.qtest || 0,
@@ -184,7 +184,7 @@ export const AdicionarProdutosAoCarrinhoModal: React.FC<AdicionarProdutosAoCarri
         const preco = Number(produto.prvenda) || 0;
         row[h] = `R$ ${preco.toFixed(2)}`;
       } else if (h === 'descr') {
-        const texto = (produto as any).descr || '';
+        const texto = (produto as any).aplic_extendida || (produto as any).descr || '';
         row[h] = (
           <div title={texto} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.3', whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'left' }}>
             {texto}

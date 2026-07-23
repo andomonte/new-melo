@@ -1,19 +1,42 @@
 # Pendências - MeloSys
 
+---
+## REGRAS CRÍTICAS (aplicar em TODAS as telas)
+---
+
+### REGRA 1: NUNCA mostrar `descr` — SEMPRE usar `aplic_extendida`
+- Em queries SQL: `COALESCE(dp.aplic_extendida, dp.descr)` como descrição
+- No front-end: `produto.aplic_extendida || produto.descr`
+- O campo `descr` é resumido/incompleto, `aplic_extendida` é a descrição real usada pelo cliente
+- Toda tela que exibe descrição de produto DEVE usar `aplic_extendida`
+
+### REGRA 2: NUNCA dar foco principal ao código (`codprod`) — SEMPRE priorizar referência (`ref`)
+- O cliente/usuário trabalha com referência, NÃO com código interno
+- Telas que mostram código como coluna principal devem trocar pra referência
+- Código pode existir como informação secundária, mas referência é o identificador principal do usuário
+- Na busca, referência tem prioridade sobre código
+- Em listagens, a coluna referência deve vir antes do código
+
+### REGRA 3: Preferências de tela SEMPRE salvas por usuário
+- Toda tela que usa DataTablePadrao DEVE passar `screenKey` e `userName`
+- Configurações salvas: colunas visíveis, ordem das colunas, ordenação, filtros, itens por página
+- O usuário configura uma vez e o sistema lembra em qualquer dispositivo que ele logar
+- Telas sem `screenKey`/`userName` perdem configuração ao recarregar — isso NÃO é aceitável
+
+---
+
 ## Padronizações a aplicar em todas as telas
 
-### 1. Descrição do produto: usar `aplic_extendida`
-- **O quê:** Trocar `dp.descr` por `COALESCE(dp.aplic_extendida, dp.descr)` em todas as queries que retornam descrição de produto
-- **Por quê:** O cliente usa a coluna `aplic_extendida` como descrição principal, não `descr`
-- **Onde já foi feito:** `src/pages/api/promocoes/get.ts`
+### 1. Aplicar regras críticas (aplic_extendida + ref como principal)
+- **Onde já foi feito:** `src/pages/api/promocoes/get.ts`, `src/pages/api/produtos/listaEnriquecida.ts`, modal adicionar itens promoção
 - **Onde falta fazer:**
   - `src/pages/api/vendas/postgresql/produto.ts` (tela de venda - busca de produto)
-  - `src/pages/api/produtos/listaEnriquecida.ts` (modal adicionar itens promoção)
   - `src/pages/api/produtos/get/index.ts` (cadastro de produtos)
   - `src/pages/api/vendas/analise-liberacao.ts` (análise para liberação)
   - `src/pages/api/vendas/get.ts` (central de vendas)
   - `src/pages/api/faturamento/produtos-fatura.ts` (faturamento)
   - Qualquer outra API que retorne `descr` de `dbprod`
+  - Todas as telas front-end que mostram `codprod` como principal em vez de `ref`
 
 ### 2. Busca: padronizar em todas as telas
 

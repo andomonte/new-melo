@@ -5,7 +5,7 @@ import { promocaoSchema } from '@/data/promocoes/promocoesSchema';
 import { AuthContext } from '@/contexts/authContexts';
 import { AdicionarProdutosAoCarrinhoModal } from './_forms/AdicionarProdutosAoCarrinhoModal';
 import InfoModal from '@/components/common/infoModal';
-import { CircleCheckBig, X, Plus, Trash2, Download, Save, Eraser, FileDown, Keyboard } from 'lucide-react';
+import { CircleCheckBig, X, Plus, Trash2, Download, Save, Eraser, FileDown, Keyboard, Eye } from 'lucide-react';
 import {
   ContextMenu, ContextMenuTrigger, ContextMenuContent,
   ContextMenuItem, ContextMenuSeparator, ContextMenuLabel,
@@ -16,6 +16,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import FormFooter from '@/components/common/FormFooter2';
+import ProductZoomModal from '@/components/common/ProductZoomModal';
 import api from '@/components/services/api';
 import { AgGridReact } from 'ag-grid-react';
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community';
@@ -146,6 +147,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
   const [infoModalIcon, setInfoModalIcon] = useState<React.ReactElement | null>(null);
   const [savedPromocaoData, setSavedPromocaoData] = useState<Promocao | null>(null);
   const [itemParaRemover, setItemParaRemover] = useState<string | null>(null);
+  const [zoomProduto, setZoomProduto] = useState<any>(null);
 
   // ---------- Clientes e Vendedores vinculados ----------
   const [clientesVinculados, setClientesVinculados] = useState<{ cod: string; nome: string }[]>([]);
@@ -637,7 +639,22 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       } else if (e.ctrlKey && e.key === 'e') {
         e.preventDefault();
         atalhoRef.current.exportar();
-      } else if (e.key === 'Escape' && !isAddProductsModalOpen && !itemParaRemover) {
+      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+        // Não interceptar em inputs (preserva undo nativo)
+        const el = e.target as HTMLElement;
+        if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT' || el?.isContentEditable) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Zoom: abre detalhes do produto selecionado no grid
+        const focusedCell = gridRef.current?.api?.getFocusedCell();
+        if (focusedCell) {
+          const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(focusedCell.rowIndex);
+          if (rowNode?.data) {
+            setZoomProduto({ codprod: rowNode.data.codprod, ref: rowNode.data.ref, descr: rowNode.data.descricao });
+          }
+        }
+      } else if (e.key === 'Escape' && !isAddProductsModalOpen && !itemParaRemover && !zoomProduto) {
         e.preventDefault();
         atalhoRef.current.close();
       }
@@ -898,6 +915,16 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
             <FileDown size={14} className="mr-2" /> Exportar CSV
             <span className="ml-auto text-[10px] text-gray-400">Ctrl+E</span>
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            const focusedCell = gridRef.current?.api?.getFocusedCell();
+            if (focusedCell) {
+              const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(focusedCell.rowIndex);
+              if (rowNode?.data) setZoomProduto({ codprod: rowNode.data.codprod, ref: rowNode.data.ref, descr: rowNode.data.descricao });
+            }
+          }}>
+            <Eye size={14} className="mr-2" /> Zoom Produto
+            <span className="ml-auto text-[10px] text-gray-400">Ctrl+Z</span>
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={onClose}>
             <X size={14} className="mr-2" /> Fechar
@@ -927,6 +954,13 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
         title="INFORMAÇÃO"
         icon={infoModalIcon === null ? undefined : infoModalIcon}
         content={mensagemInfo}
+      />
+
+      <ProductZoomModal
+        open={!!zoomProduto}
+        onOpenChange={(open) => { if (!open) setZoomProduto(null); }}
+        productId={zoomProduto?.codprod}
+        product={zoomProduto}
       />
 
       <AlertDialog open={!!itemParaRemover} onOpenChange={(open) => { if (!open) setItemParaRemover(null); }}>

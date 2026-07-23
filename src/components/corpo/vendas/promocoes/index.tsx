@@ -366,7 +366,6 @@ const PromocoesPage = () => {
     'margem_custo_medio',
     'qtde_minima_ativacao',
     'qtde_maxima_total',
-    'qtde_maxima_por_cliente',
     'criado_por',
     'criado_em',
     'descricao_promocao',
@@ -390,7 +389,6 @@ const PromocoesPage = () => {
     margem_custo_medio: 'Margem Médio %',
     qtde_minima_ativacao: 'Qtd Mín. Ativação',
     qtde_maxima_total: 'Qtd Máx. Total',
-    qtde_maxima_por_cliente: 'Qtd Máx. Cliente',
     criado_por: 'Criado Por',
     criado_em: 'Criado Em',
     descricao_promocao: 'Descrição',
@@ -694,6 +692,7 @@ const PromocoesPage = () => {
                     >
                       <Eye className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                       Ver Itens
+                      <span className="ml-auto text-[10px] text-gray-400 pl-4">V</span>
                     </button>
                     {userPermissions.editar ? (
                       <button
@@ -703,6 +702,7 @@ const PromocoesPage = () => {
                       >
                         <Pencil className="mr-2 text-gray-400 dark:text-gray-500" size={16} />
                         Editar
+                        <span className="ml-auto text-[10px] text-gray-400 pl-4">Enter</span>
                       </button>
                     ) : null}
                     {userPermissions.remover ? (
@@ -713,6 +713,7 @@ const PromocoesPage = () => {
                       >
                         <Trash2 className="mr-2 text-red-400 dark:text-gray-500" size={16} />
                         Deletar
+                        <span className="ml-auto text-[10px] text-gray-400 pl-4">Delete</span>
                       </button>
                     ) : null}
                   </div>
