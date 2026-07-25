@@ -717,21 +717,25 @@ const ProdutosPage = () => {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Produtos');
 
-      ws.columns = cols.map((c) => {
-        const t = tipoColuna(c.key);
-        return {
-          header: c.label,
-          key: c.key,
-          width: 20,
-          style: t === 'moeda' ? { numFmt: '#,##0.00' } : t === 'inteiro' ? { numFmt: '#,##0' } : {},
-        };
-      });
+      ws.columns = [
+        // 1ª coluna: sequência (1, 2, 3, ...) para facilitar a contagem
+        { header: 'Nº', key: '__seq', width: 6, style: { numFmt: '#,##0' } },
+        ...cols.map((c) => {
+          const t = tipoColuna(c.key);
+          return {
+            header: c.label,
+            key: c.key,
+            width: 20,
+            style: t === 'moeda' ? { numFmt: '"R$" #,##0.00' } : t === 'inteiro' ? { numFmt: '#,##0' } : {},
+          };
+        }),
+      ];
 
       ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
       ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
 
-      linhas.forEach((prod: any) => {
-        const row: Record<string, any> = {};
+      linhas.forEach((prod: any, idx: number) => {
+        const row: Record<string, any> = { __seq: idx + 1 };
         cols.forEach((c) => {
           const t = tipoColuna(c.key);
           const raw = prod[c.key];
@@ -784,7 +788,9 @@ const ProdutosPage = () => {
         const t = tipoColuna(key);
         if (raw === null || raw === undefined || raw === '') return '';
         if ((t === 'moeda' || t === 'inteiro') && !isNaN(Number(raw))) {
-          return t === 'moeda' ? Number(raw).toFixed(2) : String(Math.trunc(Number(raw)));
+          return t === 'moeda'
+            ? 'R$ ' + Number(raw).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : String(Math.trunc(Number(raw)));
         }
         return String(raw);
       };
@@ -793,8 +799,8 @@ const ProdutosPage = () => {
       const fs = cols.length > 22 ? 5 : cols.length > 14 ? 6 : 7;
 
       autoTable(doc, {
-        head: [cols.map((c) => c.label)],
-        body: linhas.map((prod: any) => cols.map((c) => fmt(c.key, prod[c.key]))),
+        head: [['Nº', ...cols.map((c) => c.label)]],
+        body: linhas.map((prod: any, idx: number) => [String(idx + 1), ...cols.map((c) => fmt(c.key, prod[c.key]))]),
         startY: 40,
         margin: { top: 40, left: 16, right: 16, bottom: 20 },
         styles: { fontSize: fs, cellPadding: 2, overflow: 'linebreak', valign: 'middle' },
@@ -802,7 +808,12 @@ const ProdutosPage = () => {
         tableWidth: 'auto',
         didParseCell: (data: any) => {
           if (data.section === 'body') {
-            const t = tipoColuna(cols[data.column.index]?.key || '');
+            // Coluna 0 = sequência (numérica, alinha à direita)
+            if (data.column.index === 0) {
+              data.cell.styles.halign = 'right';
+              return;
+            }
+            const t = tipoColuna(cols[data.column.index - 1]?.key || '');
             if (t !== 'texto') data.cell.styles.halign = 'right';
           }
         },

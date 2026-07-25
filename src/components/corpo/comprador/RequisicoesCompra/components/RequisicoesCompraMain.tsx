@@ -22,6 +22,7 @@ import api from '@/components/services/api';
 import { AuthContext } from '@/contexts/authContexts';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 interface RequisicoesCompraMainProps {
   showNewButton?: boolean;
@@ -59,7 +60,9 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
   // Context para verificar perfil do usuário
   const { user } = useContext(AuthContext);
   const { toast } = useToast();
-  
+  // Confirmação no modal central (padrão do sistema), nunca toast no canto.
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+
   // Verifica permissões baseado nas FUNÇÕES do banco (sem hardcode de perfis)
   // Suporta tanto objetos {sigla: '...'} quanto strings diretas
   const getFuncaoSigla = (f: any): string => typeof f === 'string' ? f : f?.sigla || '';
@@ -166,57 +169,54 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
     
-    toast({
-      title: "Submeter",
-      description: `Tem certeza que deseja submeter a requisição ${item.requisicao}?`,
-      action: (
-        <ToastAction
-          altText="Confirmar"
-          onClick={async () => {
-            try {
-              const response = await api.put('/api/requisicoesCompra/actions/submit', {
-                requisitionId: item.id,
-                version: item.versao,
-                userId: user?.codusr,
-                userName: user?.usuario,
-              });
-              
-              if (response.data.success) {
-                toast({
-                  title: "Sucesso",
-                  description: "Requisição submetida com sucesso!"
-                });
-                // Limpar seleção se o item estava selecionado
-                if (selectedItems.has(item.id)) {
-                  const newSelected = new Set(selectedItems);
-                  newSelected.delete(item.id);
-                  setSelectedItems(newSelected);
-                  if (newSelected.size === 0) {
-                    setSelectedStatus(null);
-                  }
-                }
-                await refetch();
-              } else {
-                toast({
-                  title: "Erro",
-                  description: response.data.message || 'Erro ao submeter requisição',
-                  variant: "destructive"
-                });
+    pedirConfirmacao(
+      async () => {
+        try {
+          const response = await api.put('/api/requisicoesCompra/actions/submit', {
+            requisitionId: item.id,
+            version: item.versao,
+            userId: user?.codusr,
+            userName: user?.usuario,
+          });
+
+          if (response.data.success) {
+            toast({
+              title: "Sucesso",
+              description: "Requisição submetida com sucesso!"
+            });
+            // Limpar seleção se o item estava selecionado
+            if (selectedItems.has(item.id)) {
+              const newSelected = new Set(selectedItems);
+              newSelected.delete(item.id);
+              setSelectedItems(newSelected);
+              if (newSelected.size === 0) {
+                setSelectedStatus(null);
               }
-            } catch (error: any) {
-              console.error('Erro ao submeter:', error);
-              toast({
-                title: "Erro",
-                description: error.response?.data?.message || 'Erro interno ao submeter requisição',
-                variant: "destructive"
-              });
             }
-          }}
-        >
-          Confirmar
-        </ToastAction>
-      )
-    });
+            await refetch();
+          } else {
+            toast({
+              title: "Erro",
+              description: response.data.message || 'Erro ao submeter requisição',
+              variant: "destructive"
+            });
+          }
+        } catch (error: any) {
+          console.error('Erro ao submeter:', error);
+          toast({
+            title: "Erro",
+            description: error.response?.data?.message || 'Erro interno ao submeter requisição',
+            variant: "destructive"
+          });
+        }
+      },
+      {
+        title: 'Submeter requisição',
+        message: `Tem certeza que deseja submeter a requisição ${item.requisicao} para aprovação?`,
+        confirmText: 'Sim, submeter',
+        type: 'info',
+      },
+    );
   };
 
   const handleApprove = async (item: RequisitionDTO) => {
@@ -239,49 +239,46 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
     
-    toast({
-      title: "Confirmar aprovação",
-      description: `Tem certeza que deseja aprovar a requisição ${item.requisicao}?`,
-      action: (
-        <ToastAction 
-          altText="Aprovar"
-          onClick={async () => {
-            try {
-              const response = await api.put('/api/requisicoesCompra/actions/approve', {
-                requisitionId: item.id,
-                version: item.versao,
-                userId: user?.codusr,
-                userName: user?.usuario,
-                comments: 'Aprovação via interface'
-              });
-              
-              if (response.data.success) {
-                toast({
-                  title: "Sucesso",
-                  description: "Requisição aprovada com sucesso!"
-                });
-                await refetch();
-              } else {
-                toast({
-                  title: "Erro",
-                  description: response.data.message || 'Erro ao aprovar requisição',
-                  variant: "destructive"
-                });
-              }
-            } catch (error: any) {
-              console.error('Erro ao aprovar:', error);
-              toast({
-                title: "Erro",
-                description: error.response?.data?.message || 'Erro interno ao aprovar requisição',
-                variant: "destructive"
-              });
-            }
-          }}
-        >
-          Aprovar
-        </ToastAction>
-      )
-    });
+    pedirConfirmacao(
+      async () => {
+        try {
+          const response = await api.put('/api/requisicoesCompra/actions/approve', {
+            requisitionId: item.id,
+            version: item.versao,
+            userId: user?.codusr,
+            userName: user?.usuario,
+            comments: 'Aprovação via interface'
+          });
+
+          if (response.data.success) {
+            toast({
+              title: "Sucesso",
+              description: "Requisição aprovada com sucesso!"
+            });
+            await refetch();
+          } else {
+            toast({
+              title: "Erro",
+              description: response.data.message || 'Erro ao aprovar requisição',
+              variant: "destructive"
+            });
+          }
+        } catch (error: any) {
+          console.error('Erro ao aprovar:', error);
+          toast({
+            title: "Erro",
+            description: error.response?.data?.message || 'Erro interno ao aprovar requisição',
+            variant: "destructive"
+          });
+        }
+      },
+      {
+        title: 'Confirmar aprovação',
+        message: `Tem certeza que deseja aprovar a requisição ${item.requisicao}?`,
+        confirmText: 'Sim, aprovar',
+        type: 'info',
+      },
+    );
   };
 
   const handleReject = async (item: RequisitionDTO) => {
@@ -517,57 +514,54 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
 
-    toast({
-      title: "Confirmar aprovação",
-      description: `Tem certeza que deseja aprovar ${submittedRequisitions.length} requisição(ões)?`,
-      action: (
-        <ToastAction 
-          altText="Aprovar requisições"
-          onClick={async () => {
-      let successCount = 0;
-      let errorCount = 0;
+    pedirConfirmacao(
+      async () => {
+        let successCount = 0;
+        let errorCount = 0;
 
-      for (const item of submittedRequisitions) {
-        if (!item.id) {
-          console.error('Item sem id:', item);
-          errorCount++;
-          continue;
-        }
-        
-        try {
-          const response = await api.put('/api/requisicoesCompra/actions/approve', {
-            requisitionId: item.id,
-            version: item.versao,
-            userId: user?.codusr,
-            userName: user?.usuario,
-            comments: 'Aprovação em lote via interface'
-          });
-          
-          if (response.data.success) {
-            successCount++;
-          } else {
+        for (const item of submittedRequisitions) {
+          if (!item.id) {
+            console.error('Item sem id:', item);
+            errorCount++;
+            continue;
+          }
+
+          try {
+            const response = await api.put('/api/requisicoesCompra/actions/approve', {
+              requisitionId: item.id,
+              version: item.versao,
+              userId: user?.codusr,
+              userName: user?.usuario,
+              comments: 'Aprovação em lote via interface'
+            });
+
+            if (response.data.success) {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error: any) {
+            console.error('Erro ao aprovar:', error);
             errorCount++;
           }
-        } catch (error: any) {
-          console.error('Erro ao aprovar:', error);
-          errorCount++;
         }
-      }
 
-          toast({
-            title: "Aprovação concluída",
-            description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
-            variant: errorCount > 0 ? "destructive" : "default"
-          });
-          setSelectedItems(new Set());
-          setSelectedStatus(null);
-          await refetch();
-        }}
-        >
-          Aprovar
-        </ToastAction>
-      )
-    });
+        toast({
+          title: "Aprovação concluída",
+          description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
+          variant: errorCount > 0 ? "destructive" : "default"
+        });
+        setSelectedItems(new Set());
+        setSelectedStatus(null);
+        await refetch();
+      },
+      {
+        title: 'Confirmar aprovação',
+        message: `Tem certeza que deseja aprovar ${submittedRequisitions.length} requisição(ões)?`,
+        confirmText: 'Sim, aprovar',
+        type: 'info',
+      },
+    );
   };
 
   const handleBulkReject = async () => {
@@ -661,56 +655,53 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
 
-    toast({
-      title: "Confirmar submissão",
-      description: `Tem certeza que deseja submeter ${pendingRequisitions.length} requisição(ões) para aprovação?`,
-      action: (
-        <ToastAction 
-          altText="Submeter requisições"
-          onClick={async () => {
-      let successCount = 0;
-      let errorCount = 0;
+    pedirConfirmacao(
+      async () => {
+        let successCount = 0;
+        let errorCount = 0;
 
-      for (const item of pendingRequisitions) {
-        if (!item.id) {
-          console.error('Item sem id:', item);
-          errorCount++;
-          continue;
-        }
-        
-        try {
-          const response = await api.put('/api/requisicoesCompra/actions/submit', {
-            requisitionId: item.id,
-            version: item.versao,
-            userId: user?.codusr,
-            userName: user?.usuario,
-          });
+        for (const item of pendingRequisitions) {
+          if (!item.id) {
+            console.error('Item sem id:', item);
+            errorCount++;
+            continue;
+          }
 
-          if (response.data.success) {
-            successCount++;
-          } else {
+          try {
+            const response = await api.put('/api/requisicoesCompra/actions/submit', {
+              requisitionId: item.id,
+              version: item.versao,
+              userId: user?.codusr,
+              userName: user?.usuario,
+            });
+
+            if (response.data.success) {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (error: any) {
+            console.error('Erro ao submeter:', error);
             errorCount++;
           }
-        } catch (error: any) {
-          console.error('Erro ao submeter:', error);
-          errorCount++;
         }
-      }
 
-          toast({
-            title: "Submissão concluída",
-            description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
-            variant: errorCount > 0 ? "destructive" : "default"
-          });
-          setSelectedItems(new Set());
-          setSelectedStatus(null);
-          await refetch();
-        }}
-        >
-          Submeter
-        </ToastAction>
-      )
-    });
+        toast({
+          title: "Submissão concluída",
+          description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
+          variant: errorCount > 0 ? "destructive" : "default"
+        });
+        setSelectedItems(new Set());
+        setSelectedStatus(null);
+        await refetch();
+      },
+      {
+        title: 'Confirmar submissão',
+        message: `Tem certeza que deseja submeter ${pendingRequisitions.length} requisição(ões) para aprovação?`,
+        confirmText: 'Sim, submeter',
+        type: 'info',
+      },
+    );
   };
 
   const handleManageItems = async (item: RequisitionDTO) => {
@@ -1378,6 +1369,9 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
           requisitionNumber={historicoItem.requisicao}
         />
       )}
+
+      {/* Modal central de confirmação (Submeter / Aprovar) */}
+      {ConfirmacaoSalvarModal}
     </div>
   );
 };

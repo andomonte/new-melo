@@ -132,10 +132,13 @@ export const NFeMain: React.FC = () => {
       const target = event.target as Element;
       let shouldClose = true;
 
-      // Verificar se o clique foi em qualquer dropdown ou botão de ação
+      // Verificar se o clique foi em qualquer dropdown ou botão de ação.
+      // As chaves são o codnfe_ent (string, zero-padded) — NÃO usar parseInt,
+      // senão IDs com zeros à esquerda (ex.: '000049598') não batem e o menu
+      // nunca fecha ao clicar fora.
       Object.keys(dropdownStates).forEach(nfeId => {
-        const dropdown = dropdownRefs.current[parseInt(nfeId)];
-        const actionButton = actionButtonRefs.current[parseInt(nfeId)];
+        const dropdown = dropdownRefs.current[nfeId];
+        const actionButton = actionButtonRefs.current[nfeId];
 
         if (
           (dropdown && dropdown.contains(target)) ||
@@ -145,7 +148,7 @@ export const NFeMain: React.FC = () => {
         }
       });
 
-      if (shouldClose && Object.keys(dropdownStates).some(id => dropdownStates[parseInt(id)])) {
+      if (shouldClose && Object.keys(dropdownStates).some(id => dropdownStates[id])) {
         setDropdownStates({});
         setDropdownPositions({});
         setIconRotations({});
@@ -153,7 +156,7 @@ export const NFeMain: React.FC = () => {
     };
 
     // Só adiciona o listener se há dropdowns abertos
-    const hasOpenDropdowns = Object.keys(dropdownStates).some(id => dropdownStates[parseInt(id)]);
+    const hasOpenDropdowns = Object.keys(dropdownStates).some(id => dropdownStates[id]);
     if (hasOpenDropdowns) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {

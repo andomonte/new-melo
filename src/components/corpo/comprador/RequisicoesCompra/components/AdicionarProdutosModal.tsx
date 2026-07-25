@@ -11,6 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { motivoBloqueioRequisicao, rotuloStatus } from '../statusRequisicao';
 import SugestaoAutomatica, { ItemSugestao } from './SugestaoAutomatica';
+import CadastroProdutoModal from '@/components/corpo/admin/cadastro/produtos/modalCadastrar';
+import { Plus } from 'lucide-react';
 
 interface ProdutoSelecionado extends Produto {
   quantidade: number;
@@ -40,6 +42,8 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtosSelecionados, setProdutosSelecionados] = useState<ProdutoSelecionado[]>([]);
   const [abaAdd, setAbaAdd] = useState<'buscar' | 'sugestao'>('buscar');
+  // Cadastro de produto na hora, quando a busca não encontra
+  const [showCadastroProduto, setShowCadastroProduto] = useState(false);
 
   // Itens vindos da Sugestão Automática entram no MESMO carrinho, usando a
   // quantidade sugerida e o preço da sugestão. Bloqueia D/S/N como no manual.
@@ -406,7 +410,17 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                     {produtos.length === 0 && !loading && busca && (
                       <tr>
                         <td colSpan={6} className="text-center py-8 text-gray-500 dark:text-gray-400">
-                          Nenhum produto encontrado para &quot;{debouncedBusca}&quot;. Tente uma busca diferente.
+                          <p className="mb-3">
+                            Nenhum produto encontrado para &quot;{debouncedBusca}&quot;.
+                          </p>
+                          <Button
+                            type="button"
+                            onClick={() => setShowCadastroProduto(true)}
+                            className="bg-green-600 hover:bg-green-700 text-white inline-flex items-center gap-2"
+                          >
+                            <Plus size={16} />
+                            Cadastrar Produto
+                          </Button>
                         </td>
                       </tr>
                     )}
@@ -653,6 +667,23 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
         </div>
       </div>
       {ConfirmacaoSalvarModal}
+
+      {/* Cadastro de produto na hora — ao salvar, refaz a busca para o novo
+          produto já aparecer na lista de adicionar. */}
+      {showCadastroProduto && (
+        <CadastroProdutoModal
+          isOpen={showCadastroProduto}
+          onClose={() => setShowCadastroProduto(false)}
+          title="Cadastrar Produto"
+          onSuccess={() => {
+            setShowCadastroProduto(false);
+            buscarProdutos(debouncedBusca, 1);
+            toast({ description: 'Produto cadastrado! Atualizando a busca...' });
+          }}
+        >
+          <></>
+        </CadastroProdutoModal>
+      )}
     </div>
   );
 };

@@ -61,7 +61,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         END as status,
         n.dtimport as created_at,
         COALESCE(COUNT(nia.id), 0) as itens_associados,
-        CASE WHEN COUNT(nia.id) > 0 THEN true ELSE false END as pode_gerar_entrada
+        CASE WHEN COUNT(nia.id) > 0 THEN true ELSE false END as pode_gerar_entrada,
+        -- Já existe entrada (dbent) gerada para esta chave? (exec='S' sem entrada = órfã, pode regerar)
+        EXISTS (SELECT 1 FROM db_manaus.dbent d WHERE d.chave = n.chave) as tem_entrada
       FROM dbnfe_ent n
       LEFT JOIN dbnfe_ent_emit e ON n.codnfe_ent = e.codnfe_ent
       LEFT JOIN nfe_item_associacao nia ON n.codnfe_ent = nia.nfe_id
@@ -254,12 +256,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Retornar dados formatados
     const nfesProcessadas = result.rows.map((row: any) => {
-      // Determinar status display baseado no exec e nas associações
+      // Determinar status display baseado no exec, associações e existência da entrada.
       let statusDisplay = 'Associação pendente';
       let podeGerarEntrada = false;
 
       if (row.exec_status === 'C') {
-        // exec='C' significa que a associação está concluída e pagamento configurado
+        // Associação concluída (ainda não gerou entrada) → pode gerar.
+        statusDisplay = 'Associação concluída';
+        podeGerarEntrada = true;
+      } else if (row.exec_status === 'S' && !row.tem_entrada && row.pode_gerar_entrada) {
+        // exec='S' (marcada como processada) mas SEM entrada dbent (reset removeu ou
+        // a geração não concluiu) e com associações → estado órfão: permitir regerar.
         statusDisplay = 'Associação concluída';
         podeGerarEntrada = true;
       } else if (row.pode_gerar_entrada) {
