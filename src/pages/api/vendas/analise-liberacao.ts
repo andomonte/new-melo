@@ -24,6 +24,21 @@ interface ItemVendaAnalise {
   desconto_valor: number;
   desconto_percentual: number;
   total_item: number;
+  prcompra: number;
+  prcustoatual: number;
+  margem: number;
+  codmarca: string;
+  marca_nome: string;
+  origem: string;
+  impostos: {
+    icms: number;
+    ipi: number;
+    pis: number;
+    cofins: number;
+    st: number;
+    total_impostos: number;
+  };
+  total_com_imposto: number;
 }
 
 interface HistoricoCompra {
@@ -140,15 +155,41 @@ export default async function handler(
       SELECT
         i.codprod,
         p.ref,
-        p.descr,
+        COALESCE(p.aplic_extendida, p.descr) as descr,
         i.qtd,
         i.prunit,
         COALESCE(p.prvenda, i.prunit) as prvenda_original,
-        COALESCE(i.desconto, 0) as desconto_valor
+        COALESCE(i.desconto, 0) as desconto_valor,
+        COALESCE(i.prcompra, p.prcompra, 0) as prcompra,
+        COALESCE(p.prcustoatual, 0) as prcustoatual,
+        p.codmarca,
+        COALESCE(m.descr, '') as marca_nome,
+        p.dolar as origem,
+        COALESCE(TRIM(p.codgpe), '') as codgpe,
+        COALESCE(i.aliquota_icms, 0) as aliq_icms,
+        COALESCE(i.totalicms, 0) as val_icms,
+        COALESCE(i.aliquota_ipi, 0) as aliq_ipi,
+        COALESCE(i.totalipi, 0) as val_ipi,
+        COALESCE(i.pis, 0) as aliq_pis,
+        COALESCE(i.valorpis, 0) as val_pis,
+        COALESCE(i.cofins, 0) as aliq_cofins,
+        COALESCE(i.valorcofins, 0) as val_cofins,
+        COALESCE(i.totalsubst_trib, 0) as val_st,
+        COALESCE(i.totalproduto, 0) as total_com_imposto,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM db_manaus.dbanalise_liberacao_itens ali
+          JOIN db_manaus.dbanalise_liberacao al ON al.id = ali.id_analise
+          WHERE al.codvenda = i.codvenda AND ali.codprod = i.codprod AND ali.acao = 'ADICIONAR'
+        ) THEN true ELSE false END as is_novo
       FROM dbitvenda i
       LEFT JOIN dbprod p ON i.codprod = p.codprod
+      LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
       WHERE i.codvenda = $1
-      ORDER BY i.codprod
+      ORDER BY CASE WHEN EXISTS (
+        SELECT 1 FROM db_manaus.dbanalise_liberacao_itens ali
+        JOIN db_manaus.dbanalise_liberacao al ON al.id = ali.id_analise
+        WHERE al.codvenda = i.codvenda AND ali.codprod = i.codprod AND ali.acao = 'ADICIONAR'
+      ) THEN 0 ELSE 1 END, i.codprod
     `;
     const resultItens = await client.query(queryItens, [codvenda]);
 
@@ -165,6 +206,10 @@ export default async function handler(
         desconto_percentual = ((prvenda_original - prunit) / prvenda_original) * 100;
       }
 
+      const prcompra = Number(item.prcompra) || 0;
+      const prcustoatual = Number(item.prcustoatual) || 0;
+      const margem = prcompra > 0 ? ((prunit / prcompra) - 1) * 100 : 0;
+
       return {
         codprod: item.codprod,
         ref: item.ref || item.codprod,
@@ -175,6 +220,23 @@ export default async function handler(
         desconto_valor,
         desconto_percentual,
         total_item,
+        prcompra,
+        prcustoatual,
+        margem: Math.round(margem * 100) / 100,
+        codmarca: item.codmarca || '',
+        marca_nome: item.marca_nome || '',
+        origem: item.origem || 'N',
+        codgpe: item.codgpe || '',
+        impostos: (() => {
+          const icms = Number(item.val_icms) || 0;
+          const ipi = Number(item.val_ipi) || 0;
+          const pis = Number(item.val_pis) || 0;
+          const cofins = Number(item.val_cofins) || 0;
+          const st = Number(item.val_st) || 0;
+          return { icms, ipi, pis, cofins, st, total_impostos: icms + ipi + pis + cofins + st };
+        })(),
+        total_com_imposto: total_item + (Number(item.val_icms) || 0) + (Number(item.val_ipi) || 0) + (Number(item.val_pis) || 0) + (Number(item.val_cofins) || 0) + (Number(item.val_st) || 0),
+        _novo: item.is_novo === true,
       };
     });
 

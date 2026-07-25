@@ -3,7 +3,8 @@ import { Toaster, toast } from 'react-hot-toast';
 import { Promocao, insertPromocao, ItemPromocao } from '@/data/promocoes/promocoes';
 import { promocaoSchema } from '@/data/promocoes/promocoesSchema';
 import { AuthContext } from '@/contexts/authContexts';
-import { AdicionarProdutosAoCarrinhoModal } from './_forms/AdicionarProdutosAoCarrinhoModal';
+import ModalAdicionarItemRapido from '../bloqueadas/ModalAdicionarItemRapido';
+import ModalEquivalentes from '../bloqueadas/ModalEquivalentes';
 import InfoModal from '@/components/common/infoModal';
 import { CircleCheckBig, X, Plus, Trash2, Download, Save, Eraser, FileDown, Keyboard, Eye } from 'lucide-react';
 import {
@@ -40,9 +41,9 @@ const ProdutoCellRenderer = (props: any) => {
   const d = props.data;
   if (!d) return null;
   return (
-    <div style={{ lineHeight: 1.4, padding: '4px 0' }}>
+    <div style={{ lineHeight: 1.4, padding: '4px 8px', width: '100%', textAlign: 'left' }}>
       <div title={d.descricao || ''} style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word' }}>{d.descricao || '-'}</div>
-      <div style={{ fontSize: 12, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
         <img
           src={d.origem === 'N' ? '/images/brasil.png' : '/images/importado.png'}
           alt={d.origem === 'N' ? 'Nacional' : 'Importado'}
@@ -148,6 +149,9 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
   const [savedPromocaoData, setSavedPromocaoData] = useState<Promocao | null>(null);
   const [itemParaRemover, setItemParaRemover] = useState<string | null>(null);
   const [zoomProduto, setZoomProduto] = useState<any>(null);
+  const [modalEquivalentes, setModalEquivalentes] = useState(false);
+  const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
+  const ultimaCelulaRef = useRef<any>(null);
 
   // ---------- Clientes e Vendedores vinculados ----------
   const [clientesVinculados, setClientesVinculados] = useState<{ cod: string; nome: string }[]>([]);
@@ -372,6 +376,34 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
     setIsAddProductsModalOpen(false);
   }, [promocao.valor_desconto, itemToGrid]);
 
+  // Adapter: converte itens do ModalAdicionarItemRapido para formato da promoção
+  const handleAdicionarItemRapido = useCallback((itensNovos: any[]) => {
+    const descontoPadrao = Number(promocao.valor_desconto) || 0;
+    const convertidos: ItemPromocao[] = itensNovos.map((item) => ({
+      id_promocao_item: 0,
+      id_promocao: promocao?.id_promocao || 0,
+      codprod: item.codprod,
+      codgpp: null,
+      descricao: item.descr || '',
+      ref: item.ref || '',
+      marca: item.marca_nome || item.codmarca || '',
+      qtddisponivel: 0,
+      preco: item.prunit || 0,
+      prcompra: item.prcompra || 0,
+      prcustoatual: item.prcustoatual || 0,
+      valor_desconto_item: descontoPadrao,
+      tipo_desconto_item: 'PERC',
+      preco_promocao: Math.round((item.prunit || 0) * (1 - descontoPadrao / 100) * 100) / 100,
+      qtd_total_item: null,
+      qtde_minima_item: null,
+      qtde_maxima_item: null,
+      qtdVendido: null,
+      qtdFaturado: null,
+      origem: item.origem || 'N',
+    }));
+    handleConfirmSelectedProducts(convertidos);
+  }, [promocao.valor_desconto, promocao?.id_promocao, handleConfirmSelectedProducts]);
+
   // ---------- Exportar ----------
   const handleExportar = useCallback(() => {
     gridApi?.exportDataAsCsv({ fileName: 'itens_promocao.csv', columnSeparator: ';' });
@@ -507,7 +539,16 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
     {
       headerName: 'Marca',
       field: 'marca',
-      width: 80,
+      width: 100,
+      autoHeight: true,
+      cellRenderer: (p: any) => {
+        const val = p.value || '-';
+        return (
+          <div title={val} style={{ lineHeight: 1.3, padding: '4px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word', fontSize: 12 }}>
+            {val}
+          </div>
+        );
+      },
     },
     {
       headerName: 'Estoque',
@@ -654,7 +695,40 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
             setZoomProduto({ codprod: rowNode.data.codprod, ref: rowNode.data.ref, descr: rowNode.data.descricao });
           }
         }
-      } else if (e.key === 'Escape' && !isAddProductsModalOpen && !itemParaRemover && !zoomProduto) {
+      } else if (e.key === 'F9') {
+        const el = e.target as HTMLElement;
+        if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT') return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        const fc = gridRef.current?.api?.getFocusedCell();
+        let item: any = null;
+        if (fc) {
+          const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(fc.rowIndex);
+          if (rowNode?.data) item = rowNode.data;
+        }
+        if (!item && ultimaCelulaRef.current) item = ultimaCelulaRef.current;
+        if (item) {
+          const codgpe = (item.codgpe || '').trim();
+          if (codgpe) {
+            setProdutoEquivalente({ codprod: item.codprod, ref: item.ref, descr: item.descricao || item.descr, codgpe, origem: item.origem });
+            setModalEquivalentes(true);
+          } else {
+            // Buscar codgpe do produto
+            fetch(`/api/produtos/get/${item.codprod}`)
+              .then(r => r.json())
+              .then(data => {
+                const gpe = (data.codgpe || '').trim();
+                if (gpe) {
+                  setProdutoEquivalente({ codprod: item.codprod, ref: item.ref, descr: item.descricao || item.descr, codgpe: gpe, origem: data.dolar || 'N' });
+                  setModalEquivalentes(true);
+                } else {
+                  toast.error('Produto sem grupo de equivalência');
+                }
+              }).catch(() => toast.error('Erro ao buscar equivalência'));
+          }
+        } else {
+          toast.error('Selecione um item na planilha');
+        }
+      } else if (e.key === 'Escape' && !isAddProductsModalOpen && !itemParaRemover && !zoomProduto && !modalEquivalentes) {
         e.preventDefault();
         atalhoRef.current.close();
       }
@@ -860,14 +934,55 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
           {/* ===== GRID AG GRID ===== */}
           <div className="flex-1 min-h-0">
             <style>{`
-              .ag-promo-grid .ag-cell { border-right: 1px solid #d1d5db !important; }
+              .ag-promo-grid .ag-cell { border-right: 1px solid #d1d5db !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 13px !important; }
+              .ag-promo-grid .ag-cell[col-id="descricao"] { align-items: flex-start !important; justify-content: flex-start !important; padding: 0 !important; }
               .ag-promo-grid .ag-row { border-bottom: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell-resize { display: none !important; }
               .ag-promo-grid .ag-cell-value { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
               .ag-promo-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; }
-              .ag-promo-grid .ag-cell { display: flex !important; align-items: center !important; justify-content: center !important; font-size: 13px !important; }
               .ag-promo-grid .ag-input-field-input, .ag-promo-grid .ag-text-field-input { font-size: 14px !important; text-align: center !important; }
+              .ag-promo-grid .ag-header-cell-text { text-align: center !important; width: 100% !important; }
+
+              .ag-promo-grid .ag-row,
+              .ag-promo-grid .ag-row-even,
+              .ag-promo-grid .ag-row-odd,
+              .ag-promo-grid .ag-row-hover,
+              .ag-promo-grid .ag-row-selected,
+              .ag-promo-grid .ag-row-hover.ag-row-selected { background-color: white !important; background: white !important; }
+              .ag-promo-grid .ag-row .ag-cell,
+              .ag-promo-grid .ag-row-selected .ag-cell { background-color: white !important; }
+              .ag-promo-grid .ag-row .ag-cell[col-id="_percentual_desconto"],
+              .ag-promo-grid .ag-row .ag-cell[col-id="_valor_promocao"],
+              .ag-promo-grid .ag-row .ag-cell[col-id="_margem_compra"],
+              .ag-promo-grid .ag-row .ag-cell[col-id="qtd_total_item"],
+              .ag-promo-grid .ag-row .ag-cell[col-id="qtde_minima_item"],
+              .ag-promo-grid .ag-row .ag-cell[col-id="qtde_maxima_item"] { background-color: #eff6ff !important; }
+              .ag-promo-grid .ag-cell-focus { outline: 2px solid #a8a29e !important; outline-offset: -2px; background-color: rgba(0,0,0,0.05) !important; }
+              .ag-promo-grid .ag-cell-range-selected,
+              .ag-promo-grid .ag-cell-range-single-cell { background-color: rgba(0,0,0,0.05) !important; }
+
+              .dark .ag-promo-grid .ag-root-wrapper { background-color: #18181b !important; }
+              .dark .ag-promo-grid .ag-header { background-color: #27272a !important; border-color: #3f3f46 !important; }
+              .dark .ag-promo-grid .ag-header-cell { border-color: #3f3f46 !important; color: #a1a1aa !important; }
+              .dark .ag-promo-grid .ag-row,
+              .dark .ag-promo-grid .ag-row-even,
+              .dark .ag-promo-grid .ag-row-odd,
+              .dark .ag-promo-grid .ag-row-hover,
+              .dark .ag-promo-grid .ag-row-selected,
+              .dark .ag-promo-grid .ag-row-hover.ag-row-selected { background-color: #18181b !important; background: #18181b !important; }
+              .dark .ag-promo-grid .ag-row .ag-cell,
+              .dark .ag-promo-grid .ag-row-selected .ag-cell { background-color: #18181b !important; color: #e4e4e7 !important; border-color: #3f3f46 !important; }
+              .dark .ag-promo-grid .ag-row .ag-cell[col-id="_percentual_desconto"],
+              .dark .ag-promo-grid .ag-row .ag-cell[col-id="_valor_promocao"],
+              .dark .ag-promo-grid .ag-row .ag-cell[col-id="_margem_compra"],
+              .dark .ag-promo-grid .ag-row .ag-cell[col-id="qtd_total_item"],
+              .dark .ag-promo-grid .ag-row .ag-cell[col-id="qtde_minima_item"],
+              .dark .ag-promo-grid .ag-row .ag-cell[col-id="qtde_maxima_item"] { background-color: #1e2a3a !important; }
+              .dark .ag-promo-grid .ag-cell-focus { outline: 2px solid #71717a !important; outline-offset: -2px; background-color: rgba(255,255,255,0.05) !important; }
+              .dark .ag-promo-grid .ag-cell-range-selected,
+              .dark .ag-promo-grid .ag-cell-range-single-cell { background-color: rgba(255,255,255,0.05) !important; }
+              .dark .ag-promo-grid .ag-row { border-color: #3f3f46 !important; }
             `}</style>
             <div className="h-full ag-promo-grid">
               <AgGridReact
@@ -878,6 +993,12 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
                 defaultColDef={defaultColDef}
                 onGridReady={onGridReady}
                 onCellValueChanged={onCellValueChanged}
+                onCellFocused={(e: any) => {
+                  if (e.rowIndex != null) {
+                    const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(e.rowIndex);
+                    if (rowNode?.data) ultimaCelulaRef.current = rowNode.data;
+                  }
+                }}
                 stopEditingWhenCellsLoseFocus={true}
                 singleClickEdit={false}
                 enterNavigatesVertically={true}
@@ -885,6 +1006,18 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
                 suppressHorizontalScroll={true}
                 alwaysShowVerticalScroll={true}
                 getRowId={(params) => `${params.data.codprod}-${params.data.id_promocao_item || 'new'}`}
+                suppressRowHoverHighlight={true}
+                onCellMouseOver={(e: any) => {
+                  const cellEl = e.event?.target?.closest?.('.ag-cell');
+                  if (cellEl) {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    cellEl.style.backgroundColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+                  }
+                }}
+                onCellMouseOut={(e: any) => {
+                  const cellEl = e.event?.target?.closest?.('.ag-cell');
+                  if (cellEl) cellEl.style.backgroundColor = '';
+                }}
                 rowHeight={48}
               />
             </div>
@@ -925,6 +1058,33 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
             <Eye size={14} className="mr-2" /> Zoom Produto
             <span className="ml-auto text-[10px] text-gray-400">Ctrl+Z</span>
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            const fc = gridRef.current?.api?.getFocusedCell();
+            let item: any = null;
+            if (fc) {
+              const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(fc.rowIndex);
+              if (rowNode?.data) item = rowNode.data;
+            }
+            if (!item && ultimaCelulaRef.current) item = ultimaCelulaRef.current;
+            if (item) {
+              fetch(`/api/produtos/get/${item.codprod}`)
+                .then(r => r.json())
+                .then(data => {
+                  const gpe = (data.codgpe || '').trim();
+                  if (gpe) {
+                    setProdutoEquivalente({ codprod: item.codprod, ref: item.ref, descr: item.descricao || item.descr, codgpe: gpe, origem: data.dolar || 'N' });
+                    setModalEquivalentes(true);
+                  } else {
+                    toast.error('Produto sem grupo de equivalência');
+                  }
+                }).catch(() => toast.error('Erro ao buscar equivalência'));
+            } else {
+              toast.error('Selecione um item na planilha');
+            }
+          }}>
+            <Eye size={14} className="mr-2" /> Equivalentes
+            <span className="ml-auto text-[10px] text-gray-400">F9</span>
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={onClose}>
             <X size={14} className="mr-2" /> Fechar
@@ -934,13 +1094,19 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
         </ContextMenu>
       </div>
 
-      <AdicionarProdutosAoCarrinhoModal
+      <ModalAdicionarItemRapido
         isOpen={isAddProductsModalOpen}
         onClose={() => setIsAddProductsModalOpen(false)}
-        onConfirm={handleConfirmSelectedProducts}
-        tipoPrecoCliente={'0'}
-        promocao={promocao}
-        houveAlteracoesNosItens={false}
+        onAdicionarItens={handleAdicionarItemRapido}
+        itensExistentes={rowData.map((r) => r.codprod)}
+      />
+
+      <ModalEquivalentes
+        isOpen={modalEquivalentes}
+        onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); }}
+        onAdicionarItens={handleAdicionarItemRapido}
+        itensExistentes={rowData.map((r) => r.codprod)}
+        produto={produtoEquivalente}
       />
 
       <InfoModal
