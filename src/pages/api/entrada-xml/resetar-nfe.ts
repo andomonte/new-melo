@@ -10,7 +10,7 @@ import { recalcularPrecosProduto } from '@/lib/calcularPrecos';
  *
  * Dados removidos/revertidos:
  * - Associações de itens (nfe_item_associacao, nfe_item_pedido_associacao)
- * - Entrada de estoque (entradas_estoque, entrada_itens, entrada_operacoes)
+ * - Entrada (dbent, dbitent, dbent_recebimento, entrada_operacoes) por codent
  * - Quantidade atendida nas OCs (cmp_it_requisicao.itr_quantidade_atendida)
  * - Estoque geral (dbprod.qtest, qtdreservada)
  * - Estoque por armazém (cad_armazem_produto.arp_qtest)
@@ -104,24 +104,24 @@ export default async function handler(
       historico: 0
     };
 
-    // 1. Buscar entradas geradas para esta NFe
+    // 1. Buscar entradas (dbent) geradas para esta NFe (por chave)
+    const nfeChaveRes = await client.query(`SELECT chave FROM dbnfe_ent WHERE codnfe_ent = $1`, [nfeId]);
+    const nfeChave = nfeChaveRes.rows[0]?.chave || null;
     const entradasResult = await client.query(`
-      SELECT id, numero_entrada
-      FROM entradas_estoque
-      WHERE nfe_id = $1
-    `, [nfeId]);
+      SELECT codent FROM dbent WHERE chave = $1
+    `, [nfeChave]);
 
-    const entradaIds = entradasResult.rows.map(e => e.id);
+    // No modelo Delphi a chave da entrada é o próprio codent
+    const entradaIds = entradasResult.rows.map(e => e.codent);
+    const numerosEntrada = entradaIds;
     console.log(`📦 Entradas encontradas: ${entradaIds.length}`);
-
-    // 2. Buscar itens das entradas para reverter estoque e quantidade atendida
-    const numerosEntrada = entradasResult.rows.map(e => e.numero_entrada);
 
     if (entradaIds.length > 0) {
       const itensEntradaResult = await client.query(`
-        SELECT ei.produto_cod, ei.quantidade, ei.req_id, ei.valor_unitario
-        FROM entrada_itens ei
-        WHERE ei.entrada_id = ANY($1)
+        SELECT ie.codprod AS produto_cod, ie.quant AS quantidade,
+               ie.codreq AS req_id, ie.prunit AS valor_unitario
+        FROM dbitent ie
+        WHERE ie.codent = ANY($1)
       `, [entradaIds]);
 
       // 2.1 Reverter custo medio e estoque (dbprod)
@@ -265,34 +265,28 @@ export default async function handler(
         console.log(`🗑️ Romaneio removido: ${dadosRemovidos.romaneio} registros`);
       }
 
-      // 2.4 Deletar log de operações de entrada
+      // 2.4 Deletar itens de conferência de recebimento + log/operações (por codent)
+      await client.query(`DELETE FROM entrada_itens_recebimento WHERE codent = ANY($1)`, [entradaIds]);
+
       const logResult = await client.query(`
-        DELETE FROM entrada_operacoes_log
-        WHERE entrada_id = ANY($1)
+        DELETE FROM entrada_operacoes_log WHERE codent = ANY($1)
       `, [entradaIds]);
       dadosRemovidos.operacoesLog = logResult.rowCount || 0;
-      console.log(`🗑️ Log de operações removido: ${dadosRemovidos.operacoesLog} registros`);
 
-      // 2.5 Deletar operações de entrada
       const opResult = await client.query(`
-        DELETE FROM entrada_operacoes
-        WHERE entrada_id = ANY($1)
+        DELETE FROM entrada_operacoes WHERE codent = ANY($1)
       `, [entradaIds]);
       dadosRemovidos.operacoes = opResult.rowCount || 0;
-      console.log(`🗑️ Operações removidas: ${dadosRemovidos.operacoes}`);
 
-      // 2.6 Deletar itens de entrada
+      // 2.5 Deletar itens da entrada (dbitent)
       const itResult = await client.query(`
-        DELETE FROM entrada_itens
-        WHERE entrada_id = ANY($1)
+        DELETE FROM dbitent WHERE codent = ANY($1)
       `, [entradaIds]);
       dadosRemovidos.itensEntrada = itResult.rowCount || 0;
-      console.log(`🗑️ Itens de entrada removidos: ${dadosRemovidos.itensEntrada}`);
 
-      // 2.7 Deletar entradas
+      // 2.6 Deletar a entrada (dbent) — dbent_recebimento cai por CASCADE
       const entResult = await client.query(`
-        DELETE FROM entradas_estoque
-        WHERE id = ANY($1)
+        DELETE FROM dbent WHERE codent = ANY($1)
       `, [entradaIds]);
       dadosRemovidos.entradas = entResult.rowCount || 0;
       console.log(`🗑️ Entradas removidas: ${dadosRemovidos.entradas}`);
@@ -356,6 +350,10 @@ export default async function handler(
     `, [nfeId]);
     dadosRemovidos.associacoes = assocResult.rowCount || 0;
     console.log(`🔗 Associações de itens removidas: ${dadosRemovidos.associacoes}`);
+
+    // 5.1 Deletar a Confirmação dos Dados (dbnfe_ent_aux) para reabrir limpo
+    await client.query(`DELETE FROM dbnfe_ent_aux WHERE codnfe_ent = $1`, [nfeId]);
+    console.log(`🧹 Confirmação (dbnfe_ent_aux) removida`);
 
     // 6. Deletar histórico
     const histResult = await client.query(`

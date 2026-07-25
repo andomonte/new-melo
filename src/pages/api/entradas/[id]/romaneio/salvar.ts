@@ -19,7 +19,7 @@ interface SalvarRomaneioRequest {
 
 interface SalvarRomaneioResponse {
   ok: boolean;
-  entrada_id: number;
+  entrada_id: string; // codent
   numero_entrada: string;
   itens_salvos: number;
   total_separacoes: number;
@@ -58,12 +58,13 @@ export default async function handler(
     // Iniciar transação
     await client.query('BEGIN');
 
-    // 1. Buscar dados da entrada
+    // 1. Buscar dados da entrada (dbent + workflow)
     const entradaResult = await client.query(`
-      SELECT id, numero_entrada, status, nfe_id
-      FROM db_manaus.entradas_estoque
-      WHERE id = $1
-    `, [parseInt(id)]);
+      SELECT e.codent, COALESCE(rec.status, e.status) as status
+      FROM db_manaus.dbent e
+      LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+      WHERE e.codent = $1
+    `, [id]);
 
     if (entradaResult.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -89,7 +90,7 @@ export default async function handler(
       SELECT COUNT(*) as total
       FROM db_manaus.dbitent_armazem
       WHERE codent = $1
-    `, [entrada.numero_entrada]);
+    `, [entrada.codent]);
 
     if (parseInt(romaneioExistente.rows[0].total) > 0) {
       await client.query('ROLLBACK');
@@ -144,14 +145,14 @@ export default async function handler(
     let totalSeparacoes = 0;
 
     for (const item of itens) {
-      // Buscar req_id do item
+      // Buscar codreq do item (dbitent)
       const reqResult = await client.query(`
-        SELECT req_id FROM db_manaus.entrada_itens
-        WHERE entrada_id = $1 AND produto_cod = $2
+        SELECT codreq FROM db_manaus.dbitent
+        WHERE codent = $1 AND codprod = $2
         LIMIT 1
-      `, [entrada.id, item.produto_cod]);
+      `, [entrada.codent, item.produto_cod]);
 
-      const req_id = reqResult.rows[0]?.req_id || null;
+      const req_id = reqResult.rows[0]?.codreq || null;
 
       // Se não tiver separação, usar armazém padrão (1003) para todo o produto
       if (item.romaneio.length === 0) {
@@ -159,7 +160,7 @@ export default async function handler(
           INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
           VALUES ($1, $2, $3, $4, $5)
         `, [
-          entrada.numero_entrada,
+          entrada.codent,
           item.produto_cod,
           req_id,
           1003, // Armazém padrão do sistema
@@ -174,7 +175,7 @@ export default async function handler(
               INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
               VALUES ($1, $2, $3, $4, $5)
             `, [
-              entrada.numero_entrada,
+              entrada.codent,
               item.produto_cod,
               req_id,
               rom.arm_id,
@@ -187,12 +188,11 @@ export default async function handler(
     }
 
     // 7. Marcar entrada como tendo romaneio realizado (est_alocado=1)
-    // Este campo indica que os produtos foram FISICAMENTE distribuídos nos armazéns
     await client.query(`
-      UPDATE db_manaus.entradas_estoque
+      UPDATE db_manaus.dbent
       SET est_alocado = 1
-      WHERE id = $1
-    `, [entrada.id]);
+      WHERE codent = $1
+    `, [entrada.codent]);
 
     // Commit da transação
     await client.query('COMMIT');
@@ -201,8 +201,8 @@ export default async function handler(
 
     return res.status(200).json({
       ok: true,
-      entrada_id: entrada.id,
-      numero_entrada: entrada.numero_entrada,
+      entrada_id: entrada.codent,
+      numero_entrada: entrada.codent,
       itens_salvos: itens.length,
       total_separacoes: totalSeparacoes
     });

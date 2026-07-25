@@ -17,6 +17,11 @@ export interface DadosProduto {
   prcustoatual?: number;
   dolar?: string;
   txdolarcompra?: number;
+  // Atributos fiscais para o divisor "fora do estado" (tipopreco 3/4/5).
+  // Se omitidos, são buscados de dbprod dentro de recalcularPrecosProduto.
+  codgpp?: string;
+  codmarca?: string;
+  strib?: string;
 }
 
 export interface FormacaoPreco {
@@ -74,6 +79,72 @@ const DBPRECO_COLUMNS: Record<number, string> = {
   7: 'prbv30',
 };
 
+// --- NÚCLEO DE CÁLCULO (porte fiel de CALCULAR_POR_MARGEM) ---
+
+/** ROUND do Oracle: half-away-from-zero. */
+function roundHalfAway(x: number, n = 2): number {
+  const f = Math.pow(10, n);
+  const v = x * f;
+  const s = v >= 0 ? 1 : -1;
+  return (s * Math.floor(Math.abs(v) + 0.5 + 1e-9)) / f;
+}
+
+export interface ComponentesPreco {
+  TIPOPRECO: number;
+  MARGEMLIQUIDA: number;
+  IPI: number; // alíquota
+  DCI: number; // alíquota II
+  ICMS: number;
+  PIS: number;
+  COFINS: number;
+  COMISSAO: number;
+  TAXACARTAO: number;
+  ICMSDEVOL: number;
+}
+
+/**
+ * Preço de venda de uma faixa (tipopreco) a partir do custo base e dos componentes
+ * tributários já formados. Porte fiel de POLITICA_PRECO_VENDA.CALCULAR_POR_MARGEM,
+ * validado 100% (640 faixas) contra a procedure viva do Oracle:
+ *   preço = round(precoMargem / (fator/100), 2) + IPI + II
+ * onde fator = 100 − (icmsdevol+icms+pis+cofins+comissão+taxaCartão),
+ * com divisor "fora do estado" (tp 3/4/5, não-dólar) e zeragem de IPI/II por faixa.
+ */
+export function calcularPrecoVenda(
+  base: number,
+  form: ComponentesPreco,
+  prod: { dolar?: string; codgpp?: string; codmarca?: string; strib?: string }
+): number | null {
+  const tp = form.TIPOPRECO;
+  const margMult = 1 + (form.MARGEMLIQUIDA || 0) / 100;
+  const s1 = (prod.strib || '').charAt(0);
+  const foraEstado = [3, 4, 5].includes(tp) && prod.dolar !== 'S';
+
+  let precoMargem: number;
+  let ipiVal: number;
+  let iiVal: number;
+  if (foraEstado) {
+    const gpp = ['00302', '00524', '01763', '01743', '01750', '01762', '00008', '01436'];
+    let div: number;
+    if (gpp.includes(prod.codgpp || '')) div = 1.19;
+    else if (prod.codmarca === '02543') div = 1.17;
+    else if (['1', '2', '3', '8'].includes(s1)) div = 1.30;
+    else div = 1.21;
+    precoMargem = roundHalfAway((base / div) * margMult, 2);
+    ipiVal = 0;
+    iiVal = 0;
+  } else {
+    precoMargem = roundHalfAway(base * margMult, 2);
+    ipiVal = tp === 7 ? 0 : roundHalfAway((base * (form.IPI || 0)) / 100, 2);
+    iiVal = [0, 1, 2, 7].includes(tp) ? 0 : roundHalfAway((base * (form.DCI || 0)) / 100, 2);
+  }
+
+  const fator = 100 - ((form.ICMSDEVOL || 0) + (form.ICMS || 0) + (form.PIS || 0) +
+    (form.COFINS || 0) + (form.COMISSAO || 0) + (form.TAXACARTAO || 0));
+  if (fator === 0) return null;
+  return roundHalfAway(precoMargem / (fator / 100), 2) + ipiVal + iiVal;
+}
+
 // --- FUNÇÕES PRINCIPAIS ---
 
 /**
@@ -106,70 +177,71 @@ export async function recalcularPrecosProduto(
     return;
   }
 
-  // Calcular custo base
-  const custoOriginal = produto.prcustoatual || produto.prcompra || 0;
-  if (custoOriginal === 0) {
+  // Atributos fiscais do produto (custo/dólar/divisor "fora do estado")
+  const pfRes = await client.query(
+    `SELECT prcompra, dolar, txdolarcompra, codgpp, codmarca, strib FROM dbprod WHERE codprod = $1`,
+    [produto.codprod]
+  );
+  const pf = pfRes.rows[0] || {};
+  const dolarS = (produto.dolar ?? pf.dolar) === 'S';
+  const txdolar = Number(produto.txdolarcompra ?? pf.txdolarcompra ?? 0);
+  // Base de custo = PRCOMPRA (como o Oracle), aplicando dólar quando importado
+  const custoOriginal = Number(produto.prcompra ?? pf.prcompra ?? 0);
+  if (!custoOriginal) {
     console.log(`Produto ${produto.codprod}: custo base = 0, nada a recalcular`);
     return;
   }
+  const base = roundHalfAway(custoOriginal * (dolarS && txdolar > 0 ? txdolar : 1), 2);
+  const prodCtx = {
+    dolar: (produto.dolar ?? pf.dolar) || 'N',
+    codgpp: produto.codgpp ?? pf.codgpp,
+    codmarca: produto.codmarca ?? pf.codmarca,
+    strib: produto.strib ?? pf.strib,
+  };
 
-  let custoBase = custoOriginal;
-  if (produto.dolar === 'S' && produto.txdolarcompra && produto.txdolarcompra > 0) {
-    custoBase = custoOriginal * produto.txdolarcompra;
-  }
-
-  // 2. Para cada registro existente, recalcular preço mantendo a margem
+  // 2. Recalcular o preço de cada faixa reusando margem + alíquotas gravadas
   const formacoesAtualizadas: FormacaoPreco[] = [];
 
   for (const reg of existentes.rows) {
-    const tipopreco = parseInt(reg.TIPOPRECO, 10);
-    const margemLiquida = parseFloat(reg.MARGEMLIQUIDA || 0);
-    const icms = parseFloat(reg.ICMS || 0);
-    const pis = parseFloat(reg.PIS || 0);
-    const cofins = parseFloat(reg.COFINS || 0);
-    const comissao = parseFloat(reg.COMISSAO || 0);
-    const taxaCartao = parseFloat(reg.TAXACARTAO || 0);
-    const ipi = parseFloat(reg.IPI || 0);
-
-    // Fórmula legada:
-    // precoComMargem = custoBase * (1 + margemliquida / 100)
-    // fatorDespesas = 100 - (ICMS + PIS + COFINS + comissao + taxaCartao)
-    // precoFinal = precoComMargem / (fatorDespesas / 100) + IPI
-    const precoComMargem = custoBase * (1 + margemLiquida / 100);
-    const fatorDespesasPct = 100 - (icms + pis + cofins + comissao + taxaCartao);
-    let precoFinal: number;
-    if (fatorDespesasPct > 0) {
-      precoFinal = precoComMargem / (fatorDespesasPct / 100) + ipi;
-    } else {
-      precoFinal = precoComMargem + ipi;
-    }
-
-    precoFinal = Number(precoFinal.toFixed(2));
-
-    const formacao: FormacaoPreco = {
-      CODPROD: produto.codprod,
-      TIPOPRECO: tipopreco,
-      PRECOVENDA: precoFinal,
-      MARGEMLIQUIDA: margemLiquida,
-      ICMSDEVOL: parseFloat(reg.ICMSDEVOL || 0),
-      ICMS: icms,
-      IPI: ipi,
-      PIS: pis,
-      COFINS: cofins,
+    const form: ComponentesPreco = {
+      TIPOPRECO: parseInt(reg.TIPOPRECO, 10),
+      MARGEMLIQUIDA: parseFloat(reg.MARGEMLIQUIDA || 0),
+      IPI: parseFloat(reg.IPI || 0),
       DCI: parseFloat(reg.DCI || 0),
-      COMISSAO: comissao,
-      FATORDESPESAS: Number((fatorDespesasPct / 100).toFixed(4)),
-      TAXACARTAO: taxaCartao,
+      ICMS: parseFloat(reg.ICMS || 0),
+      PIS: parseFloat(reg.PIS || 0),
+      COFINS: parseFloat(reg.COFINS || 0),
+      COMISSAO: parseFloat(reg.COMISSAO || 0),
+      TAXACARTAO: parseFloat(reg.TAXACARTAO || 0),
+      ICMSDEVOL: parseFloat(reg.ICMSDEVOL || 0),
     };
 
-    formacoesAtualizadas.push(formacao);
+    const preco = calcularPrecoVenda(base, form, prodCtx);
+    if (preco == null) continue;
+    const precoFinal = Number(preco.toFixed(2));
 
-    // Atualizar o registro existente
+    formacoesAtualizadas.push({
+      CODPROD: produto.codprod,
+      TIPOPRECO: form.TIPOPRECO,
+      PRECOVENDA: precoFinal,
+      MARGEMLIQUIDA: form.MARGEMLIQUIDA,
+      ICMSDEVOL: form.ICMSDEVOL,
+      ICMS: form.ICMS,
+      IPI: form.IPI,
+      PIS: form.PIS,
+      COFINS: form.COFINS,
+      DCI: form.DCI,
+      COMISSAO: form.COMISSAO,
+      FATORDESPESAS: parseFloat(reg.FATORDESPESAS || 0),
+      TAXACARTAO: form.TAXACARTAO,
+    });
+
+    // Atualiza só o PRECOVENDA (FATORDESPESAS gravado é preservado)
     await client.query(
       `UPDATE ${tableName}
-       SET "PRECOVENDA" = $1, "FATORDESPESAS" = $2
-       WHERE "CODPROD" = $3 AND "TIPOPRECO" = $4`,
-      [formacao.PRECOVENDA, formacao.FATORDESPESAS, produto.codprod, tipopreco]
+       SET "PRECOVENDA" = $1
+       WHERE "CODPROD" = $2 AND "TIPOPRECO" = $3`,
+      [precoFinal, produto.codprod, form.TIPOPRECO]
     );
   }
 

@@ -11,6 +11,7 @@ export const colunasDbNFe = [
   { campo: 'dataEmissao', label: 'Data Emissão' },
   { campo: 'valorTotal', label: 'Valor Total' },
   { campo: 'status', label: 'Status' },
+  { campo: 'codent', label: 'Nº Entrada' },
   { campo: 'dataUpload', label: 'Data Upload' },
 
   // Colunas secundárias (substituíveis)

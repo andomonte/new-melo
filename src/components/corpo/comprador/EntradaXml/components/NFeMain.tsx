@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, useMemo } from 'react';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { Upload, Package, CircleChevronDown, Eye, Settings, Trash2, DollarSign, Play, Filter, History, Unlock, RotateCcw } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
@@ -100,11 +101,21 @@ export const NFeMain: React.FC = () => {
     storageKey: 'nfe-entrada-xml-table-config-v2'
   });
 
+  // Filtro rápido por status (dropdown, estilo Requisições). Injeta um filtro
+  // 'status' (igual) no array enviado à busca — n.exec no backend.
+  const [statusFiltro, setStatusFiltro] = useState('');
+  const filtrosCombinados = useMemo(() => {
+    const semStatus = filtros.filter((f) => f.campo !== 'status');
+    return statusFiltro
+      ? [...semStatus, { campo: 'status', tipo: 'igual', valor: statusFiltro }]
+      : semStatus;
+  }, [filtros, statusFiltro]);
+
   const { data, meta, loading, refetch, updateNFeStatus } = useNFes({
     page,
     perPage,
     search,
-    filters: filtros,
+    filters: filtrosCombinados,
     advancedFilters,
   });
 
@@ -789,7 +800,7 @@ export const NFeMain: React.FC = () => {
                     role="menuitem"
                   >
                     <Play className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
-                    Confirmar NFe
+                    Gerar Entrada
                   </button>
                 </>
               )}
@@ -839,6 +850,11 @@ export const NFeMain: React.FC = () => {
         style: 'currency',
         currency: 'BRL'
       }).format(nfe.valorTotal) : 'R$ 0,00',
+      codent: nfe.codent ? (
+        <span className="font-medium text-emerald-700 dark:text-emerald-300">{nfe.codent}</span>
+      ) : (
+        <span className="text-gray-400">–</span>
+      ),
       status: (
         <div className="flex flex-col gap-1">
           {/* Badge de status principal */}
@@ -958,11 +974,14 @@ export const NFeMain: React.FC = () => {
                 </Button>
 
                 <Button
-                  onClick={() => setIsGerarEntradaVerdeOpen(true)}
+                  onClick={() => {
+                    setDropdownStates({}); // fecha qualquer menu Ações aberto
+                    setIsGerarEntradaVerdeOpen(true);
+                  }}
                   className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-green-600 hover:bg-green-700 text-white"
                 >
                   <Package size={18} />
-                  Processar XML
+                  Gerar Entrada
                 </Button>
               </>
             )}
@@ -991,6 +1010,25 @@ export const NFeMain: React.FC = () => {
           searchInputPlaceholder="Buscar por NFe, chave, emitente..."
           exportEndpoint="/api/entrada-xml/exportar"
           exportFileName="nfes.xlsx"
+          searchRightSlot={
+            <div className="w-44 shrink-0">
+              <SelectPadrao
+                placeholder="Todos os status"
+                value={statusFiltro || 'todos'}
+                onValueChange={(v) => {
+                  setStatusFiltro(v === 'todos' ? '' : v);
+                  handlePageChange(1);
+                }}
+                options={[
+                  { value: 'todos', label: 'Todos os status' },
+                  { value: 'N', label: 'Recebida' },
+                  { value: 'S', label: 'Processada' },
+                  { value: 'A', label: 'Em Andamento' },
+                  { value: 'C', label: 'Associada' },
+                ]}
+              />
+            </div>
+          }
         />
       </div>
 

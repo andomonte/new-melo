@@ -1,6 +1,7 @@
 // src/components/modals/usuarios/modalFormEditar.tsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { X } from 'lucide-react';
 import { buscarArmazensPerfil } from '@/data/armazem/armazens';
 import { buscarFuncoesPerfil } from '@/data/funcoes/funcoes';
@@ -56,6 +57,7 @@ interface ItemAdicionado {
       codigo_filial: string;
       nome_filial: string;
       codvend?: string | null;
+      codcomprador?: string | null;
       armazens?: Armazem[];
       funcoesDoUsuario: Funcao[];
     }[];
@@ -97,6 +99,46 @@ export default function FormCadastrarUsuario({
   const [perfilSelecionado, setPerfilSelecionado] = useState<string>('');
   const [filialSelecionada, setFilialSelecionada] = useState<string>('');
   const [codvendInput, setCodvendInput] = useState<string | null>(null);
+  const [compradorInput, setCompradorInput] = useState<string | null>(null);
+
+  // Comprador por perfil/filial (igual ao Vendedor). Opções do select ao lado
+  // do Vendedor; o valor escolhido é adicionado à linha.
+  const [compradoresOpts, setCompradoresOpts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [loadingCompradores, setLoadingCompradores] = useState(false);
+
+  const buscarCompradores = useCallback(async (termo: string) => {
+    setLoadingCompradores(true);
+    try {
+      const resp = await fetch(
+        `/api/compradores/get?page=1&perPage=50&search=${encodeURIComponent(termo)}`,
+      );
+      const json = await resp.json();
+      const lista = (json.data ?? []).map((c: any) => ({
+        value: String(c.codcomprador),
+        label: `${c.codcomprador} - ${c.nome}`,
+      }));
+      setCompradoresOpts(lista);
+    } catch (e) {
+      console.error('Erro ao buscar compradores:', e);
+    } finally {
+      setLoadingCompradores(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    buscarCompradores('');
+  }, [buscarCompradores]);
+
+  const labelComprador = useCallback(
+    (cod?: string | null) => {
+      if (!cod) return '';
+      const o = compradoresOpts.find((x) => x.value === String(cod));
+      return o ? o.label : String(cod);
+    },
+    [compradoresOpts],
+  );
 
   const [hasChanges, setHasChanges] = useState(false);
   const [filiaisOptions, setFiliaisOptions] = useState<
@@ -187,6 +229,7 @@ export default function FormCadastrarUsuario({
         setFilialSelecionada('');
         setFuncoesSelecionadas([]);
         setCodvendInput(null);
+        setCompradorInput(null);
         setItensAtivados({});
         // Limpa armazém selecionado
       }
@@ -240,6 +283,7 @@ export default function FormCadastrarUsuario({
         nome_filial: filialSelecionada,
         codigo_filial: codigoFilial,
         codvend: codvendInput ?? null,
+        codcomprador: compradorInput ?? null,
         armazens: armazensSelecionados[filialSelecionada] ?? [],
         funcoesDoUsuario: funcoesSelecionadas,
       };
@@ -276,6 +320,7 @@ export default function FormCadastrarUsuario({
       setPerfilSelecionado('');
       setFilialSelecionada('');
       setCodvendInput(null);
+      setCompradorInput(null);
       setFuncoesSelecionadas([]);
       setItensAtivados({});
 
@@ -390,6 +435,7 @@ export default function FormCadastrarUsuario({
     );
 
     setCodvendInput(filial?.codvend ?? null);
+    setCompradorInput(filial?.codcomprador ?? null);
     if (filialSelecionada) {
       setItensAtivados({ [filialSelecionada]: true });
     }
@@ -427,6 +473,7 @@ export default function FormCadastrarUsuario({
       );
 
       setCodvendInput(filialExistente?.codvend ?? null);
+      setCompradorInput(filialExistente?.codcomprador ?? null);
 
       if (filialExistente?.armazens) {
         setArmazensSelecionados((prev) => ({
@@ -440,6 +487,7 @@ export default function FormCadastrarUsuario({
       setPerfilSelecionado('');
       setFuncoesSelecionadas([]);
       setCodvendInput(null);
+      setCompradorInput(null);
     }
   };
 
@@ -455,6 +503,7 @@ export default function FormCadastrarUsuario({
     setFilialSelecionada('');
     setFuncoesSelecionadas([]);
     setCodvendInput(null);
+    setCompradorInput(null);
     setItensAtivados({});
     setHasChanges(false);
     // Limpa armazém selecionado
@@ -552,6 +601,7 @@ export default function FormCadastrarUsuario({
       setFilialSelecionada('');
       setFuncoesSelecionadas([]);
       setCodvendInput(null);
+      setCompradorInput(null);
       // Limpa armazém selecionado
     } else {
       const funcoesNormalizadas: Funcao[] = funcoes.map((funcao) => ({
@@ -580,6 +630,7 @@ export default function FormCadastrarUsuario({
       }
 
       const codvendDoItemAtivado = filialEncontrada?.codvend ?? null;
+      const codcompradorDoItemAtivado = filialEncontrada?.codcomprador ?? null;
       // Obter ID do armazém do item ativado (para seleção única)
       const chave = filialName;
       if (filialEncontrada?.armazens) {
@@ -599,16 +650,24 @@ export default function FormCadastrarUsuario({
           ? String(codvendDoItemAtivado)
           : null,
       );
+      setCompradorInput(
+        codcompradorDoItemAtivado !== null &&
+          codcompradorDoItemAtivado !== undefined
+          ? String(codcompradorDoItemAtivado)
+          : null,
+      );
     }
   };
 
   const handleLoginChange = (value: string) => {
-    setLoginUser(value);
+    // Armazena em maiúsculo (mesmo texto exibido) para não salvar a caixa digitada.
+    setLoginUser(value.toLocaleUpperCase());
     setHasChanges(true);
   };
 
   const handleNomeChange = (value: string) => {
-    setNomeUser(value);
+    // Armazena em maiúsculo (mesmo texto exibido) para não salvar a caixa digitada.
+    setNomeUser(value.toLocaleUpperCase());
     setHasChanges(true);
   };
 
@@ -652,6 +711,7 @@ export default function FormCadastrarUsuario({
     );
 
     const codvendItemNaLista = filialNaLista?.codvend ?? null;
+    const codcompradorItemNaLista = filialNaLista?.codcomprador ?? null;
     const armazensItemNaLista: Armazem[] = filialNaLista?.armazens ?? [];
 
     const funcoesAtuais = funcoesSelecionadas.map((funcao) => ({
@@ -677,6 +737,9 @@ export default function FormCadastrarUsuario({
     const codvendMudou =
       String(codvendInput ?? '') !== String(codvendItemNaLista ?? '');
 
+    const compradorMudou =
+      String(compradorInput ?? '') !== String(codcompradorItemNaLista ?? '');
+
     const armazemAtual: Armazem[] = armazensSelecionados[chave] ?? [];
 
     const armazensMudaram = !areArmazensEqual(
@@ -684,7 +747,7 @@ export default function FormCadastrarUsuario({
       armazensItemNaLista,
     );
 
-    return funcoesMudaram || codvendMudou || armazensMudaram;
+    return funcoesMudaram || codvendMudou || compradorMudou || armazensMudaram;
   })();
 
   const armazensFiltradosDaFilialSelecionada = (): Armazem[] => {
@@ -862,6 +925,26 @@ export default function FormCadastrarUsuario({
                   </span>
                 ) : null}
               </div>
+
+              {/* Comprador por perfil/filial — opcional, igual ao Vendedor.
+                  Pré-preenche o comprador na Confirmação da NFe e na Requisição
+                  conforme o login e a filial. */}
+              <div className="w-[25%]">
+                <label className="block mb-1 text-sm font-medium">
+                  Comprador <span className="ml-1">(opcional)</span>
+                </label>
+                <SelectPadrao
+                  searchable
+                  name="codcomprador"
+                  placeholder="Selecione um comprador"
+                  options={compradoresOpts}
+                  value={compradorInput ?? ''}
+                  onValueChange={(v) => setCompradorInput(v || null)}
+                  onInputChange={(termo) => buscarCompradores(termo)}
+                  loading={loadingCompradores}
+                />
+              </div>
+
               {/* Ajuste para seleção ÚNICA de Armazéns - REMOVIDO 'multiple' */}
               <div className="w-[25%] flex justify-center items-end">
                 <button
@@ -906,7 +989,7 @@ export default function FormCadastrarUsuario({
           </div>
 
           <div className="mt-4  rounded-lg border border-gray-300 dark:border-gray-600 shadow h-[calc(100vh-330px)] flex flex-col">
-            <div className="bg-gray-200 dark:bg-gray-700 p-2 grid grid-cols-6 gap-4 border-b border-gray-300 dark:border-gray-600">
+            <div className="bg-gray-200 dark:bg-gray-700 p-2 grid grid-cols-7 gap-4 border-b border-gray-300 dark:border-gray-600">
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Perfil
               </div>
@@ -915,6 +998,9 @@ export default function FormCadastrarUsuario({
               </div>
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Vendedor
+              </div>
+              <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
+                Comprador
               </div>
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Armazéns
@@ -937,7 +1023,7 @@ export default function FormCadastrarUsuario({
                   return (
                     <div
                       key={key}
-                      className={`grid grid-cols-6 gap-4 p-2 border-b dark:border-gray-700 text-sm ${
+                      className={`grid grid-cols-7 gap-4 p-2 border-b dark:border-gray-700 text-sm ${
                         isAtivado ? 'bg-blue-100 dark:bg-blue-900' : ''
                       }`}
                     >
@@ -952,6 +1038,11 @@ export default function FormCadastrarUsuario({
                           ? vendedores.find(
                               (v) => String(v.codvend) === filial.codvend,
                             )?.nome || filial.codvend
+                          : 'N/A'}
+                      </div>
+                      <div className="flex items-center justify-center text-center">
+                        {filial.codcomprador
+                          ? labelComprador(filial.codcomprador)
                           : 'N/A'}
                       </div>
                       <div className="flex items-center justify-center text-center">

@@ -15,6 +15,7 @@ import {
   updateCliente,
   getCliente,
 } from '@/data/clientes/clientes';
+import { getFornecedor } from '@/data/fornecedores/fornecedores';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -96,6 +97,7 @@ export default function ClientFormModal({
       faixaFinanceira: '',
       banco: undefined,
       formaPagamento: '',
+      precoVenda: '0', // Desconto Aplicado padrão "0 - BALCÃO"
       bairro: '',
       nome: '',
       nomeFantasia: '',
@@ -107,10 +109,15 @@ export default function ClientFormModal({
       numero: '',
       complemento: '',
     },
-    mode: 'onTouched',
+    // 'onChange' (antes 'onTouched'): revalida cada campo ao alterar, limpando
+    // o erro assim que fica válido. Com 'onTouched', os selects (que não marcam
+    // "touched", pois não chamam field.onBlur) nunca revalidavam, então erros
+    // marcados pela validação de troca de aba (trigger) ficavam presos —
+    // campos preenchidos (ex.: Classificação) seguiam mostrando "obrigatório".
+    mode: 'onChange',
   });
 
-  const { watch, handleSubmit, reset, formState, trigger } = methods;
+  const { watch, handleSubmit, reset, formState, trigger, setValue } = methods;
   const documento = watch('documento');
   const { errors } = formState;
 
@@ -417,6 +424,7 @@ export default function ClientFormModal({
             faixaFinanceira: '',
             banco: undefined,
             formaPagamento: '',
+            precoVenda: '0', // Desconto Aplicado padrão "0 - BALCÃO"
           });
         }
       }
@@ -424,6 +432,61 @@ export default function ClientFormModal({
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, clientToEdit]);
+
+  // Aproveita o cadastro de um FORNECEDOR com o mesmo CNPJ para PRÉ-PREENCHER o
+  // formulário de NOVO cliente (identificação + endereço + inscrições em comum).
+  // Não entra em modo edição: ao salvar, um cliente novo é criado. Campos
+  // exclusivos de cliente (Tipo Cliente, Situação Tributária, Classe) seguem
+  // vazios para o usuário completar.
+  const aproveitarFornecedor = async (id: string) => {
+    try {
+      setIsLoadingData(true);
+      const f = await getFornecedor(id);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const set = (name: any, val: any) =>
+        setValue(name, val, { shouldDirty: true });
+
+      if (f.tipo) set('tipoPessoa', String(f.tipo).trim());
+      set('nome', (f.nome || '').trim().substring(0, 40));
+      set('nomeFantasia', (f.nome_fant || '').trim().substring(0, 30));
+
+      // Endereço
+      set('cep', (f.cep || '').replace(/\D/g, ''));
+      set('endereco', f.endereco || '');
+      set('numero', f.numero || '');
+      set('complemento', f.complemento || '');
+      set('bairro', f.bairro || '');
+      set('cidade', f.cidade || '');
+      set('uf', f.uf || '');
+      set('referencia', f.referencia || '');
+      if (f.codpais) set('pais', Number(f.codpais) || 1058);
+
+      // Inscrições (detecta ISENTO)
+      const iestIsento = String(f.iest || '').toUpperCase() === 'ISENTO';
+      set('isentoIE', iestIsento);
+      set('inscricaoEstadual', iestIsento ? 'ISENTO' : f.iest || '');
+      const imunIsento = String(f.imun || '').toUpperCase() === 'ISENTO';
+      set('isentoIM', imunIsento);
+      set('inscricaoMunicipal', imunIsento ? 'ISENTO' : f.imun || '');
+      const sufIsento = String(f.isuframa || '').toUpperCase() === 'ISENTO';
+      set('isentoSuframa', sufIsento);
+      set('suframa', sufIsento ? 'ISENTO' : f.isuframa || '');
+
+      // Tipo de empresa (se compatível com as opções do cliente)
+      if (f.tipoemp) set('tipoEmpresa', String(f.tipoemp).trim());
+
+      setShowGatekeeperModal(false);
+      toast.success(
+        'Dados do fornecedor aproveitados. Complete os campos do cliente e salve.',
+      );
+    } catch (error) {
+      console.error('Erro ao aproveitar fornecedor:', error);
+      toast.error('Não foi possível carregar os dados do fornecedor.');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
 
   // Converte todos os campos texto para maiúscula antes de salvar
   const toUpper = (val: any): string => {
@@ -525,7 +588,12 @@ export default function ClientFormModal({
           // Preço de Venda Kick Back (checkbox) -> coluna kickback 0/1 (igual ao Delphi)
           kickback: data.precoVendaKickback ? 1 : 0,
           // Desconto Aplicado (Preço de Venda no Delphi) -> coluna prvenda (códigos 0-7)
-          prvenda: data.precoVenda || '0',
+          prvenda:
+            data.precoVenda &&
+            data.precoVenda !== 'undefined' &&
+            data.precoVenda !== 'null'
+              ? String(data.precoVenda).slice(0, 1)
+              : '0',
           // Bloquear Preço de Venda (checkbox) -> coluna bloquear_preco 'S'/'N' (igual ao Delphi)
           bloquear_preco: data.benmd === 'S' ? 'S' : 'N',
           // Hab. Suframa (Sim/Não) -> coluna habilitasuframa 'S'/'N' (igual ao Delphi)
@@ -622,7 +690,12 @@ export default function ClientFormModal({
           // Preço de Venda Kick Back (checkbox) -> coluna kickback 0/1 (igual ao Delphi)
           kickback: data.precoVendaKickback ? 1 : 0,
           // Desconto Aplicado (Preço de Venda no Delphi) -> coluna prvenda (códigos 0-7)
-          prvenda: data.precoVenda || '0',
+          prvenda:
+            data.precoVenda &&
+            data.precoVenda !== 'undefined' &&
+            data.precoVenda !== 'null'
+              ? String(data.precoVenda).slice(0, 1)
+              : '0',
           // Bloquear Preço de Venda (checkbox) -> coluna bloquear_preco 'S'/'N' (igual ao Delphi)
           bloquear_preco: data.benmd === 'S' ? 'S' : 'N',
           // Hab. Suframa (Sim/Não) -> coluna habilitasuframa 'S'/'N' (igual ao Delphi)
@@ -1146,17 +1219,24 @@ export default function ClientFormModal({
                               } finally {
                                 setIsLoadingData(false);
                               }
+                            } else if (match.type === 'FORNECEDOR') {
+                              // Aproveita o cadastro do fornecedor no novo cliente
+                              await aproveitarFornecedor(match.id);
                             } else {
-                              const editUrl =
-                                match.type === 'FORNECEDOR'
-                                  ? `/admin/cadastros/fornecedores?edit=${match.id}`
-                                  : `/admin/cadastros/transportadoras?edit=${match.id}`;
-                              window.open(editUrl, '_blank');
+                              // Transportadora: abre o cadastro correspondente
+                              window.open(
+                                `/admin/cadastros/transportadoras?edit=${match.id}`,
+                                '_blank',
+                              );
                               setShowGatekeeperModal(false);
                             }
                           }}
                         >
-                          {match.type === 'CLIENTE' ? 'Editar' : 'Abrir'}
+                          {match.type === 'CLIENTE'
+                            ? 'Editar'
+                            : match.type === 'FORNECEDOR'
+                            ? 'Aproveitar dados'
+                            : 'Abrir'}
                         </Button>
                       </div>
                     </div>

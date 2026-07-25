@@ -60,6 +60,9 @@ export default async function handle(
   };
 
   let client: PoolClient | undefined;
+  // Guarda o registro efetivamente gravado (INSERT ou UPDATE) para, em caso de
+  // erro 22001 (valor muito longo), identificar EXATAMENTE qual coluna estourou.
+  let registroGravado: Record<string, any> | null = null;
 
   try {
     const pool = getPgPool(filial);
@@ -102,6 +105,18 @@ export default async function handle(
       }
 
       updateValues.push(clienteExistente.codcli);
+
+      // Mapa dos valores gravados (para diagnóstico de 22001)
+      registroGravado = {};
+      for (const key in data) {
+        if (
+          Object.prototype.hasOwnProperty.call(data, key) &&
+          key !== 'codcli' &&
+          key !== 'cpfcgc'
+        ) {
+          registroGravado[key] = sanitizeValue(data[key as keyof Cliente]);
+        }
+      }
 
       const updateQuery = `
         UPDATE dbclien
@@ -200,6 +215,8 @@ export default async function handle(
 
       if (!clienteParaCriar.cpfcgc) clienteParaCriar.cpfcgc = data.cpfcgc;
       if (!clienteParaCriar.nome) clienteParaCriar.nome = data.nome;
+
+      registroGravado = clienteParaCriar; // para diagnóstico de 22001
 
       const insertFields = Object.keys(clienteParaCriar)
         .map((key) => `"${key}"`)
@@ -345,6 +362,7 @@ export default async function handle(
     });
 
     let userMessage = 'Erro ao salvar cliente';
+    let campoEstouro: string | undefined;
     if (error.code === '23505') {
       userMessage = 'Cliente já existe com este CPF/CNPJ';
     } else if (error.code === '23502') {
@@ -355,11 +373,46 @@ export default async function handle(
       userMessage = 'Erro de estrutura do banco. Contate o suporte.';
     } else if (error.code === 'ECONNREFUSED') {
       userMessage = 'Erro de conexão com o banco de dados';
+    } else if (error.code === '22001') {
+      // "valor muito longo": o PostgreSQL não informa a coluna, então
+      // comparamos os valores gravados com os tamanhos reais de cada coluna.
+      userMessage = 'Um campo excedeu o tamanho permitido.';
+      try {
+        if (registroGravado && client) {
+          const lens = await client.query(
+            `SELECT column_name, character_maximum_length AS m
+               FROM information_schema.columns
+              WHERE table_name = 'dbclien'
+                AND character_maximum_length IS NOT NULL`,
+          );
+          const maxByCol: Record<string, number> = {};
+          lens.rows.forEach((r: any) => {
+            maxByCol[r.column_name] = r.m;
+          });
+          const offenders = Object.entries(registroGravado)
+            .filter(
+              ([k, v]) =>
+                v != null &&
+                maxByCol[k] != null &&
+                String(v).length > maxByCol[k],
+            )
+            .map(
+              ([k, v]) =>
+                `${k} (${String(v).length}/${maxByCol[k]}: "${v}")`,
+            );
+          if (offenders.length) {
+            campoEstouro = offenders.join(', ');
+            userMessage = `Campo(s) acima do tamanho permitido: ${campoEstouro}`;
+          }
+        }
+      } catch (diagErr) {
+        console.error('Falha ao diagnosticar 22001:', diagErr);
+      }
     }
 
     res.status(500).json({
       error: userMessage,
-      detail: error.message || 'Erro ao upsert cliente.',
+      detail: campoEstouro || error.message || 'Erro ao upsert cliente.',
       code: error.code,
     });
   } finally {

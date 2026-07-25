@@ -32,23 +32,26 @@ interface ItensResponse {
   };
 }
 
-// Query para buscar itens de uma entrada
+// Itens da entrada (dbitent) + conferência (entrada_itens_recebimento por codent/produto/codreq).
+// entrada_item_id = id da linha de conferência (usado pelo frontend em conferir-item).
 const ITENS_QUERY = `
   SELECT
     COALESCE(eir.id, 0) as id,
-    ei.id as entrada_item_id,
-    ei.produto_cod as produto_cod,
+    COALESCE(eir.id, 0) as entrada_item_id,
+    ie.codprod as produto_cod,
     COALESCE(p.descr, 'Produto nao identificado') as produto_nome,
-    ei.quantidade as qtd_esperada,
+    ie.quant as qtd_esperada,
     eir.qtd_recebida,
     COALESCE(eir.status_item, 'PENDENTE') as status_item,
     eir.observacao,
-    'UN' as unidade
-  FROM entrada_itens ei
-  LEFT JOIN entrada_itens_recebimento eir ON eir.entrada_item_id = ei.id
-  LEFT JOIN dbprod p ON p.codprod = ei.produto_cod
-  WHERE ei.entrada_id = $1
-  ORDER BY ei.id
+    COALESCE(p.unimed, 'UN') as unidade
+  FROM db_manaus.dbitent ie
+  LEFT JOIN db_manaus.entrada_itens_recebimento eir
+    ON eir.codent = ie.codent AND eir.produto_cod = ie.codprod
+   AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
+  LEFT JOIN db_manaus.dbprod p ON p.codprod = ie.codprod
+  WHERE ie.codent = $1
+  ORDER BY ie.codprod
 `;
 
 export default async function handler(
@@ -59,9 +62,9 @@ export default async function handler(
     return res.status(405).json({ error: 'Metodo nao permitido' });
   }
 
-  const entradaId = parseInt(req.query.entradaId as string);
+  const entradaId = (req.query.entradaId as string) || ''; // codent
 
-  if (!entradaId || isNaN(entradaId)) {
+  if (!entradaId) {
     return res.status(400).json({ error: 'entradaId e obrigatorio' });
   }
 

@@ -3,6 +3,7 @@ export interface NFeDTO {
   numeroNF: string;
   serie: string;
   chaveNFe: string;
+  codent?: string | null; // nº da entrada gerada (dbent), quando houver
   versao?: string;
   cuf?: number;
   protocolo?: string;

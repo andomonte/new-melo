@@ -30,18 +30,20 @@ export default async function handle(
     // 1. Buscar últimas entradas recebidas (últimos 12 meses)
     const queryEntradas = `
       SELECT
-        e.id as numero_documento,
-        e.nota_fiscal,
-        e.data_entrada,
-        e.fornecedor_nome as fornecedor,
-        ei.quantidade,
-        ei.valor_unitario as preco_unitario,
+        e.codent as numero_documento,
+        nfe.nnf as nota_fiscal,
+        e.dtent as data_entrada,
+        emit.xnome as fornecedor,
+        ie.quant as quantidade,
+        ie.prunit as preco_unitario,
         e.status
-      FROM entrada_itens ei
-      INNER JOIN entradas_estoque e ON ei.entrada_id = e.id
-      WHERE ei.produto_cod = $1
-        AND e.data_entrada >= NOW() - INTERVAL '12 months'
-      ORDER BY e.data_entrada DESC
+      FROM db_manaus.dbitent ie
+      INNER JOIN db_manaus.dbent e ON ie.codent = e.codent
+      LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
+      LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
+      WHERE ie.codprod = $1
+        AND e.dtent >= NOW() - INTERVAL '12 months'
+      ORDER BY e.dtent DESC
       LIMIT 10
     `;
 
@@ -115,12 +117,12 @@ export default async function handle(
     // 4. Calcular estatísticas
     const queryStats = `
       SELECT
-        COALESCE(SUM(ei.quantidade), 0) as total_entradas_12m,
-        COUNT(DISTINCT e.id) as qtd_entradas_12m
-      FROM entrada_itens ei
-      INNER JOIN entradas_estoque e ON ei.entrada_id = e.id
-      WHERE ei.produto_cod = $1
-        AND e.data_entrada >= NOW() - INTERVAL '12 months'
+        COALESCE(SUM(ie.quant), 0) as total_entradas_12m,
+        COUNT(DISTINCT e.codent) as qtd_entradas_12m
+      FROM db_manaus.dbitent ie
+      INNER JOIN db_manaus.dbent e ON ie.codent = e.codent
+      WHERE ie.codprod = $1
+        AND e.dtent >= NOW() - INTERVAL '12 months'
     `;
 
     let resultStats = { rows: [{ total_entradas_12m: 0, qtd_entradas_12m: 0 }] };
@@ -162,8 +164,8 @@ export default async function handle(
         quantidade_sugerida: parseFloat(row.quantidade_sugerida || 0),
       })),
       stats: {
-        totalEntradas12m: parseFloat(resultStats.rows[0]?.total_entradas_12m || 0),
-        qtdEntradas12m: parseInt(resultStats.rows[0]?.qtd_entradas_12m || 0),
+        totalEntradas12m: Number(resultStats.rows[0]?.total_entradas_12m ?? 0),
+        qtdEntradas12m: Number(resultStats.rows[0]?.qtd_entradas_12m ?? 0),
         temPedidoPendente: resultPedidos.rows.length > 0,
       },
     });

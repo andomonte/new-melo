@@ -464,23 +464,10 @@ export const menus = [
             corpo: EntradasMain,
           },
           {
-            name: 'Entrada por XML',
+            name: 'Entrada por XML de NFe',
             icon: FileText,
-            hasSubmenu: true,
-            subMenuItems: [
-              {
-                name: 'Gerar Entrada de NFe',
-                href: '/compras/entrada-xml/gerar-nfe',
-              },
-              {
-                name: 'Entrada por XML de NFe',
-                href: '/compras/entrada-xml/importar-nfe',
-              },
-              {
-                name: 'Entrada por XML de Embarque',
-                href: '/compras/entrada-xml/embarque',
-              },
-            ],
+            href: '/compras/entrada-xml/importar-nfe',
+            corpo: EntradaXmlMain,
           },
           {
             name: 'Importação',
@@ -762,7 +749,7 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
       const ORDEM_COMPRAS = [
         'Dashboard',
         'Requisições de Compra',
-        'Entrada por XML',
+        'Entrada por XML de NFe',
         'Entradas',
         'Importação',
         'Recebimento',

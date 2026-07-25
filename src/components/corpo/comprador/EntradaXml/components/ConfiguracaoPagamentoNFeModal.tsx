@@ -62,8 +62,12 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
     [],
   );
   const [parcelas, setParcelas] = useState<Parcela[]>([]);
-  const [banco, setBanco] = useState<string | null>(null);
+  // Conta padrão fixa: 0003 - 338 | BRADESCO (campo travado; sempre salva 0003).
+  const CONTA_PADRAO = '0003';
+  const CONTA_PADRAO_LABEL = '0003 - 338 | BRADESCO';
+  const [banco, setBanco] = useState<string | null>(CONTA_PADRAO);
   const [tipoDocumento, setTipoDocumento] = useState('BOLETO');
+  const [intervaloDias, setIntervaloDias] = useState('30'); // intervalo entre parcelas
   const [modalKey, setModalKey] = useState(0);
   const [valorNFe, setValorNFe] = useState(0);
   const [valorEntrada, setValorEntrada] = useState(0);
@@ -89,9 +93,10 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
       setValorNFe(0);
       setValorEntrada(0);
       setHabilitarEntrada(false);
-      setBanco(null);
+      setBanco(CONTA_PADRAO); // mantém a conta padrão travada
       setTipoDocumento('BOLETO');
       setPrazoInput('');
+      setIntervaloDias('30');
       setPagamentoConfigurado(false);
       setModalKey(prev => prev + 1); // Reset do Autocomplete
 
@@ -176,21 +181,38 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
           setValorEntrada(parcelaAntecipado.valor_parcela);
         }
 
+        // Normaliza qualquer data (ISO com/sem hora) para 'YYYY-MM-DD' sem
+        // deslocamento de fuso — o DatePicker e o "Dias" esperam esse formato.
+        const isoDate = (s: any): string => {
+          if (!s) return '';
+          const str = String(s);
+          const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+          const d = new Date(str);
+          if (isNaN(d.getTime())) return '';
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+
         // Carregar parcelas do XML como sugestão
         const parcelasXML = data.data
           .filter((p: ParcelaSugerida) => p.numero_parcela > 0)
           .map((p: ParcelaSugerida) => {
-            const dataVenc = new Date(p.data_vencimento);
-            const hoje = new Date();
-            const dias = Math.ceil(
-              (dataVenc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-            );
+            const dataISO = isoDate(p.data_vencimento);
+            let dias = 0;
+            if (dataISO) {
+              const dataVenc = new Date(dataISO + 'T00:00:00');
+              const hoje = new Date();
+              hoje.setHours(0, 0, 0, 0);
+              dias = Math.ceil(
+                (dataVenc.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+              );
+            }
 
             return {
               numero_parcela: p.numero_parcela,
               numero_duplicata: p.numero_duplicata,
               valor_parcela: p.valor_parcela,
-              data_vencimento: p.data_vencimento,
+              data_vencimento: dataISO,
               dias: dias > 0 ? dias : 0,
             };
           });
@@ -290,6 +312,16 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
     }
   };
 
+  // Data de vencimento (ISO) a partir de "dias" contados de hoje.
+  const dataISODeDias = (dias: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + dias);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleGerarParcelas = () => {
     const qtdParcelas = parseInt(prazoInput);
     if (!qtdParcelas || qtdParcelas <= 0) {
@@ -301,7 +333,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
       return;
     }
 
-    const hoje = new Date();
+    const intervalo = parseInt(intervaloDias, 10) || 30;
     const valorRestante = valorNFe - valorEntrada;
     const valorPorParcela = Math.round((valorRestante / qtdParcelas) * 100) / 100;
     const somaParcelas = valorPorParcela * qtdParcelas;
@@ -309,21 +341,13 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
 
     const novasParcelas: Parcela[] = [];
     for (let i = 1; i <= qtdParcelas; i++) {
-      const diasParcela = i * 30;
-      const dataVencimento = new Date(hoje);
-      dataVencimento.setDate(dataVencimento.getDate() + diasParcela);
-
-      const year = dataVencimento.getFullYear();
-      const month = String(dataVencimento.getMonth() + 1).padStart(2, '0');
-      const day = String(dataVencimento.getDate()).padStart(2, '0');
-      const dataISO = `${year}-${month}-${day}`;
-
+      const diasParcela = i * intervalo; // ex.: intervalo 30 → 30, 60, 90; intervalo 15 → 15, 30, 45
       const isUltima = i === qtdParcelas;
       novasParcelas.push({
         numero_parcela: i,
         numero_duplicata: `${String(i).padStart(3, '0')}/${qtdParcelas}`,
         valor_parcela: isUltima ? valorPorParcela + ajuste : valorPorParcela,
-        data_vencimento: dataISO,
+        data_vencimento: dataISODeDias(diasParcela),
         dias: diasParcela,
       });
     }
@@ -355,6 +379,20 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
       ...novasParcelas[index],
       [campo]: valor,
     };
+    setParcelas(novasParcelas);
+  };
+
+  // Ao alterar os "dias" de uma parcela, corrige as SEGUINTES pelo mesmo delta
+  // (preserva o intervalo entre elas) e recalcula os vencimentos. Ex.: parcela 1
+  // de 21→30 (+9) empurra 51→60, 81→90.
+  const handleAtualizarDias = (index: number, novoDias: number) => {
+    const antigo = parcelas[index]?.dias || 0;
+    const delta = novoDias - antigo;
+    const novasParcelas = parcelas.map((p, j) => {
+      if (j < index) return p;
+      const dias = j === index ? novoDias : (p.dias || 0) + delta;
+      return { ...p, dias, data_vencimento: dataISODeDias(dias) };
+    });
     setParcelas(novasParcelas);
   };
 
@@ -479,17 +517,15 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Código da Conta *
                     </label>
-                    <Autocomplete
-                      resetKey={modalKey}
-                      placeholder="Buscar conta..."
-                      apiUrl="/api/contas-pagar/contas-dbconta"
-                      value={banco}
-                      onChange={(value) => setBanco(value)}
-                      disabled={loading || pagamentoConfigurado}
-                      mapResponse={(data) => data.contas || []}
+                    <input
+                      type="text"
+                      value={CONTA_PADRAO_LABEL}
+                      readOnly
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 cursor-not-allowed"
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Conta bancária vinculada ao pagamento
+                      Conta padrão do pagamento (fixa)
                     </p>
                   </div>
 
@@ -518,18 +554,35 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Quantidade de Parcelas
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="1"
-                        max="48"
-                        value={prazoInput}
-                        onChange={(e) => setPrazoInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Ex: 3"
-                        className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        disabled={loading || pagamentoConfigurado}
-                      />
+                    <div className="flex gap-2 items-end">
+                      <div>
+                        <span className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Qtd.</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="48"
+                          value={prazoInput}
+                          onChange={(e) => setPrazoInput(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          placeholder="Ex: 3"
+                          className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          disabled={loading || pagamentoConfigurado}
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Dias</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={intervaloDias}
+                          onChange={(e) => setIntervaloDias(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          placeholder="30"
+                          title="Intervalo em dias entre as parcelas"
+                          className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          disabled={loading || pagamentoConfigurado}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={handleGerarParcelas}
@@ -548,7 +601,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                       </button>
                     </div>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      As parcelas serão geradas com intervalos de 30 dias a partir da data de emissão (30, 60, 90 dias...)
+                      As parcelas usam o intervalo em dias (ex.: 30 → 30, 60, 90; 15 → 15, 30, 45). Alterar os dias de uma parcela ajusta as seguintes.
                     </p>
                   </div>
 
@@ -611,30 +664,8 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                                     onChange={(e) => {
                                       const dias =
                                         parseInt(e.target.value) || 0;
-                                      handleAtualizarParcela(
-                                        index,
-                                        'dias',
-                                        dias,
-                                      );
-
-                                      // Recalcular data de vencimento
-                                      const hoje = new Date();
-                                      const novaData = new Date(hoje);
-                                      novaData.setDate(
-                                        novaData.getDate() + dias,
-                                      );
-                                      const year = novaData.getFullYear();
-                                      const month = String(
-                                        novaData.getMonth() + 1,
-                                      ).padStart(2, '0');
-                                      const day = String(
-                                        novaData.getDate(),
-                                      ).padStart(2, '0');
-                                      handleAtualizarParcela(
-                                        index,
-                                        'data_vencimento',
-                                        `${year}-${month}-${day}`,
-                                      );
+                                      // Ajusta esta parcela E as seguintes (mesmo delta).
+                                      handleAtualizarDias(index, dias);
                                     }}
                                     className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     disabled={loading || pagamentoConfigurado}

@@ -15,6 +15,7 @@ const filtroParaColunaSQL: Record<string, string> = {
   dataUpload: 'n.dtimport',
   valorTotal: 'n.vnf',
   status: 'n.exec',
+  codent: 'ent.codent',
 
   // Campos secundarios
   natOperacao: 'n.natop',
@@ -102,6 +103,37 @@ export default async function handler(
 
     const filtrosCampoSQL: string[] = [];
 
+    // Expressão da coluna para ILIKE textual (data → TO_CHAR, numérico → CAST).
+    const colExpr = isCampoData
+      ? `TO_CHAR(${coluna}, 'DD/MM/YYYY')`
+      : isCampoNumerico
+      ? `CAST(${coluna} AS TEXT)`
+      : coluna;
+
+    // Multi-termo estilo Delphi: ESPAÇO = E (todas as palavras), ';' = OU.
+    // Ex.: "bosch retentor;melo" = (BOSCH E RETENTOR) OU MELO.
+    const ilikeMulti = (valorBruto: string, padrao: (t: string) => string) => {
+      const grupos = String(valorBruto)
+        .split(';')
+        .map((g) =>
+          g
+            .trim()
+            .split(/\s+/)
+            .map((t) => t.replace(/^%+|%+$/g, '').trim())
+            .filter(Boolean),
+        )
+        .filter((g) => g.length > 0);
+      if (grupos.length === 0) return null;
+      const orConds = grupos.map((termos) => {
+        const andConds = termos.map((t) => {
+          params.push(padrao(t));
+          return `${colExpr} ILIKE $${params.length}`;
+        });
+        return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
+      });
+      return orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0];
+    };
+
     filtrosDoCampo.forEach((filtro) => {
       let operador = 'ILIKE';
       let valor: any = filtro.valor;
@@ -159,60 +191,31 @@ export default async function handler(
           valor = String(valor);
           break;
         case 'contém':
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          } else {
-            operador = 'ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          }
-          break;
         case 'começa':
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `${String(filtro.valor)}%`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `${String(filtro.valor)}%`;
-          } else {
-            operador = 'ILIKE';
-            valor = `${String(filtro.valor)}%`;
-          }
-          break;
         case 'termina':
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `%${String(filtro.valor)}`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `%${String(filtro.valor)}`;
-          } else {
-            operador = 'ILIKE';
-            valor = `%${String(filtro.valor)}`;
+        default: {
+          // Status: comparação exata pelo código (não multi-termo).
+          if (isCampoStatus) {
+            params.push(valor);
+            filtrosCampoSQL.push(`${coluna} = $${params.length}`);
+            return;
           }
-          break;
+          const padrao =
+            filtro.tipo === 'começa'
+              ? (t: string) => `${t}%`
+              : filtro.tipo === 'termina'
+              ? (t: string) => `%${t}`
+              : (t: string) => `%${t}%`; // contém e default
+          const cond = ilikeMulti(filtro.valor, padrao);
+          if (cond) filtrosCampoSQL.push(cond);
+          return;
+        }
         case 'nulo':
           filtrosCampoSQL.push(`${coluna} IS NULL`);
           return;
         case 'nao_nulo':
           filtrosCampoSQL.push(`${coluna} IS NOT NULL`);
           return;
-        default:
-          // Default: contem
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          } else {
-            operador = 'ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          }
-          break;
       }
 
       // Tratar operadores especiais que precisam substituir COLUMN
@@ -254,10 +257,15 @@ export default async function handler(
         t.xnome as transportadora_nome, t.cpf_cnpj as transportadora_cnpj,
         t.ie as transportadora_ie, t.xender as transportadora_endereco,
         t.xmun as transportadora_municipio, t.uf as transportadora_uf,
-        t.placa as transportadora_placa
+        t.placa as transportadora_placa,
+        ent.codent
       FROM dbnfe_ent n
       LEFT JOIN dbnfe_ent_emit e ON n.codnfe_ent = e.codnfe_ent
       LEFT JOIN dbnfe_ent_tran t ON n.codnfe_ent = t.codnfe_ent
+      LEFT JOIN LATERAL (
+        SELECT STRING_AGG(d.codent::text, ', ' ORDER BY d.codent) AS codent
+        FROM dbent d WHERE d.chave = n.chave
+      ) ent ON true
       ${whereString}
       ORDER BY n.dtimport DESC, n.demi DESC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
@@ -302,6 +310,7 @@ export default async function handler(
         numeroNF: nfe.nnf ? nfe.nnf.toString() : '',
         serie: nfe.serie ? nfe.serie.toString() : '',
         chaveNFe: nfe.chave || '',
+        codent: nfe.codent || null, // nº da entrada gerada (dbent), quando houver
         versao: nfe.versao || '4.00',
         cuf: nfe.cuf || 0,
         protocolo: nfe.nprot || '',

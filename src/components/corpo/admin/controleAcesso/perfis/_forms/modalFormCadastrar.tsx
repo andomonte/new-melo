@@ -162,7 +162,10 @@ export default function FormPerfilContainer({
         });
       } else {
         toast({
-          description: 'Erro ao salvar perfil.',
+          description:
+            e instanceof Error && e.message
+              ? e.message
+              : 'Erro ao salvar perfil.',
           variant: 'destructive',
         });
       }

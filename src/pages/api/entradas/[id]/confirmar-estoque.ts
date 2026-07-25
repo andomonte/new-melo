@@ -12,20 +12,13 @@ interface ConfirmarEstoqueResponse {
 }
 
 /**
- * Confirmar Estoque - Libera a entrada para recebimento físico
+ * Confirmar Estoque — modelo Delphi (dbent/dbent_recebimento).
+ * Libera a entrada para recebimento físico: avança o workflow
+ * PRECO_CONFIRMADO → AGUARDANDO_RECEBIMENTO e garante o romaneio (dbitent_armazem).
+ * NÃO atualiza estoque (isso ocorre ao finalizar a alocação).
  *
- * FLUXO CORRETO:
- * 1. PENDENTE (entrada criada)
- * 2. Romaneio (opcional) - planejamento de distribuição
- * 3. Confirmar Preço → PRECO_CONFIRMADO
- * 4. Confirmar Estoque → AGUARDANDO_RECEBIMENTO (esta API)
- * 5. Peão inicia recebimento → EM_RECEBIMENTO
- * 6. Peão finaliza recebimento → RECEBIDO
- * 7. Peão inicia alocação → EM_ALOCACAO
- * 8. Peão finaliza alocação → ALOCADO → DISPONIVEL_VENDA
- *
- * IMPORTANTE: Esta API NÃO atualiza estoque.
- * O estoque é atualizado quando o peão FINALIZA a alocação.
+ * Obs.: a criação da operação de recebimento (entrada_operacoes) faz parte do fluxo
+ * físico (Fatia C) e ainda usa chave inteira; será realinhada ao codent nessa fase.
  */
 export default async function handler(
   req: NextApiRequest,
@@ -37,16 +30,16 @@ export default async function handler(
   }
 
   const { id } = req.query;
-  const { observacao }: ConfirmarEstoqueRequest = req.body;
+  const { observacao }: ConfirmarEstoqueRequest = req.body || {};
 
-  if (!id) {
-    return res.status(400).json({
-      error: 'ID da entrada é obrigatório'
-    });
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({ error: 'ID (codent) da entrada é obrigatório' });
   }
 
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo || cookies.filial || 'MANAUS';
+
+  const ARMAZEM_PADRAO = 1003;
 
   let client;
 
@@ -56,106 +49,70 @@ export default async function handler(
 
     await client.query('BEGIN');
 
-    // Verificar se entrada existe e está no status correto
-    const entradaResult = await client.query(`
-      SELECT id, numero_entrada, status
-      FROM entradas_estoque
-      WHERE id = $1
-    `, [id]);
-
-    if (entradaResult.rows.length === 0) {
+    const entResult = await client.query(
+      `SELECT e.codent, rec.status AS rec_status
+         FROM db_manaus.dbent e
+         LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+        WHERE e.codent = $1`,
+      [id]
+    );
+    if (entResult.rows.length === 0) {
       throw new Error('Entrada não encontrada');
     }
-
-    const entrada = entradaResult.rows[0];
-
-    if (entrada.status !== 'PRECO_CONFIRMADO') {
-      throw new Error(`Não é possível liberar para recebimento. É necessário confirmar o preço primeiro. Status atual: ${entrada.status}`);
+    const ent = entResult.rows[0];
+    if (ent.rec_status !== 'PRECO_CONFIRMADO') {
+      throw new Error(`Não é possível liberar para recebimento. Confirme o preço primeiro. Status atual: ${ent.rec_status || 'PENDENTE'}`);
     }
 
-    // Verificar se tem romaneio
-    const romaneioResult = await client.query(`
-      SELECT COUNT(*) as total
-      FROM dbitent_armazem
-      WHERE codent = $1
-    `, [entrada.numero_entrada]);
+    // Romaneio: se não houver, cria automático com armazém padrão a partir de dbitent
+    const romaneioResult = await client.query(
+      `SELECT COUNT(*) AS total FROM db_manaus.dbitent_armazem WHERE codent = $1`,
+      [id]
+    );
+    const temRomaneio = parseInt(romaneioResult.rows[0].total, 10) > 0;
 
-    let temRomaneio = parseInt(romaneioResult.rows[0].total) > 0;
-
-    // Se não tem romaneio, criar automaticamente com armazém padrão
     if (!temRomaneio) {
-      const ARMAZEM_PADRAO = 1003;
-
-      console.log(`Criando romaneio automático com armazém padrão ${ARMAZEM_PADRAO}`);
-
-      // Buscar itens da entrada
-      const itensResult = await client.query(`
-        SELECT ei.produto_cod, ei.quantidade, ei.req_id
-        FROM entrada_itens ei
-        WHERE ei.entrada_id = $1
-      `, [id]);
-
+      const itensResult = await client.query(
+        `SELECT codprod, codreq, quant FROM db_manaus.dbitent WHERE codent = $1`,
+        [id]
+      );
       for (const item of itensResult.rows) {
-        const qtd = parseFloat(item.quantidade);
-
-        await client.query(`
-          INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT DO NOTHING
-        `, [entrada.numero_entrada, item.produto_cod, item.req_id, ARMAZEM_PADRAO, qtd]);
+        await client.query(
+          `INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [id, item.codprod, item.codreq, ARMAZEM_PADRAO, parseFloat(item.quant)]
+        );
       }
-
-      console.log(`Romaneio automático criado: ${itensResult.rows.length} itens → armazém ${ARMAZEM_PADRAO}`);
+      console.log(`Romaneio automático criado p/ ${id}: ${itensResult.rows.length} itens → armazém ${ARMAZEM_PADRAO}`);
     }
 
-    // Definir tipo de romaneio para mensagens
-    const tipoRomaneio = parseInt(romaneioResult.rows[0].total) > 0 ? 'manual' : 'automático';
-
-    // Atualizar status para AGUARDANDO_RECEBIMENTO (próximo passo é o peão receber)
-    await client.query(`
-      UPDATE entradas_estoque
-      SET
-        status = 'AGUARDANDO_RECEBIMENTO',
-        data_confirmacao_estoque = CURRENT_TIMESTAMP,
-        observacao_estoque = $1,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [observacao || '', id]);
-
-    // Log da operação
-    await client.query(`
-      INSERT INTO entrada_operacoes_log (
-        entrada_id,
-        operacao,
-        status_anterior,
-        status_novo,
-        observacao,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
-    `, [
-      id,
-      'CONFIRMAR_ESTOQUE',
-      'PRECO_CONFIRMADO',
-      'AGUARDANDO_RECEBIMENTO',
-      observacao || `Liberado para recebimento (romaneio ${tipoRomaneio})`
-    ]);
+    // Avança o workflow físico
+    await client.query(
+      `UPDATE db_manaus.dbent_recebimento
+          SET status = 'AGUARDANDO_RECEBIMENTO',
+              data_confirmacao_estoque = now(),
+              observacao_estoque = $2,
+              updated_at = now()
+        WHERE codent = $1`,
+      [id, observacao || null]
+    );
 
     await client.query('COMMIT');
 
     res.status(200).json({
       success: true,
-      message: tipoRomaneio === 'manual'
-        ? `Entrada ${entrada.numero_entrada} liberada para recebimento. Romaneio planejado será exibido para o operador.`
-        : `Entrada ${entrada.numero_entrada} liberada para recebimento. Romaneio automático criado (armazém padrão 1003).`
+      message: temRomaneio
+        ? `Entrada ${id} liberada para recebimento (romaneio planejado).`
+        : `Entrada ${id} liberada para recebimento (romaneio automático, armazém ${ARMAZEM_PADRAO}).`,
     });
   } catch (err) {
     if (client) {
       await client.query('ROLLBACK');
     }
-
     console.error('Erro ao confirmar estoque:', err);
     res.status(500).json({
-      error: err instanceof Error ? err.message : 'Falha ao confirmar estoque.'
+      error: err instanceof Error ? err.message : 'Falha ao confirmar estoque.',
     });
   } finally {
     if (client) {

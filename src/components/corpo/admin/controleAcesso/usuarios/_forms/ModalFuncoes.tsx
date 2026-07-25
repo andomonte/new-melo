@@ -54,11 +54,26 @@ export default function ModalFuncoes({
       setSelecionadasLocal(selecionadas ?? []); // zera para o perfil atual
     }
   }, [isOpen, selecionadas]);
+
+  // Normaliza o valor de "Usado Em" para agrupar/filtrar de forma consistente.
+  const chaveUsadoEm = (f: Funcao) => String(f.usadoEm) || '-';
+
+  const valoresUsadoEm = Array.from(
+    new Set(funcoesFiltradas.map(chaveUsadoEm)),
+  ).sort();
+
+  // Lista efetivamente exibida: aplica o filtro "Usado Em" sobre as funções
+  // recebidas. Antes o dropdown só mudava o estado e nunca filtrava a tabela.
+  const funcoesExibidas =
+    filtroUsadoEm === 'todos'
+      ? funcoesFiltradas
+      : funcoesFiltradas.filter((f) => chaveUsadoEm(f) === filtroUsadoEm);
+
   const selecionarTodasFiltradas = () => {
     setSelecionadasLocal((prev) => {
       const novasSelecionadas = [...prev];
 
-      funcoesFiltradas.forEach((funcao) => {
+      funcoesExibidas.forEach((funcao) => {
         if (
           !novasSelecionadas.some((f) => f.id_functions === funcao.id_functions)
         ) {
@@ -74,25 +89,21 @@ export default function ModalFuncoes({
     setSelecionadasLocal((prev) =>
       prev.filter(
         (f) =>
-          !funcoesFiltradas.some(
+          !funcoesExibidas.some(
             (filtrada) => f.id_functions === filtrada.id_functions,
           ),
       ),
     );
   };
 
-  const todasSelecionadasFiltradas = funcoesFiltradas.every((funcaoFiltrada) =>
-    selecionadasLocal.some(
-      (selecionada) => selecionada.id_functions === funcaoFiltrada.id_functions,
-    ),
-  );
-
-  const valoresUsadoEm = [
-    'todos',
-    ...Array.from(
-      new Set(funcoesFiltradas.map((f) => String(f.usadoEm) || '-')),
-    ).sort(),
-  ];
+  const todasSelecionadasFiltradas =
+    funcoesExibidas.length > 0 &&
+    funcoesExibidas.every((funcaoFiltrada) =>
+      selecionadasLocal.some(
+        (selecionada) =>
+          selecionada.id_functions === funcaoFiltrada.id_functions,
+      ),
+    );
 
   return (
     <div
@@ -130,6 +141,10 @@ export default function ModalFuncoes({
             </SelectContent>
           </Select>
 
+          <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+            {funcoesExibidas.length} de {funcoesFiltradas.length}
+          </span>
+
           <Button onClick={() => onConfirmar(selecionadasLocal)}>
             {/* Alterado aqui para incluir a contagem */}
             Confirmar Seleção ({selecionadasLocal.length})
@@ -162,7 +177,7 @@ export default function ModalFuncoes({
             </thead>
 
             <tbody>
-              {funcoesFiltradas.length === 0 ? (
+              {funcoesExibidas.length === 0 ? (
                 <tr>
                   <td
                     colSpan={3}
@@ -172,7 +187,7 @@ export default function ModalFuncoes({
                   </td>
                 </tr>
               ) : (
-                funcoesFiltradas.map((funcao) => {
+                funcoesExibidas.map((funcao) => {
                   const isChecked = selecionadasLocal.some(
                     (f) => f.id_functions === funcao.id_functions,
                   );

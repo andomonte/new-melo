@@ -35,21 +35,21 @@ export const clientSchema = z.object({
 
   // Classificação Tributária e Comercial
   tipoCliente: z.preprocess(
-    (val) => (val === null || val === '' ? undefined : val),
+    (val) => (val === null || val === undefined || val === '' ? undefined : String(val).trim()),
     z.enum(['R', 'F', 'L', 'S', 'X'], {
       required_error: 'Tipo de cliente é obrigatório',
       invalid_type_error: 'Tipo de cliente é obrigatório',
     }),
   ),
   situacaoTributaria: z.preprocess(
-    (val) => (val === null || val === '' ? undefined : val),
+    (val) => (val === null || val === undefined || val === '' ? undefined : String(val).trim()),
     z.enum(['1', '2', '3', '4'], {
       required_error: 'Situação tributária é obrigatória',
       invalid_type_error: 'Situação tributária é obrigatória',
     }),
   ),
   tipoEmpresa: z.preprocess(
-    (val) => (val === null || val === '' ? undefined : val),
+    (val) => (val === null || val === undefined || val === '' ? undefined : String(val).trim()),
     z.enum(
       ['EPP', 'EP', 'EF', 'ME', 'NL', 'PF', 'MEI', 'EI', 'LTDA', 'SLU', 'S/S', 'S/A', 'MGP'],
       {
@@ -77,7 +77,7 @@ export const clientSchema = z.object({
   ),
   complemento: z.string().max(50).optional().nullable(),
   referencia: z.string().max(100).optional().nullable(),
-  bairro: z.string({ required_error: 'Bairro é obrigatório' }).min(1, 'Bairro é obrigatório').max(20, 'Máximo 20 caracteres').default(''),
+  bairro: z.string({ required_error: 'Bairro é obrigatório' }).min(1, 'Bairro é obrigatório').max(100, 'Máximo 100 caracteres').default(''),
   cidade: z.string({ required_error: 'Cidade é obrigatória' }).min(1, 'Cidade é obrigatória').max(20, 'Máximo 20 caracteres'),
   uf: z.string({ required_error: 'UF é obrigatória' }).min(1, 'UF é obrigatória').max(2),
 
@@ -178,7 +178,7 @@ export const clientSchema = z.object({
   enderecoCobrancaIgual: z.boolean().default(true),
   endercobr: z.string().max(100).optional().nullable(),
   numerocobr: z.string().max(60).optional().nullable(),
-  bairrocobr: z.string().max(20, 'Máximo 20 caracteres').optional().nullable(),
+  bairrocobr: z.string().max(100, 'Máximo 100 caracteres').optional().nullable(),
   cidadecobr: z.string().max(20, 'Máximo 20 caracteres').optional().nullable(),
   ufcobr: z.string().max(2).optional().nullable(),
   cepcobr: z.string().max(9).optional().nullable(),
@@ -206,7 +206,11 @@ export const clientSchema = z.object({
   acrescimo: z.union([z.string(), z.number()]).optional().nullable(),
   desconto: z.union([z.string(), z.number()]).optional().nullable(),
   precoVenda: z.preprocess(
-    (val) => (val === null || val === '' ? undefined : String(val)),
+    // IMPORTANTE: tratar `undefined` também — sem isso, String(undefined) vira
+    // a string "undefined" (9 chars), que é truthy, BURLA o .min(1) e acaba
+    // gravada na coluna prvenda varchar(1), estourando (erro 22001).
+    (val) =>
+      val === null || val === undefined || val === '' ? undefined : String(val),
     z.string({ required_error: 'Preço de venda é obrigatório' }).min(1, 'Preço de venda é obrigatório'),
   ),
   kickback: z.union([z.string(), z.number()]).optional().nullable(),

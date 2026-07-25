@@ -21,6 +21,7 @@ interface Filial {
   codigo_filial: string; // Vem como string do frontend
   nome_filial: string;
   codvend?: string | null;
+  codcomprador?: string | null;
   armazens?: Armazem[]; // <<--- CORREÇÃO: ADICIONADO AQUI
   funcoesDoUsuario: Funcao[];
 }
@@ -69,7 +70,37 @@ export default async function handle(
 
     await client.query('BEGIN');
 
-    // 1. Atualizar o usuário
+    // O login (login_user_login) é a CHAVE usada por todas as tabelas filhas.
+    // Se ele mudar (inclusive só a caixa: 'LIVIa' -> 'LIVIA'), atualizar o
+    // registro pai antes de remover os filhos viola integridade referencial e
+    // estoura 500. Por isso a ordem é: (1) remover TODOS os filhos pelo login
+    // ANTIGO (id), (2) atualizar o pai para o login NOVO, (3) reinserir os
+    // filhos com o login NOVO.
+
+    // 1. Remover perfis antigos
+    await client.query('DELETE FROM tb_user_perfil WHERE user_login_id = $1', [
+      id,
+    ]);
+
+    // 2. Remover acessos de funções anteriores
+    await client.query(
+      'DELETE FROM tb_login_access_user WHERE login_user_login = $1',
+      [id],
+    );
+
+    // 3. Remover acessos de armazéns anteriores do usuário
+    await client.query(
+      'DELETE FROM tb_login_armazem_user WHERE login_user_login = $1',
+      [id],
+    );
+
+    // 4. Remover filiais existentes
+    await client.query(
+      'DELETE FROM tb_login_filiais WHERE login_user_login = $1',
+      [id],
+    );
+
+    // 5. Atualizar o usuário (pode renomear o login com os filhos já removidos)
     await client.query(
       `UPDATE tb_login_user
         SET login_user_name = $1,
@@ -78,35 +109,26 @@ export default async function handle(
       [login_user_name, login_user_login, id],
     );
 
-    // 2. Remover perfis antigos
-    await client.query('DELETE FROM tb_user_perfil WHERE user_login_id = $1', [
-      id,
-    ]);
-
-    // 3. Inserir novos perfis (com codvend)
+    // 6. Inserir novos perfis (com codvend)
     for (const perfil of perfis) {
       for (const filial of perfil.filial) {
         await client.query(
           `INSERT INTO tb_user_perfil
-           (user_login_id, perfil_name, codigo_filial, nome_filial, codvend)
-           VALUES ($1, $2, $3, $4, $5)`,
+           (user_login_id, perfil_name, codigo_filial, nome_filial, codvend, codcomprador)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             login_user_login,
             perfil.perfil_name,
             Number(filial.codigo_filial),
             filial.nome_filial,
             filial.codvend ?? null,
+            filial.codcomprador ?? null,
           ],
         );
       }
     }
 
-    // 4. Remover acessos de funções anteriores
-    await client.query(
-      'DELETE FROM tb_login_access_user WHERE login_user_login = $1',
-      [id],
-    );
-    // 5. Inserir apenas as funções do usuário, com código_filial
+    // 7. Inserir apenas as funções do usuário, com código_filial
     for (const perfil of perfis) {
       for (const filial of perfil.filial) {
         const codFilial = Number(filial.codigo_filial);
@@ -143,13 +165,7 @@ export default async function handle(
 
     // --- NOVA LÓGICA PARA ATUALIZAÇÃO DE ARMAZÉNS (INÍCIO) ---
 
-    // 6. Remover acessos de armazéns anteriores do usuário
-    await client.query(
-      'DELETE FROM tb_login_armazem_user WHERE login_user_login = $1',
-      [id],
-    );
-
-    // 7. Inserir apenas os armazéns do usuário, considerando a lógica de prioridade (não salvar se já for padrão do perfil)
+    // 8. Inserir apenas os armazéns do usuário, considerando a lógica de prioridade (não salvar se já for padrão do perfil)
     for (const perfil of perfis) {
       for (const filial of perfil.filial) {
         const codFilial = Number(filial.codigo_filial);
@@ -178,12 +194,6 @@ export default async function handle(
       }
     }
     // --- NOVA LÓGICA PARA ATUALIZAÇÃO DE ARMAZÉNS (FIM) ---
-
-    // 8. Remover filiais existentes
-    await client.query(
-      'DELETE FROM tb_login_filiais WHERE login_user_login = $1',
-      [id],
-    );
 
     // 9. Inserir filiais únicas
     const uniqueFiliais = new Map<
@@ -214,7 +224,11 @@ export default async function handle(
   } catch (error) {
     if (client) await client.query('ROLLBACK');
     console.error('Erro ao atualizar usuário:', error);
-    return res.status(500).json({ error: 'Erro ao atualizar usuário.' });
+    return res.status(500).json({
+      error: 'Erro ao atualizar usuário.',
+      // Detalhe do banco (ex.: violação de FK) para facilitar o diagnóstico.
+      message: error instanceof Error ? error.message : String(error),
+    });
   } finally {
     if (client) client.release();
   }

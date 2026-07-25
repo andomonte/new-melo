@@ -15,7 +15,7 @@ import { getPgPool } from '@/lib/pgClient';
 import { PoolClient } from 'pg';
 
 interface IniciarRequest {
-  entradaId: number;
+  entradaId: string; // codent
   matriculaAlocador: string;
   nomeAlocador: string;
   armId: number;
@@ -28,32 +28,25 @@ interface IniciarResponse {
 
 // Verificar se operador ja tem alocacao ativa
 const CHECK_ATIVO_QUERY = `
-  SELECT id, entrada_id
-  FROM entrada_operacoes
-  WHERE alocador_matricula = $1
-    AND status = 'EM_ALOCACAO'
+  SELECT id, codent
+  FROM db_manaus.entrada_operacoes
+  WHERE alocador_matricula = $1 AND status = 'EM_ALOCACAO'
   LIMIT 1
 `;
 
 // Verificar se entrada esta pronta para alocacao
 const CHECK_ENTRADA_QUERY = `
   SELECT id, status, alocador_nome
-  FROM entrada_operacoes
-  WHERE entrada_id = $1
+  FROM db_manaus.entrada_operacoes
+  WHERE codent = $1
 `;
 
 // Atualizar operacao para iniciar alocacao
 const INICIAR_ALOCACAO_QUERY = `
-  UPDATE entrada_operacoes
-  SET
-    status = 'EM_ALOCACAO',
-    alocador_matricula = $2,
-    alocador_nome = $3,
-    arm_id = $4,
-    inicio_alocacao = NOW(),
-    updated_at = NOW()
-  WHERE entrada_id = $1
-    AND status = 'RECEBIDO'
+  UPDATE db_manaus.entrada_operacoes
+  SET status = 'EM_ALOCACAO', alocador_matricula = $2, alocador_nome = $3,
+      arm_id = $4, inicio_alocacao = NOW(), updated_at = NOW()
+  WHERE codent = $1 AND status = 'RECEBIDO'
   RETURNING id
 `;
 
@@ -125,6 +118,11 @@ export default async function handler(
         error: 'Nao foi possivel iniciar a alocacao.',
       });
     }
+
+    // Avança o workflow físico
+    await client.query(
+      `UPDATE db_manaus.dbent_recebimento SET status = 'EM_ALOCACAO', updated_at = now() WHERE codent = $1`,
+      [entradaId]);
 
     console.log('Alocacao iniciada:', {
       entradaId,

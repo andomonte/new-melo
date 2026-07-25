@@ -28,50 +28,26 @@ interface ConferirItemResponse {
   message: string;
 }
 
-// Verificar se o operador esta ativo no recebimento desta entrada
+// entradaItemId = id da linha de conferência (entrada_itens_recebimento).
+// Verifica se o operador está ativo no recebimento desta entrada.
 const CHECK_OPERADOR_QUERY = `
   SELECT op.id as operacao_id
-  FROM entrada_operacoes op
-  INNER JOIN entrada_itens ei ON ei.entrada_id = op.entrada_id
-  WHERE ei.id = $1
+  FROM db_manaus.entrada_itens_recebimento eir
+  INNER JOIN db_manaus.entrada_operacoes op ON op.id = eir.entrada_operacao_id
+  WHERE eir.id = $1
     AND op.recebedor_matricula = $2
     AND op.status = 'EM_RECEBIMENTO'
 `;
 
-// Atualizar ou criar registro de conferencia do item
+// Atualiza a conferência do item
 const UPSERT_ITEM_QUERY = `
-  INSERT INTO entrada_itens_recebimento (
-    entrada_operacao_id,
-    entrada_item_id,
-    produto_cod,
-    qtd_esperada,
-    qtd_recebida,
-    status_item,
-    observacao,
-    conferido_em,
-    created_at,
-    updated_at
-  )
-  SELECT
-    $1,
-    ei.id,
-    ei.produto_cod,
-    ei.quantidade,
-    $3,
-    $4,
-    $5,
-    NOW(),
-    NOW(),
-    NOW()
-  FROM entrada_itens ei
-  WHERE ei.id = $2
-  ON CONFLICT (entrada_item_id)
-  DO UPDATE SET
-    qtd_recebida = $3,
-    status_item = $4,
-    observacao = $5,
-    conferido_em = NOW(),
-    updated_at = NOW()
+  UPDATE db_manaus.entrada_itens_recebimento
+     SET qtd_recebida = $2,
+         status_item = $3,
+         observacao = $4,
+         conferido_em = NOW(),
+         updated_at = NOW()
+   WHERE id = $1
   RETURNING id
 `;
 
@@ -123,11 +99,8 @@ export default async function handler(
       });
     }
 
-    const operacaoId = checkResult.rows[0].operacao_id;
-
-    // Atualizar conferencia do item
+    // Atualizar conferencia do item (por id da linha de conferência)
     const updateResult = await client.query(UPSERT_ITEM_QUERY, [
-      operacaoId,
       entradaItemId,
       qtdRecebida,
       statusItem,

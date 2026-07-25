@@ -597,6 +597,7 @@ const UsuariosPage = () => {
                               nome_filial: f.nome_filial,
                               armazens: f.armazens || [], // ✅ ADICIONE ESTA LINHA
                               codvend: f.codvend ?? null, // ✅ CORRETO: se codvend for por filial
+                              codcomprador: f.codcomprador ?? null, // comprador por filial
                               funcoesDoUsuario: perfil?.funcoesDoUsuario || [],
                             })),
                           })),

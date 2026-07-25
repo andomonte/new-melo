@@ -11,6 +11,7 @@ interface EntradasQueryParams {
   filtros?: string; // JSON string dos filtros
 }
 
+// Listagem de entradas — fonte: modelo Delphi dbent/dbitent (substitui entradas_estoque).
 export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -30,22 +31,22 @@ export default async function handle(
       const offset = (Number(page) - 1) * Number(perPage);
       const limit = Number(perPage);
 
-      let whereConditions = [];
+      const whereConditions: string[] = [];
       const params: any[] = [];
 
       if (search) {
         whereConditions.push(`(
-          e.numero_entrada ILIKE $${params.length + 1} OR
-          e.nfe_id::text ILIKE $${params.length + 2} OR
-          n.numero_nf ILIKE $${params.length + 3} OR
-          f.nome ILIKE $${params.length + 4}
+          e.codent ILIKE $${params.length + 1} OR
+          nfe.codnfe_ent::text ILIKE $${params.length + 2} OR
+          nfe.nnf::text ILIKE $${params.length + 3} OR
+          emit.xnome ILIKE $${params.length + 4}
         )`);
         const searchPattern = `%${search}%`;
         params.push(searchPattern, searchPattern, searchPattern, searchPattern);
       }
 
       if (status) {
-        whereConditions.push(`e.status = $${params.length + 1}`);
+        whereConditions.push(`COALESCE(rec.status, e.status) = $${params.length + 1}`);
         params.push(status);
       }
 
@@ -54,31 +55,29 @@ export default async function handle(
         try {
           const filtrosParsed = JSON.parse(filtros as string) as { campo: string; tipo: string; valor: string }[];
 
-          // Mapeamento de campos do frontend para colunas do banco
+          // Mapeamento de campos do frontend para colunas de dbent/dbitent
           const campoParaColuna: Record<string, string> = {
-            numeroEntrada: 'e.numero_entrada',
+            numeroEntrada: 'e.codent',
             numeroNF: 'nfe.nnf',
-            status: 'e.status',
+            status: 'COALESCE(rec.status, e.status)',
             temRomaneio: 'temRomaneio', // tratamento especial abaixo
             precoConfirmado: 'precoConfirmado', // tratamento especial abaixo
-            valorProdutos: '(SELECT COALESCE(SUM(valor_total), 0) FROM db_manaus.entrada_itens WHERE entrada_id = e.id)',
-            valorTotal: 'e.valor_total',
+            valorProdutos: '(SELECT COALESCE(SUM(quant*prunit), 0) FROM db_manaus.dbitent WHERE codent = e.codent)',
+            valorTotal: 'e.totalnf',
             fornecedorNome: 'emit.xnome',
             dataEmissao: 'nfe.demi',
-            dataEntrada: 'e.data_entrada',
+            dataEntrada: 'e.dtent',
             serie: 'nfe.serie',
-            tipoEntrada: 'e.tipo_operacao',
-            observacoes: 'e.observacoes',
-            totalItens: '(SELECT COUNT(*) FROM db_manaus.entrada_itens WHERE entrada_id = e.id)',
+            tipoEntrada: 'e.operacao',
+            observacoes: 'e.obs',
+            totalItens: '(SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent)',
           };
 
-          // Campos booleanos que precisam de tratamento especial
           const camposBooleanos = ['temRomaneio', 'precoConfirmado'];
 
-          // Mapeamento de valores de texto para booleano
           const valorParaBooleano = (valor: string): boolean | null => {
             const valorLower = valor.toLowerCase().trim();
-            if (['confirmado', 'sim', 'true', 'gerado', '1', 'yes'].includes(valorLower)) return true;
+            if (['confirmado', 'sim', 'true', 'gerado', '1', 'yes', 'finalizada'].includes(valorLower)) return true;
             if (['pendente', 'nao', 'não', 'false', 'não gerado', '0', 'no'].includes(valorLower)) return false;
             return null;
           };
@@ -94,23 +93,18 @@ export default async function handle(
               const valorBool = valorParaBooleano(filtro.valor);
               if (valorBool !== null) {
                 if (filtro.campo === 'precoConfirmado') {
-                  if (valorBool) {
-                    whereConditions.push('e.data_confirmacao_preco IS NOT NULL');
-                  } else {
-                    whereConditions.push('e.data_confirmacao_preco IS NULL');
-                  }
+                  // Preço confirmado = passou pelo confirmar-preço (companheira) ou entrada fechada
+                  whereConditions.push(valorBool
+                    ? `((rec.status IS NOT NULL AND rec.data_confirmacao_preco IS NOT NULL) OR (rec.status IS NULL AND e.status = 'F'))`
+                    : `((rec.status IS NOT NULL AND rec.data_confirmacao_preco IS NULL) OR (rec.status IS NULL AND e.status <> 'F'))`);
                 } else if (filtro.campo === 'temRomaneio') {
-                  if (valorBool) {
-                    whereConditions.push('(SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.numero_entrada) > 0');
-                  } else {
-                    whereConditions.push('(SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.numero_entrada) = 0');
-                  }
+                  const cond = `(COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.codent) > 0)`;
+                  whereConditions.push(valorBool ? cond : `NOT ${cond}`);
                 }
               }
-              continue; // Pular processamento normal
+              continue;
             }
 
-            // Aplicar filtro baseado no tipo
             switch (filtro.tipo) {
               case 'começa':
                 whereConditions.push(`${coluna}::text ILIKE $${params.length + 1}`);
@@ -164,50 +158,44 @@ export default async function handle(
 
       const whereSQL = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      // Buscar entradas de estoque com dados da NFe
-      const whereSQL_simple = whereConditions.length > 0 ?
-        `WHERE ${whereConditions.join(' AND ').replace(/n\./g, 'e.').replace(/f\./g, 'e.')}` : '';
+      const fromJoin = `
+        FROM db_manaus.dbent e
+        LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+        LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
+        LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
+      `;
 
       const entradasQuery = `
         SELECT
-          e.id,
-          e.numero_entrada,
-          e.nfe_id,
-          e.tipo_operacao,
-          e.data_entrada,
-          e.valor_total,
+          e.codent,
+          e.chave,
+          e.operacao,
+          e.dtent,
+          e.totalnf,
           e.status,
           e.est_alocado,
-          e.created_at,
-          e.updated_at,
-          e.observacoes,
-          -- Dados da NFe
+          e.obs,
+          rec.status as rec_status,
+          rec.data_confirmacao_preco,
+          nfe.codnfe_ent as nfe_id,
           nfe.nnf as nfe_numero,
           nfe.serie as nfe_serie,
           nfe.demi as nfe_emissao,
-          -- Dados do emitente (fornecedor)
           emit.cpf_cnpj as fornecedor_cnpj,
           emit.xnome as fornecedor_nome,
-          -- Contar itens da entrada
-          (SELECT COUNT(*) FROM db_manaus.entrada_itens WHERE entrada_id = e.id) as total_itens,
-          -- Valor dos produtos (soma dos itens)
-          (SELECT COALESCE(SUM(valor_total), 0) FROM db_manaus.entrada_itens WHERE entrada_id = e.id) as valor_produtos,
-          -- Verificar se tem romaneio
-          (SELECT COUNT(*) > 0 FROM db_manaus.dbitent_armazem WHERE codent = e.numero_entrada) as tem_romaneio,
-          -- Verificar se preco foi confirmado
-          e.data_confirmacao_preco IS NOT NULL as preco_confirmado
-        FROM db_manaus.entradas_estoque e
-        LEFT JOIN db_manaus.dbnfe_ent nfe ON e.nfe_id::varchar = nfe.codnfe_ent::varchar
-        LEFT JOIN db_manaus.dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
-        ${whereSQL_simple}
-        ORDER BY e.created_at DESC, e.id DESC
+          (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as total_itens,
+          (SELECT COALESCE(SUM(quant*prunit), 0) FROM db_manaus.dbitent WHERE codent = e.codent) as valor_produtos,
+          (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
+        ${fromJoin}
+        ${whereSQL}
+        ORDER BY e.dtent DESC, e.codent DESC
         LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `;
 
       const countQuery = `
-        SELECT COUNT(DISTINCT e.id) as total
-        FROM db_manaus.entradas_estoque e
-        ${whereSQL_simple}
+        SELECT COUNT(*) as total
+        ${fromJoin}
+        ${whereSQL}
       `;
 
       const [entradasResult, countResult] = await Promise.all([
@@ -218,27 +206,29 @@ export default async function handle(
       const entradas = entradasResult.rows;
       const count = Number(countResult.rows[0]?.total) || 0;
 
-      // Transformar dados para o formato esperado pelo frontend
+      // Transformar dados para o formato esperado pelo frontend (mesmo contrato de antes)
       const entradasFormatted = entradas.map((entrada: any) => ({
-        id: entrada.id.toString(),
-        numeroNF: entrada.nfe_numero || entrada.numero_entrada,
-        numeroEntrada: entrada.numero_entrada,
+        id: entrada.codent,
+        numeroNF: entrada.nfe_numero || entrada.codent,
+        numeroEntrada: entrada.codent,
         serie: entrada.nfe_serie || '001',
         fornecedor: entrada.fornecedor_cnpj || '',
         fornecedorNome: entrada.fornecedor_nome || 'SISTEMA',
         fornecedorCnpj: entrada.fornecedor_cnpj || '',
-        dataEmissao: entrada.nfe_emissao ? new Date(entrada.nfe_emissao).toISOString() : new Date(entrada.created_at).toISOString(),
-        dataEntrada: entrada.data_entrada ? new Date(entrada.data_entrada).toISOString() : new Date(entrada.created_at).toISOString(),
-        valorTotal: entrada.valor_total ? Number(entrada.valor_total) : 0,
+        dataEmissao: entrada.nfe_emissao ? new Date(entrada.nfe_emissao).toISOString() : (entrada.dtent ? new Date(entrada.dtent).toISOString() : null),
+        dataEntrada: entrada.dtent ? new Date(entrada.dtent).toISOString() : null,
+        valorTotal: entrada.totalnf ? Number(entrada.totalnf) : 0,
         valorProdutos: entrada.valor_produtos ? Number(entrada.valor_produtos) : undefined,
-        status: entrada.status || 'CRIADA',
-        tipoEntrada: entrada.tipo_operacao || 'ENTRADA_NFE',
+        // status do workflow físico (companheira) com fallback p/ dbent.status (entradas migradas)
+        status: entrada.rec_status || entrada.status || 'A',
+        tipoEntrada: 'ENTRADA_NFE',
         comprador: 'SISTEMA',
-        observacoes: entrada.observacoes || '',
+        observacoes: entrada.obs || '',
         totalItens: Number(entrada.total_itens) || 0,
         nfeId: entrada.nfe_id,
-        temRomaneio: entrada.tem_romaneio === true || entrada.est_alocado === 1,
-        precoConfirmado: entrada.preco_confirmado === true
+        temRomaneio: entrada.tem_romaneio === true,
+        // Com companheira: usa o estado dela; sem companheira (migradas): fallback dbent.status='F'
+        precoConfirmado: entrada.rec_status != null ? (entrada.data_confirmacao_preco != null) : (entrada.status === 'F'),
       }));
 
       res.status(200).json({

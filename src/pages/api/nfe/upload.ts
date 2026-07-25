@@ -65,6 +65,19 @@ interface NFDataExtracted {
     vprod: number;
     ncm?: string;
     cfop?: number;
+    // Imposto por item (extraído do bloco <imposto> do XML) — insumos do motor de custo
+    vbc_icms: number;
+    picms: number;
+    vicms: number;
+    vbcst: number;
+    picmsst: number;
+    vicmsst: number;
+    vicmsdeson: number;
+    vipi: number;
+    vpis: number;
+    vcofins: number;
+    cst_icms: string | null;
+    orig: string | null;
   }>;
   parcelas?: Array<{
     nDup: string;
@@ -215,11 +228,17 @@ export default async function handle(
           for (const item of nfeData.itens) {
             await pgClient.query(`
               INSERT INTO dbnfe_ent_det (
-                codnfe_ent, nitem, cprod, xprod, qcom, vuncom, vprod, ncm, cfop
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                codnfe_ent, nitem, cprod, xprod, qcom, vuncom, vprod, ncm, cfop,
+                vbc_icms, picms, vicms, vbcst, picmsst, vicmsst, vicmsdeson,
+                vipi, vpis, vcofins, cst_icms, orig
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             `, [
               nextCode, item.nitem, item.cprod, item.xprod,
-              item.qcom, item.vuncom, item.vprod, item.ncm, item.cfop
+              item.qcom, item.vuncom, item.vprod, item.ncm, item.cfop,
+              item.vbc_icms, item.picms, item.vicms, item.vbcst, item.picmsst,
+              item.vicmsst, item.vicmsdeson, item.vipi, item.vpis, item.vcofins,
+              item.cst_icms, item.orig
             ]);
           }
 
@@ -294,6 +313,44 @@ export default async function handle(
   } finally {
     pgClient.release();
   }
+}
+
+/**
+ * Extrai os valores de imposto de UM item da NFe (nó <det>/<imposto>).
+ * Escopa a busca por bloco (ICMS→variante, IPI→IPITrib, PIS/COFINS→variante)
+ * para não confundir vBC do ICMS com o de PIS/COFINS/IPI.
+ */
+function extrairImpostoItem(item: any) {
+  const num = (v: any) => (v == null ? 0 : parseFloat(v));
+  const imp = item?.imposto?.[0];
+
+  // ICMS: uma única variante (ICMS00, ICMS10, ICMSSN101, ...) sob <ICMS>
+  const icmsNode = imp?.ICMS?.[0];
+  const icmsVar: any = icmsNode ? (Object.values(icmsNode)[0] as any)?.[0] : null;
+
+  // IPI: valor só existe em IPITrib (IPINT = isento/não-tributado)
+  const ipiTrib = imp?.IPI?.[0]?.IPITrib?.[0];
+
+  // PIS/COFINS: uma variante sob cada bloco
+  const pisNode = imp?.PIS?.[0];
+  const pisVar: any = pisNode ? (Object.values(pisNode)[0] as any)?.[0] : null;
+  const cofNode = imp?.COFINS?.[0];
+  const cofVar: any = cofNode ? (Object.values(cofNode)[0] as any)?.[0] : null;
+
+  return {
+    vbc_icms: num(icmsVar?.vBC?.[0]),
+    picms: num(icmsVar?.pICMS?.[0]),
+    vicms: num(icmsVar?.vICMS?.[0]),
+    vbcst: num(icmsVar?.vBCST?.[0]),
+    picmsst: num(icmsVar?.pICMSST?.[0]),
+    vicmsst: num(icmsVar?.vICMSST?.[0]),
+    vicmsdeson: num(icmsVar?.vICMSDeson?.[0]),
+    vipi: ipiTrib ? num(ipiTrib?.vIPI?.[0]) : 0,
+    vpis: num(pisVar?.vPIS?.[0]),
+    vcofins: num(cofVar?.vCOFINS?.[0]),
+    cst_icms: icmsVar?.CST?.[0] || icmsVar?.CSOSN?.[0] || null,
+    orig: icmsVar?.orig?.[0] || null,
+  };
 }
 
 function extractNFeData(xmlData: any, xmlContent: string): NFDataExtracted {
@@ -372,6 +429,7 @@ function extractNFeData(xmlData: any, xmlContent: string): NFDataExtracted {
         vprod: parseFloat(prod?.vProd?.[0] || '0'),
         ncm: prod?.NCM?.[0],
         cfop: parseInt(prod?.CFOP?.[0] || '0'),
+        ...extrairImpostoItem(item),
       };
     }),
     parcelas: dup.length > 0 ? dup.map((duplicata: any) => ({

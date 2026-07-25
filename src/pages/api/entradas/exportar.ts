@@ -24,19 +24,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const colunas = colunasRaw.filter((c: string) => !colunasInvalidas.includes(c));
 
     // Query para buscar entradas
+    // Fonte: modelo Delphi dbent/dbitent (aliases preservados p/ o restante do export)
     let query = `
       SELECT
-        e.id,
-        e.numero_entrada,
-        e.nfe_id,
-        e.tipo_operacao,
-        e.data_entrada,
-        e.valor_total,
+        e.codent as id,
+        e.codent as numero_entrada,
+        nfe.codnfe_ent as nfe_id,
+        'ENTRADA_NFE' as tipo_operacao,
+        e.dtent as data_entrada,
+        e.totalnf as valor_total,
         e.status,
         e.est_alocado,
-        e.created_at,
-        e.updated_at,
-        e.observacoes,
+        e.dtent as created_at,
+        e.obs as observacoes,
         -- Dados da NFe
         nfe.nnf as nfe_numero,
         nfe.serie as nfe_serie,
@@ -45,15 +45,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         -- Dados do emitente (fornecedor)
         emit.cpf_cnpj as fornecedor_cnpj,
         emit.xnome as fornecedor_nome,
-        -- Contar itens da entrada
-        (SELECT COUNT(*) FROM db_manaus.entrada_itens WHERE entrada_id = e.id) as total_itens,
-        -- Valor dos produtos (soma dos itens)
-        (SELECT COALESCE(SUM(valor_total), 0) FROM db_manaus.entrada_itens WHERE entrada_id = e.id) as valor_produtos,
-        -- Verificar se tem romaneio
-        (SELECT COUNT(*) > 0 FROM db_manaus.dbitent_armazem WHERE codent = e.numero_entrada) as tem_romaneio
-      FROM db_manaus.entradas_estoque e
-      LEFT JOIN db_manaus.dbnfe_ent nfe ON e.nfe_id::varchar = nfe.codnfe_ent::varchar
-      LEFT JOIN db_manaus.dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
+        (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as total_itens,
+        (SELECT COALESCE(SUM(quant*prunit), 0) FROM db_manaus.dbitent WHERE codent = e.codent) as valor_produtos,
+        (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
+      FROM db_manaus.dbent e
+      LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
+      LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
       WHERE 1=1
     `;
 
@@ -63,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Busca global
     if (busca?.trim()) {
       query += ` AND (
-        LOWER(e.numero_entrada) LIKE LOWER($${paramIndex}) OR
+        LOWER(e.codent) LIKE LOWER($${paramIndex}) OR
         LOWER(nfe.nnf::text) LIKE LOWER($${paramIndex}) OR
         LOWER(emit.xnome) LIKE LOWER($${paramIndex})
       )`;
@@ -107,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    query += ` ORDER BY e.created_at DESC, e.id DESC LIMIT 5000`;
+    query += ` ORDER BY e.dtent DESC, e.codent DESC LIMIT 5000`;
 
     console.log('Exportando Entradas - Query:', query.substring(0, 200));
 
@@ -258,17 +255,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 // Mapear campos da interface para campos do banco
 function mapearCampoParaDB(campo: string): string | null {
   const mapeamento: Record<string, string> = {
-    numeroEntrada: 'e.numero_entrada',
+    numeroEntrada: 'e.codent',
     numeroNF: 'nfe.nnf',
     serie: 'nfe.serie',
     chaveNFe: 'nfe.chave',
     fornecedorNome: 'emit.xnome',
     fornecedorCnpj: 'emit.cpf_cnpj',
     status: 'e.status',
-    tipoEntrada: 'e.tipo_operacao',
     dataEmissao: 'nfe.demi',
-    dataEntrada: 'e.data_entrada',
-    valorTotal: 'e.valor_total',
+    dataEntrada: 'e.dtent',
+    valorTotal: 'e.totalnf',
   };
 
   return mapeamento[campo] || null;

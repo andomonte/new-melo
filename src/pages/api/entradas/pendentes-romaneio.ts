@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 
 interface EntradaPendenteRomaneio {
-  id: number;
+  id: string; // codent
   numero_entrada: string;
   nfe_id: string;
   fornecedor_cod: string;
@@ -40,22 +40,21 @@ export default async function handler(
     // Ordenar por mais antigas primeiro (FIFO)
     const result = await client.query(`
       SELECT
-        e.id,
-        e.numero_entrada,
-        e.nfe_id,
-        e.fornecedor_cod,
+        e.codent as id,
+        e.codent as numero_entrada,
+        (SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) as nfe_id,
+        e.cod_credor as fornecedor_cod,
         c.nome as fornecedor_nome,
-        e.valor_total,
-        COUNT(ei.id) as total_itens,
-        e.created_at,
-        EXTRACT(DAY FROM (NOW() - e.created_at))::INTEGER as dias_pendente
-      FROM db_manaus.entradas_estoque e
-      LEFT JOIN db_manaus.dbcredor c ON e.fornecedor_cod = c.cod_credor
-      LEFT JOIN db_manaus.entrada_itens ei ON e.id = ei.entrada_id
-      WHERE e.status = 'PENDENTE'
+        e.totalnf as valor_total,
+        (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as total_itens,
+        e.dtent as created_at,
+        EXTRACT(DAY FROM (NOW() - e.dtent))::INTEGER as dias_pendente
+      FROM db_manaus.dbent e
+      LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+      LEFT JOIN db_manaus.dbcredor c ON e.cod_credor = c.cod_credor
+      WHERE COALESCE(rec.status, 'PENDENTE') = 'PENDENTE'
         AND COALESCE(e.est_alocado, 0) = 0
-      GROUP BY e.id, e.numero_entrada, e.nfe_id, e.fornecedor_cod, c.nome, e.valor_total, e.created_at
-      ORDER BY e.created_at ASC
+      ORDER BY e.dtent ASC
     `);
 
     const entradas: EntradaPendenteRomaneio[] = result.rows.map(row => ({
