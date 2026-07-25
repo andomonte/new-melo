@@ -63,17 +63,13 @@ export default async function handle(
 
       const grupos = semAspas
         .split(/[;,]/)
-        .map((g: string) => g.trim().split(/\s+/).filter(Boolean))
+        .map((g: string) => g.trim().split(/[\s%]+/).filter(Boolean))
         .filter((g: string[]) => g.length > 0);
 
       frases.forEach((f: string) => { if (f) grupos.push([f]); });
 
       if (grupos.length > 0) {
-        const colsGeral = isNumerico
-          ? ['p.codprod::text', 'p.ref']
-          : isRefMista
-            ? ['p.ref', 'p.codprod::text']
-            : ['p.aplic_extendida', 'p.ref'];
+        const colsGeral = ['p.aplic_extendida', 'p.ref'];
 
         const orConds = grupos.map((termos: string[]) => {
           if (termos.length === 1) {

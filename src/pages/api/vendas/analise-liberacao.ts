@@ -160,8 +160,9 @@ export default async function handler(
         i.prunit,
         COALESCE(p.prvenda, i.prunit) as prvenda_original,
         COALESCE(i.desconto, 0) as desconto_valor,
-        COALESCE(i.prcompra, p.prcompra, 0) as prcompra,
+        COALESCE(i.prcompra, p.prcompra, 0) as prcompra_raw,
         COALESCE(p.prcustoatual, 0) as prcustoatual,
+        COALESCE(p.txdolarcompra, 0) as txdolarcompra,
         p.codmarca,
         COALESCE(m.descr, '') as marca_nome,
         p.dolar as origem,
@@ -206,7 +207,10 @@ export default async function handler(
         desconto_percentual = ((prvenda_original - prunit) / prvenda_original) * 100;
       }
 
-      const prcompra = Number(item.prcompra) || 0;
+      const prcompraRaw = Number(item.prcompra_raw) || 0;
+      const txDolar = Number(item.txdolarcompra) || 0;
+      const isImportado = (item.origem || 'N') !== 'N';
+      const prcompra = isImportado && txDolar > 0 ? prcompraRaw * txDolar : prcompraRaw;
       const prcustoatual = Number(item.prcustoatual) || 0;
       const margem = prcompra > 0 ? ((prunit / prcompra) - 1) * 100 : 0;
 

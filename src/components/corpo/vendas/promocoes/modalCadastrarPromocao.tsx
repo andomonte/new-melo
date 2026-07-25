@@ -50,7 +50,6 @@ const ProdutoCellRenderer = (props: any) => {
           alt={d.origem === 'N' ? 'Nacional' : 'Importado'}
           style={{ width: 16, height: 11, objectFit: 'contain' }}
         />
-        Cód: <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
       </div>
     </div>
   );

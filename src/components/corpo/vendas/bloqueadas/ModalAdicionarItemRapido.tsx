@@ -562,7 +562,6 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                         </div>
                         <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
                           <img src={origem === 'N' ? '/images/brasil.png' : '/images/importado.png'} alt={origem === 'N' ? 'Nacional' : 'Importado'} style={{ width: 16, height: 11, objectFit: 'contain' }} />
-                          Cód: <span style={{ fontWeight: 500 }}>{produto.codprod}</span>
                           {jaAdicionado && !jaExistente ? (
                             <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded ml-2">
                               Qtd: {adicionados.get(produto.codprod)}

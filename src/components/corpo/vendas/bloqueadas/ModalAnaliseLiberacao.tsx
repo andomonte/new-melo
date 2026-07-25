@@ -336,8 +336,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
             alt={d.origem === 'N' ? 'Nacional' : 'Importado'}
             style={{ width: 16, height: 11, objectFit: 'contain' }}
           />
-          Cód: <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
-          {d._novo ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>NOVO</span> : null}
+          {d._novo ? <span style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>NOVO</span> : null}
         </div>
       </div>
     );
