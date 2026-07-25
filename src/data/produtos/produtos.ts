@@ -391,13 +391,17 @@ export async function getProdutos({
   perPage,
   search,
   status = 'ativo',
-}: GetParams & { status?: string }): Promise<Produtos> {
+  sortBy,
+  sortDir,
+}: GetParams & { status?: string; sortBy?: string; sortDir?: string }): Promise<Produtos> {
   let produtos: Produtos = {} as Produtos;
 
+  let url = `/api/produtos/get?page=${page}&perPage=${perPage}&search=${search}&status=${status}`;
+  if (sortBy) url += `&sortBy=${sortBy}`;
+  if (sortDir) url += `&sortDir=${sortDir}`;
+
   await api
-    .get(
-      `/api/produtos/get?page=${page}&perPage=${perPage}&search=${search}&status=${status}`,
-    )
+    .get(url)
     .then((response) => {
       produtos = response.data;
     });

@@ -638,7 +638,7 @@ export default function DataTablePadrao({
 
               <DropdownMenuContent
                 collisionPadding={8}
-                className="w-44 bg-white dark:bg-zinc-900 shadow-md border border-gray-300 dark:border-zinc-600 text-xs text-gray-700 dark:text-white cursor-pointer max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto overflow-x-hidden"
+                className="w-52 bg-white dark:bg-zinc-900 shadow-md border border-gray-300 dark:border-zinc-600 text-xs text-gray-700 dark:text-white cursor-pointer max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto whitespace-nowrap"
               >
                 {/* Toggle Filtros rápidos */}
                 <DropdownMenuItem

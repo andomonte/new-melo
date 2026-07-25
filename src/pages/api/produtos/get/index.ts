@@ -12,7 +12,7 @@ export default async function handle(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { page = '1', perPage = '10', search = '', status = 'ativo' } =
+  const { page = '1', perPage = '10', search = '', status = 'ativo', sortBy = 'descr', sortDir = 'asc' } =
     req.query;
   let client: PoolClient | undefined;
 
@@ -136,7 +136,19 @@ export default async function handle(
         ), 0) as estoque_disponivel
       FROM db_manaus.dbprod p
       ${whereClause}
-      ORDER BY p.descr
+      ORDER BY ${(() => {
+        const allowedCols: Record<string, string> = {
+          codprod: 'p.codprod',
+          ref: 'p.ref',
+          descr: 'p.descr',
+          codmarca: 'p.codmarca',
+          estoque_disponivel: 'estoque_disponivel',
+          prvenda: 'p.prvenda',
+        };
+        const col = allowedCols[String(sortBy)] || 'p.descr';
+        const dir = String(sortDir).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+        return `${col} ${dir}`;
+      })()}
       OFFSET $${paramIndex} LIMIT $${paramIndex + 1}
     `;
 
