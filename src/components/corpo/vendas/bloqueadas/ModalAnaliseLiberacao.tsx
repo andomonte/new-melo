@@ -34,6 +34,7 @@ import ProductZoomModal from '@/components/common/ProductZoomModal';
 import ModalAdicionarItemRapido from './ModalAdicionarItemRapido';
 import ModalEquivalentes from './ModalEquivalentes';
 import ModalHistoricoProduto from './ModalHistoricoProduto';
+import ModalFinalizarVenda from './ModalFinalizarVenda';
 import { AgGridReact } from 'ag-grid-react';
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community';
 import type { CellValueChangedEvent } from 'ag-grid-community';
@@ -192,6 +193,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
   const [modalHistProduto, setModalHistProduto] = useState(false);
   const [produtoHist, setProdutoHist] = useState<any>(null);
+  const [modalFinalizar, setModalFinalizar] = useState(false);
 
   // Refs para evitar re-registrar handlers quando modais abrem/fecham
   const modaisAbertosRef = React.useRef(false);
@@ -465,7 +467,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
   ], []);
 
   // ---------- Sync ref de modais abertos ----------
-  modaisAbertosRef.current = modalCliente || modalFinanceiro || modalHistorico || modalAlertas || !!zoomProduto || addItemOpen || modalEquivalentes || modalHistProduto;
+  modaisAbertosRef.current = modalCliente || modalFinanceiro || modalHistorico || modalAlertas || !!zoomProduto || addItemOpen || modalEquivalentes || modalHistProduto || modalFinalizar;
 
   const restaurarFocoGrid = useCallback(() => {
     setTimeout(() => {
@@ -576,7 +578,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         else toast({ title: 'Selecione um item na planilha' });
       }
       else if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.key === 'Add')) { e.preventDefault(); e.stopImmediatePropagation(); setAddItemOpen(true); }
-      else if (e.ctrlKey && e.key === 'l') { e.preventDefault(); e.stopImmediatePropagation(); onLiberar(); }
+      else if (e.ctrlKey && e.key === 'l') { e.preventDefault(); e.stopImmediatePropagation(); setModalFinalizar(true); }
       else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
     };
 
@@ -747,7 +749,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                         F2 Cliente | F3 Financeiro | F4 Histórico | F5 Alertas | F9 Equiv. | F10 Hist. Produto | Ctrl+Z Zoom | Ctrl++ Adicionar | Ctrl+L Liberar | Esc
                       </span>
                       <button
-                        onClick={onLiberar}
+                        onClick={() => setModalFinalizar(true)}
                         className="px-4 py-1.5 text-xs font-medium rounded-md bg-green-600 hover:bg-green-700 text-white flex items-center gap-1.5"
                       >
                         <CheckCircle size={14} />
@@ -910,7 +912,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
             <span className="ml-auto text-[10px] text-gray-400">Ctrl++</span>
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onClick={onLiberar} className="text-green-600">
+          <ContextMenuItem onClick={() => setModalFinalizar(true)} className="text-green-600">
             <CheckCircle size={14} className="mr-2" /> Liberar Venda
             <span className="ml-auto text-[10px] text-gray-400">Ctrl+L</span>
           </ContextMenuItem>
@@ -1249,6 +1251,15 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         isOpen={modalHistProduto}
         onClose={() => { setModalHistProduto(false); setProdutoHist(null); restaurarFocoGrid(); }}
         produto={produtoHist}
+      />
+
+      {/* ========== Modal: Finalizar Venda ========== */}
+      <ModalFinalizarVenda
+        isOpen={modalFinalizar}
+        onClose={() => { setModalFinalizar(false); restaurarFocoGrid(); }}
+        codvenda={codvenda}
+        onFinalizar={onLiberar}
+        usuario={user?.usuario}
       />
 
       {/* ========== Modal: Pontos de Atenção ========== */}
