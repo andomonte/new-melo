@@ -830,7 +830,26 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
           </div>
 
           {/* ===== FORMULÁRIO CABEÇALHO ===== */}
-          <div className="px-4 py-2 border-b dark:border-gray-700 bg-white dark:bg-zinc-700 text-xs">
+          <div className="px-4 py-2 border-b dark:border-gray-700 bg-white dark:bg-zinc-700 text-xs"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const target = e.target as HTMLElement;
+                if (target.tagName === 'TEXTAREA') return;
+                if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+                  e.preventDefault();
+                  const form = target.closest('[data-promo-form]');
+                  if (!form) return;
+                  const focusables = Array.from(form.querySelectorAll<HTMLElement>(
+                    'input:not([disabled]):not([type="checkbox"]), select:not([disabled]), textarea:not([disabled])'
+                  )).filter((el) => el.offsetParent !== null);
+                  const idx = focusables.indexOf(target);
+                  if (idx >= 0 && idx < focusables.length - 1) {
+                    focusables[idx + 1]?.focus();
+                  }
+                }
+              }
+            }}
+            data-promo-form>
             {/* Linha 1: Nome + % Desc + Qtds */}
             <div className="flex gap-2 mb-2">
               <div className="flex-1 min-w-[180px]">

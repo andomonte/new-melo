@@ -210,7 +210,25 @@ const ModalFinalizarVenda: React.FC<ModalFinalizarVendaProps> = ({
             </div>
 
             {/* Formulário — 2 colunas */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4" data-fin-form
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const target = e.target as HTMLElement;
+                  if (target.tagName === 'TEXTAREA') return;
+                  if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+                    e.preventDefault();
+                    const form = target.closest('[data-fin-form]');
+                    if (!form) return;
+                    const focusables = Array.from(form.querySelectorAll<HTMLElement>(
+                      'input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
+                    )).filter((el) => el.offsetParent !== null);
+                    const idx = focusables.indexOf(target);
+                    if (idx >= 0 && idx < focusables.length - 1) {
+                      focusables[idx + 1]?.focus();
+                    }
+                  }
+                }
+              }}>
               {/* Coluna esquerda — Transporte e Pagamento */}
               <div className="border border-slate-200 dark:border-zinc-700 rounded-xl overflow-hidden flex flex-col">
                 <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800">
