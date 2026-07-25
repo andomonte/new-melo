@@ -16,7 +16,17 @@ export default async function handler(
     const pool = getPgPool('manaus');
     client = await pool.connect();
 
-    // Buscar transportadoras ativas
+    // Busca por termo (nome, código ou CNPJ) — dbtransp. Sem termo retorna as 500 primeiras.
+    const search = String(req.query.search || '').trim();
+    const params: any[] = [];
+    let where = '';
+    if (search) {
+      params.push(`%${search}%`);
+      params.push(`%${search.replace(/\D/g, '')}%`);
+      where = `WHERE nome ILIKE $1 OR nomefant ILIKE $1 OR codtransp ILIKE $1
+               OR ($2 <> '%%' AND regexp_replace(COALESCE(cpfcgc,''),'[^0-9]','','g') ILIKE $2)`;
+    }
+
     const result = await client.query(`
       SELECT
         codtransp,
@@ -24,9 +34,10 @@ export default async function handler(
         nomefant,
         cpfcgc
       FROM dbtransp
+      ${where}
       ORDER BY nome
       LIMIT 500
-    `);
+    `, params);
 
     return res.status(200).json(serializeBigInt({
       success: true,

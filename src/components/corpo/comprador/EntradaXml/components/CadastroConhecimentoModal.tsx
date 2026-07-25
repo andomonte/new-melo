@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, Truck, DollarSign, FileText, AlertCircle, CheckCircle,
-  Upload, RefreshCw, Wand2, PenLine, FileUp, Bot
+  Upload, RefreshCw, Wand2, PenLine, FileUp, Bot, Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
+import SelectPadrao from '@/components/common/SelectPadrao';
+import CadastroTransportadoraModal from '@/components/corpo/admin/cadastro/transportadoras/modalCadastrar';
 
 interface Transportadora {
   codtransp: string;
@@ -98,6 +100,8 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
   const [transportadoras, setTransportadoras] = useState<Transportadora[]>([]);
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  // Cadastro de transportadora na hora (quando a busca não encontra)
+  const [showCadastroTransp, setShowCadastroTransp] = useState(false);
   const [uploadingXml, setUploadingXml] = useState(false);
   const [buscandoCte, setBuscandoCte] = useState(false);
   const [cteEncontrado, setCteEncontrado] = useState<CtePendente | null>(null);
@@ -212,10 +216,13 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
   }, []);
 
   // Carregar transportadoras
-  const carregarTransportadoras = async () => {
+  const carregarTransportadoras = async (termo: string = '') => {
     setLoading(true);
     try {
-      const response = await fetch('/api/transportadoras');
+      const url = termo
+        ? `/api/transportadoras?search=${encodeURIComponent(termo)}`
+        : '/api/transportadoras';
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
         setTransportadoras(data.data || []);
@@ -751,19 +758,29 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Transportadora *
                   </label>
-                  <select
+                  <SelectPadrao
+                    searchable
+                    placeholder="Buscar transportadora (nome, código ou CNPJ)..."
+                    options={transportadoras.map((t) => ({
+                      value: t.codtransp,
+                      label: `${t.codtransp} - ${t.nome}`,
+                    }))}
                     value={codtransp}
-                    onChange={(e) => setCodtransp(e.target.value)}
+                    onValueChange={(v) => setCodtransp(v)}
+                    onInputChange={(termo) => carregarTransportadoras(termo)}
+                    loading={loading}
                     disabled={camposPreenchidos.codtransp}
-                    className={`w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white ${camposPreenchidos.codtransp ? 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-zinc-700' : ''}`}
-                  >
-                    <option value="">Selecione...</option>
-                    {transportadoras.map((t) => (
-                      <option key={t.codtransp} value={t.codtransp}>
-                        {t.codtransp} - {t.nome}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  {!camposPreenchidos.codtransp && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCadastroTransp(true)}
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                    >
+                      <Plus size={12} />
+                      Não encontrou? Cadastrar transportadora
+                    </button>
+                  )}
                 </div>
 
                 <div>
@@ -1076,6 +1093,19 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Cadastro de transportadora na hora — ao salvar, refaz a busca */}
+      {showCadastroTransp && (
+        <CadastroTransportadoraModal
+          isOpen={showCadastroTransp}
+          onClose={() => setShowCadastroTransp(false)}
+          onSuccess={(busca?: string) => {
+            setShowCadastroTransp(false);
+            carregarTransportadoras(busca || '');
+            toast.success('Transportadora cadastrada! Busque e selecione na lista.');
+          }}
+        />
+      )}
     </div>
   );
 };
