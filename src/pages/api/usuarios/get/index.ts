@@ -76,7 +76,7 @@ export default async function handle(
     const resposta = await Promise.all(
       usuarios.map(async (usuario) => {
         // Query para obter os perfis do usuário, já ordenada por perfil_name
-        const userPerfisQuery = `SELECT perfil_name, codigo_filial, nome_filial, codvend
+        const userPerfisQuery = `SELECT perfil_name, codigo_filial, nome_filial, codvend, codcomprador
           FROM tb_user_perfil
           WHERE user_login_id = $1
           ORDER BY perfil_name; 
@@ -104,6 +104,7 @@ export default async function handle(
                   nome_filial: userPerfil.nome_filial,
                   armazens: [],
                   codvend: userPerfil.codvend ?? null,
+                  codcomprador: userPerfil.codcomprador ?? null,
                 },
               ],
 
@@ -132,6 +133,7 @@ export default async function handle(
                       nome_filial: userPerfil.nome_filial,
                       armazens: [],
                       codvend: userPerfil.codvend ?? null,
+                      codcomprador: userPerfil.codcomprador ?? null,
                     },
                   ],
 
@@ -193,6 +195,7 @@ export default async function handle(
                       nome_filial: userPerfil.nome_filial,
                       armazens: [],
                       codvend: userPerfil.codvend ?? null,
+                      codcomprador: userPerfil.codcomprador ?? null,
                     },
                   ],
 

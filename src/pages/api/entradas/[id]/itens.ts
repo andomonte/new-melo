@@ -44,20 +44,20 @@ export default async function handler(
     const pool = getPgPool(filial);
     client = await pool.connect();
 
-    // Buscar itens da entrada
+    // Buscar itens da entrada (modelo Delphi dbitent, por codent)
     const itensQuery = `
       SELECT
-        ei.id,
-        ei.produto_cod,
+        ie.codprod,
+        ie.codreq,
         COALESCE(p.descr, 'Produto nao encontrado') as produto_descricao,
-        ei.quantidade,
-        ei.valor_unitario,
-        ei.valor_total,
+        ie.quant,
+        ie.prunit,
+        ROUND(COALESCE(ie.quant,0) * COALESCE(ie.prunit,0), 2) as valor_total,
         COALESCE(p.unimed, 'UN') as unimed
-      FROM entrada_itens ei
-      LEFT JOIN dbprod p ON ei.produto_cod = p.codprod
-      WHERE ei.entrada_id = $1
-      ORDER BY ei.id ASC
+      FROM db_manaus.dbitent ie
+      LEFT JOIN db_manaus.dbprod p ON ie.codprod = p.codprod
+      WHERE ie.codent = $1
+      ORDER BY ie.codprod ASC
     `;
 
     const result = await client.query(itensQuery, [id]);
@@ -66,11 +66,11 @@ export default async function handler(
     res.status(200).json({
       success: true,
       data: items.map(item => ({
-        id: item.id.toString(),
-        produto_cod: item.produto_cod,
+        id: `${item.codprod}-${item.codreq ?? '0'}`,
+        produto_cod: item.codprod,
         produto_descricao: item.produto_descricao,
-        quantidade: Number(item.quantidade),
-        valor_unitario: Number(item.valor_unitario),
+        quantidade: Number(item.quant),
+        valor_unitario: Number(item.prunit),
         valor_total: Number(item.valor_total),
         unimed: item.unimed || 'UN'
       })),

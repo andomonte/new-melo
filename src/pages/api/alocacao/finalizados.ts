@@ -34,10 +34,10 @@ interface FinalizadosResponse {
 const FINALIZADOS_QUERY = `
   SELECT
     op.id,
-    e.numero_entrada,
+    e.codent as numero_entrada,
     COALESCE(emit.xnome, 'Fornecedor nao identificado') as fornecedor,
-    COALESCE(NULLIF(e.valor_total::text, '')::numeric, 0) as valor_total,
-    COALESCE(item_count.total, 0) as qtd_itens,
+    COALESCE(e.totalnf, 0) as valor_total,
+    COALESCE((SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent), 0) as qtd_itens,
     op.fim_alocacao as data_alocacao,
     CASE
       WHEN op.inicio_alocacao IS NOT NULL AND op.fim_alocacao IS NOT NULL
@@ -45,16 +45,11 @@ const FINALIZADOS_QUERY = `
       ELSE NULL
     END as tempo_segundos,
     arm.arm_descricao
-  FROM entrada_operacoes op
-  INNER JOIN entradas_estoque e ON e.id = op.entrada_id
-  LEFT JOIN dbnfe_ent n ON NULLIF(e.nfe_id::text, '')::varchar = n.codnfe_ent::varchar
-  LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
-  LEFT JOIN cad_armazem arm ON arm.arm_id = op.arm_id
-  LEFT JOIN (
-    SELECT entrada_id, COUNT(*) as total
-    FROM entrada_itens
-    GROUP BY entrada_id
-  ) item_count ON item_count.entrada_id = e.id
+  FROM db_manaus.entrada_operacoes op
+  INNER JOIN db_manaus.dbent e ON e.codent = op.codent
+  LEFT JOIN db_manaus.dbnfe_ent n ON n.chave = e.chave
+  LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
+  LEFT JOIN db_manaus.cad_armazem arm ON arm.arm_id = op.arm_id
   WHERE op.alocador_matricula = $1
     AND op.status = 'ALOCADO'
   ORDER BY op.fim_alocacao DESC

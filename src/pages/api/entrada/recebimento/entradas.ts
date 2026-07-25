@@ -13,7 +13,7 @@ import { PoolClient } from 'pg';
 
 interface EntradaParaReceber {
   id: number;
-  entrada_id: number;
+  entrada_id: string; // codent (chave opaca usada pelo frontend)
   numero_entrada: string;
   nfe_numero: string;
   nfe_serie: string;
@@ -37,22 +37,20 @@ interface EntradasResponse {
 }
 
 // Query para buscar entradas com status de operacao
+// Fonte: dbent + dbent_recebimento (workflow) + entrada_operacoes (por codent).
 const ENTRADAS_QUERY = `
   SELECT
     COALESCE(op.id, 0) as id,
-    e.id as entrada_id,
-    e.numero_entrada,
+    e.codent as entrada_id,
+    e.codent as numero_entrada,
     COALESCE(n.nnf::text, '') as nfe_numero,
     COALESCE(n.serie::text, '') as nfe_serie,
     COALESCE(emit.xnome, 'Fornecedor nao identificado') as fornecedor,
-    CASE
-      WHEN e.valor_total IS NULL OR e.valor_total::text = '' THEN 0
-      ELSE e.valor_total::numeric
-    END as valor_total,
+    COALESCE(e.totalnf, 0)::numeric as valor_total,
     COALESCE(item_count.total, 0) as qtd_itens,
-    e.created_at as data_entrada,
-    COALESCE(op.status, 'AGUARDANDO_RECEBIMENTO') as status,
-    CASE COALESCE(op.status, 'AGUARDANDO_RECEBIMENTO')
+    e.dtent as data_entrada,
+    COALESCE(op.status, rec.status) as status,
+    CASE COALESCE(op.status, rec.status)
       WHEN 'AGUARDANDO_RECEBIMENTO' THEN 'Aguardando'
       WHEN 'EM_RECEBIMENTO' THEN 'Em Recebimento'
       WHEN 'RECEBIDO' THEN 'Recebido'
@@ -60,23 +58,22 @@ const ENTRADAS_QUERY = `
     END as status_label,
     op.recebedor_nome,
     op.inicio_recebimento,
-    e.data_confirmacao_preco IS NOT NULL as preco_confirmado,
-    e.data_confirmacao_preco
-  FROM entradas_estoque e
-  LEFT JOIN dbnfe_ent n ON e.nfe_id IS NOT NULL AND e.nfe_id::text <> '' AND e.nfe_id::text = n.codnfe_ent::text
-  LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
-  LEFT JOIN entrada_operacoes op ON op.entrada_id = e.id
+    rec.data_confirmacao_preco IS NOT NULL as preco_confirmado,
+    rec.data_confirmacao_preco
+  FROM db_manaus.dbent e
+  JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+  LEFT JOIN db_manaus.dbnfe_ent n ON n.chave = e.chave
+  LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
+  LEFT JOIN db_manaus.entrada_operacoes op ON op.codent = e.codent
   LEFT JOIN (
-    SELECT entrada_id, COUNT(*) as total
-    FROM entrada_itens
-    GROUP BY entrada_id
-  ) item_count ON item_count.entrada_id = e.id
+    SELECT codent, COUNT(*) as total FROM db_manaus.dbitent GROUP BY codent
+  ) item_count ON item_count.codent = e.codent
   WHERE
-    (op.status IS NULL OR op.status IN ('AGUARDANDO_RECEBIMENTO', 'EM_RECEBIMENTO'))
+    rec.status IN ('AGUARDANDO_RECEBIMENTO', 'EM_RECEBIMENTO')
     AND ($1 = '' OR op.recebedor_nome = $1 OR op.recebedor_nome IS NULL)
   ORDER BY
     CASE WHEN op.recebedor_nome = $1 AND op.status = 'EM_RECEBIMENTO' THEN 0 ELSE 1 END,
-    e.created_at DESC
+    e.dtent DESC
   LIMIT 50
 `;
 
@@ -102,7 +99,7 @@ export default async function handler(
 
     const entradas: EntradaParaReceber[] = result.rows.map(row => ({
       id: parseInt(row.id),
-      entrada_id: parseInt(row.entrada_id),
+      entrada_id: row.entrada_id, // codent (string opaca)
       numero_entrada: row.numero_entrada,
       nfe_numero: row.nfe_numero,
       nfe_serie: row.nfe_serie,

@@ -15,6 +15,7 @@ export interface Perfil {
     codigo_filial: string;
     nome_filial: string;
     codvend?: string | null;
+    codcomprador?: string | null;
     armazens?: Armazem[];
   }[];
   funcoesPadraoPerfil?: Funcao[];
@@ -46,6 +47,7 @@ export interface UsuarioEdit {
       codigo_filial: string;
       nome_filial: string;
       codvend?: string | null;
+      codcomprador?: string | null;
       armazens?: Armazem[];
       funcoesDoUsuario: Funcao[]; // Revertido para o nível do Perfil
     }[];

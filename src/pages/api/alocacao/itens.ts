@@ -39,55 +39,43 @@ interface ItensResponse {
   };
 }
 
-// Query para buscar numero_entrada
-const ENTRADA_QUERY = `
-  SELECT numero_entrada FROM entradas_estoque WHERE id = $1
-`;
-
-// Query para buscar itens de uma entrada para alocacao
-// Nota: dbitent_armazem usa codent (numero_entrada), não entrada_id
-// E usa codprod, não cod_produto
-// IMPORTANTE: Agrupa alocações por codprod apenas (não por arm_id) para evitar duplicação
+// Itens da entrada (dbitent) para alocação, com conferência (eir) e alocado (dbitent_armazem).
+// entrada_item_id = id da linha de conferência (eir.id).
 const ITENS_QUERY = `
   SELECT
-    COALESCE(eir.id, ei.id) as id,
-    ei.id as entrada_item_id,
-    ei.produto_cod as produto_cod,
+    COALESCE(eir.id, 0) as id,
+    COALESCE(eir.id, 0) as entrada_item_id,
+    ie.codprod as produto_cod,
     COALESCE(p.descr, 'Produto nao identificado') as produto_nome,
-    COALESCE(eir.qtd_recebida, ei.quantidade) as qtd_recebida,
+    COALESCE(eir.qtd_recebida, ie.quant) as qtd_recebida,
     COALESCE(aloc.qtd_alocada, 0) as qtd_alocada,
     CASE
-      WHEN COALESCE(aloc.qtd_alocada, 0) >= COALESCE(eir.qtd_recebida, ei.quantidade) THEN 'ALOCADO'
+      WHEN COALESCE(aloc.qtd_alocada, 0) >= COALESCE(eir.qtd_recebida, ie.quant) THEN 'ALOCADO'
       WHEN COALESCE(aloc.qtd_alocada, 0) > 0 THEN 'PARCIAL'
       ELSE 'PENDENTE'
     END as status_alocacao,
-    'UN' as unidade
-  FROM entrada_itens ei
-  LEFT JOIN entrada_itens_recebimento eir ON eir.entrada_item_id = ei.id
-  LEFT JOIN dbprod p ON p.codprod = ei.produto_cod
+    COALESCE(p.unimed, 'UN') as unidade
+  FROM db_manaus.dbitent ie
+  LEFT JOIN db_manaus.entrada_itens_recebimento eir
+    ON eir.codent = ie.codent AND eir.produto_cod = ie.codprod
+   AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
+  LEFT JOIN db_manaus.dbprod p ON p.codprod = ie.codprod
   LEFT JOIN (
-    SELECT
-      codprod,
-      SUM(qtd) as qtd_alocada
-    FROM dbitent_armazem
-    WHERE codent = $2
-    GROUP BY codprod
-  ) aloc ON aloc.codprod = ei.produto_cod
-  WHERE ei.entrada_id = $1
-  ORDER BY ei.id
+    SELECT codprod, SUM(qtd) as qtd_alocada
+    FROM db_manaus.dbitent_armazem WHERE codent = $1 GROUP BY codprod
+  ) aloc ON aloc.codprod = ie.codprod
+  WHERE ie.codent = $1
+  ORDER BY ie.codprod
 `;
 
-// Query para buscar romaneio planejado (salvo via RomaneioModal) + localização existente
+// Romaneio planejado + localização existente (por codent)
 const ROMANEIO_QUERY = `
   SELECT
-    da.codprod as produto_cod,
-    da.arm_id,
-    ca.arm_descricao,
-    da.qtd,
+    da.codprod as produto_cod, da.arm_id, ca.arm_descricao, da.qtd,
     loc.apl_descricao as localizacao_existente
-  FROM dbitent_armazem da
-  INNER JOIN cad_armazem ca ON ca.arm_id = da.arm_id
-  LEFT JOIN cad_armazem_produto_locacao loc
+  FROM db_manaus.dbitent_armazem da
+  INNER JOIN db_manaus.cad_armazem ca ON ca.arm_id = da.arm_id
+  LEFT JOIN db_manaus.cad_armazem_produto_locacao loc
     ON loc.apl_arm_id = da.arm_id AND loc.apl_codprod = da.codprod
   WHERE da.codent = $1
   ORDER BY da.codprod, da.arm_id
@@ -101,9 +89,9 @@ export default async function handler(
     return res.status(405).json({ error: 'Metodo nao permitido' });
   }
 
-  const entradaId = parseInt(req.query.entradaId as string);
+  const entradaId = (req.query.entradaId as string) || ''; // codent
 
-  if (!entradaId || isNaN(entradaId)) {
+  if (!entradaId) {
     return res.status(400).json({ error: 'entradaId e obrigatorio' });
   }
 
@@ -116,18 +104,11 @@ export default async function handler(
   try {
     client = await pool.connect();
 
-    // 1. Buscar numero_entrada para poder buscar romaneio
-    const entradaResult = await client.query(ENTRADA_QUERY, [entradaId]);
-    if (entradaResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Entrada nao encontrada' });
-    }
-    const numeroEntrada = entradaResult.rows[0].numero_entrada;
+    // Itens da entrada (codent)
+    const result = await client.query(ITENS_QUERY, [entradaId]);
 
-    // 2. Buscar itens da entrada (passa entradaId e numeroEntrada)
-    const result = await client.query(ITENS_QUERY, [entradaId, numeroEntrada]);
-
-    // 3. Buscar romaneio planejado (salvo via RomaneioModal, usa codent = numero_entrada)
-    const romaneioResult = await client.query(ROMANEIO_QUERY, [numeroEntrada]);
+    // Romaneio planejado (por codent)
+    const romaneioResult = await client.query(ROMANEIO_QUERY, [entradaId]);
 
     // 4. Agrupar romaneio por produto (inclui localização existente se houver)
     const romaneioMap: { [produtoCod: string]: RomaneioItem[] } = {};

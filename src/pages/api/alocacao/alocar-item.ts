@@ -43,66 +43,48 @@ interface AlocarItemResponse {
   message: string;
 }
 
-// Verificar se o operador esta ativo na alocacao desta entrada
-// Retorna tambem o numero_entrada para usar nas queries de alocacao
+// entradaItemId = id da linha de conferência (entrada_itens_recebimento).
+// Verifica se o operador está ativo na alocação desta entrada.
 const CHECK_OPERADOR_QUERY = `
-  SELECT op.id as operacao_id, op.arm_id, e.id as entrada_id, e.numero_entrada
-  FROM entrada_operacoes op
-  INNER JOIN entrada_itens ei ON ei.entrada_id = op.entrada_id
-  INNER JOIN entradas_estoque e ON e.id = op.entrada_id
-  WHERE ei.id = $1
+  SELECT op.id as operacao_id, op.arm_id, eir.codent as numero_entrada
+  FROM db_manaus.entrada_itens_recebimento eir
+  INNER JOIN db_manaus.entrada_operacoes op ON op.codent = eir.codent
+  WHERE eir.id = $1
     AND op.alocador_matricula = $2
     AND op.status = 'EM_ALOCACAO'
 `;
 
-// Buscar dados do item
-// Nota: dbitent_armazem usa codent (numero_entrada) e codprod
+// Dados do item (por eir.id)
 const GET_ITEM_QUERY = `
   SELECT
-    ei.id,
-    ei.entrada_id,
-    ei.produto_cod,
-    ei.quantidade,
-    ei.req_id,
-    e.numero_entrada,
-    COALESCE(eir.qtd_recebida, ei.quantidade) as qtd_recebida,
+    eir.produto_cod,
+    eir.codreq,
+    eir.codent as numero_entrada,
+    COALESCE(eir.qtd_recebida, ie.quant) as qtd_recebida,
     COALESCE(aloc.qtd_alocada, 0) as qtd_ja_alocada
-  FROM entrada_itens ei
-  INNER JOIN entradas_estoque e ON e.id = ei.entrada_id
-  LEFT JOIN entrada_itens_recebimento eir ON eir.entrada_item_id = ei.id
+  FROM db_manaus.entrada_itens_recebimento eir
+  LEFT JOIN db_manaus.dbitent ie
+    ON ie.codent = eir.codent AND ie.codprod = eir.produto_cod
+   AND COALESCE(ie.codreq,'') = COALESCE(eir.codreq,'')
   LEFT JOIN (
     SELECT codprod, codent, SUM(qtd) as qtd_alocada
-    FROM dbitent_armazem
-    GROUP BY codprod, codent
-  ) aloc ON aloc.codprod = ei.produto_cod AND aloc.codent = e.numero_entrada
-  WHERE ei.id = $1
+    FROM db_manaus.dbitent_armazem GROUP BY codprod, codent
+  ) aloc ON aloc.codprod = eir.produto_cod AND aloc.codent = eir.codent
+  WHERE eir.id = $1
 `;
 
-// Inserir registro de alocacao (SEM localizacao - coluna é opcional)
-// Nota: dbitent_armazem usa codent (numero_entrada), codprod, codreq
-// Cada alocacao cria um novo registro (permite alocar mesmo produto em armazens diferentes)
 const INSERT_ALOCACAO_QUERY = `
-  INSERT INTO dbitent_armazem (
-    codent,
-    codprod,
-    codreq,
-    arm_id,
-    qtd
-  )
+  INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
   VALUES ($1, $2, $3, $4, $5)
 `;
 
-// Query para atualizar localização (só funciona se coluna existir)
 const UPDATE_LOCALIZACAO_QUERY = `
-  UPDATE dbitent_armazem
-  SET localizacao = $1
+  UPDATE db_manaus.dbitent_armazem SET localizacao = $1
   WHERE codent = $2 AND codprod = $3 AND arm_id = $4
 `;
 
-// Deletar alocações anteriores do item (para permitir redistribuição)
 const DELETE_ALOCACOES_ANTERIORES_QUERY = `
-  DELETE FROM dbitent_armazem
-  WHERE codent = $1 AND codprod = $2
+  DELETE FROM db_manaus.dbitent_armazem WHERE codent = $1 AND codprod = $2
 `;
 
 // Helper para verificar se é formato novo
@@ -215,7 +197,7 @@ export default async function handler(
         await client.query(INSERT_ALOCACAO_QUERY, [
           item.numero_entrada,      // codent
           item.produto_cod,         // codprod
-          item.req_id || null,      // codreq
+          item.codreq || null,      // codreq
           aloc.arm_id,              // arm_id
           aloc.qtd,                 // qtd
         ]);

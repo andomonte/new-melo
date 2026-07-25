@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Building2, User, Package, Truck, Save, ArrowRight, Search, ChevronDown, CheckCircle2, AlertTriangle, Plus } from 'lucide-react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
+import { AuthContext } from '@/contexts/authContexts';
+import { X, FileText, Building2, User, Package, Truck, Save, ArrowRight, Search, ChevronDown, CheckCircle2, AlertTriangle, Plus, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -271,6 +272,36 @@ const TransportadoraAutocomplete: React.FC<{
   );
 };
 
+// Input de percentual com máscara "centavos": digita os dígitos e formata da direita
+// (ex.: 1000 -> 10,00). Definido em nível de módulo p/ não recriar (não perde o foco).
+const PercentInput: React.FC<{
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}> = ({ label, value, onChange }) => {
+  const display = (Number(value) || 0).toFixed(2).replace('.', ',');
+  const handle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 9);
+    onChange(digits ? parseInt(digits, 10) / 100 : 0);
+  };
+  return (
+    <div>
+      <Label>{label} (%)</Label>
+      <div className="relative">
+        <Input
+          type="text"
+          inputMode="numeric"
+          className="pr-7 text-right"
+          value={display}
+          onChange={handle}
+          placeholder="0,00"
+        />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">%</span>
+      </div>
+    </div>
+  );
+};
+
 export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   isOpen,
   nfe,
@@ -279,6 +310,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   loading = false
 }) => {
   const { toast } = useToast();
+  const { user } = useContext(AuthContext);
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
     title: 'Confirmar',
     message: '',
@@ -292,6 +324,10 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   type MatchStatus = null | 'auto' | 'salvo' | 'multiplos' | 'nao_encontrado';
   const [matchFornec, setMatchFornec] = useState<MatchStatus>(null);
   const [matchTransp, setMatchTransp] = useState<MatchStatus>(null);
+  // Quando há vários cadastros com o mesmo CNPJ, guardamos a lista p/ o usuário escolher.
+  const [matchFornecList, setMatchFornecList] = useState<Fornecedor[]>([]);
+  const [matchTranspList, setMatchTranspList] = useState<Transportadora[]>([]);
+  const [cnpjCopiado, setCnpjCopiado] = useState<string | null>(null);
   // Cadastro rápido (na hora) de fornecedor/transportadora ausente no cadastro.
   const [cadFornecAberto, setCadFornecAberto] = useState(false);
   const [cadTranspAberto, setCadTranspAberto] = useState(false);
@@ -301,7 +337,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     comprador: null,
     fornecedor: null,
     transportadora: null,
-    calculoCusto: true,
+    calculoCusto: false,
     devolucao: false,
     nfeComplementar: false,
     custoFinanceiro: 0,
@@ -327,7 +363,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
         comprador: null,
         fornecedor: null,
         transportadora: null,
-        calculoCusto: true,
+        calculoCusto: false,
         devolucao: false,
         nfeComplementar: false,
         custoFinanceiro: 0,
@@ -353,6 +389,26 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
         const transp = await fetchTransportadoraXml();
         const aux = await fetchDadosAuxExistentes();
 
+        // Auto-preenche o comprador pelo login logado (como no Delphi, que traz
+        // o comprador do operador). Só quando a nota ainda não tem comprador salvo.
+        if (!aux?.codcomprador && user?.usuario) {
+          try {
+            const r = await api.get('/api/usuarios/meu-comprador', {
+              params: { login: user.usuario, filial: user.filial },
+            });
+            const c = r.data;
+            if (c?.codcomprador) {
+              setFormData(prev =>
+                prev.comprador
+                  ? prev
+                  : { ...prev, comprador: { codigo: String(c.codcomprador), nome: c.nome || '' } },
+              );
+            }
+          } catch {
+            // sem comprador vinculado ao login — segue sem pré-preencher
+          }
+        }
+
         if (aux?.codcredor) {
           setMatchFornec('salvo');
         } else if (nfe.cnpjEmitente) {
@@ -376,11 +432,13 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     tipo: 'fornecedor' | 'transportadora',
   ) => {
     const setMatch = tipo === 'fornecedor' ? setMatchFornec : setMatchTransp;
+    const setList = tipo === 'fornecedor' ? setMatchFornecList : setMatchTranspList;
     try {
       const r = await api.get('/api/entrada-xml/credor-por-cnpj', {
-        params: { cnpj },
+        params: { cnpj, tipo },
       });
       const matches: any[] = r.data?.data || [];
+      setList(matches);
       if (matches.length === 1) {
         const m = matches[0];
         if (tipo === 'fornecedor') {
@@ -404,6 +462,17 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
       }
     } catch {
       // Silencioso — mantém o comportamento manual atual.
+    }
+  };
+
+  // Escolha de um dos vários cadastros com o mesmo CNPJ.
+  const escolherMatch = (tipo: 'fornecedor' | 'transportadora', m: any) => {
+    if (tipo === 'fornecedor') {
+      setFormData((prev) => ({ ...prev, fornecedor: m, usarFornecedorNfe: false }));
+      setMatchFornec('auto');
+    } else {
+      setFormData((prev) => ({ ...prev, transportadora: m, usarTransportadoraNfe: false }));
+      setMatchTransp('auto');
     }
   };
 
@@ -477,17 +546,18 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
 
         setFormData(prev => ({
           ...prev,
-          operacao: dados.operacao ?? 0,
-          custoFinanceiro: dados.custofin ?? 0,
-          desconto: dados.desconto ?? 0,
-          acrescimo: dados.acrescimo ?? 0,
-          verbaTmk: dados.verba_tmk ?? 0,
+          // pg devolve colunas numeric como string — coagir para número.
+          operacao: Number(dados.operacao ?? 0),
+          custoFinanceiro: Number(dados.custofin ?? 0),
+          desconto: Number(dados.desconto ?? 0),
+          acrescimo: Number(dados.acrescimo ?? 0),
+          verbaTmk: Number(dados.verba_tmk ?? 0),
           cfop: dados.cfop?.toString() ?? '',
           descontoIcms: dados.desconto_icms === 'S',
           descontoSt: dados.desconto_st === 'S',
           zerarIpi: dados.zerar_ipi === 'S',
           zerarSt: dados.zerar_st === 'S',
-          calculoCusto: dados.temcusto === 'S' || dados.temcusto === null,
+          calculoCusto: dados.temcusto === 'S',
           nfeComplementar: dados.complementar === 1,
           devolucao: dados.devolucao === 1,
           devCodfat: dados.dev_codfat ?? '',
@@ -498,7 +568,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
           usarFornecedorNfe: !dados.codcredor,
           usarTransportadoraNfe: !dados.codtransp,
         }));
-        return { codcredor: dados.codcredor, codtransp: dados.codtransp };
+        return { codcredor: dados.codcredor, codtransp: dados.codtransp, codcomprador: dados.codcomprador };
       }
     } catch (error) {
       // Dados auxiliares ainda não existem
@@ -513,11 +583,43 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }));
   };
 
+  // Copia os dígitos do CNPJ para a área de transferência (ajuda a buscar/cadastrar).
+  const copiarCnpj = async (valor?: string) => {
+    const digits = (valor || '').replace(/\D/g, '');
+    if (!digits) return;
+    try {
+      await navigator.clipboard.writeText(digits);
+      setCnpjCopiado(digits);
+      setTimeout(() => setCnpjCopiado((c) => (c === digits ? null : c)), 1500);
+    } catch {
+      /* clipboard indisponível — ignora */
+    }
+  };
+
+  // Botão pequeno de copiar CNPJ, reutilizável.
+  const BotaoCopiarCnpj: React.FC<{ cnpj?: string }> = ({ cnpj }) => {
+    if (!cnpj) return null;
+    const copiado = cnpjCopiado === (cnpj || '').replace(/\D/g, '');
+    return (
+      <button
+        type="button"
+        onClick={() => copiarCnpj(cnpj)}
+        title="Copiar CNPJ"
+        className="inline-flex items-center gap-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+      >
+        <Copy size={12} /> {copiado ? 'Copiado!' : 'Copiar CNPJ'}
+      </button>
+    );
+  };
+
   // Selo do resultado do casamento por CNPJ, mostrado em cada seção.
   const renderMatchBadge = (
     status: MatchStatus,
     label: string,
     onCadastrar?: () => void,
+    matches?: any[],
+    onEscolher?: (m: any) => void,
+    cnpj?: string,
   ) => {
     if (status === 'auto') {
       return (
@@ -529,9 +631,29 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }
     if (status === 'multiplos') {
       return (
-        <div className="mb-3 flex items-center gap-2 rounded-md bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 px-3 py-1.5 text-xs text-blue-800 dark:text-blue-200">
-          <AlertTriangle size={14} />
-          Vários cadastros com esse CNPJ — selecione o {label.toLowerCase()} correto abaixo.
+        <div className="mb-3 rounded-md bg-blue-100 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700 px-3 py-2 text-xs text-blue-800 dark:text-blue-200">
+          <div className="flex items-center gap-2 mb-1.5">
+            <AlertTriangle size={14} />
+            Vários cadastros com esse CNPJ — selecione o {label.toLowerCase()} correto:
+          </div>
+          <div className="flex flex-col gap-1 max-h-40 overflow-auto">
+            {(matches || []).map((m) => (
+              <button
+                key={m.cod_credor}
+                type="button"
+                onClick={() => onEscolher?.(m)}
+                className="w-full text-left rounded border border-blue-200 dark:border-blue-700 bg-white/70 dark:bg-gray-800/60 hover:bg-blue-50 dark:hover:bg-blue-900/60 px-2 py-1.5"
+              >
+                <span className="font-medium text-blue-700 dark:text-blue-300">{m.cod_credor}</span>
+                {' — '}
+                <span className="text-gray-900 dark:text-gray-100">{m.nome}</span>
+                {(m.cidade || m.uf) && (
+                  <span className="text-gray-500 ml-1">({m.cidade}{m.uf ? `/${m.uf}` : ''})</span>
+                )}
+                {m.cpf_cgc && <span className="text-gray-500 ml-1">· {m.cpf_cgc}</span>}
+              </button>
+            ))}
+          </div>
         </div>
       );
     }
@@ -542,15 +664,18 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
             <AlertTriangle size={14} />
             CNPJ da nota não encontrado no cadastro de {label.toLowerCase()}.
           </span>
-          {onCadastrar && (
-            <button
-              type="button"
-              onClick={onCadastrar}
-              className="flex-shrink-0 inline-flex items-center gap-1 rounded bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 font-medium"
-            >
-              <Plus size={12} /> Cadastrar {label.toLowerCase()}
-            </button>
-          )}
+          <span className="flex-shrink-0 flex items-center gap-2">
+            <BotaoCopiarCnpj cnpj={cnpj} />
+            {onCadastrar && (
+              <button
+                type="button"
+                onClick={onCadastrar}
+                className="inline-flex items-center gap-1 rounded bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 font-medium"
+              >
+                <Plus size={12} /> Cadastrar {label.toLowerCase()}
+              </button>
+            )}
+          </span>
         </div>
       );
     }
@@ -568,14 +693,17 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   // Monta o payload da tabela auxiliar (dbnfe_ent_aux) a partir do formulário.
   const montarPayloadAux = () => ({
     nfeId: nfe.id,
-    operacao: formData.operacao,
+    // Coação defensiva: os campos numéricos podem chegar como string (input de texto
+    // ou colunas numeric do pg) — garantir number para a validação do backend.
+    operacao: Number(formData.operacao) || 0,
     codcomprador: formData.comprador?.codigo || '',
-    codcredor: formData.usarFornecedorNfe ? '' : formData.fornecedor?.cod_credor || '',
-    codtransp: formData.usarTransportadoraNfe ? '' : formData.transportadora?.cod_credor || '',
-    custofin: formData.custoFinanceiro,
-    desconto: formData.desconto,
-    acrescimo: formData.acrescimo,
-    verba_tmk: formData.verbaTmk,
+    // Fornecedor/transportadora são obrigatórios (do cadastro) — salvar sempre que houver seleção.
+    codcredor: formData.fornecedor?.cod_credor || '',
+    codtransp: formData.transportadora?.cod_credor || '',
+    custofin: Number(formData.custoFinanceiro) || 0,
+    desconto: Number(formData.desconto) || 0,
+    acrescimo: Number(formData.acrescimo) || 0,
+    verba_tmk: Number(formData.verbaTmk) || 0,
     cfop: formData.cfop ? parseInt(formData.cfop) : null,
     desconto_icms: formData.descontoIcms ? 'S' : 'N',
     desconto_st: formData.descontoSt ? 'S' : 'N',
@@ -659,20 +787,31 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     const soDigitos = (s?: string) => (s || '').replace(/\D/g, '');
     const cnpjNota = soDigitos(nfe.cnpjEmitente);
 
-    // Fornecedor: escolheu "Buscar do cadastro" mas não selecionou.
-    if (!formData.usarFornecedorNfe && !formData.fornecedor) {
+    // Comprador é OBRIGATÓRIO — como no Delphi ("INDIQUE UM COMPRADOR VÁLIDO").
+    if (!formData.comprador?.codigo) {
       return pedirConfirmacao(() => {}, {
-        title: 'Fornecedor não selecionado',
-        message: 'Selecione o fornecedor no cadastro ou marque "Usar dados da NFe".',
+        title: 'Comprador obrigatório',
+        message: 'Selecione um comprador válido para a entrada.',
         type: 'warning',
         confirmText: 'OK',
         somenteOk: true,
       });
     }
 
-    // Fornecedor do cadastro com CNPJ diferente do emitente da nota.
+    // Fornecedor é OBRIGATÓRIO (do cadastro) — como no Delphi.
+    if (!formData.fornecedor) {
+      return pedirConfirmacao(() => {}, {
+        title: 'Fornecedor obrigatório',
+        message: 'Associe um fornecedor do cadastro à NFe: selecione na busca/lista ou cadastre-o.',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+
+    // CNPJ do fornecedor diverge da nota (aviso — permite prosseguir).
     const cnpjForn = soDigitos(formData.fornecedor?.cpf_cgc);
-    if (!formData.usarFornecedorNfe && cnpjForn && cnpjNota && cnpjForn !== cnpjNota) {
+    if (cnpjForn && cnpjNota && cnpjForn !== cnpjNota) {
       return pedirConfirmacao(prosseguirConfirmacao, {
         title: 'CNPJ do fornecedor diverge da nota',
         message: `O CNPJ do fornecedor selecionado (${formData.fornecedor?.cpf_cgc}) é diferente do emitente da nota (${nfe.cnpjEmitente}). Deseja prosseguir mesmo assim?`,
@@ -682,26 +821,15 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
       });
     }
 
-    // Transportadora: escolheu "Buscar do cadastro" mas não selecionou.
-    if (!formData.usarTransportadoraNfe && !formData.transportadora) {
+    // Transportadora é OBRIGATÓRIA quando a nota tem transportadora — como no Delphi.
+    const notaTemTransp = !!soDigitos(transportadoraXml?.cpf_cnpj);
+    if (notaTemTransp && !formData.transportadora) {
       return pedirConfirmacao(() => {}, {
-        title: 'Transportadora não selecionada',
-        message: 'Selecione a transportadora no cadastro ou marque "Usar dados da NFe".',
+        title: 'Transportadora obrigatória',
+        message: 'Associe uma transportadora do cadastro à NFe: selecione na busca/lista ou cadastre-a.',
         type: 'warning',
         confirmText: 'OK',
         somenteOk: true,
-      });
-    }
-
-    // A nota tem transportadora, mas ela não foi vinculada ao cadastro.
-    const cnpjTransp = soDigitos(transportadoraXml?.cpf_cnpj);
-    if (formData.usarTransportadoraNfe && cnpjTransp) {
-      return pedirConfirmacao(prosseguirConfirmacao, {
-        title: 'Transportadora não vinculada',
-        message: `A transportadora da nota (${transportadoraXml?.xnome || cnpjTransp}) não está vinculada a um cadastro. Deseja prosseguir mesmo assim?`,
-        type: 'warning',
-        confirmText: 'Sim, prosseguir',
-        cancelText: 'Revisar',
       });
     }
 
@@ -1007,72 +1135,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
               </div>
             </div>
 
-            {/* Segunda linha - Campos financeiros */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-              <div>
-                <Label>Custo Financeiro (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.custoFinanceiro}
-                  onChange={(e) => handleInputChange('custoFinanceiro', parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label>Desconto (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.desconto}
-                  onChange={(e) => handleInputChange('desconto', parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label>Acréscimo (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.acrescimo}
-                  onChange={(e) => handleInputChange('acrescimo', parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label>Verba TMK (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.verbaTmk}
-                  onChange={(e) => handleInputChange('verbaTmk', parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            {/* Terceira linha - CFOP */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-              <div>
-                <Label>CFOP</Label>
-                <Input
-                  type="text"
-                  maxLength={4}
-                  value={formData.cfop}
-                  onChange={(e) => handleInputChange('cfop', e.target.value.replace(/\D/g, ''))}
-                  placeholder="Ex: 1102"
-                />
-              </div>
-              <div></div>
-              <div></div>
-              <div></div>
-            </div>
-
-            {/* Checkboxes - Primeira linha */}
+            {/* Checkboxes principais (espelham o Delphi) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -1080,53 +1143,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                   checked={formData.calculoCusto}
                   onCheckedChange={(checked) => handleInputChange('calculoCusto', checked)}
                 />
-                <Label htmlFor="calculoCusto" className="text-sm">
-                  Cálculo do Custo
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="descontoIcms"
-                  checked={formData.descontoIcms}
-                  onCheckedChange={(checked) => handleInputChange('descontoIcms', checked)}
-                />
-                <Label htmlFor="descontoIcms" className="text-sm">
-                  Desconto ICMS
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="descontoSt"
-                  checked={formData.descontoSt}
-                  onCheckedChange={(checked) => handleInputChange('descontoSt', checked)}
-                />
-                <Label htmlFor="descontoSt" className="text-sm">
-                  Desconto ST
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="zerarIpi"
-                  checked={formData.zerarIpi}
-                  onCheckedChange={(checked) => handleInputChange('zerarIpi', checked)}
-                />
-                <Label htmlFor="zerarIpi" className="text-sm">
-                  Zerar IPI
-                </Label>
-              </div>
-            </div>
-
-            {/* Checkboxes - Segunda linha */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="zerarSt"
-                  checked={formData.zerarSt}
-                  onCheckedChange={(checked) => handleInputChange('zerarSt', checked)}
-                />
-                <Label htmlFor="zerarSt" className="text-sm">
-                  Zerar ST
-                </Label>
+                <Label htmlFor="calculoCusto" className="text-sm">Cálculo do Custo</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -1134,9 +1151,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                   checked={formData.devolucao}
                   onCheckedChange={(checked) => handleInputChange('devolucao', checked)}
                 />
-                <Label htmlFor="devolucao" className="text-sm">
-                  Devolução ou Retorno de Comodato
-                </Label>
+                <Label htmlFor="devolucao" className="text-sm">Devolução ou Retorno de Comodato</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -1144,12 +1159,31 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                   checked={formData.nfeComplementar}
                   onCheckedChange={(checked) => handleInputChange('nfeComplementar', checked)}
                 />
-                <Label htmlFor="nfeComplementar" className="text-sm">
-                  NFe Complementar
-                </Label>
+                <Label htmlFor="nfeComplementar" className="text-sm">NFe Complementar</Label>
               </div>
-              <div></div>
             </div>
+
+            {/* Cálculo do Custo — campos aparecem só quando marcado (como o modal do Delphi) */}
+            {formData.calculoCusto && (
+              <div className="mt-4 rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/20 p-3 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <PercentInput label="Custo Financeiro" value={formData.custoFinanceiro} onChange={(v) => handleInputChange('custoFinanceiro', v)} />
+                  <PercentInput label="Desconto" value={formData.desconto} onChange={(v) => handleInputChange('desconto', v)} />
+                  <PercentInput label="Acréscimo" value={formData.acrescimo} onChange={(v) => handleInputChange('acrescimo', v)} />
+                  <PercentInput label="Verba Mkt" value={formData.verbaTmk} onChange={(v) => handleInputChange('verbaTmk', v)} />
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="zerarIpi" checked={formData.zerarIpi} onCheckedChange={(checked) => handleInputChange('zerarIpi', checked)} />
+                    <Label htmlFor="zerarIpi" className="text-sm">Zerar IPI</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="zerarSt" checked={formData.zerarSt} onCheckedChange={(checked) => handleInputChange('zerarSt', checked)} />
+                    <Label htmlFor="zerarSt" className="text-sm">Zerar ST</Label>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Campo de devolução (aparece quando checkbox de devolução está marcado) */}
             {formData.devolucao && (
@@ -1200,7 +1234,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
               </div>
             </div>
 
-            {renderMatchBadge(matchFornec, 'Fornecedor', () => setCadFornecAberto(true))}
+            {renderMatchBadge(matchFornec, 'Fornecedor', () => setCadFornecAberto(true), matchFornecList, (m) => escolherMatch('fornecedor', m), nfe.cnpjEmitente)}
 
             {/* Busca do fornecedor cadastrado */}
             {!formData.usarFornecedorNfe && (
@@ -1222,8 +1256,9 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                   <div>
                     <strong>Nome:</strong> {nfe.emitente}
                   </div>
-                  <div>
-                    <strong>CPF/CNPJ:</strong> {nfe.cnpjEmitente}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span><strong>CPF/CNPJ:</strong> {nfe.cnpjEmitente}</span>
+                    <BotaoCopiarCnpj cnpj={nfe.cnpjEmitente} />
                   </div>
                   <div>
                     <strong>Insc. Estadual:</strong> {nfe.emitenteIE || 'NÃO INFORMADO'}
@@ -1278,7 +1313,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
               </div>
             </div>
 
-            {renderMatchBadge(matchTransp, 'Transportadora', () => setCadTranspAberto(true))}
+            {renderMatchBadge(matchTransp, 'Transportadora', () => setCadTranspAberto(true), matchTranspList, (m) => escolherMatch('transportadora', m), transportadoraXml?.cpf_cnpj)}
 
             {/* Busca da transportadora cadastrada */}
             {!formData.usarTransportadoraNfe && (
@@ -1304,7 +1339,10 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                     </div>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">CNPJ/CPF:</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">CNPJ/CPF:</Label>
+                      <BotaoCopiarCnpj cnpj={nfe.cnpjTransportadora} />
+                    </div>
                     <div className="text-sm bg-gray-50 dark:bg-slate-600 p-2 rounded border mt-1">
                       {nfe.cnpjTransportadora || 'NÃO INFORMADO'}
                     </div>

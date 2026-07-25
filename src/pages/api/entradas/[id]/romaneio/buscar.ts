@@ -17,7 +17,7 @@ interface ItemRomaneio {
 }
 
 interface BuscarRomaneioResponse {
-  entrada_id: number;
+  entrada_id: string; // codent
   numero_entrada: string;
   status: string;
   armazem_padrao_id: number;
@@ -49,17 +49,16 @@ export default async function handler(
     const pool = getPgPool('manaus');
     client = await pool.connect();
 
-    // 1. Buscar dados da entrada
+    // 1. Buscar dados da entrada (dbent + workflow)
     const entradaResult = await client.query(`
       SELECT
-        id,
-        numero_entrada,
-        status,
-        nfe_id,
-        COALESCE(est_alocado, 0) as est_alocado
-      FROM db_manaus.entradas_estoque
-      WHERE id = $1
-    `, [parseInt(id)]);
+        e.codent,
+        COALESCE(rec.status, e.status) as status,
+        COALESCE(e.est_alocado, 0) as est_alocado
+      FROM db_manaus.dbent e
+      LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+      WHERE e.codent = $1
+    `, [id]);
 
     if (entradaResult.rows.length === 0) {
       return res.status(404).json({
@@ -69,21 +68,20 @@ export default async function handler(
 
     const entrada = entradaResult.rows[0];
 
-    // 2. Buscar itens da entrada com informações do produto
+    // 2. Buscar itens da entrada (dbitent) com informações do produto
     const itensResult = await client.query(`
       SELECT
-        ei.id,
-        ei.produto_cod,
+        ie.codprod AS produto_cod,
         p.ref AS produto_ref,
         p.descr AS produto_descr,
-        ei.quantidade AS quantidade_total,
+        ie.quant AS quantidade_total,
         COALESCE(p.multiplo, 1) AS multiplo,
-        ei.req_id
-      FROM db_manaus.entrada_itens ei
-      LEFT JOIN db_manaus.dbprod p ON ei.produto_cod = p.codprod
-      WHERE ei.entrada_id = $1
-      ORDER BY ei.id
-    `, [parseInt(id)]);
+        ie.codreq AS req_id
+      FROM db_manaus.dbitent ie
+      LEFT JOIN db_manaus.dbprod p ON ie.codprod = p.codprod
+      WHERE ie.codent = $1
+      ORDER BY ie.codprod
+    `, [id]);
 
     // 3. Verificar se já existe romaneio salvo
     const romaneioResult = await client.query(`
@@ -96,7 +94,7 @@ export default async function handler(
       INNER JOIN db_manaus.cad_armazem ca ON da.arm_id = ca.arm_id
       WHERE da.codent = $1
       ORDER BY da.codprod, da.arm_id
-    `, [entrada.numero_entrada]);
+    `, [entrada.codent]);
 
     // 4. Organizar romaneio por produto
     const romaneioMap: { [produto_cod: string]: RomaneioItem[] } = {};
@@ -123,8 +121,8 @@ export default async function handler(
     }));
 
     return res.status(200).json({
-      entrada_id: entrada.id,
-      numero_entrada: entrada.numero_entrada,
+      entrada_id: entrada.codent,
+      numero_entrada: entrada.codent,
       status: entrada.status,
       armazem_padrao_id: 1003,
       armazem_padrao_nome: 'PADRAO_SISTEMA',

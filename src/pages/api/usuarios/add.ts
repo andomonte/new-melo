@@ -20,6 +20,7 @@ interface FilialPayload {
   codigo_filial: number | string;
   nome_filial: string;
   codvend?: string | null;
+  codcomprador?: string | null;
   funcoesDoUsuario?: Funcao[];
   armazens?: ArmazemDoPayload[];
 }
@@ -71,7 +72,7 @@ export default async function handle(
 
     // 1) Usuário
     await client.query(
-      `INSERT INTO tb_login_user 
+      `INSERT INTO tb_login_user
         (login_user_login, login_user_name, login_user_password)
        VALUES ($1, $2, $3)`,
       [login_user_login, login_user_name, hashedPassword],
@@ -90,15 +91,16 @@ export default async function handle(
 
         // 2.1) tb_user_perfil
         await client.query(
-          `INSERT INTO tb_user_perfil 
-            (user_login_id, perfil_name, codigo_filial, nome_filial, codvend)
-           VALUES ($1, $2, $3, $4, $5)`,
+          `INSERT INTO tb_user_perfil
+            (user_login_id, perfil_name, codigo_filial, nome_filial, codvend, codcomprador)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             login_user_login,
             perfil.perfil_name,
             codigoFilial,
             filial.nome_filial,
             filial.codvend ?? null,
+            filial.codcomprador ?? null,
           ],
         );
 

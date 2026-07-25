@@ -97,6 +97,34 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
     }
   }, [showEditProdutosModal, produtosSelecionados]);
 
+  // Auto-preenche o comprador pelo login logado (paridade com o Delphi, que traz
+  // o comprador do operador). Só em requisição nova (sem duplicação) e enquanto
+  // o campo estiver vazio.
+  useEffect(() => {
+    if (!isOpen || initialData || !user?.usuario) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await api.get('/api/usuarios/meu-comprador', {
+          params: { login: user.usuario, filial: user.filial },
+        });
+        const c = r.data;
+        if (!cancelado && c?.codcomprador) {
+          setFormData(prev =>
+            prev.comprador_codigo
+              ? prev
+              : { ...prev, comprador_codigo: String(c.codcomprador), comprador_nome: c.nome || '' },
+          );
+        }
+      } catch {
+        // sem comprador vinculado ao login — segue sem pré-preencher
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [isOpen, initialData, user?.usuario]);
+
   // Preencher dados quando tiver initialData (duplicação)
   useEffect(() => {
     if (isOpen && initialData && filiais.length > 0 && tipos.length > 0) {

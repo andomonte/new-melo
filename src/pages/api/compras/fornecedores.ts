@@ -32,40 +32,50 @@ export default async function handler(
   const page = parseInt((req.query.page as string) ?? '1', 10);
   const perPage = parseInt((req.query.perPage as string) ?? '50', 10);
   const search = (req.query.search as string) ?? '';
+  const tipo = (req.query.tipo as string) ?? '';
   const offset = (page - 1) * perPage;
+
+  // Transportadoras ficam em dbtransp (colunas codtransp/cpfcgc/ender), fornecedores
+  // em dbcredor. Antes o endpoint ignorava o "tipo" e sempre buscava dbcredor — por
+  // isso a busca de transportadora não encontrava nada.
+  const isTransp = tipo === 'transportadora';
+  const tabela = isTransp ? 'db_manaus.dbtransp' : 'db_manaus.dbcredor';
+  const colCod = isTransp ? 'codtransp' : 'cod_credor';
+  const colFant = isTransp ? 'nomefant' : 'nome_fant';
+  const colDoc = isTransp ? 'cpfcgc' : 'cpf_cgc';
+  const colEnder = isTransp ? 'ender' : 'endereco';
 
   try {
     const client = await pool.connect();
-    
+
     let whereSQL = '';
     const params: Array<string | number> = [];
 
     if (search) {
       // O CNPJ está gravado em formatos diferentes ('45.990.181/0001-89' e
       // '45990181000189'). Comparar só com ILIKE encontrava apenas os sem
-      // pontuação — por isso a tela avisava "vários cadastros" mas a busca
-      // trazia um só. Aqui comparamos também os dígitos normalizados.
+      // pontuação. Aqui comparamos também os dígitos normalizados.
       whereSQL = `
-        WHERE cod_credor ILIKE $1
+        WHERE ${colCod} ILIKE $1
            OR nome ILIKE $1
-           OR nome_fant ILIKE $1
-           OR cpf_cgc ILIKE $1
-           OR ($2 <> '' AND regexp_replace(COALESCE(cpf_cgc, ''), '[^0-9]', '', 'g') LIKE '%' || $2 || '%')
+           OR ${colFant} ILIKE $1
+           OR ${colDoc} ILIKE $1
+           OR ($2 <> '' AND regexp_replace(COALESCE(${colDoc}, ''), '[^0-9]', '', 'g') LIKE '%' || $2 || '%')
       `;
       params.push(`%${search}%`, search.replace(/\D/g, ''));
     }
 
-    // Query principal
+    // Query principal (aliases normalizam a saída para o mesmo formato)
     const fornecedoresQuery = `
-      SELECT 
-        cod_credor,
+      SELECT
+        ${colCod} AS cod_credor,
         nome,
-        nome_fant,
-        cpf_cgc,
-        endereco,
+        ${colFant} AS nome_fant,
+        ${colDoc} AS cpf_cgc,
+        ${colEnder} AS endereco,
         cidade,
         uf
-      FROM db_manaus.dbcredor 
+      FROM ${tabela}
       ${whereSQL}
       ORDER BY nome
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
@@ -73,8 +83,8 @@ export default async function handler(
 
     // Query para contar total
     const countQuery = `
-      SELECT COUNT(*) as total 
-      FROM db_manaus.dbcredor 
+      SELECT COUNT(*) as total
+      FROM ${tabela}
       ${whereSQL}
     `;
 

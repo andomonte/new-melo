@@ -63,6 +63,7 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
   const [nfes, setNfes] = useState<NFEProcessada[]>([]);
   const [filtro, setFiltro] = useState('');
   const [nfeSelecionada, setNfeSelecionada] = useState<NFEProcessada | null>(null);
+  const [informarSelo, setInformarSelo] = useState(false); // opcional (Delphi: checkbox)
   const [numeroSelo, setNumeroSelo] = useState('');
   const [dataSelo, setDataSelo] = useState<string>(new Date().toISOString().split('T')[0]); // Data atual como padrão
   const [numeroConhecimento, setNumeroConhecimento] = useState('');
@@ -214,44 +215,53 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('/api/entrada-xml/gerar-entrada', {
+      // 1) Persiste Selo + Conhecimento (Delphi: Inc_ConhecimentoEnt + selo no dbent).
+      const respSelo = await fetch('/api/entrada-xml/salvar-conhecimento-selo', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          nfeId: nfeSelecionada.id,  // Usar ID da NFe, não a chave
-          dados: {
-            informarSelo: !!numeroSelo,
-            numeroSelo: numeroSelo || '',
-            dataSelo: (numeroSelo && dataSelo) ? dataSelo : null, // ✅ Incluir data do selo
-            temConhecimento: temConhecimento,
-            numeroConhecimento: dadosConhecimento?.nrocon || numeroConhecimento || '',
-            observacoes: observacoes || '',
-            // Dados do conhecimento/frete
-            codtransp: dadosConhecimento?.codtransp,
-            fretecif: dadosConhecimento?.cif,
-            totaltransp: dadosConhecimento?.totaltransp,
-            totcon: dadosConhecimento?.totalcon,
-            dtcon: dadosConhecimento?.dtcon,
-          },
-          // Dados completos do conhecimento para cadastro na tabela dbconhecimentoent
-          conhecimento: temConhecimento ? dadosConhecimento : null
+          nfeId: nfeSelecionada.id,
+          codtransp: dadosConhecimento?.codtransp || null,
+          selo: numeroSelo || null,
+          dtselo: (numeroSelo && dataSelo) ? dataSelo : null,
+          temConhecimento,
+          conhecimento: temConhecimento ? dadosConhecimento : null,
         }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erro ao gerar entrada');
+      if (!respSelo.ok) {
+        const e = await respSelo.json().catch(() => ({}));
+        throw new Error(e.error || 'Falha ao salvar selo/conhecimento');
       }
 
-      toast.success('NFe processada com sucesso!', {
-        description: data.message || 'Para gerar a entrada, acesse a tela de Entradas de Mercadorias.'
+      // 2) Marca a NFe como processada (exec='S').
+      const response = await fetch('/api/entrada-xml/gerar-entrada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nfeId: nfeSelecionada.id }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || data.message || 'Erro ao processar XML');
+      }
+
+      // 3) Gera a entrada de estoque (dbent) — grava selo/conhecimento; custo entra
+      //    no Confirmar Preço/Estoque.
+      const rGerar = await fetch('/api/entradas/gerar-por-chave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nfeId: nfeSelecionada.id }),
+      });
+      const dGerar = await rGerar.json();
+      if (!rGerar.ok || !dGerar.success) {
+        throw new Error(dGerar.error || 'Não foi possível gerar a entrada');
+      }
+
+      toast.success('Entrada gerada com sucesso!', {
+        description: `Entrada ${dGerar.numeroEntrada} criada. Confirme o preço e o estoque na tela de Entradas de Mercadorias.`,
       });
 
       if (onEntradaGerada) {
-        onEntradaGerada(0, '', nfeSelecionada.id);
+        onEntradaGerada(Number(dGerar.entradaId) || 0, dGerar.numeroEntrada || '', nfeSelecionada.id);
       }
 
       onClose();
@@ -309,6 +319,12 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Só notas com associação concluída podem gerar entrada (as pendentes ficam
+  // fora desta tela — associação é passo anterior).
+  const nfesAssociadas = nfes.filter(
+    (n) => n.statusDisplay === 'Associação concluída',
+  );
+
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -316,7 +332,7 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
-            Processar XML
+            Gerar Entrada
           </h2>
           <button
             onClick={onClose}
@@ -367,16 +383,19 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="mt-2 text-gray-600 dark:text-gray-400">Carregando NFes...</p>
               </div>
-            ) : nfes.length === 0 ? (
+            ) : nfesAssociadas.length === 0 ? (
               <div className="p-8 text-center">
                 <FileText className="mx-auto h-12 w-12 text-gray-400" />
                 <p className="mt-2 text-gray-600 dark:text-gray-400">
-                  Nenhuma NFe encontrada para gerar entrada
+                  Nenhuma NFe associada disponível para gerar entrada
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+                  Associe os itens da NFe antes de gerar a entrada.
                 </p>
               </div>
             ) : (
               <div className="p-4 space-y-2">
-                {nfes.map((nfe) => (
+                {nfesAssociadas.map((nfe) => (
                   <div
                     key={nfe.id}
                     onClick={() => setNfeSelecionada(nfe)}
@@ -509,111 +528,116 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-700 dark:text-gray-300">Informações da Entrada</h4>
 
-                  {/* Seção do Selo */}
+                  {/* Seção do Selo — opcional (Delphi: checkbox "Informar Selo") */}
                   <div className="space-y-3 p-4 border border-gray-200 dark:border-zinc-700 rounded-lg">
-                    <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Selo da Nota Fiscal
-                    </h5>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Número do Selo
-                      </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-gray-700 dark:text-gray-300">
                       <input
-                        type="text"
-                        value={numeroSelo}
-                        onChange={(e) => setNumeroSelo(e.target.value)}
-                        placeholder="Informe o número do selo"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white"
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={informarSelo}
+                        onChange={(e) => {
+                          setInformarSelo(e.target.checked);
+                          if (!e.target.checked) setNumeroSelo('');
+                        }}
                       />
-                    </div>
+                      Informar Selo
+                    </label>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Data do Selo
-                      </label>
-                      <input
-                        type="date"
-                        value={dataSelo}
-                        onChange={(e) => setDataSelo(e.target.value)}
-                        max={new Date().toISOString().split('T')[0]} // Não permite data futura
-                        disabled={!numeroSelo || numeroSelo.trim() === ''}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                      />
-                      {numeroSelo && numeroSelo.trim() !== '' && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Data do selo não pode ser maior que hoje
-                        </p>
-                      )}
-                    </div>
+                    {informarSelo && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Número do Selo
+                          </label>
+                          <input
+                            type="text"
+                            value={numeroSelo}
+                            onChange={(e) => setNumeroSelo(e.target.value)}
+                            placeholder="Informe o número do selo"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Data do Selo
+                          </label>
+                          <input
+                            type="date"
+                            value={dataSelo}
+                            onChange={(e) => setDataSelo(e.target.value)}
+                            max={new Date().toISOString().split('T')[0]} // Não permite data futura
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white"
+                          />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Data do selo não pode ser maior que hoje
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
 
-                  {/* Seção de Conhecimento de Transporte - Verificação Automática */}
-                  <div>
-                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                      <Truck className="h-5 w-5 text-blue-600" />
-                      Conhecimento de Transporte (CTe)
-                    </h4>
+                  {/* Conhecimento — opcional (Delphi: checkbox "Tem Conhecimento") */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer font-medium text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={temConhecimento}
+                        onChange={(e) => {
+                          setTemConhecimento(e.target.checked);
+                          if (!e.target.checked) setDadosConhecimento(null);
+                        }}
+                      />
+                      <Truck className="h-4 w-4 text-blue-600" />
+                      Tem Conhecimento
+                    </label>
 
-                    {verificandoConhecimento ? (
-                      <div className="p-4 border border-gray-300 dark:border-zinc-600 rounded-lg">
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                          <span className="text-sm">Verificando conhecimento...</span>
-                        </div>
-                      </div>
-                    ) : statusConhecimento === 'pendente' && dadosConhecimento ? (
-                      <div className="p-4 border border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700 rounded-lg">
-                        <div className="flex items-center gap-2 text-green-700 dark:text-green-300 mb-2">
-                          <CheckCircle className="h-5 w-5" />
-                          <span className="font-medium">Conhecimento encontrado automaticamente</span>
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                          <p><strong>CTe:</strong> {dadosConhecimento.nrocon} / {dadosConhecimento.serie}</p>
-                          <p><strong>Tipo:</strong> {dadosConhecimento.cif === 'S' ? 'CIF (frete fornecedor)' : 'FOB (frete comprador)'}</p>
-                          <p><strong>Valor:</strong> R$ {dadosConhecimento.totalcon.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                        <button
-                          onClick={() => setShowCadastroConhecimento(true)}
-                          className="mt-3 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
-                        >
-                          Editar conhecimento
-                        </button>
-                      </div>
-                    ) : temConhecimento && dadosConhecimento ? (
-                      <div className="p-4 border border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700 rounded-lg">
-                        <div className="flex items-center gap-2 text-green-700 dark:text-green-300 mb-2">
-                          <CheckCircle className="h-5 w-5" />
-                          <span className="font-medium">Conhecimento configurado</span>
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                          <p><strong>CTe:</strong> {dadosConhecimento.nrocon} / {dadosConhecimento.serie}</p>
-                          <p><strong>Tipo:</strong> {dadosConhecimento.cif === 'S' ? 'CIF (frete fornecedor)' : 'FOB (frete comprador)'}</p>
-                          <p><strong>Valor:</strong> R$ {dadosConhecimento.totalcon.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                        <button
-                          onClick={() => setShowCadastroConhecimento(true)}
-                          className="mt-3 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
-                        >
-                          Editar conhecimento
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-4 border border-gray-300 dark:border-zinc-600 rounded-lg">
-                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mb-3">
-                          <AlertCircle className="h-5 w-5" />
-                          <span className="text-sm font-medium">Nenhum conhecimento encontrado</span>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
-                          Se esta entrada possui CTe, cadastre manualmente ou faça upload do XML.
-                        </p>
-                        <button
-                          onClick={() => setShowCadastroConhecimento(true)}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center gap-2"
-                        >
-                          <Truck size={16} />
-                          Cadastrar Conhecimento
-                        </button>
+                    {temConhecimento && (
+                      <div className="pl-6">
+                        {verificandoConhecimento ? (
+                          <div className="p-4 border border-gray-300 dark:border-zinc-600 rounded-lg">
+                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              <span className="text-sm">Verificando conhecimento...</span>
+                            </div>
+                          </div>
+                        ) : dadosConhecimento ? (
+                          <div className="p-4 border border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700 rounded-lg">
+                            <div className="flex items-center gap-2 text-green-700 dark:text-green-300 mb-2">
+                              <CheckCircle className="h-5 w-5" />
+                              <span className="font-medium">
+                                {statusConhecimento === 'pendente'
+                                  ? 'Conhecimento encontrado automaticamente'
+                                  : 'Conhecimento configurado'}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                              <p><strong>CTe:</strong> {dadosConhecimento.nrocon} / {dadosConhecimento.serie}</p>
+                              <p><strong>Tipo:</strong> {dadosConhecimento.cif === 'S' ? 'CIF (frete fornecedor)' : 'FOB (frete comprador)'}</p>
+                              <p><strong>Valor:</strong> R$ {dadosConhecimento.totalcon.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            </div>
+                            <button
+                              onClick={() => setShowCadastroConhecimento(true)}
+                              className="mt-3 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                            >
+                              Editar conhecimento
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="p-4 border border-gray-300 dark:border-zinc-600 rounded-lg">
+                            <p className="text-xs text-gray-500 dark:text-gray-500 mb-3">
+                              Cadastre os dados do conhecimento (CTe) ou faça upload do XML.
+                            </p>
+                            <button
+                              onClick={() => setShowCadastroConhecimento(true)}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm flex items-center justify-center gap-2"
+                            >
+                              <Truck size={16} />
+                              Cadastrar Conhecimento
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -640,18 +664,18 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
                   {gerando ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Processando XML...
+                      Gerando entrada...
                     </>
                   ) : (
                     <>
                       <Package size={16} />
-                      Processar XML
+                      Gerar Entrada
                     </>
                   )}
                 </button>
                 {!nfeSelecionada.pagamento_configurado && (
                   <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center mt-2">
-                    Configure o pagamento da NFe para habilitar o processamento
+                    Configure o pagamento da NFe para habilitar a geração da entrada
                   </p>
                 )}
               </div>

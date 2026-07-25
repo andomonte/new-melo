@@ -22,6 +22,7 @@ import { getTodasFiliais } from '@/data/filiais/filiais';
 import { getTodasFuncoes } from '@/data/funcoes/funcoes';
 import { Vendedor } from '@/data/vendedores/vendedores';
 import { Armazem, getTodosArmazens } from '@/data/armazem/armazens';
+import SelectPadrao from '@/components/common/SelectPadrao';
 
 interface Funcao {
   id_functions: number;
@@ -55,6 +56,7 @@ interface ItemAdicionado {
       codigo_filial: string;
       nome_filial: string;
       codvend?: string | null;
+      codcomprador?: string | null;
       armazens?: Armazem[];
       funcoesDoUsuario: Funcao[];
     }[];
@@ -81,6 +83,46 @@ export default function FormEditarUsuario({
   }>({});
   const [loginUser, setLoginUser] = useState(usuario.login_user_login || '');
   const [nomeUser, setNomeUser] = useState(usuario.login_user_name || '');
+  // Comprador por perfil/filial (igual ao Vendedor). Lista de opções para o
+  // select ao lado do Vendedor; o valor escolhido é adicionado à linha.
+  const [compradoresOpts, setCompradoresOpts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [loadingCompradores, setLoadingCompradores] = useState(false);
+
+  const buscarCompradores = useCallback(async (termo: string) => {
+    setLoadingCompradores(true);
+    try {
+      const resp = await fetch(
+        `/api/compradores/get?page=1&perPage=50&search=${encodeURIComponent(termo)}`,
+      );
+      const json = await resp.json();
+      const lista = (json.data ?? []).map((c: any) => ({
+        value: String(c.codcomprador),
+        label: `${c.codcomprador} - ${c.nome}`,
+      }));
+      setCompradoresOpts(lista);
+    } catch (e) {
+      console.error('Erro ao buscar compradores:', e);
+    } finally {
+      setLoadingCompradores(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    buscarCompradores('');
+  }, [buscarCompradores]);
+
+  // rótulo de um comprador pelo código (para exibir na coluna da tabela)
+  const labelComprador = useCallback(
+    (cod?: string | null) => {
+      if (!cod) return '';
+      const o = compradoresOpts.find((x) => x.value === String(cod));
+      return o ? o.label : String(cod);
+    },
+    [compradoresOpts],
+  );
+
   const [showModalFuncoes, setShowModalFuncoes] = useState(false);
   const [showModalArmazens, setShowModalArmazens] = useState(false);
   const [funcoesDisponiveis, setFuncoesDisponiveis] = useState<Funcao[]>([]);
@@ -93,6 +135,7 @@ export default function FormEditarUsuario({
   const [perfilSelecionado, setPerfilSelecionado] = useState<string>('');
   const [filialSelecionada, setFilialSelecionada] = useState<string>('');
   const [codvendInput, setCodvendInput] = useState<string | null>(null);
+  const [compradorInput, setCompradorInput] = useState<string | null>(null);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [filiaisOptions, setFiliaisOptions] = useState<
@@ -121,6 +164,7 @@ export default function FormEditarUsuario({
             codigo_filial: filial.codigo_filial,
             nome_filial: filial.nome_filial,
             codvend: filial.codvend ?? null,
+            codcomprador: filial.codcomprador ?? null,
             armazens: filial.armazens ?? [],
             funcoesDoUsuario: filial.funcoesDoUsuario ?? [],
           })),
@@ -147,7 +191,7 @@ export default function FormEditarUsuario({
                 .join(',');
               return `${f.codigo_filial}|${f.nome_filial}|${
                 f.codvend ?? ''
-              }|[${armazens}]|[${funcoes}]`;
+              }|${f.codcomprador ?? ''}|[${armazens}]|[${funcoes}]`;
             })
             .sort()
             .join(';');
@@ -194,6 +238,7 @@ export default function FormEditarUsuario({
           codigo_filial: filial.codigo_filial,
           nome_filial: filial.nome_filial,
           codvend: filial.codvend ?? null,
+          codcomprador: filial.codcomprador ?? null,
           armazens: filial.armazens ?? [],
           funcoesDoUsuario: filial.funcoesDoUsuario ?? [],
         })),
@@ -237,6 +282,7 @@ export default function FormEditarUsuario({
         setFilialSelecionada('');
         setFuncoesSelecionadas([]);
         setCodvendInput(null);
+        setCompradorInput(null);
         setItensAtivados({});
         // Limpa armazém selecionado
       }
@@ -290,6 +336,7 @@ export default function FormEditarUsuario({
         nome_filial: filialSelecionada,
         codigo_filial: codigoFilial,
         codvend: codvendInput ?? null,
+        codcomprador: compradorInput ?? null,
         armazens: armazensSelecionados[filialSelecionada] ?? [],
         funcoesDoUsuario: funcoesSelecionadas,
       };
@@ -331,6 +378,7 @@ export default function FormEditarUsuario({
       setPerfilSelecionado('');
       setFilialSelecionada('');
       setCodvendInput(null);
+      setCompradorInput(null);
       setFuncoesSelecionadas([]);
       setItensAtivados({});
 
@@ -428,6 +476,7 @@ export default function FormEditarUsuario({
     );
 
     setCodvendInput(filial?.codvend ?? null);
+    setCompradorInput(filial?.codcomprador ?? null);
 
     // Reativa a linha (ícone sun)
     if (filialSelecionada) {
@@ -467,6 +516,7 @@ export default function FormEditarUsuario({
       );
 
       setCodvendInput(filialExistente?.codvend ?? null);
+      setCompradorInput(filialExistente?.codcomprador ?? null);
 
       if (filialExistente?.armazens) {
         setArmazensSelecionados((prev) => ({
@@ -480,6 +530,7 @@ export default function FormEditarUsuario({
       setPerfilSelecionado('');
       setFuncoesSelecionadas([]);
       setCodvendInput(null);
+      setCompradorInput(null);
     }
   };
 
@@ -500,6 +551,7 @@ export default function FormEditarUsuario({
     setFilialSelecionada('');
     setFuncoesSelecionadas([]);
     setCodvendInput(null);
+    setCompradorInput(null);
     setItensAtivados({});
     setHasChanges(false);
     // Limpa armazém selecionado
@@ -619,6 +671,7 @@ export default function FormEditarUsuario({
       setFilialSelecionada('');
       setFuncoesSelecionadas([]);
       setCodvendInput(null);
+      setCompradorInput(null);
       // Limpa armazém selecionado
     } else {
       const funcoesNormalizadas: Funcao[] = funcoes.map((funcao) => ({
@@ -647,6 +700,7 @@ export default function FormEditarUsuario({
       }
 
       const codvendDoItemAtivado = filialEncontrada?.codvend ?? null;
+      const codcompradorDoItemAtivado = filialEncontrada?.codcomprador ?? null;
       // Obter ID do armazém do item ativado (para seleção única)
       const chave = filialName;
       if (filialEncontrada?.armazens) {
@@ -664,6 +718,12 @@ export default function FormEditarUsuario({
       setCodvendInput(
         codvendDoItemAtivado !== null && codvendDoItemAtivado !== undefined
           ? String(codvendDoItemAtivado)
+          : null,
+      );
+      setCompradorInput(
+        codcompradorDoItemAtivado !== null &&
+          codcompradorDoItemAtivado !== undefined
+          ? String(codcompradorDoItemAtivado)
           : null,
       );
     }
@@ -721,6 +781,7 @@ export default function FormEditarUsuario({
     );
 
     const codvendItemNaLista = filialNaLista?.codvend ?? null;
+    const codcompradorItemNaLista = filialNaLista?.codcomprador ?? null;
     const armazensItemNaLista: Armazem[] = filialNaLista?.armazens ?? [];
 
     const funcoesAtuais = funcoesSelecionadas.map((funcao) => ({
@@ -746,6 +807,9 @@ export default function FormEditarUsuario({
     const codvendMudou =
       String(codvendInput ?? '') !== String(codvendItemNaLista ?? '');
 
+    const compradorMudou =
+      String(compradorInput ?? '') !== String(codcompradorItemNaLista ?? '');
+
     const armazemAtual: Armazem[] = armazensSelecionados[chave] ?? [];
 
     const armazensMudaram = !areArmazensEqual(
@@ -753,7 +817,7 @@ export default function FormEditarUsuario({
       armazensItemNaLista,
     );
 
-    return funcoesMudaram || codvendMudou || armazensMudaram;
+    return funcoesMudaram || codvendMudou || compradorMudou || armazensMudaram;
   })();
 
   const armazensFiltradosDaFilialSelecionada = (): Armazem[] => {
@@ -931,6 +995,25 @@ export default function FormEditarUsuario({
                 ) : null}
               </div>
 
+              {/* Comprador por perfil/filial — opcional, igual ao Vendedor.
+                  Pré-preenche o comprador na Confirmação da NFe e na Requisição
+                  conforme o login e a filial. */}
+              <div className="w-[25%]">
+                <label className="block mb-1 text-sm font-medium">
+                  Comprador <span className="ml-1">(opcional)</span>
+                </label>
+                <SelectPadrao
+                  searchable
+                  name="codcomprador"
+                  placeholder="Selecione um comprador"
+                  options={compradoresOpts}
+                  value={compradorInput ?? ''}
+                  onValueChange={(v) => setCompradorInput(v || null)}
+                  onInputChange={(termo) => buscarCompradores(termo)}
+                  loading={loadingCompradores}
+                />
+              </div>
+
               {/* Ajuste para seleção ÚNICA de Armazéns - REMOVIDO 'multiple' */}
               <div className="w-[25%] flex justify-center items-end">
                 <button
@@ -975,7 +1058,7 @@ export default function FormEditarUsuario({
           </div>
 
           <div className="mt-4  rounded-lg border border-gray-300 dark:border-gray-600 shadow h-[calc(100vh-330px)] flex flex-col">
-            <div className="bg-gray-200 dark:bg-gray-700 p-2 grid grid-cols-6 gap-4 border-b border-gray-300 dark:border-gray-600">
+            <div className="bg-gray-200 dark:bg-gray-700 p-2 grid grid-cols-7 gap-4 border-b border-gray-300 dark:border-gray-600">
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Perfil
               </div>
@@ -984,6 +1067,9 @@ export default function FormEditarUsuario({
               </div>
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Vendedor
+              </div>
+              <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
+                Comprador
               </div>
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Armazéns
@@ -1006,7 +1092,7 @@ export default function FormEditarUsuario({
                   return (
                     <div
                       key={key}
-                      className={`grid grid-cols-6 gap-4 p-2 border-b dark:border-gray-700 text-sm ${
+                      className={`grid grid-cols-7 gap-4 p-2 border-b dark:border-gray-700 text-sm ${
                         isAtivado ? 'bg-blue-100 dark:bg-blue-900' : ''
                       }`}
                     >
@@ -1021,6 +1107,11 @@ export default function FormEditarUsuario({
                           ? vendedores.find(
                               (v) => String(v.codvend) === filial.codvend,
                             )?.nome || filial.codvend
+                          : 'N/A'}
+                      </div>
+                      <div className="flex items-center justify-center text-center">
+                        {filial.codcomprador
+                          ? labelComprador(filial.codcomprador)
                           : 'N/A'}
                       </div>
                       <div className="flex items-center justify-center text-center">

@@ -73,6 +73,8 @@ interface DataTableProps {
     icon: React.ReactNode;
     onClick: () => void;
   }[];
+  // Slot à direita da busca (ex.: dropdown de status)
+  searchRightSlot?: React.ReactNode;
 }
 
 export default function DataTableNFe({
@@ -95,6 +97,7 @@ export default function DataTableNFe({
   exportEndpoint,
   exportFileName = 'dados.xlsx',
   customActions = [],
+  searchRightSlot,
 }: DataTableProps) {
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<
@@ -211,6 +214,9 @@ export default function DataTableNFe({
           />
 
           <div className="flex items-center gap-2">
+            {/* Slot à direita da busca (ex.: filtro rápido por status) */}
+            {searchRightSlot}
+
             {/* Modal de Filtros Avançados */}
             <Dialog
               open={mostrarModalFiltro}

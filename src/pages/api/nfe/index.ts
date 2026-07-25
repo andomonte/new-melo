@@ -162,10 +162,15 @@ export default async function handle(
         t.xnome as transportadora_nome, t.cpf_cnpj as transportadora_cnpj,
         t.ie as transportadora_ie, t.xender as transportadora_endereco,
         t.xmun as transportadora_municipio, t.uf as transportadora_uf,
-        t.placa as transportadora_placa
+        t.placa as transportadora_placa,
+        ent.codent
       FROM dbnfe_ent n
       LEFT JOIN dbnfe_ent_emit e ON n.codnfe_ent = e.codnfe_ent
       LEFT JOIN dbnfe_ent_tran t ON n.codnfe_ent = t.codnfe_ent
+      LEFT JOIN LATERAL (
+        SELECT STRING_AGG(d.codent::text, ', ' ORDER BY d.codent) AS codent
+        FROM dbent d WHERE d.chave = n.chave
+      ) ent ON true
       ${whereSQL}
       ORDER BY n.dtimport DESC, n.demi DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -205,6 +210,7 @@ export default async function handle(
         numeroNF: nfe.nnf ? nfe.nnf.toString() : '',
         serie: nfe.serie ? nfe.serie.toString() : '',
         chaveNFe: nfe.chave || '',
+        codent: nfe.codent || null, // nº da entrada gerada (dbent), quando houver
         versao: nfe.versao || '4.00',
         cuf: nfe.cuf || 0,
         protocolo: nfe.nprot || '',

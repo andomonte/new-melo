@@ -21,6 +21,7 @@ interface Filial {
   codigo_filial: string; // Vem como string do frontend
   nome_filial: string;
   codvend?: string | null;
+  codcomprador?: string | null;
   armazens?: Armazem[]; // <<--- CORREÇÃO: ADICIONADO AQUI
   funcoesDoUsuario: Funcao[];
 }
@@ -113,14 +114,15 @@ export default async function handle(
       for (const filial of perfil.filial) {
         await client.query(
           `INSERT INTO tb_user_perfil
-           (user_login_id, perfil_name, codigo_filial, nome_filial, codvend)
-           VALUES ($1, $2, $3, $4, $5)`,
+           (user_login_id, perfil_name, codigo_filial, nome_filial, codvend, codcomprador)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             login_user_login,
             perfil.perfil_name,
             Number(filial.codigo_filial),
             filial.nome_filial,
             filial.codvend ?? null,
+            filial.codcomprador ?? null,
           ],
         );
       }

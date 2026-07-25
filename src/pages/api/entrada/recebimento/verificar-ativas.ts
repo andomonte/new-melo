@@ -13,7 +13,7 @@ import { PoolClient } from 'pg';
 
 interface EntradaAtiva {
   id: number;
-  entrada_id: number;
+  entrada_id: string; // codent
   numero_entrada: string;
   nfe_numero: string;
   nfe_serie: string;
@@ -37,27 +37,22 @@ interface VerificarAtivasResponse {
 const ATIVAS_QUERY = `
   SELECT
     op.id,
-    e.id as entrada_id,
-    e.numero_entrada,
+    e.codent as entrada_id,
+    e.codent as numero_entrada,
     COALESCE(n.nnf::text, '') as nfe_numero,
     COALESCE(n.serie::text, '') as nfe_serie,
     COALESCE(emit.xnome, 'Fornecedor nao identificado') as fornecedor,
-    COALESCE(e.valor_total, 0) as valor_total,
-    COALESCE(item_count.total, 0) as qtd_itens,
-    e.created_at as data_entrada,
+    COALESCE(e.totalnf, 0) as valor_total,
+    COALESCE((SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent), 0) as qtd_itens,
+    e.dtent as data_entrada,
     op.status,
     'Em Recebimento' as status_label,
     op.recebedor_nome,
     op.inicio_recebimento
-  FROM entrada_operacoes op
-  INNER JOIN entradas_estoque e ON e.id = op.entrada_id
-  LEFT JOIN dbnfe_ent n ON e.nfe_id::varchar = n.codnfe_ent::varchar
-  LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
-  LEFT JOIN (
-    SELECT entrada_id, COUNT(*) as total
-    FROM entrada_itens
-    GROUP BY entrada_id
-  ) item_count ON item_count.entrada_id = e.id
+  FROM db_manaus.entrada_operacoes op
+  INNER JOIN db_manaus.dbent e ON e.codent = op.codent
+  LEFT JOIN db_manaus.dbnfe_ent n ON n.chave = e.chave
+  LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
   WHERE op.recebedor_matricula = $1
     AND op.status = 'EM_RECEBIMENTO'
   ORDER BY op.inicio_recebimento DESC
@@ -90,7 +85,7 @@ export default async function handler(
 
     const recebimentosAtivos: EntradaAtiva[] = result.rows.map(row => ({
       id: parseInt(row.id),
-      entrada_id: parseInt(row.entrada_id),
+      entrada_id: row.entrada_id, // codent
       numero_entrada: row.numero_entrada,
       nfe_numero: row.nfe_numero,
       nfe_serie: row.nfe_serie,
