@@ -59,7 +59,6 @@ export const EntradasModals: React.FC<EntradasModalsProps> = ({
           isOpen={isNewOpen}
           onClose={onNewClose}
           onSuccess={onNewSuccess}
-          loading={actionLoading}
         />
       )}
 
@@ -92,7 +91,8 @@ export const EntradasModals: React.FC<EntradasModalsProps> = ({
       {itensItem && (
         <EntradaItensModal
           isOpen={!!itensItem}
-          entrada={itensItem}
+          entradaId={String(itensItem.id)}
+          numeroEntrada={itensItem.numeroEntrada || itensItem.numeroNF || String(itensItem.id)}
           onClose={onItensClose}
         />
       )}

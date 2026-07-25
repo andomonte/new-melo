@@ -29,6 +29,7 @@ interface EntradasFiltersProps {
   onSearchBlur: () => void;
   onFiltroChange: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
   onToggleFiltrosRapidos: () => void;
+  searchRightSlot?: React.ReactNode;
 }
 
 export const EntradasFilters: React.FC<EntradasFiltersProps> = ({
@@ -41,6 +42,7 @@ export const EntradasFilters: React.FC<EntradasFiltersProps> = ({
   onSearchBlur,
   onFiltroChange,
   onToggleFiltrosRapidos,
+  searchRightSlot,
 }) => {
   const { toast } = useToast();
   const [mostrarModalExportar, setMostrarModalExportar] = useState(false);
@@ -92,6 +94,9 @@ export const EntradasFilters: React.FC<EntradasFiltersProps> = ({
         />
 
         <div className="flex items-center gap-2">
+          {/* Slot à direita da busca (filtro rápido por status) */}
+          {searchRightSlot}
+
           {/* Modal de Filtros Avancados */}
           <Dialog open={mostrarModalFiltro} onOpenChange={setMostrarModalFiltro}>
             <DialogContent className="max-w-[90vw] w-[90vw] max-h-full p-6 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white">

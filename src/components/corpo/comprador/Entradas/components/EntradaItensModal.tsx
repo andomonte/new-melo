@@ -6,9 +6,14 @@ interface EntradaItem {
   id: string;
   produto_cod: string;
   produto_descricao: string;
+  referencia?: string;
+  ordem_compra?: string;
+  estoque_anterior?: number;
   quantidade: number;
   valor_unitario: number;
   valor_total: number;
+  custo?: number;
+  armazens?: string;
   unimed?: string;
 }
 
@@ -69,7 +74,7 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b dark:border-gray-700">
           <div>
@@ -152,9 +157,9 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
                 </div>
               </div>
 
-              {/* Tabela de itens */}
-              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              {/* Tabela de itens (espelha o grid de baixo do Delphi) */}
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm whitespace-nowrap">
                   <thead className="bg-gray-100 dark:bg-slate-700">
                     <tr>
                       <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">
@@ -163,13 +168,16 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
                           Codigo
                         </div>
                       </th>
+                      <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Referencia</th>
                       <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Descricao</th>
+                      <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Ordem Compra</th>
                       <th className="text-center p-3 font-semibold text-gray-700 dark:text-gray-300">
                         <div className="flex items-center justify-center gap-1">
                           <Ruler className="w-3 h-3" />
                           Un.
                         </div>
                       </th>
+                      <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">Est. Ant.</th>
                       <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">Qtd</th>
                       <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">
                         <div className="flex items-center justify-end gap-1">
@@ -177,26 +185,37 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
                           Unit.
                         </div>
                       </th>
+                      <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">Custo</th>
                       <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">Total</th>
+                      <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Armazens</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {items.map((item, index) => (
+                    {items.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
                         <td className="p-3">
                           <span className="font-mono font-medium text-blue-600 dark:text-blue-400">
                             {item.produto_cod}
                           </span>
                         </td>
-                        <td className="p-3 text-gray-700 dark:text-gray-300 max-w-[250px]">
+                        <td className="p-3 text-gray-600 dark:text-gray-400 font-mono text-xs">
+                          {item.referencia || '-'}
+                        </td>
+                        <td className="p-3 text-gray-700 dark:text-gray-300 max-w-[220px] whitespace-normal">
                           <span className="line-clamp-2" title={item.produto_descricao}>
                             {item.produto_descricao || 'Descricao nao informada'}
                           </span>
+                        </td>
+                        <td className="p-3 text-gray-600 dark:text-gray-400 font-mono text-xs">
+                          {item.ordem_compra || '-'}
                         </td>
                         <td className="p-3 text-center">
                           <span className="inline-flex px-2 py-0.5 bg-gray-100 dark:bg-slate-600 rounded text-xs font-medium text-gray-700 dark:text-gray-300">
                             {item.unimed || 'UN'}
                           </span>
+                        </td>
+                        <td className="p-3 text-right text-gray-600 dark:text-gray-400">
+                          {Number(item.estoque_anterior ?? 0).toLocaleString('pt-BR')}
                         </td>
                         <td className="p-3 text-right font-medium text-gray-900 dark:text-white">
                           {item.quantidade.toLocaleString('pt-BR')}
@@ -204,8 +223,14 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
                         <td className="p-3 text-right text-gray-700 dark:text-gray-300">
                           {formatCurrency(item.valor_unitario)}
                         </td>
+                        <td className="p-3 text-right text-blue-700 dark:text-blue-300">
+                          {item.custo ? formatCurrency(item.custo) : '-'}
+                        </td>
                         <td className="p-3 text-right font-semibold text-green-600 dark:text-green-400">
                           {formatCurrency(item.valor_total)}
+                        </td>
+                        <td className="p-3 text-gray-600 dark:text-gray-400 text-xs max-w-[200px] whitespace-normal">
+                          {item.armazens || '-'}
                         </td>
                       </tr>
                     ))}

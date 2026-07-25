@@ -5,6 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
+import SelectPadrao from '@/components/common/SelectPadrao';
 
 // Componentes
 import { EntradasHeader } from './EntradasHeader';
@@ -62,11 +63,15 @@ export const EntradasMain: React.FC = () => {
     limiteColunas: 9,
   });
 
+  // Filtro rápido por status (dropdown) — vai como `status` (match exato no backend)
+  const [statusFiltro, setStatusFiltro] = useState('');
+
   // Hook de dados - incluir filtros dinamicos por coluna
   const filters = React.useMemo(() => ({
     search,
     filtrosColuna: filtros,
-  }), [search, filtros]);
+    status: statusFiltro || undefined,
+  }), [search, filtros, statusFiltro]);
 
   const { data, meta, loading, refetch } = useEntradas({
     page,
@@ -129,6 +134,31 @@ export const EntradasMain: React.FC = () => {
             onSearchBlur={handleSearchBlur}
             onFiltroChange={handleFiltroChange}
             onToggleFiltrosRapidos={handleToggleFiltrosRapidos}
+            searchRightSlot={
+              <div className="w-44 shrink-0">
+                <SelectPadrao
+                  placeholder="Todos os status"
+                  value={statusFiltro || 'todos'}
+                  onValueChange={(v) => {
+                    setStatusFiltro(v === 'todos' ? '' : v);
+                    handlePageChange(1);
+                  }}
+                  options={[
+                    { value: 'todos', label: 'Todos os status' },
+                    { value: 'A', label: 'Aberta' },
+                    { value: 'F', label: 'Finalizada' },
+                    { value: 'C', label: 'Cancelada' },
+                    { value: 'PENDENTE', label: 'Pendente' },
+                    { value: 'PRECO_CONFIRMADO', label: 'Preço Confirmado' },
+                    { value: 'AGUARDANDO_RECEBIMENTO', label: 'Aguardando Recebimento' },
+                    { value: 'RECEBIDO', label: 'Recebido' },
+                    { value: 'ALOCADO', label: 'Alocado' },
+                    { value: 'DISPONIVEL_VENDA', label: 'Disponível p/ Venda' },
+                    { value: 'CANCELADA', label: 'Cancelada (novo)' },
+                  ]}
+                />
+              </div>
+            }
           />
 
           {/* Tabela */}

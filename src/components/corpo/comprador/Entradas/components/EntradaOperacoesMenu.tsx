@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CircleChevronDown, Eye, RotateCcw, List, Warehouse, DollarSign } from 'lucide-react';
+import { CircleChevronDown, Eye, RotateCcw, List, Warehouse, DollarSign, PackageCheck, Ban } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +11,9 @@ import ConfirmationModal from '@/components/common/ConfirmationModal';
 import MessageModal from '@/components/common/MessageModal';
 import RomaneioModal from '@/components/entradas/RomaneioModal';
 import { ConfirmarPrecoModal } from './ConfirmarPrecoModal';
+import { ConfirmarEstoqueModal } from './ConfirmarEstoqueModal';
+import { ConsultaEntradaModal, ConsultaTipo } from './ConsultaEntradaModal';
+import { Truck, ShoppingCart, FileText } from 'lucide-react';
 
 interface EntradaOperacoesMenuProps {
   entrada: {
@@ -36,6 +39,9 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   const [showConfirmReabrir, setShowConfirmReabrir] = useState(false);
   const [showRomaneio, setShowRomaneio] = useState(false);
   const [showConfirmarPreco, setShowConfirmarPreco] = useState(false);
+  const [showConfirmarEstoque, setShowConfirmarEstoque] = useState(false);
+  const [consultaTipo, setConsultaTipo] = useState<ConsultaTipo | null>(null);
+  const [showConfirmCancelar, setShowConfirmCancelar] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
   const [loading, setLoading] = useState(false);
@@ -45,6 +51,10 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
 
   // Pode confirmar preco se ainda nao foi confirmado
   const canConfirmarPreco = !entrada.precoConfirmado;
+
+  // Confirmar estoque so DEPOIS do preco (workflow PRECO_CONFIRMADO), como no Delphi.
+  const canConfirmarEstoque =
+    entrada.precoConfirmado && entrada.status === 'PRECO_CONFIRMADO';
 
   const handleReabrirEntrada = () => {
     setShowConfirmReabrir(true);
@@ -156,6 +166,84 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
     }
   };
 
+  const handleConfirmarCancelar = async () => {
+    setShowConfirmCancelar(false);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/entradas/${entrada.id}/cancelar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacao: `Entrada ${entrada.numeroNF} cancelada` }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMessageData({
+          title: 'Entrada Cancelada',
+          message: 'A entrada foi cancelada, o estoque revertido e a NFe liberada para reprocessar.',
+          type: 'success',
+        });
+        setShowMessage(true);
+        if (onRefresh) setTimeout(() => onRefresh(), 1000);
+      } else {
+        setMessageData({
+          title: 'Erro ao Cancelar Entrada',
+          message: data.error || 'Ocorreu um erro desconhecido',
+          type: 'error',
+        });
+        setShowMessage(true);
+      }
+    } catch (error) {
+      console.error('Erro ao cancelar entrada:', error);
+      setMessageData({
+        title: 'Erro de Comunicação',
+        message: 'Não foi possível conectar com o servidor. Tente novamente.',
+        type: 'error',
+      });
+      setShowMessage(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmarEstoque = async (observacao: string) => {
+    setShowConfirmarEstoque(false);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/entradas/${entrada.id}/confirmar-estoque`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ observacao }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMessageData({
+          title: 'Estoque Confirmado!',
+          message: 'O estoque foi confirmado e os produtos liberados para venda.',
+          type: 'success',
+        });
+        setShowMessage(true);
+        if (onRefresh) setTimeout(() => onRefresh(), 1000);
+      } else {
+        setMessageData({
+          title: 'Erro ao Confirmar Estoque',
+          message: data.error || 'Ocorreu um erro desconhecido',
+          type: 'error',
+        });
+        setShowMessage(true);
+      }
+    } catch (error) {
+      console.error('Erro ao confirmar estoque:', error);
+      setMessageData({
+        title: 'Erro de Comunicação',
+        message: 'Não foi possível conectar com o servidor. Tente novamente.',
+        type: 'error',
+      });
+      setShowMessage(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center justify-center">
@@ -184,6 +272,21 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               Ver Itens
             </DropdownMenuItem>
 
+            {/* Consultas (read-only) */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setConsultaTipo('conhecimento')}>
+              <Truck className="mr-2 h-4 w-4 text-blue-600" />
+              Consultar Conhecimento
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setConsultaTipo('pedidos')}>
+              <ShoppingCart className="mr-2 h-4 w-4 text-orange-600" />
+              Consultar Pedidos
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setConsultaTipo('notas')}>
+              <FileText className="mr-2 h-4 w-4 text-green-600" />
+              Consultar Notas Fiscais
+            </DropdownMenuItem>
+
             {/* Fazer Romaneio */}
             {canFazerRomaneio && (
               <>
@@ -203,6 +306,14 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               </DropdownMenuItem>
             )}
 
+            {/* Confirmar Estoque (apos o preco) */}
+            {canConfirmarEstoque && (
+              <DropdownMenuItem onClick={() => setShowConfirmarEstoque(true)}>
+                <PackageCheck className="mr-2 h-4 w-4 text-emerald-600" />
+                Confirmar Estoque
+              </DropdownMenuItem>
+            )}
+
             {/* Reabrir (se necessário) */}
             {entrada.status !== 'PENDENTE' && entrada.status !== 'PROCESSANDO' && (
               <>
@@ -213,6 +324,20 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
                 >
                   <RotateCcw className="mr-2 h-4 w-4" />
                   Reabrir Entrada
+                </DropdownMenuItem>
+              </>
+            )}
+
+            {/* Cancelar Entrada (destrutivo) */}
+            {entrada.status !== 'CANCELADA' && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-red-600"
+                  onClick={() => setShowConfirmCancelar(true)}
+                >
+                  <Ban className="mr-2 h-4 w-4" />
+                  Cancelar Entrada
                 </DropdownMenuItem>
               </>
             )}
@@ -230,6 +355,18 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
         type="warning"
         confirmText="Sim, Reabrir Entrada"
         cancelText="Cancelar"
+        loading={loading}
+      />
+
+      <ConfirmationModal
+        isOpen={showConfirmCancelar}
+        onClose={() => setShowConfirmCancelar(false)}
+        onConfirm={handleConfirmarCancelar}
+        title="Cancelar Entrada"
+        message={`Deseja CANCELAR a entrada ${entrada.numeroNF}?\n\nEsta ação irá:\n• Reverter o estoque adicionado por esta entrada\n• Cancelar o romaneio e devolver o estoque por armazém\n• Reabrir as ordens de compra atendidas\n• Marcar a entrada como CANCELADA\n• Liberar a NFe para reprocessamento\n\nEsta ação não pode ser desfeita.`}
+        type="danger"
+        confirmText="Sim, Cancelar Entrada"
+        cancelText="Voltar"
         loading={loading}
       />
 
@@ -269,6 +406,25 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
         entradaId={entrada.id}
         loading={loading}
       />
+
+      <ConfirmarEstoqueModal
+        isOpen={showConfirmarEstoque}
+        onClose={() => setShowConfirmarEstoque(false)}
+        onConfirm={handleConfirmarEstoque}
+        numeroNF={entrada.numeroNF}
+        entradaId={entrada.id}
+        loading={loading}
+      />
+
+      {consultaTipo && (
+        <ConsultaEntradaModal
+          isOpen={!!consultaTipo}
+          tipo={consultaTipo}
+          entradaId={entrada.id}
+          numeroEntrada={entrada.numeroEntrada || entrada.numeroNF}
+          onClose={() => setConsultaTipo(null)}
+        />
+      )}
     </>
   );
 };

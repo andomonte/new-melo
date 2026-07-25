@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Plus, RefreshCcw, Package } from 'lucide-react';
+import { Plus, RefreshCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface EntradasHeaderProps {
@@ -37,24 +37,15 @@ export const EntradasHeader: React.FC<EntradasHeaderProps> = ({
           </Button>
 
           {canManageEntradas && (
-            <>
-              <Button
-                onClick={onGerarEntrada}
-                className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
-              >
-                <Package size={16} />
-                Gerar Entrada
-              </Button>
-              <Button
-                onClick={onNovaEntrada}
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-1"
-              >
-                <Plus size={18} />
-                Nova Entrada
-              </Button>
-            </>
+            <Button
+              onClick={onNovaEntrada}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1"
+            >
+              <Plus size={18} />
+              Nova Entrada
+            </Button>
           )}
         </div>
       </div>
