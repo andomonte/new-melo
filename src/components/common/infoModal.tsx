@@ -32,7 +32,9 @@ export default function infoModal({
         {/* Rodapé fixo */}
         <div className="p-4 border-t sticky bottom-0 bg-white dark:text-zinc-100 dark:bg-zinc-700 z-10 text-right rounded-b-2xl">
           <button
+            autoFocus
             onClick={onClose}
+            onKeyDown={(e) => { if (e.key === 'Enter') onClose(); }}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
             Fechar

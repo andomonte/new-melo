@@ -11,9 +11,10 @@ export interface ItemPromocao {
   codprod: string | null;
   codgpp: string | null;
   descricao: string | null;
+  ref?: string | null;
 
-  marca?: string | null; // ✅ NOVO
-  qtddisponivel?: number | null; // ✅ NOVO
+  marca?: string | null;
+  qtddisponivel?: number | null;
   preco?: number | null;
   qtde_maxima_item: number | null;
   qtde_minima_item: number | null;
@@ -23,6 +24,18 @@ export interface ItemPromocao {
   qtdFaturado: number | null;
   qtd_total_item?: number | null;
   origem: string | null;
+
+  // Campos de custo e margem
+  prcompra?: number | null;
+  prcustoatual?: number | null;
+  preco_promocao?: number | null;
+  margem_custo_compra?: number | null;
+  margem_custo_medio?: number | null;
+  margem_tabela?: number | null;
+
+  // Vendas fora da promoção no período
+  qtd_vendida_fora?: number | null;
+  qtd_faturada_fora?: number | null;
 }
 
 // --- INTERFACE Promocao ---
@@ -43,8 +56,12 @@ export interface Promocao {
   criado_por: string;
   observacoes: string | null;
 
-  // ✅ CORRIGIR AQUI:
-  itens_promocao?: ItemPromocao[]; // em vez de ProdutoCarrinhoTemp[]
+  itens_promocao?: ItemPromocao[];
+
+  // Personalização
+  permite_balcao?: boolean;
+  clientes_vinculados?: { cod: string; nome: string }[] | null;
+  vendedores_vinculados?: { cod: string; nome: string }[] | null;
 }
 
 // --- INTERFACE Promocao ---

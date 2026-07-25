@@ -64,10 +64,13 @@ export default async function handle(
           (
             SELECT jsonb_agg(
                      jsonb_build_object(
-                       'id_promocao_item',  sub.id_promocao_item,
-                       'id_promocao',       sub.id_promocao,
-                       'codigo',            sub.codigo,
-                       'descricao',         sub.descricao,
+                       'id_promocao_item',    sub.id_promocao_item,
+                       'id_promocao',         sub.id_promocao,
+                       'codprod',             sub.codprod_raw,
+                       'codigo',              sub.codigo,
+                       'codgpp',              sub.codgpp_raw,
+                       'descricao',           sub.descricao,
+                       'ref',                 sub.ref,
                        'valor_desconto_item', sub.valor_desconto_item,
                        'tipo_desconto_item',  sub.tipo_desconto_item,
                        'qtde_minima_item',    sub.qtde_minima_item,
@@ -78,17 +81,27 @@ export default async function handle(
                        'origem',              sub.origem,
                        'marca',               sub.marca,
                        'qtddisponivel',       sub.qtddisponivel,
-                       'prvenda',             sub.prvenda
+                       'prvenda',             sub.prvenda,
+                       'prcompra',            sub.prcompra,
+                       'prcustoatual',        sub.prcustoatual,
+                       'preco_promocao',      sub.preco_promocao,
+                       'margem_custo_compra', sub.margem_custo_compra,
+                       'margem_custo_medio',  sub.margem_custo_medio,
+                       'margem_tabela',       sub.margem_tabela,
+                       'qtd_vendida_fora',    sub.qtd_vendida_fora,
+                       'qtd_faturada_fora',   sub.qtd_faturada_fora
                      )
                      ORDER BY sub.id_promocao_item
                    )
             FROM (
-              -- Dedup da linha do item + joins que podem multiplicar (preço)
               SELECT DISTINCT ON (pi.id_promocao_item)
                      pi.id_promocao_item,
                      pi.id_promocao,
-                     COALESCE(pi.codprod::text, pi.codgpp::text) AS codigo,
-                     COALESCE(dp.descr, dg.descr)                AS descricao,
+                     pi.codprod                                    AS codprod_raw,
+                     pi.codgpp                                     AS codgpp_raw,
+                     COALESCE(pi.codprod::text, pi.codgpp::text)   AS codigo,
+                     COALESCE(dp.aplic_extendida, dp.descr, dg.descr) AS descricao,
+                     dp.ref                                        AS ref,
                      pi.valor_desconto_item,
                      pi.tipo_desconto_item,
                      pi.qtde_minima_item,
@@ -97,15 +110,116 @@ export default async function handle(
                      pi.qtdFaturado,
                      pi.qtd_total_item,
                      pi.origem,
-                     cp."MARCA"                                   AS marca,
-                     (dp.qtest - dp.qtdreservada)                 AS qtddisponivel,
-                     fp1."PRECOVENDA"                             AS prvenda
+                     cp."MARCA"                                    AS marca,
+                     COALESCE((
+                       SELECT SUM(cap.arp_qtest)
+                       FROM cad_armazem_produto cap
+                       WHERE cap.arp_codprod = pi.codprod
+                         AND COALESCE(cap.arp_bloqueado, 'N') <> 'S'
+                     ), 0) AS qtddisponivel,
+                     fp1."PRECOVENDA"                              AS prvenda,
+                     COALESCE(dp.prcompra, 0)                      AS prcompra,
+                     COALESCE(dp.prcustoatual, 0)                  AS prcustoatual,
+                     -- Preço com promoção aplicada
+                     CASE
+                       WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PERC'
+                         THEN fp1."PRECOVENDA" * (1 - COALESCE(pi.valor_desconto_item, p.valor_desconto) / 100)
+                       WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'VALO'
+                         THEN fp1."PRECOVENDA" - COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                       WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PREF'
+                         THEN COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                       ELSE fp1."PRECOVENDA"
+                     END                                           AS preco_promocao,
+                     -- Margem custo compra: ((precoPromo / prcompra) - 1) * 100
+                     CASE WHEN COALESCE(dp.prcompra, 0) > 0 THEN
+                       ROUND(((
+                         CASE
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PERC'
+                             THEN fp1."PRECOVENDA" * (1 - COALESCE(pi.valor_desconto_item, p.valor_desconto) / 100)
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'VALO'
+                             THEN fp1."PRECOVENDA" - COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PREF'
+                             THEN COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                           ELSE fp1."PRECOVENDA"
+                         END
+                       ) / dp.prcompra - 1) * 100, 2)
+                     ELSE 0 END                                    AS margem_custo_compra,
+                     -- Margem custo médio: ((precoPromo / prcustoatual) - 1) * 100
+                     CASE WHEN COALESCE(dp.prcustoatual, 0) > 0 THEN
+                       ROUND(((
+                         CASE
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PERC'
+                             THEN fp1."PRECOVENDA" * (1 - COALESCE(pi.valor_desconto_item, p.valor_desconto) / 100)
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'VALO'
+                             THEN fp1."PRECOVENDA" - COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PREF'
+                             THEN COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                           ELSE fp1."PRECOVENDA"
+                         END
+                       ) / dp.prcustoatual - 1) * 100, 2)
+                     ELSE
+                       -- Fallback: se prcustoatual = 0, usa prcompra (igual Delphi)
+                       CASE WHEN COALESCE(dp.prcompra, 0) > 0 THEN
+                         ROUND(((
+                           CASE
+                             WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PERC'
+                               THEN fp1."PRECOVENDA" * (1 - COALESCE(pi.valor_desconto_item, p.valor_desconto) / 100)
+                             WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'VALO'
+                               THEN fp1."PRECOVENDA" - COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                             WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PREF'
+                               THEN COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                             ELSE fp1."PRECOVENDA"
+                           END
+                         ) / dp.prcompra - 1) * 100, 2)
+                       ELSE 0 END
+                     END                                           AS margem_custo_medio,
+                     -- Margem sobre tabela: ((precoPromo / prvenda) - 1) * 100
+                     CASE WHEN COALESCE(fp1."PRECOVENDA", 0) > 0 THEN
+                       ROUND(((
+                         CASE
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PERC'
+                             THEN fp1."PRECOVENDA" * (1 - COALESCE(pi.valor_desconto_item, p.valor_desconto) / 100)
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'VALO'
+                             THEN fp1."PRECOVENDA" - COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                           WHEN COALESCE(pi.tipo_desconto_item, p.tipo_desconto) = 'PREF'
+                             THEN COALESCE(pi.valor_desconto_item, p.valor_desconto)
+                           ELSE fp1."PRECOVENDA"
+                         END
+                       ) / fp1."PRECOVENDA" - 1) * 100, 2)
+                     ELSE 0 END                                    AS margem_tabela,
+                     -- Qtd vendida TOTAL do item no período da promoção
+                     -- (vendas fora = total - vendido na promoção)
+                     GREATEST(
+                       COALESCE((
+                         SELECT SUM(iv.qtd)
+                         FROM dbitvenda iv
+                         INNER JOIN dbvenda v ON v.codvenda = iv.codvenda
+                         WHERE iv.codprod = pi.codprod
+                           AND v.data >= p2.data_inicio
+                           AND v.data <= p2.data_fim
+                           AND COALESCE(v.cancel, 'N') != 'S'
+                       ), 0) - COALESCE(pi.qtdVendido, 0),
+                     0)                                            AS qtd_vendida_fora,
+                     -- Qtd faturada FORA da promoção no período
+                     -- (total faturado do item no período - faturado na promoção)
+                     GREATEST(
+                       COALESCE((
+                         SELECT SUM(iv2.qtd)
+                         FROM dbitvenda iv2
+                         INNER JOIN dbvenda v2 ON v2.codvenda = iv2.codvenda
+                         INNER JOIN fatura_venda fv2 ON fv2.codvenda = v2.codvenda
+                         INNER JOIN dbfatura f2 ON f2.codfat = fv2.codfat
+                         WHERE iv2.codprod = pi.codprod
+                           AND f2.data >= p2.data_inicio
+                           AND f2.data <= p2.data_fim
+                       ), 0) - COALESCE(pi.qtdFaturado, 0),
+                     0)                                            AS qtd_faturada_fora
               FROM dbpromocao_item pi
+              INNER JOIN dbpromocao p2 ON p2.id_promocao = pi.id_promocao
               LEFT JOIN dbprod    dp ON dp.codprod = pi.codprod
               LEFT JOIN dbgpprod  dg ON dg.codgpp  = pi.codgpp
               LEFT JOIN cmp_produto cp ON cp."CODPROD" = pi.codprod
               LEFT JOIN (
-                -- Dedup de preços: 1 linha por (CODPROD, TIPOPRECO)
                 SELECT DISTINCT ON ("CODPROD", "TIPOPRECO")
                        "CODPROD", "TIPOPRECO", "PRECOVENDA"
                 FROM dbformacaoprvenda

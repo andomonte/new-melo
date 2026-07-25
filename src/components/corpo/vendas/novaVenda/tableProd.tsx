@@ -219,6 +219,9 @@ interface ChildProps {
   setKickbackMarcadoPorProduto: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   precosOriginais: Record<string, string>;
   setPrecosOriginais: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // Navegação entre grids
+  activeGrid: 'prod' | 'ref';
+  onActivateGrid: (grid: 'prod' | 'ref') => void;
 }
 
 const dataT: Payment[] = [
@@ -252,6 +255,9 @@ const DataTablecolumns: React.FC<ChildProps> = ({
   setKickbackMarcadoPorProduto,
   precosOriginais,
   setPrecosOriginais,
+  // Navegação entre grids
+  activeGrid,
+  onActivateGrid,
 }) => {
   const quantT = data2.map((val) => val.quantidade);
   const descT = data2.map((val) => val.desconto);
@@ -283,6 +289,11 @@ const DataTablecolumns: React.FC<ChildProps> = ({
   // Estado para o modal de histórico de pedidos
   const [openHistoricoPedidos, setOpenHistoricoPedidos] = React.useState(false);
   const [produtoHistorico, setProdutoHistorico] = React.useState<any>(null);
+
+  // Refs para navegação por teclado
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const rowRefs = React.useRef<(HTMLDivElement | null)[]>([]);
+
 
   // --- TOTAL com promoção (aplica mínimo/máximo da promo e depois o "desconto à vista" %)
   // Total da linha considerando promoção (mín, máx, disponível) + desconto à vista (%)
@@ -471,6 +482,120 @@ const DataTablecolumns: React.FC<ChildProps> = ({
       setOpenContextMenu(true);
     }
   }, [points]);
+
+  // Navegação por teclado (setas cima/baixo) para selecionar produto
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Só funciona quando este grid está ativo
+      if (activeGrid !== 'prod') return;
+
+      // Não interfere se o usuário estiver digitando em input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      // Não interfere se modal de confirma ou contexto estiver aberto
+      if (openConfirma || openContextMenu) return;
+
+      // Tab → move foco para o grid de referências
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        onActivateGrid('ref');
+        return;
+      }
+
+      const rows = table.getRowModel().rows;
+      if (!rows?.length) return;
+
+      const pageSize = rows.length;
+      const canNextPage = table.getCanNextPage();
+      const canPrevPage = table.getCanPreviousPage();
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+
+        // Achar índice selecionado na página atual
+        let currentPageIndex = -1;
+        for (let i = 0; i < pageSize; i++) {
+          if (corFundo[i + indexPagina]) {
+            currentPageIndex = i;
+            break;
+          }
+        }
+
+        let newAbsoluteIndex = -1;
+
+        if (e.key === 'ArrowDown') {
+          if (currentPageIndex < pageSize - 1) {
+            const newPageIndex = currentPageIndex + 1;
+            newAbsoluteIndex = newPageIndex + indexPagina;
+            setCorFundo((oldArray) => {
+              const newArray = oldArray.map(() => 0);
+              newArray[newAbsoluteIndex] = 1;
+              return newArray;
+            });
+            setTimeout(() => {
+              rowRefs.current[newPageIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+            // Aciona busca de referência ao navegar
+            produtoSelecionado(String(newAbsoluteIndex));
+          } else if (canNextPage) {
+            table.nextPage();
+            const newPageSize = table.getState().pagination.pageSize;
+            const newIndexPagina = (table.getState().pagination.pageIndex + 1) * newPageSize;
+            mudouPagina({ pagina: String(table.getState().pagination.pageIndex + 1), linhas: String(newPageSize) });
+            setTimeout(() => {
+              setCorFundo((oldArray) => {
+                const newArray = oldArray.map(() => 0);
+                oldArray[newIndexPagina] = 1;
+                return oldArray.map(() => 0).map((_, i) => i === newIndexPagina ? 1 : 0);
+              });
+              produtoSelecionado(String(newIndexPagina));
+              setTimeout(() => {
+                rowRefs.current[0]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              }, 0);
+            }, 50);
+          }
+        } else {
+          // ArrowUp
+          if (currentPageIndex > 0) {
+            const newPageIndex = currentPageIndex - 1;
+            newAbsoluteIndex = newPageIndex + indexPagina;
+            setCorFundo((oldArray) => {
+              const newArray = oldArray.map(() => 0);
+              newArray[newAbsoluteIndex] = 1;
+              return newArray;
+            });
+            setTimeout(() => {
+              rowRefs.current[newPageIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }, 0);
+            // Aciona busca de referência ao navegar
+            produtoSelecionado(String(newAbsoluteIndex));
+          } else if (canPrevPage) {
+            table.previousPage();
+            const newPageSize = table.getState().pagination.pageSize;
+            const prevPageIndex = table.getState().pagination.pageIndex - 1;
+            mudouPagina({ pagina: String(prevPageIndex), linhas: String(newPageSize) });
+            setTimeout(() => {
+              const prevRows = table.getRowModel().rows;
+              const lastIdx = prevRows.length - 1;
+              const lastAbsoluteIndex = lastIdx + (prevPageIndex * newPageSize);
+              setCorFundo((oldArray) => {
+                return oldArray.map((_, i) => i === lastAbsoluteIndex ? 1 : 0);
+              });
+              produtoSelecionado(String(lastAbsoluteIndex));
+              setTimeout(() => {
+                rowRefs.current[lastIdx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              }, 0);
+            }, 50);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corFundo, indexPagina, table, openConfirma, openContextMenu, activeGrid]);
 
   const handleAtualizarDescF = (indexDesc: number, novoDesc: string) => {
     if (indexDesc === undefined || indexDesc === null) return;
@@ -688,19 +813,25 @@ const DataTablecolumns: React.FC<ChildProps> = ({
       onClick={() => {
         setOpenContextMenu(false);
         onCtxChange?.({ ...ctxGlobal, open: false });
+        onActivateGrid('prod');
       }}
-      className="w-[100%] select-none h-full text-[10px] lg:text-[12px]  "
+      className={`w-full select-none h-full text-[10px] lg:text-[12px] flex flex-col min-h-0 ${
+        activeGrid === 'prod' ? 'ring-2 ring-blue-400 ring-inset' : ''
+      }`}
     >
-      <div className=" h-[100%] border-b border-t border-gray-300 w-[100%] flex justify-center items-center ">
-        <div className=" w-[100%]  h-[98%]">
-          <div className="flex flex-col w-full h-[100%]  dark:border-gray-800">
-            <div className="flex-grow w-full h-[100%]   overflow-auto">
+      <div className="flex-1 min-h-0 border-b border-t border-gray-300 w-full">
+        <div className="w-full h-full">
+          <div className="flex flex-col w-full h-full dark:border-gray-800">
+            <div ref={scrollContainerRef} className="flex-1 min-h-0 w-full overflow-auto">
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row, index) => (
                   <div
                     key={Number(index + indexPagina)}
+                    ref={(el) => { rowRefs.current[index] = el; }}
                     className={` py-1  w-full ${
-                      corFundo[index + indexPagina] ? 'bg-yellow-100' : ''
+                      corFundo[index + indexPagina]
+                        ? activeGrid === 'prod' ? 'bg-yellow-100' : 'bg-yellow-50'
+                        : ''
                     }`}
                   >
                     {/*box 1 - 2 box um a direita e outro a esquerda  */}
@@ -876,22 +1007,36 @@ const DataTablecolumns: React.FC<ChildProps> = ({
                         {/* COLUNA 1 — DESCRIÇÃO (mobile = 2 frações; desktop = 9 colunas) */}
                         <div className="h-full col-span-2 lg:col-span-9 w-full flex items-center">
                           <div
-                            onClick={() => {
-                              const valorF = row.id;
-                              if (!corFundo[index + indexPagina]) {
+                            onClick={(e) => {
+                              // Se é o segundo clique de um duplo clique, ignora
+                              if (e.detail > 1) return;
+
+                              const absIdx = index + indexPagina;
+                              if (!corFundo[absIdx]) {
+                                // Seleciona (destaca amarelo) sem buscar referência
                                 setCorFundo((oldArray) => {
                                   const newArray = oldArray.map(() => 0);
-                                  newArray[index + indexPagina] = 1;
+                                  newArray[absIdx] = 1;
                                   return newArray;
                                 });
-                                produtoSelecionado(valorF);
                               } else {
+                                // Desseleciona e limpa referências
                                 setCorFundo((oldArray) => {
                                   const newArray = oldArray.map(() => 0);
                                   return newArray;
                                 });
                                 produtoSelecionado('-1');
                               }
+                            }}
+                            onDoubleClick={() => {
+                              // Duplo clique: seleciona + busca referências/equivalentes
+                              const valorF = row.id;
+                              setCorFundo((oldArray) => {
+                                const newArray = oldArray.map(() => 0);
+                                newArray[index + indexPagina] = 1;
+                                return newArray;
+                              });
+                              produtoSelecionado(valorF);
                             }}
                             className="w-full cursor-pointer"
                           >
@@ -1472,10 +1617,15 @@ const DataTablecolumns: React.FC<ChildProps> = ({
                                       quant[idx] ?? item?.quantidade ?? 0,
                                     );
 
+                                    // Verifica se item tem promoção ativa
+                                    const promoItem = item?.promocoes?.[0] ?? item?.promocao;
+                                    const promoAtiva = promoItem?.ativa === true || promoItem?.ativa === 'true';
+                                    const promoLock = promoAtiva && Array.isArray(item?.promocoes) && item.promocoes.length > 0;
+
                                     // Define as condições de desabilitação
                                     const isTrava = isEditedBelowAt(item);
                                     const isDisabled =
-                                      currentQuant === 0 || isTrava;
+                                      currentQuant === 0 || isTrava || promoLock;
 
                                     return (
                                       <>
@@ -1941,7 +2091,7 @@ const DataTablecolumns: React.FC<ChildProps> = ({
           </div>
         </div>
       </div>
-      <div className=" bg-blue-50 dark:bg-slate-700    flex h-10 border-b items-center  space-x-5 justify-center">
+      <div className="flex-none bg-blue-50 dark:bg-slate-700 flex h-10 border-b items-center space-x-5 justify-center">
         <DataTablePagination table={table} mudouPagina={mudouPagina} />
       </div>
       <div>

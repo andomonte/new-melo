@@ -743,6 +743,11 @@ export default function HomeVenda() {
   const [loadingRef, setLoadingRef] = React.useState(false);
   const [loadingCli, setLoadingCli] = React.useState(false);
 
+  // Qual grid está ativo para navegação por teclado: 'prod' ou 'ref'
+  const [activeGrid, setActiveGrid] = React.useState<'prod' | 'ref'>('prod');
+  // Tab inferior: 'equivalentes' ou 'carrinho'
+  const [tabInferior, setTabInferior] = React.useState<'equivalentes' | 'carrinho'>('equivalentes');
+
   const [tela, setTela] = React.useState('0');
   const [obsFat, setObsFat] = React.useState('');
   const [requisição, setRequisição] = React.useState('');
@@ -2874,6 +2879,7 @@ export default function HomeVenda() {
     if (listaProd.length) {
       if (novoLabel !== '-1') {
         const newItemProd = listaProd[Number(novoLabel)];
+        if (!newItemProd) return;
         setLoadingRef(true);
 
         if (newItemProd.CODGPE) {
@@ -2885,12 +2891,14 @@ export default function HomeVenda() {
           }
 
           await api
-            .post('/api/dbOracle/produtoEquival', {
+            //  .post('/api/dbOracle/produtoEquival', {
+            .post('/api/vendas/postgresql/produtoEquival', {
               CODGPE: newItemProd.CODGPE,
               PRVENDA,
             })
             .then((response) => {
-              if (response.data.length) {
+              const dataArr = Array.isArray(response.data) ? response.data : [];
+              if (dataArr.length) {
                 const arrayProd: {
                   codigo: string;
                   descrição: string;
@@ -2908,7 +2916,7 @@ export default function HomeVenda() {
                   margemMinima?: number;
                 }[] = [];
 
-                response.data.map((val: any) => {
+                dataArr.map((val: any) => {
                   if (val.CODPROD && val.CODPROD !== newItemProd.CODPROD) {
                     const newPerfil: any = {
                       ...createProduto(
@@ -2942,12 +2950,22 @@ export default function HomeVenda() {
                   return 0;
                 });
 
-                setProdutoRef(arrayProd);
+                setProdutoRef(arrayProd.length ? arrayProd : [
+                  { codigo: 'sem referencia', descrição: 'produto', marca: '', estoque: '', preço: '', ref: '', quantidade: '0', descriçãoEditada: '', totalItem: '', precoItemEditado: '', tipoPreço: '', desconto: 0, origem: '' },
+                ]);
+                setLoadingRef(false);
+              } else {
+                setProdutoRef([
+                  { codigo: 'sem referencia', descrição: 'produto', marca: '', estoque: '', preço: '', ref: '', quantidade: '0', descriçãoEditada: '', totalItem: '', precoItemEditado: '', tipoPreço: '', desconto: 0, origem: '' },
+                ]);
                 setLoadingRef(false);
               }
             })
             .catch((error: string) => {
               setLoadingRef(false);
+              setProdutoRef([
+                { codigo: 'sem referencia', descrição: 'produto', marca: '', estoque: '', preço: '', ref: '', quantidade: '0', descriçãoEditada: '', totalItem: '', precoItemEditado: '', tipoPreço: '', desconto: 0, origem: '' },
+              ]);
               console.log('error busca equivalente', error);
             });
         } else {
@@ -3901,9 +3919,9 @@ export default function HomeVenda() {
       onContextMenu={(e) => {
         e.preventDefault();
       }}
-      className=" select-none h-[calc(100%)] w-[calc(100%)]  dark:bg-slate-900"
+      className="select-none h-full w-full flex flex-col dark:bg-slate-900"
     >
-      <div className=" h-auto bg-gray-50 dark:bg-zinc-800  w-full flex justify-center items-center ">
+      <div className="flex-none bg-gray-50 dark:bg-zinc-800 w-full flex justify-center items-center">
         <div className="flex space-x-6 mt-2 mb-2 h-full py-0   w-[98%]  justify-center items-center ">
           <div className="space-y-2 sm:space-y-0 w-full flex-col flex sm:flex-row sm:space-x-4 items-center justify-center ">
             <SelectInput compact
@@ -4008,21 +4026,20 @@ export default function HomeVenda() {
                     </div>
                     <input
                       className="peer h-full w-full
-                    rounded-[7px] border  
-                  border-gray-300 dark:border-gray-400
-                  dark:focus:border-orange-200
+                    rounded-[7px] border
+                    border-gray-300 dark:border-gray-400
+                    border-t-transparent dark:border-t-transparent
+                    bg-transparent
+                    px-3 py-2.5 !pr-9 font-sans font-normal
+                    text-orange-600 dark:text-orange-300
+                    focus:text-orange-600 dark:focus:text-orange-200
+                    focus:border-2
+                    focus:border-b-orange-600 focus:border-l-orange-600 focus:border-r-orange-600
+                    focus:border-t-transparent
+                    dark:focus:border-2
+                    dark:focus:border-b-orange-200 dark:focus:border-l-orange-200 dark:focus:border-r-orange-200
                     dark:focus:border-t-transparent
-                    bg-transparent 
-                    px-3 py-2.5 !pr-9 font-sans 
-                     font-normal text-orange-600
-                    dark:text-orange-300 
-                    focus:text-orange-600
-                    dark:focus:text-orange-200
-                    outline outline-0 transition-all   
-                    focus:border-1 focus:border-orange-600
-                    focus:border-t-transparent 
-                    dark:border-t-transparent
-                    border-t-transparent focus:outline-0 
+                    outline outline-0 transition-all focus:outline-0
                     disabled:border-0 disabled:bg-gray-50"
                       value={
                         dadosClienteSel.codigo
@@ -4034,9 +4051,8 @@ export default function HomeVenda() {
                       }
                     />
                     <label
-                      className="before:content[' ']
-                  text-gray-400 
-                  after:content[' '] pointer-events-none
+                      className="before:content-[' ']
+                  after:content-[' '] pointer-events-none
                   absolute left-0 -top-1.5 flex h-full
                   w-full select-none text-[11px]
                   font-normal leading-tight
@@ -4054,23 +4070,27 @@ export default function HomeVenda() {
                   after:border-t after:border-r
                   after:border-gray-300 after:transition-all
                   dark:after:border-gray-400
-                  peer-placeholder-shown:
+
+                  peer-placeholder-shown:text-sm
                   peer-placeholder-shown:leading-[3.75]
                   peer-placeholder-shown:text-gray-500
                   peer-placeholder-shown:before:border-transparent
                   peer-placeholder-shown:after:border-transparent
                   peer-focus:text-[11px] peer-focus:leading-tight
-                 peer-focus:text-orange-600
+                  peer-focus:text-orange-600
                   dark:peer-focus:text-orange-200
-                  peer-focus:before:border-t-1
+                  peer-focus:before:border-t-2
                   peer-focus:before:border-l-2
                   peer-focus:before:border-orange-600
+                  dark:peer-focus:before:border-t-2
                   dark:peer-focus:before:border-l-2
                   dark:peer-focus:before:border-orange-200
-                  peer-focus:after:border-t-1
+                  peer-focus:after:border-t-2
                   peer-focus:after:border-r-2
-                peer-focus:after:border-orange-600
-                dark:peer-focus:after:border-orange-200
+                  peer-focus:after:border-orange-600
+                  dark:peer-focus:after:border-t-2
+                  dark:peer-focus:after:border-r-2
+                  dark:peer-focus:after:border-orange-200
                   peer-disabled:text-transparent
                   peer-disabled:before:border-transparent
                   peer-disabled:after:border-transparent
@@ -4095,32 +4115,25 @@ export default function HomeVenda() {
                       ref={cliInputRef}
                       autoFocus
                       className="peer h-full w-full
-                     
-                    rounded-[7px] border  
-                  border-gray-300 dark:border-gray-50
-                  
-                    dark:focus:border-t-transparent
-                    
-                    bg-transparent 
-                    
-                    px-3 py-2.5 !pr-9 font-sans 
-                     font-normal
-                    focus:text-orange-600 
-                    focus:border-1
+                    rounded-[7px] border
+                    border-gray-300 dark:border-gray-50
+                    border-t-transparent dark:border-t-transparent
+                    bg-transparent
+                    px-3 py-2.5 !pr-9 font-sans font-normal
+                    focus:text-orange-600
+                    focus:border-2
+                    focus:border-b-orange-600 focus:border-l-orange-600 focus:border-r-orange-600
+                    focus:border-t-transparent
                     dark:focus:text-orange-200
                     dark:focus:border-2
-                    dark:focus:border-orange-200 
-                    outline outline-0 transition-all   
-                    focus:border-orange-600
-                    focus:border-t-transparent 
-                    dark:border-t-transparent
-                    placeholder-shown:border-t  
-                 placeholder-shown:border-gray-300
-                 placeholder-shown:placeholder-gray-400 
-                 dark:placeholder-shown:placeholder-gray-500
-                 dark:placeholder-shown:border-gray-400
-                 
-                    border-t-transparent focus:outline-0 
+                    dark:focus:border-b-orange-200 dark:focus:border-l-orange-200 dark:focus:border-r-orange-200
+                    dark:focus:border-t-transparent
+                    outline outline-0 transition-all focus:outline-0
+                    placeholder-shown:border-t
+                    placeholder-shown:border-gray-300
+                    placeholder-shown:placeholder-gray-400
+                    dark:placeholder-shown:placeholder-gray-500
+                    dark:placeholder-shown:border-gray-400
                     disabled:border-0 disabled:bg-gray-50
                     "
                       value={pesquisaCli || ''}
@@ -4173,8 +4186,8 @@ export default function HomeVenda() {
                       }
                     />
                     <label
-                      className="before:content[' ']
-                  after:content[' '] pointer-events-none
+                      className="before:content-[' ']
+                  after:content-[' '] pointer-events-none
                   absolute left-0 -top-1.5 flex h-full
                   w-full select-none text-[11px]
                   font-normal leading-tight
@@ -4191,28 +4204,28 @@ export default function HomeVenda() {
                   after:flex-grow after:rounded-tr-md
                   after:border-t after:border-r
                   after:border-gray-300 after:transition-all
-                  
-                  peer-placeholder-shown:
+
+                  peer-placeholder-shown:text-sm
                   peer-placeholder-shown:leading-[3.75]
-                  dark:peer-placeholder-shown:text-gray-500 
-                  dark:peer-placeholder:text-gray-500 
+                  dark:peer-placeholder-shown:text-gray-500
+                  dark:peer-placeholder:text-gray-500
                   peer-placeholder-shown:before:border-transparent
                   peer-placeholder-shown:after:border-transparent
                   peer-focus:text-[11px] peer-focus:leading-tight
                  peer-focus:text-orange-600
                  dark:peer-focus:text-orange-200
-                  
-                  peer-focus:before:border-t-1
-                  peer-focus:before:border-l-1
+
+                  peer-focus:before:border-t-2
+                  peer-focus:before:border-l-2
                   peer-focus:before:border-orange-600
-                  
+
                   dark:peer-focus:before:border-t-2
                   dark:peer-focus:before:border-l-2
                   dark:peer-focus:after:border-t-2
-                  dark:*:peer-focus:after:border-r-2
+                  dark:peer-focus:after:border-r-2
                   dark:peer-focus:before:border-orange-200
-                  peer-focus:after:border-t-1
-                  peer-focus:after:border-r-1
+                  peer-focus:after:border-t-2
+                  peer-focus:after:border-r-2
                 peer-focus:after:border-orange-600
                 dark:peer-focus:after:border-orange-200
                   peer-disabled:text-transparent
@@ -4239,28 +4252,26 @@ export default function HomeVenda() {
                   />
                 </div>
                 <input
-                  className="peer h-full w-full rounded-[7px] 
-                border border-gray-300 dark:border-gray-400
-                 dark:focus:border-blue-300
-                 dark:focus:border-t-transparent
-                 bg-transparent px-3 py-2.5 !pr-9 
-                 font-sans  font-normal 
-                 text-gray-400
-                 focus:text-blue-600  
-                 dark:text-gray-600 
-                 dark:focus:text-blue-200 outline outline-0 
-                 transition-all   focus:border-2 
-                 focus:border-blue-300 focus:border-t-transparent
-                 dark:border-t-transparent 
-                 
-                 border-t-transparent focus:outline-0 
-                 placeholder-shown:border-t  
-                 dark:placeholder-shown:border-gray-400
-                 placeholder-shonw:border-gray-400
-                 placeholder-shown:border-gray-300
-                 placeholder-shown:placeholder-gray-400 
-                 dark:placeholder-shown:placeholder-gray-500
-                  disabled:border-0 disabled:bg-gray-50"
+                  className="peer h-full w-full rounded-[7px]
+                    border border-gray-300 dark:border-gray-400
+                    border-t-transparent dark:border-t-transparent
+                    bg-transparent px-3 py-2.5 !pr-9
+                    font-sans font-normal
+                    text-gray-400 dark:text-gray-600
+                    focus:text-blue-600 dark:focus:text-blue-200
+                    focus:border-2
+                    focus:border-b-blue-300 focus:border-l-blue-300 focus:border-r-blue-300
+                    focus:border-t-transparent
+                    dark:focus:border-2
+                    dark:focus:border-b-blue-300 dark:focus:border-l-blue-300 dark:focus:border-r-blue-300
+                    dark:focus:border-t-transparent
+                    outline outline-0 transition-all focus:outline-0
+                    placeholder-shown:border-t
+                    placeholder-shown:border-gray-300
+                    placeholder-shown:placeholder-gray-400
+                    dark:placeholder-shown:border-gray-400
+                    dark:placeholder-shown:placeholder-gray-500
+                    disabled:border-0 disabled:bg-gray-50"
                   ref={prodInputRef}
                   value={pesquisa || ''}
                   onFocus={() => {
@@ -4320,40 +4331,40 @@ export default function HomeVenda() {
                   }
                 />
                 <label
-                  className="text-gray-400 
-                before:content[' '] after:content[' '] 
-              pointer-events-none absolute left-0 -top-1.5 
-              flex h-full w-full select-none text-[11px] font-normal 
-              leading-tight  transition-all 
-              before:pointer-events-none before:mt-[6.5px] 
-              before:mr-1 before:box-border before:block 
+                  className="text-gray-400
+                before:content-[' '] after:content-[' ']
+              pointer-events-none absolute left-0 -top-1.5
+              flex h-full w-full select-none text-[11px] font-normal
+              leading-tight  transition-all
+              before:pointer-events-none before:mt-[6.5px]
+              before:mr-1 before:box-border before:block
               before:h-1.5 before:w-2.5 before:rounded-tl-md
-              before:border-t before:border-l 
-              before:border-gray-300 before:transition-all 
-              after:pointer-events-none after:mt-[6.5px] 
-              after:ml-1 after:box-border after:block 
-              after:h-1.5 after:w-2.5 after:flex-grow 
-              after:rounded-tr-md after:border-t after:border-r 
-              after:border-gray-300 after:transition-all 
+              before:border-t before:border-l
+              before:border-gray-300 before:transition-all
+              after:pointer-events-none after:mt-[6.5px]
+              after:ml-1 after:box-border after:block
+              after:h-1.5 after:w-2.5 after:flex-grow
+              after:rounded-tr-md after:border-t after:border-r
+              after:border-gray-300 after:transition-all
               dark:after:border-gray-500
               peer-focus:after:border-t-2
-              peer-placeholder-shown: 
-              peer-placeholder-shown:leading-[3.75] 
+              peer-placeholder-shown:text-sm
+              peer-placeholder-shown:leading-[3.75]
               peer-placeholder-shown:text-gray-400
-              dark:peer-placeholder-shown:text-gray-500 
-              peer-placeholder-shown:before:border-transparent 
-              peer-placeholder-shown:after:border-transparent 
-              peer-focus:text-[11px] peer-focus:leading-tight 
+              dark:peer-placeholder-shown:text-gray-500
+              peer-placeholder-shown:before:border-transparent
+              peer-placeholder-shown:after:border-transparent
+              peer-focus:text-[11px] peer-focus:leading-tight
               peer-focus:text-blue-500
               dark:peer-focus:text-blue-200
-              peer-focus:before:border-t-1 
-              peer-focus:before:border-l-2 
-              peer-focus:before:border-blue-300 
-              peer-focus:after:border-t-1 
+              peer-focus:before:border-t-2
+              peer-focus:before:border-l-2
+              peer-focus:before:border-blue-300
+              peer-focus:after:border-t-2
               peer-focus:after:border-r-2
-              peer-focus:after:border-blue-300 
-              peer-disabled:text-transparent 
-              peer-disabled:before:border-transparent 
+              peer-focus:after:border-blue-300
+              peer-disabled:text-transparent
+              peer-disabled:before:border-transparent
               peer-disabled:after:border-transparent "
                 >
                   Pesquisar Produto
@@ -4384,7 +4395,7 @@ export default function HomeVenda() {
       </div>
 
       {tela === '0' ? (
-        <div className="h-[calc(100%-7rem)] w-full border-b border-gray-300 flex justify-center items-start">
+        <div className="flex-1 min-h-0 w-full border-b border-gray-300 flex justify-center items-start">
           {!openInfoCliente ? (
             <div className="w-full h-full">
               {showCli ? (
@@ -4418,7 +4429,7 @@ export default function HomeVenda() {
                   )}
                 </div>
               ) : (
-                <div className="h-[calc(100%-7rem)] w-full border-t border-gray-300 flex justify-center items-center">
+                <div className="flex-1 min-h-0 w-full border-t border-gray-300 flex justify-center items-center">
                   <div className="h-full w-full">
                     <div className="h-[calc(100%-3rem)] flex justify-center items-center">
                       {mensagem.length ? (
@@ -4475,11 +4486,12 @@ export default function HomeVenda() {
         </div>
       ) : null}
       {tela === '1' ? (
-        <div className="h-[calc(100%-7rem)]  w-full border-b border-gray-300  flex justify-center items-start ">
+        <div className="flex-1 min-h-0  w-full border-b border-gray-300  flex justify-center items-start ">
           <div className="w-full h-full">
             {showProd && produto?.length ? (
-              <div className="w-full h-full">
-                <div className="h-[calc(60%-3.5rem)] w-full    flex justify-center items-start ">
+              <div className="w-full h-full flex flex-col min-h-0">
+                {/* Grid superior: produtos — flex-[3] ocupa ~60% */}
+                <div className="flex-[3] min-h-0 w-full">
                   <TableProd
                     data2={produto || []}
                     tela={tela}
@@ -4495,57 +4507,117 @@ export default function HomeVenda() {
                     setKickbackMarcadoPorProduto={setKickbackMarcadoPorProduto}
                     precosOriginais={precosOriginaisKickback}
                     setPrecosOriginais={setPrecosOriginaisKickback}
+                    activeGrid={activeGrid}
+                    onActivateGrid={setActiveGrid}
                   />
                 </div>
-                <div className="h-10   w-full flex justify-center items-center " />
-                {loadingRef ? (
-                  <div className="w-full h-[50%]">
-                    <Carregamento />
+                {/* Grid inferior: tabs Equivalentes / Carrinho */}
+                <div className="flex-[2] min-h-0 w-full flex flex-col">
+                  {/* Tabs */}
+                  <div className="flex-none flex h-8 bg-gray-100 dark:bg-neutral-800 border-t border-gray-300">
+                    <button
+                      onClick={() => setTabInferior('equivalentes')}
+                      className={`px-4 text-xs font-semibold border-b-2 transition-colors ${
+                        tabInferior === 'equivalentes'
+                          ? 'border-blue-500 text-blue-600 dark:text-blue-300 bg-white dark:bg-neutral-700'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                      }`}
+                    >
+                      Equivalentes
+                    </button>
+                    <button
+                      onClick={() => setTabInferior('carrinho')}
+                      className={`px-4 text-xs font-semibold border-b-2 transition-colors ${
+                        tabInferior === 'carrinho'
+                          ? 'border-green-500 text-green-600 dark:text-green-300 bg-white dark:bg-neutral-700'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                      }`}
+                    >
+                      Carrinho ({carrinho?.length || 0})
+                    </button>
                   </div>
-                ) : (
-                  <div className="h-full w-full">
-                    {produtoRef.length && produtoRef[0]?.codigo !== 'nenhum' ? (
-                      <div className="h-full w-full">
-                        {produtoRef[0].codigo !== 'sem referencia' ? (
-                          <div className="h-8 bg-gray-100 dark:bg-neutral-800 w-full flex justify-center items-center ">
-                            ITENS EQUIVALENTES
-                          </div>
-                        ) : (
-                          <div className="h-8 bg-gray-100 dark:bg-neutral-600 w-full flex justify-center items-center " />
-                        )}
 
-                        <div className="h-[calc(34%)] bg-white dark:bg-neutral-600 w-full flex justify-center items-center ">
-                          {produtoRef[0].codigo !== 'sem referencia' ? (
-                            <TableProdRef
-                              data2={produtoRef || []}
-                              tela={tela}
-                              telaSelecionada={telaSelecionada}
-                              produtoSelecionado={produtoSelecionado}
-                              cliente={dadosClienteSel.nome}
-                              handleCarrinho={handleCarrinho}
-                              descontoTodos={descontoTodosAtivo}
-                              kickback={clienteSelect.KICKBACK || false}
-                              ctxGlobal={ctxGlobal}
-                              onCtxChange={handleCtxChange}
-                              kickbackMarcadoPorProduto={kickbackMarcadoPorProduto}
-                              setKickbackMarcadoPorProduto={setKickbackMarcadoPorProduto}
-                              precosOriginais={precosOriginaisKickback}
-                              setPrecosOriginais={setPrecosOriginaisKickback}
-                            />
+                  {/* Conteúdo da tab */}
+                  {tabInferior === 'equivalentes' ? (
+                    <>
+                      {loadingRef ? (
+                        <div className="flex-1 min-h-0 w-full flex justify-center items-center">
+                          <Carregamento />
+                        </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 w-full flex flex-col">
+                          {produtoRef.length && produtoRef[0]?.codigo !== 'nenhum' ? (
+                            <div className="flex-1 min-h-0 w-full flex flex-col">
+                              <div className="flex-1 min-h-0 bg-white dark:bg-neutral-600 w-full">
+                                {produtoRef[0].codigo !== 'sem referencia' ? (
+                                  <TableProdRef
+                                    data2={produtoRef || []}
+                                    tela={tela}
+                                    telaSelecionada={telaSelecionada}
+                                    produtoSelecionado={produtoSelecionado}
+                                    cliente={dadosClienteSel.nome}
+                                    handleCarrinho={handleCarrinho}
+                                    descontoTodos={descontoTodosAtivo}
+                                    kickback={clienteSelect.KICKBACK || false}
+                                    ctxGlobal={ctxGlobal}
+                                    onCtxChange={handleCtxChange}
+                                    kickbackMarcadoPorProduto={kickbackMarcadoPorProduto}
+                                    setKickbackMarcadoPorProduto={setKickbackMarcadoPorProduto}
+                                    precosOriginais={precosOriginaisKickback}
+                                    setPrecosOriginais={setPrecosOriginaisKickback}
+                                    activeGrid={activeGrid}
+                                    onActivateGrid={setActiveGrid}
+                                  />
+                                ) : (
+                                  <div className="flex justify-center items-center font-bold h-full w-full bg-gray-100">
+                                    Não tem equivalentes para esse item
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           ) : (
-                            <div className="flex justify-center items-center font-bold  h-full w-full bg-gray-100 ">
-                              Não tem equivalentes para esse item
+                            <div className="font-bold bg-gray-50 dark:bg-neutral-900 w-full flex-1 flex justify-center items-center text-gray-400 dark:text-gray-500">
+                              Selecione um item para ver equivalentes
                             </div>
                           )}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="font-bold bg-gray-50 dark:bg-neutral-900 w-full h-[calc(45%)] flex justify-center items-center">
-                        CLICK NO ITEM PARA VER O EQUIVALENTE
-                      </div>
-                    )}{' '}
-                  </div>
-                )}
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex-1 min-h-0 w-full overflow-auto bg-white dark:bg-neutral-700">
+                      {carrinho?.length ? (
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-green-50 dark:bg-neutral-800 text-left">
+                            <tr className="border-b border-gray-300">
+                              <th className="px-2 py-1.5 font-semibold">Ref</th>
+                              <th className="px-2 py-1.5 font-semibold">Descrição</th>
+                              <th className="px-2 py-1.5 font-semibold">Marca</th>
+                              <th className="px-2 py-1.5 font-semibold text-center">Qtd</th>
+                              <th className="px-2 py-1.5 font-semibold text-right">Preço</th>
+                              <th className="px-2 py-1.5 font-semibold text-right">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {carrinho.map((item: any, idx: number) => (
+                              <tr key={idx} className="border-b border-gray-200 dark:border-neutral-600 hover:bg-green-50 dark:hover:bg-neutral-600">
+                                <td className="px-2 py-1 text-gray-600 dark:text-gray-300">{item.ref}</td>
+                                <td className="px-2 py-1 font-medium">{item.descrição?.substring(0, 40)}</td>
+                                <td className="px-2 py-1 text-gray-500 dark:text-gray-400">{item.marca?.substring(0, 15)}</td>
+                                <td className="px-2 py-1 text-center font-semibold">{item.quantidade}</td>
+                                <td className="px-2 py-1 text-right">{MascaraReal(item.precoItemEditado || item.preço)}</td>
+                                <td className="px-2 py-1 text-right font-semibold">{MascaraReal(item.totalItem)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="font-bold w-full h-full flex justify-center items-center text-gray-400 dark:text-gray-500">
+                          Nenhum item no carrinho
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="h-[calc(100%)] w-full border-t border-gray-300  flex justify-center items-center ">
@@ -4611,7 +4683,7 @@ export default function HomeVenda() {
         </div>
       ) : null}
       {tela === '2' && hasVendedor ? (
-        <div className="h-[calc(100%-7rem)]  w-full border-b border-gray-300  flex justify-center items-start ">
+        <div className="flex-1 min-h-0  w-full border-b border-gray-300  flex justify-center items-start ">
           <div className="w-full h-full">
             {carrinho?.length ? (
               <div className="w-full h-full">
@@ -5951,7 +6023,7 @@ export default function HomeVenda() {
                 </div>
               </div>
             ) : (
-              <div className="h-[calc(100%-7rem)] w-full border-t border-gray-300  flex justify-center items-center ">
+              <div className="flex-1 min-h-0 w-full border-t border-gray-300  flex justify-center items-center ">
                 <div className="h-full w-full">
                   <div className="h-[calc(100%-3rem)]  flex justify-center items-center">
                     {mensagem.length ? (

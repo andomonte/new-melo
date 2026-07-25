@@ -26,7 +26,7 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
       <div className="flex-none flex h-20 items-center justify-center w-full bg-[#347AB6] dark:bg-[#1f517c] text-white border-b border-gray-300 dark:border-slate-700">
         <div className="w-[6%] sm:w-[8%] md:w-[5%] lg:w-[4%] ml-2 h-full flex items-center justify-start">
           <Button
-            className="w-8 h-8"
+            className="w-8 h-8 text-black dark:text-white"
             size="icon"
             variant="outline"
             onClick={() => {

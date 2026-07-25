@@ -16,7 +16,21 @@ export default async function handle(
     const pool = getPgPool();
 
     const result = await pool.query(
-      'SELECT * FROM dbprod WHERE codprod = $1',
+      `SELECT p.*,
+        COALESCE(m.descr, '') as marca_nome,
+        COALESCE(gf.descr, '') as grupo_funcao_nome,
+        COALESCE(gp.descr, '') as grupo_produto_nome,
+        COALESCE((
+          SELECT SUM(cap.arp_qtest)
+          FROM cad_armazem_produto cap
+          WHERE cap.arp_codprod = p.codprod
+            AND COALESCE(cap.arp_bloqueado, 'N') <> 'S'
+        ), 0) as estoque_disponivel
+      FROM dbprod p
+      LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
+      LEFT JOIN dbgpfunc gf ON gf.codgpf = p.codgpf
+      LEFT JOIN dbgpprod gp ON gp.codgpp = p.codgpp
+      WHERE p.codprod = $1`,
       [id as string]
     );
 

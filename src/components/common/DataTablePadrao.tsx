@@ -103,6 +103,8 @@ interface DataTablePadraoProps {
       amigável do cabeçalho). Fonte única para exportações (Excel/PDF) usarem
       exatamente o que está na grade. */
   onColunasVisiveisChange?: (colunas: { key: string; label: string }[]) => void;
+  /** Função que retorna className extra para cada row (ex: highlight de seleção) */
+  rowClassName?: (row: any, index: number) => string;
 }
 
 export default function DataTablePadrao({
@@ -146,6 +148,7 @@ export default function DataTablePadrao({
   mostrarFiltrosSempre,
   dicaFiltro,
   filtrarSomenteAoConfirmar,
+  rowClassName,
 }: DataTablePadraoProps) {
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
@@ -948,12 +951,10 @@ export default function DataTablePadrao({
                   return (
                   <React.Fragment key={rowKey}>
                   <tr
-                    className={`hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors ${onRowClick || expandableRowRender ? 'cursor-pointer' : ''} ${estaExpandida ? 'bg-blue-50 dark:bg-zinc-800' : ''}`}
+                    className={`hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors ${onRowClick || expandableRowRender ? 'cursor-pointer' : ''} ${estaExpandida ? 'bg-blue-50 dark:bg-zinc-800' : ''} ${rowClassName ? rowClassName(row, rowIndex) : ''}`}
                     onClick={(e) => {
                       onRowClick?.(row);
                       if (!expandableRowRender) return;
-                      // Não alterna ao clicar em controles interativos (Ações,
-                      // checkbox de seleção, links).
                       const alvo = e.target as HTMLElement;
                       if (alvo.closest('button, input, a, select, [role="menuitem"], [role="menu"]')) return;
                       setLinhaExpandida((k) => (k === rowKey ? null : rowKey));
