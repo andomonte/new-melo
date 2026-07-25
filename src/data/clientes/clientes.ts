@@ -157,7 +157,14 @@ export async function insertCliente(cliente: Cliente): Promise<Cliente> {
   const data = await res.json();
 
   if (!res.ok || data.error) {
-    throw new Error(data.error || data.detail || `Erro HTTP ${res.status}`);
+    // Inclui o detalhe real do banco (ex.: "valor muito longo...") quando houver,
+    // em vez de mostrar só a mensagem genérica "Erro ao salvar cliente".
+    const base = data.error || 'Erro ao salvar cliente';
+    const msg =
+      data.detail && data.detail !== data.error
+        ? `${base}: ${data.detail}`
+        : base || `Erro HTTP ${res.status}`;
+    throw new Error(msg);
   }
 
   return data;

@@ -71,7 +71,14 @@ export async function getPerfis({
 export async function insertPerfil(
   perfil: Omit<Perfil, 'qtd_telas' | 'qtd_usuarios' | 'qtd_functions'>,
 ): Promise<void> {
-  await api.post('/api/perfis/add', perfil);
+  try {
+    await api.post('/api/perfis/add', perfil);
+  } catch (error: any) {
+    // A rota /add retorna { error } com a mensagem real do banco embutida.
+    const data = error?.response?.data;
+    const msg = data?.details || data?.error || error?.message;
+    throw new Error(msg || 'Erro ao criar perfil.');
+  }
 }
 
 export async function getPerfil(id: string): Promise<PerfilCompleto> {
@@ -87,7 +94,15 @@ export async function getPerfil(id: string): Promise<PerfilCompleto> {
 export async function updatePerfil(
   perfil: PerfilCadastroOuEdicao,
 ): Promise<void> {
-  await api.put(`/api/perfis/update`, perfil);
+  try {
+    await api.put(`/api/perfis/update`, perfil);
+  } catch (error: any) {
+    // A rota retorna { error, details } com a mensagem real do banco.
+    // Propaga essa mensagem para o componente exibir no toast.
+    const data = error?.response?.data;
+    const msg = data?.details || data?.error || error?.message;
+    throw new Error(msg || 'Erro ao atualizar perfil.');
+  }
 }
 export interface Option {
   label: string;

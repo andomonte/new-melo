@@ -670,12 +670,14 @@ export default function FormEditarUsuario({
   };
 
   const handleLoginChange = (value: string) => {
-    setLoginUser(value);
+    // Armazena em maiúsculo (mesmo texto exibido) para não salvar a caixa digitada.
+    setLoginUser(value.toLocaleUpperCase());
     setHasChanges(true);
   };
 
   const handleNomeChange = (value: string) => {
-    setNomeUser(value);
+    // Armazena em maiúsculo (mesmo texto exibido) para não salvar a caixa digitada.
+    setNomeUser(value.toLocaleUpperCase());
     setHasChanges(true);
   };
 

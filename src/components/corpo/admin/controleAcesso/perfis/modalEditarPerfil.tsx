@@ -75,11 +75,11 @@ export default function ModalEditarPerfil({
     setHasChanges(false);
   };
 
-  const handleErrorSave = () => {
+  const handleErrorSave = (mensagem?: string) => {
     setIsSaving(false);
     toast({
       title: 'Erro ao atualizar perfil',
-      description: 'Ocorreu um erro ao salvar as alterações.',
+      description: mensagem || 'Ocorreu um erro ao salvar as alterações.',
       variant: 'destructive',
     });
   };

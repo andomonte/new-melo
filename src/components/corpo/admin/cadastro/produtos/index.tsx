@@ -177,6 +177,12 @@ const ProdutosPage = () => {
   // habilita o navegador de registros do modal de edição (editar vários
   // produtos na sequência que o usuário vê, como no Delphi).
   const [ordemNavCodprods, setOrdemNavCodprods] = useState<string[]>([]);
+  // Espelho em ref para as exportações lerem a ordem atual da grade (ordenação
+  // por coluna feita depois do filtro) sem depender de closure defasada.
+  const ordemNavCodprodsRef = useRef<string[]>([]);
+  useEffect(() => {
+    ordemNavCodprodsRef.current = ordemNavCodprods;
+  }, [ordemNavCodprods]);
 
   // Novos modais
   const [isZoomOpen, setIsZoomOpen] = useState(false);
@@ -656,6 +662,23 @@ const ProdutosPage = () => {
     return 'texto';
   };
 
+  // Reordena as linhas buscadas para seguir EXATAMENTE a ordem exibida na grade
+  // (ordenação por coluna aplicada depois do filtro, reportada pelo DataTable via
+  // `onOrderedRowsChange`). Códigos fora dessa ordem (ex.: páginas não exibidas)
+  // ficam ao final, preservando a ordem do servidor. `sort` é estável no JS atual.
+  const ordenarComoGrade = (linhas: any[]): any[] => {
+    const ordem = ordemNavCodprodsRef.current;
+    if (!ordem || ordem.length === 0) return linhas;
+    const pos = new Map<string, number>();
+    ordem.forEach((c, i) => pos.set(String(c), i));
+    const FIM = Number.MAX_SAFE_INTEGER;
+    return [...linhas].sort((a, b) => {
+      const ia = pos.has(String(a?.codprod)) ? (pos.get(String(a?.codprod)) as number) : FIM;
+      const ib = pos.has(String(b?.codprod)) ? (pos.get(String(b?.codprod)) as number) : FIM;
+      return ia - ib;
+    });
+  };
+
   // Busca TODAS as linhas do filtro atual (busca + filtros por coluna + status),
   // não só a página visível — reaproveita os mesmos endpoints/params da grade.
   const buscarLinhasParaExport = useCallback(async (): Promise<any[]> => {
@@ -670,10 +693,10 @@ const ProdutosPage = () => {
       });
       if (!resp.ok) throw new Error('Erro na busca com filtros');
       const d = await resp.json();
-      return d.data || [];
+      return ordenarComoGrade(d.data || []);
     }
     const d = await getProdutos({ page: 1, perPage: perPageAll, search, filtros, status: statusFiltroRef.current });
-    return d.data || [];
+    return ordenarComoGrade(d.data || []);
   }, [produtos.meta, produtos.data, filtros, search]);
 
   // Exportar para Excel (exceljs) — colunas visíveis, rótulos amigáveis, todas

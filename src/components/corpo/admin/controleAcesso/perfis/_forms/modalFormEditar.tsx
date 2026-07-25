@@ -21,7 +21,7 @@ interface Props {
   login_perfil_name: string;
   onClose: () => void;
   onSuccess?: () => void;
-  onError?: () => void; // Adicionando a prop onError
+  onError?: (mensagem?: string) => void; // Adicionando a prop onError
   titulo: string;
   onDataChange?: (hasChanged: boolean) => void;
   onSaveInitiated?: () => void;
@@ -175,7 +175,8 @@ export default function FormEditarPerfil({
       onSuccess?.();
     } catch (error) {
       console.error(error);
-      onError?.(); // Chama a função de erro passada pelo pai EM CASO DE FALHA
+      // Repassa a mensagem real (ex.: erro do banco) para o pai exibir no toast.
+      onError?.(error instanceof Error ? error.message : undefined);
     } finally {
       setIsSaving(false); // Define isSaving como false quando o salvamento termina
     }
