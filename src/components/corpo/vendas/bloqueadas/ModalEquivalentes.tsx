@@ -207,8 +207,8 @@ const ModalEquivalentes: React.FC<ModalEquivalentesProps> = ({
       if (pedindoQtd >= 0) return;
 
       if (e.key === 'Escape') {
-        e.preventDefault(); e.stopImmediatePropagation();
-        onClose();
+        e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
+        setTimeout(onClose, 0);
         return;
       }
 

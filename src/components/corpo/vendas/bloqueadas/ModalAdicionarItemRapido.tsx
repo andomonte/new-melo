@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
-import { X, Loader2, Search, ArrowLeftRight } from 'lucide-react';
+import { X, Loader2, Search, ArrowLeftRight, History } from 'lucide-react';
 import {
   ContextMenu, ContextMenuTrigger, ContextMenuContent,
   ContextMenuItem, ContextMenuSeparator, ContextMenuLabel,
@@ -11,6 +11,7 @@ import { AuthContext } from '@/contexts/authContexts';
 import { useToast } from '@/hooks/use-toast';
 import api from '@/components/services/api';
 import ModalEquivalentes from './ModalEquivalentes';
+import ModalHistoricoProduto from './ModalHistoricoProduto';
 
 interface ItemAdicionado {
   codprod: string;
@@ -62,6 +63,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [modalEquiv, setModalEquiv] = useState(false);
   const [produtoEquiv, setProdutoEquiv] = useState<any>(null);
+  const [modalHist, setModalHist] = useState(false);
+  const [produtoHist, setProdutoHist] = useState<any>(null);
   const [pageLoaded, setPageLoaded] = useState(0);
 
   const modalRef = useRef<HTMLDivElement>(null);
@@ -69,6 +72,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const qtdInputRef = useRef<HTMLInputElement>(null);
   const linhaSelecionadaRef = useRef(-1);
   linhaSelecionadaRef.current = linhaSelecionada;
+  const listaProdRef = useRef<any[]>([]);
+  listaProdRef.current = listaProd;
   const buscandoRef = useRef(false);
   const SCREEN_KEY = 'analise-adicionar-itens';
   const prefsCarregadasRef = useRef(false);
@@ -264,11 +269,11 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
 
   // Abrir equivalentes do item selecionado
   const abrirEquivalentes = useCallback(() => {
-    if (linhaSelecionadaRef.current < 0 || !listaProd[linhaSelecionadaRef.current]) {
+    if (linhaSelecionadaRef.current < 0 || !listaProdRef.current[linhaSelecionadaRef.current]) {
       toast({ title: 'Selecione um item na lista' });
       return;
     }
-    const produto = listaProd[linhaSelecionadaRef.current];
+    const produto = listaProdRef.current[linhaSelecionadaRef.current];
     const codgpe = (produto.codgpe || '').trim();
     if (codgpe) {
       setProdutoEquiv({ codprod: produto.codprod, ref: produto.ref || '', descr: produto.aplic_extendida || produto.descr || '', codgpe, origem: produto.dolar || 'N' });
@@ -287,7 +292,17 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         })
         .catch(() => toast({ title: 'Erro ao buscar equivalência' }));
     }
-  }, [listaProd, toast]);
+  }, [toast]);
+
+  const abrirHistorico = useCallback(() => {
+    if (linhaSelecionadaRef.current < 0 || !listaProdRef.current[linhaSelecionadaRef.current]) {
+      toast({ title: 'Selecione um item na lista' });
+      return;
+    }
+    const produto = listaProdRef.current[linhaSelecionadaRef.current];
+    setProdutoHist({ codprod: produto.codprod, ref: produto.ref || '', descr: produto.aplic_extendida || produto.descr || '' });
+    setModalHist(true);
+  }, [toast]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -374,6 +389,13 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         return;
       }
 
+      // F10: histórico do item selecionado
+      if (e.key === 'F10' && !emInput) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        abrirHistorico();
+        return;
+      }
+
       // F9: equivalentes do item selecionado
       if (e.key === 'F9' && !emInput) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -390,7 +412,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [isOpen, listaProd, totalProd, currentSearch, pageLoaded, pedindoQtd, confirmarAdicao, abrirQtd, abrirEquivalentes, fetchProdutos, onClose]);
+  }, [isOpen, listaProd, totalProd, currentSearch, pageLoaded, pedindoQtd, confirmarAdicao, abrirQtd, abrirEquivalentes, abrirHistorico, fetchProdutos, onClose]);
 
   // Ordenação
   const handleSort = useCallback((col: string) => {
@@ -462,7 +484,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-gray-400">
-              Enter buscar | ↑↓ navegar | Enter selecionar | F9 Equivalentes | Esc voltar/fechar
+              Enter buscar | ↑↓ navegar | Enter selecionar | F9 Equiv. | F10 Hist. | Esc voltar/fechar
             </span>
             <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-500">
               <X className="h-5 w-5" />
@@ -612,6 +634,10 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
             <ArrowLeftRight size={14} className="mr-2" /> Equivalentes
             <span className="ml-auto text-[10px] text-gray-400">F9</span>
           </ContextMenuItem>
+          <ContextMenuItem onClick={abrirHistorico}>
+            <History size={14} className="mr-2" /> Histórico Produto
+            <span className="ml-auto text-[10px] text-gray-400">F10</span>
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={onClose}>
             Fechar
@@ -619,6 +645,13 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      {/* Modal Histórico */}
+      <ModalHistoricoProduto
+        isOpen={modalHist}
+        onClose={() => { setModalHist(false); setProdutoHist(null); }}
+        produto={produtoHist}
+      />
 
       {/* Modal Equivalentes */}
       <ModalEquivalentes

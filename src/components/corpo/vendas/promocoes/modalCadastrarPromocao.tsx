@@ -5,8 +5,9 @@ import { promocaoSchema } from '@/data/promocoes/promocoesSchema';
 import { AuthContext } from '@/contexts/authContexts';
 import ModalAdicionarItemRapido from '../bloqueadas/ModalAdicionarItemRapido';
 import ModalEquivalentes from '../bloqueadas/ModalEquivalentes';
+import ModalHistoricoProduto from '../bloqueadas/ModalHistoricoProduto';
 import InfoModal from '@/components/common/infoModal';
-import { CircleCheckBig, X, Plus, Trash2, Download, Save, Eraser, FileDown, Keyboard, Eye } from 'lucide-react';
+import { CircleCheckBig, X, Plus, Trash2, Download, Save, Eraser, FileDown, Keyboard, Eye, History } from 'lucide-react';
 import {
   ContextMenu, ContextMenuTrigger, ContextMenuContent,
   ContextMenuItem, ContextMenuSeparator, ContextMenuLabel,
@@ -151,7 +152,11 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
   const [zoomProduto, setZoomProduto] = useState<any>(null);
   const [modalEquivalentes, setModalEquivalentes] = useState(false);
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
+  const [modalHistProduto, setModalHistProduto] = useState(false);
+  const [produtoHist, setProdutoHist] = useState<any>(null);
   const ultimaCelulaRef = useRef<any>(null);
+  const gridWrapperRef = useRef<HTMLDivElement>(null);
+  const modaisAbertosRef = useRef(false);
 
   // ---------- Clientes e Vendedores vinculados ----------
   const [clientesVinculados, setClientesVinculados] = useState<{ cod: string; nome: string }[]>([]);
@@ -371,7 +376,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       const novos = selectedItems
         .filter((item) => !existentes.has(item.codprod))
         .map((item) => itemToGrid(item, descontoPadrao));
-      return [...prev, ...novos];
+      return [...novos, ...prev];
     });
     setIsAddProductsModalOpen(false);
   }, [promocao.valor_desconto, itemToGrid]);
@@ -662,10 +667,51 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
     wrapperBorder: true,
   }), []);
 
+  modaisAbertosRef.current = isAddProductsModalOpen || !!zoomProduto || modalEquivalentes || modalHistProduto || !!itemParaRemover;
+
+  const restaurarFocoGrid = useCallback(() => {
+    setTimeout(() => {
+      const api = gridRef.current?.api;
+      if (!api) return;
+      const fc = api.getFocusedCell();
+      if (fc) {
+        api.setFocusedCell(fc.rowIndex, fc.column?.getColId?.() || 'ref');
+      } else if (ultimaCelulaRef.current) {
+        const idx = rowData.findIndex((r: any) => r.codprod === ultimaCelulaRef.current.codprod);
+        if (idx >= 0) api.setFocusedCell(idx, 'ref');
+      }
+    }, 100);
+  }, [rowData]);
+
   // Registrar atalhos de teclado (após todas as funções serem definidas)
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      // Setas cima/baixo dentro do grid
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !emInput) {
+        const wrapper = gridWrapperRef.current;
+        if (wrapper && wrapper.contains(e.target as Node)) {
+          const api = gridRef.current?.api;
+          if (!api) return;
+          const focused = api.getFocusedCell();
+          if (!focused) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const totalRows = api.getDisplayedRowCount();
+          const currentCol = focused.column?.getColId?.() || 'ref';
+          const nextRow = e.key === 'ArrowDown'
+            ? Math.min(focused.rowIndex + 1, totalRows - 1)
+            : Math.max(focused.rowIndex - 1, 0);
+          api.setFocusedCell(nextRow, currentCol);
+          api.ensureIndexVisible(nextRow);
+          return;
+        }
+        return;
+      }
+
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
         e.stopPropagation();
@@ -674,13 +720,14 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
       } else if (e.ctrlKey && e.key === 'l') {
         e.preventDefault();
         atalhoRef.current.clear();
-      } else if (e.ctrlKey && e.key === 'n') {
+      } else if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.key === 'Add')) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         setIsAddProductsModalOpen(true);
       } else if (e.ctrlKey && e.key === 'e') {
         e.preventDefault();
         atalhoRef.current.exportar();
-      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+      } else if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z' && !modaisAbertosRef.current) {
         // Não interceptar em inputs (preserva undo nativo)
         const el = e.target as HTMLElement;
         if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT' || el?.isContentEditable) return;
@@ -695,7 +742,17 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
             setZoomProduto({ codprod: rowNode.data.codprod, ref: rowNode.data.ref, descr: rowNode.data.descricao });
           }
         }
-      } else if (e.key === 'F9') {
+      } else if (e.key === 'F10' && !modaisAbertosRef.current) {
+        const el = e.target as HTMLElement;
+        if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT') return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        const fc = gridRef.current?.api?.getFocusedCell();
+        let item: any = null;
+        if (fc) { const rn = gridRef.current?.api?.getDisplayedRowAtIndex(fc.rowIndex); if (rn?.data) item = rn.data; }
+        if (!item && ultimaCelulaRef.current) item = ultimaCelulaRef.current;
+        if (item) { setProdutoHist({ codprod: item.codprod, ref: item.ref, descr: item.descricao || item.descr }); setModalHistProduto(true); }
+        else toast.error('Selecione um item na planilha');
+      } else if (e.key === 'F9' && !modaisAbertosRef.current) {
         const el = e.target as HTMLElement;
         if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.tagName === 'SELECT') return;
         e.preventDefault(); e.stopImmediatePropagation();
@@ -728,14 +785,15 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
         } else {
           toast.error('Selecione um item na planilha');
         }
-      } else if (e.key === 'Escape' && !isAddProductsModalOpen && !itemParaRemover && !zoomProduto && !modalEquivalentes) {
+      } else if (e.key === 'Escape' && !modaisAbertosRef.current) {
         e.preventDefault();
         atalhoRef.current.close();
       }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [isOpen, isAddProductsModalOpen, itemParaRemover]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -984,7 +1042,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
               .dark .ag-promo-grid .ag-cell-range-single-cell { background-color: rgba(255,255,255,0.05) !important; }
               .dark .ag-promo-grid .ag-row { border-color: #3f3f46 !important; }
             `}</style>
-            <div className="h-full ag-promo-grid">
+            <div className="h-full ag-promo-grid" ref={gridWrapperRef}>
               <AgGridReact
                 ref={gridRef}
                 theme={gridTheme}
@@ -1042,7 +1100,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => setIsAddProductsModalOpen(true)} disabled={isSaving}>
             <Plus size={14} className="mr-2" /> Adicionar Item
-            <span className="ml-auto text-[10px] text-gray-400">Ctrl+N</span>
+            <span className="ml-auto text-[10px] text-gray-400">Ctrl++</span>
           </ContextMenuItem>
           <ContextMenuItem onClick={handleExportar}>
             <FileDown size={14} className="mr-2" /> Exportar CSV
@@ -1085,6 +1143,17 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
             <Eye size={14} className="mr-2" /> Equivalentes
             <span className="ml-auto text-[10px] text-gray-400">F9</span>
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            const fc = gridRef.current?.api?.getFocusedCell();
+            let item: any = null;
+            if (fc) { const rn = gridRef.current?.api?.getDisplayedRowAtIndex(fc.rowIndex); if (rn?.data) item = rn.data; }
+            if (!item && ultimaCelulaRef.current) item = ultimaCelulaRef.current;
+            if (item) { setProdutoHist({ codprod: item.codprod, ref: item.ref, descr: item.descricao || item.descr }); setModalHistProduto(true); }
+            else toast.error('Selecione um item na planilha');
+          }}>
+            <History size={14} className="mr-2" /> Histórico Produto
+            <span className="ml-auto text-[10px] text-gray-400">F10</span>
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={onClose}>
             <X size={14} className="mr-2" /> Fechar
@@ -1096,17 +1165,23 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
 
       <ModalAdicionarItemRapido
         isOpen={isAddProductsModalOpen}
-        onClose={() => setIsAddProductsModalOpen(false)}
+        onClose={() => { setIsAddProductsModalOpen(false); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItemRapido}
         itensExistentes={rowData.map((r) => r.codprod)}
       />
 
       <ModalEquivalentes
         isOpen={modalEquivalentes}
-        onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); }}
+        onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItemRapido}
         itensExistentes={rowData.map((r) => r.codprod)}
         produto={produtoEquivalente}
+      />
+
+      <ModalHistoricoProduto
+        isOpen={modalHistProduto}
+        onClose={() => { setModalHistProduto(false); setProdutoHist(null); restaurarFocoGrid(); }}
+        produto={produtoHist}
       />
 
       <InfoModal
@@ -1124,7 +1199,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
 
       <ProductZoomModal
         open={!!zoomProduto}
-        onOpenChange={(open) => { if (!open) setZoomProduto(null); }}
+        onOpenChange={(open) => { if (!open) { setZoomProduto(null); restaurarFocoGrid(); } }}
         productId={zoomProduto?.codprod}
         product={zoomProduto}
       />

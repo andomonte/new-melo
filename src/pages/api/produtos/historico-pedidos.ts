@@ -64,7 +64,7 @@ export default async function handle(
         cr.nome as fornecedor,
         ri.quantidade,
         ri.preco_unitario,
-        ri.prazo_entrega as previsao_chegada,
+        o.orc_previsao_chegada as previsao_chegada,
         CASE
           WHEN o.orc_status = 'P' THEN 'PENDENTE'
           WHEN o.orc_status = 'A' THEN 'APROVADO'
