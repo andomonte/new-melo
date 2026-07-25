@@ -19,6 +19,7 @@ import {
   Trash2,
   Keyboard,
   ArrowLeftRight,
+  History,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -32,6 +33,8 @@ import { useToast } from '@/hooks/use-toast';
 import ProductZoomModal from '@/components/common/ProductZoomModal';
 import ModalAdicionarItemRapido from './ModalAdicionarItemRapido';
 import ModalEquivalentes from './ModalEquivalentes';
+import ModalHistoricoProduto from './ModalHistoricoProduto';
+import ModalFinalizarVenda from './ModalFinalizarVenda';
 import { AgGridReact } from 'ag-grid-react';
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community';
 import type { CellValueChangedEvent } from 'ag-grid-community';
@@ -188,6 +191,9 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
 
   const [modalEquivalentes, setModalEquivalentes] = useState(false);
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
+  const [modalHistProduto, setModalHistProduto] = useState(false);
+  const [produtoHist, setProdutoHist] = useState<any>(null);
+  const [modalFinalizar, setModalFinalizar] = useState(false);
 
   // Refs para evitar re-registrar handlers quando modais abrem/fecham
   const modaisAbertosRef = React.useRef(false);
@@ -330,8 +336,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
             alt={d.origem === 'N' ? 'Nacional' : 'Importado'}
             style={{ width: 16, height: 11, objectFit: 'contain' }}
           />
-          Cód: <span style={{ fontWeight: 500 }}>{d.codprod || ''}</span>
-          {d._novo ? <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>NOVO</span> : null}
+          {d._novo ? <span style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>NOVO</span> : null}
         </div>
       </div>
     );
@@ -461,7 +466,21 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
   ], []);
 
   // ---------- Sync ref de modais abertos ----------
-  modaisAbertosRef.current = modalCliente || modalFinanceiro || modalHistorico || modalAlertas || !!zoomProduto || addItemOpen || modalEquivalentes;
+  modaisAbertosRef.current = modalCliente || modalFinanceiro || modalHistorico || modalAlertas || !!zoomProduto || addItemOpen || modalEquivalentes || modalHistProduto || modalFinalizar;
+
+  const restaurarFocoGrid = useCallback(() => {
+    setTimeout(() => {
+      const api = gridRef.current?.api;
+      if (!api) return;
+      const fc = api.getFocusedCell();
+      if (fc) {
+        api.setFocusedCell(fc.rowIndex, fc.column?.getColId?.() || 'ref');
+      } else if (ultimaCelulaRef.current) {
+        const idx = itensGrid.findIndex((r: any) => r.codprod === ultimaCelulaRef.current.codprod);
+        if (idx >= 0) api.setFocusedCell(idx, 'ref');
+      }
+    }, 100);
+  }, [itensGrid]);
 
   // ---------- Atalhos de teclado (registra UMA vez, usa refs) ----------
   useEffect(() => {
@@ -548,8 +567,17 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
           toast({ title: 'Selecione um item na planilha' });
         }
       }
+      else if (e.key === 'F10') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        const fc = gridRef.current?.api?.getFocusedCell();
+        let item: any = null;
+        if (fc) { const rn = gridRef.current?.api?.getDisplayedRowAtIndex(fc.rowIndex); if (rn?.data) item = rn.data; }
+        if (!item && ultimaCelulaRef.current) item = ultimaCelulaRef.current;
+        if (item) { setProdutoHist({ codprod: item.codprod, ref: item.ref, descr: item.descr }); setModalHistProduto(true); }
+        else toast({ title: 'Selecione um item na planilha' });
+      }
       else if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.key === 'Add')) { e.preventDefault(); e.stopImmediatePropagation(); setAddItemOpen(true); }
-      else if (e.ctrlKey && e.key === 'l') { e.preventDefault(); e.stopImmediatePropagation(); onLiberar(); }
+      else if (e.ctrlKey && e.key === 'l') { e.preventDefault(); e.stopImmediatePropagation(); setModalFinalizar(true); }
       else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
     };
 
@@ -717,10 +745,10 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
                         <Keyboard size={11} />
-                        F2 Cliente | F3 Financeiro | F4 Histórico | F5 Alertas | F9 Equivalentes | Ctrl+Z Zoom | Ctrl++ Adicionar | Ctrl+L Liberar | Esc Fechar
+                        F2 Cliente | F3 Financeiro | F4 Histórico | F5 Alertas | F9 Equiv. | F10 Hist. Produto | Ctrl+Z Zoom | Ctrl++ Adicionar | Ctrl+L Liberar | Esc
                       </span>
                       <button
-                        onClick={onLiberar}
+                        onClick={() => setModalFinalizar(true)}
                         className="px-4 py-1.5 text-xs font-medium rounded-md bg-green-600 hover:bg-green-700 text-white flex items-center gap-1.5"
                       >
                         <CheckCircle size={14} />
@@ -867,12 +895,23 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
             <ArrowLeftRight size={14} className="mr-2" /> Equivalentes
             <span className="ml-auto text-[10px] text-gray-400">F9</span>
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            const fc = gridRef.current?.api?.getFocusedCell();
+            let item: any = null;
+            if (fc) { const rn = gridRef.current?.api?.getDisplayedRowAtIndex(fc.rowIndex); if (rn?.data) item = rn.data; }
+            if (!item && ultimaCelulaRef.current) item = ultimaCelulaRef.current;
+            if (item) { setProdutoHist({ codprod: item.codprod, ref: item.ref, descr: item.descr }); setModalHistProduto(true); }
+            else toast({ title: 'Selecione um item na planilha' });
+          }}>
+            <History size={14} className="mr-2" /> Histórico Produto
+            <span className="ml-auto text-[10px] text-gray-400">F10</span>
+          </ContextMenuItem>
           <ContextMenuItem onClick={() => setAddItemOpen(true)}>
             <Plus size={14} className="mr-2" /> Adicionar Item
             <span className="ml-auto text-[10px] text-gray-400">Ctrl++</span>
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onClick={onLiberar} className="text-green-600">
+          <ContextMenuItem onClick={() => setModalFinalizar(true)} className="text-green-600">
             <CheckCircle size={14} className="mr-2" /> Liberar Venda
             <span className="ml-auto text-[10px] text-gray-400">Ctrl+L</span>
           </ContextMenuItem>
@@ -1184,7 +1223,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
       {/* ========== Zoom Produto ========== */}
       <ProductZoomModal
         open={!!zoomProduto}
-        onOpenChange={(open) => { if (!open) setZoomProduto(null); }}
+        onOpenChange={(open) => { if (!open) { setZoomProduto(null); restaurarFocoGrid(); } }}
         productId={zoomProduto?.codprod}
         product={zoomProduto}
       />
@@ -1192,7 +1231,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
       {/* ========== Modal: Adicionar Produtos ========== */}
       <ModalAdicionarItemRapido
         isOpen={addItemOpen}
-        onClose={() => setAddItemOpen(false)}
+        onClose={() => { setAddItemOpen(false); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItens}
         itensExistentes={itensGrid.filter((i) => !i._novo).map((i) => i.codprod)}
       />
@@ -1200,10 +1239,26 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
       {/* ========== Modal: Equivalentes ========== */}
       <ModalEquivalentes
         isOpen={modalEquivalentes}
-        onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); }}
+        onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItens}
         itensExistentes={itensGrid.map((i) => i.codprod)}
         produto={produtoEquivalente}
+      />
+
+      {/* ========== Modal: Histórico Produto ========== */}
+      <ModalHistoricoProduto
+        isOpen={modalHistProduto}
+        onClose={() => { setModalHistProduto(false); setProdutoHist(null); restaurarFocoGrid(); }}
+        produto={produtoHist}
+      />
+
+      {/* ========== Modal: Finalizar Venda ========== */}
+      <ModalFinalizarVenda
+        isOpen={modalFinalizar}
+        onClose={() => { setModalFinalizar(false); restaurarFocoGrid(); }}
+        codvenda={codvenda}
+        onFinalizar={onLiberar}
+        usuario={user?.usuario}
       />
 
       {/* ========== Modal: Pontos de Atenção ========== */}

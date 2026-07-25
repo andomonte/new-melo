@@ -174,6 +174,8 @@ export default function DataTablePadrao({
   }, [searchValue]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [larguraTabela, setLarguraTabela] = useState(0);
+  const [customColWidths, setCustomColWidths] = useState<Record<string, number>>({});
+  const resizingRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [colunasVisiveis, setColunasVisiveis] = useState<string[]>(headers);
   const [mostrarSeletorColunas, setMostrarSeletorColunas] = useState(false);
@@ -204,6 +206,7 @@ export default function DataTablePadrao({
           }
           if (p.sortColumn) setSortColumn(p.sortColumn);
           if (p.sortDirection) setSortDirection(p.sortDirection);
+          if (p.customColWidths && typeof p.customColWidths === 'object') setCustomColWidths(p.customColWidths);
           if (p.perPage && onPerPageChange) onPerPageChange(Number(p.perPage));
           // Com mostrarFiltrosSempre, a preferência salva não pode escondê-la no load.
           if (!mostrarFiltrosSempre && typeof p.mostrarFiltros === 'boolean') setMostrarFiltros(p.mostrarFiltros);
@@ -226,6 +229,7 @@ export default function DataTablePadrao({
         sortDirection,
         perPage: meta?.perPage,
         mostrarFiltros,
+        customColWidths,
         ...overrides,
       };
 
@@ -743,6 +747,8 @@ export default function DataTablePadrao({
                 ))
               ) : (
                 ordemColunas.filter(h => colunasVisiveis.includes(h)).map((header, i) => {
+                  const customW = customColWidths[header];
+                  if (customW) return <col key={i} style={{ width: `${customW}px`, minWidth: `${customW}px` }} />;
                   const narrow = header === '☑️' ? '70px' : header === 'Ações' ? '50px' : undefined;
                   return <col key={i} style={narrow ? { width: narrow, maxWidth: narrow } : { minWidth: '70px' }} />;
                 })
@@ -759,10 +765,15 @@ export default function DataTablePadrao({
                   return (
                     <th
                       key={index}
-                      className={`px-2 py-1.5 text-center text-[0.6875rem] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none ${
+                      className={`px-2 py-1.5 text-center text-[0.6875rem] font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider select-none relative ${
                         sortable ? 'cursor-pointer hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors' : ''
                       }`}
-                      style={header === '☑️' ? { width: '40px', maxWidth: '40px' } : header === 'Ações' ? { width: '50px', maxWidth: '50px' } : undefined}
+                      style={
+                        header === '☑️' ? { width: '40px', maxWidth: '40px' } :
+                        header === 'Ações' ? { width: '50px', maxWidth: '50px' } :
+                        customColWidths[header] ? { width: `${customColWidths[header]}px`, minWidth: `${customColWidths[header]}px` } :
+                        undefined
+                      }
                       onClick={() => sortable && handleSort(header)}
                     >
                       <div className="flex items-center justify-center gap-1">
@@ -781,6 +792,33 @@ export default function DataTablePadrao({
                           </span>
                         )}
                       </div>
+                      {/* Handle de redimensionamento */}
+                      {!EH_UTILITARIA(header) ? (
+                        <div
+                          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400 active:bg-blue-500 z-20"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const th = (e.target as HTMLElement).parentElement;
+                            const startW = th?.offsetWidth || 100;
+                            resizingRef.current = { col: header, startX: e.clientX, startW };
+                            const onMove = (ev: MouseEvent) => {
+                              if (!resizingRef.current) return;
+                              const diff = ev.clientX - resizingRef.current.startX;
+                              const newW = Math.max(40, resizingRef.current.startW + diff);
+                              setCustomColWidths((prev) => ({ ...prev, [resizingRef.current!.col]: newW }));
+                            };
+                            const onUp = () => {
+                              resizingRef.current = null;
+                              window.removeEventListener('mousemove', onMove);
+                              window.removeEventListener('mouseup', onUp);
+                              salvarPreferencias();
+                            };
+                            window.addEventListener('mousemove', onMove);
+                            window.addEventListener('mouseup', onUp);
+                          }}
+                        />
+                      ) : null}
                     </th>
                   );
                 })}

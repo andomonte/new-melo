@@ -21,9 +21,8 @@ export default async function handle(
   try {
     // 1. EXTRAIR DADOS DA REQUISIÇÃO
     const { codvenda } = req.query;
-    const { status } = req.body;
+    const { status, transportadora, codtptransp, vlrfrete, formaPagamento, prazo, obsfat, obs, pedido } = req.body;
 
-    // Validação dos dados recebidos, usando o padrão de retorno corrigido
     if (!codvenda || typeof codvenda !== 'string') {
       res.status(400).json({ message: 'Código da venda inválido.' });
       return;
@@ -33,20 +32,34 @@ export default async function handle(
       return;
     }
 
-    // 2. ATUALIZAR NO BANCO DE DADOS COM PG
     const pool = getPgPool();
     client = await pool.connect();
 
-    // A instrução UPDATE com a cláusula RETURNING * é a chave aqui.
-    // Ela atualiza a linha e a retorna em uma única operação.
+    // Montar UPDATE dinâmico com campos opcionais de finalização
+    const setClauses = ['status = $1'];
+    const params: any[] = [status, codvenda];
+    let idx = 3;
+
+    if (transportadora !== undefined) { setClauses.push(`transp = $${idx}`); params.push(transportadora); idx++; }
+    if (codtptransp !== undefined) { setClauses.push(`codtptransp = $${idx}`); params.push(codtptransp); idx++; }
+    if (vlrfrete !== undefined) { setClauses.push(`vlrfrete = $${idx}`); params.push(Number(vlrfrete) || 0); idx++; }
+    // forma de pagamento não é salva em dbvenda (só no frontend para validação)
+    if (prazo !== undefined) { setClauses.push(`prazo = $${idx}`); params.push(prazo); idx++; }
+    if (obsfat !== undefined) { setClauses.push(`obsfat = $${idx}`); params.push(obsfat); idx++; }
+    if (obs !== undefined) { setClauses.push(`obs = $${idx}`); params.push(obs); idx++; }
+    if (pedido !== undefined) { setClauses.push(`pedido = $${idx}`); params.push(pedido); idx++; }
+
+    setClauses.push(`bloqueada = '0'`);
+    setClauses.push(`dtupdate = NOW()`);
+
     const updateQuery = `
       UPDATE dbvenda
-      SET status = $1
+      SET ${setClauses.join(', ')}
       WHERE codvenda = $2
       RETURNING *;
     `;
 
-    const result = await client.query(updateQuery, [status, codvenda]);
+    const result = await client.query(updateQuery, params);
 
     // Se result.rows estiver vazio, significa que o WHERE não encontrou
     // nenhuma venda com o 'codvenda' fornecido.

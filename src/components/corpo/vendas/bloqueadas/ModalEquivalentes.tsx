@@ -207,8 +207,8 @@ const ModalEquivalentes: React.FC<ModalEquivalentesProps> = ({
       if (pedindoQtd >= 0) return;
 
       if (e.key === 'Escape') {
-        e.preventDefault(); e.stopImmediatePropagation();
-        onClose();
+        e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
+        setTimeout(onClose, 0);
         return;
       }
 
@@ -323,8 +323,7 @@ const ModalEquivalentes: React.FC<ModalEquivalentesProps> = ({
                             {descr}
                           </div>
                           <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                            Cód: <span style={{ fontWeight: 500 }}>{cod}</span>
-                            {jaExistente ? <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded ml-2">Na venda</span> : null}
+                            {jaExistente ? <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded">Na venda</span> : null}
                             {jaAdicionado ? <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-900/30 px-1.5 py-0.5 rounded ml-2">Qtd: {adicionados.get(cod)}</span> : null}
                             {semEstoque && !jaExistente ? <span className="text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded ml-2">S/ EST.</span> : null}
                             {idx === pedindoQtd ? (
