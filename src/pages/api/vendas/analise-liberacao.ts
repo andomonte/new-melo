@@ -137,7 +137,10 @@ export default async function handler(
         v.credito,
         v.debito as venda_debito,
         v.limite as venda_limite,
-        v.codvend
+        v.codvend,
+        v.tele,
+        (SELECT COALESCE(u.nomeusr, vv.codvend, '') FROM dbvvend vv LEFT JOIN dbusuario u ON vv.codvend = u.codusr WHERE vv.codvenda = v.codvenda AND COALESCE(vv.operador, 'N') = 'N' LIMIT 1) as vendedor_nome,
+        (SELECT COALESCE(u.nomeusr, vv.codvend, '') FROM dbvvend vv LEFT JOIN dbusuario u ON vv.codvend = u.codusr WHERE vv.codvenda = v.codvenda AND vv.operador = 'S' LIMIT 1) as operador_nome
       FROM dbvenda v
       WHERE v.codvenda = $1
     `;
@@ -535,6 +538,8 @@ export default async function handler(
         obs: venda.obs,
         obsfat: venda.obsfat,
         codvend: venda.codvend,
+        vendedor_nome: venda.vendedor_nome || '',
+        operador_nome: venda.operador_nome || '',
       },
       itens,
       cliente: analiseCliente,

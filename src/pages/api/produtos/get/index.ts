@@ -26,7 +26,7 @@ export default async function handle(
 
     // Status do produto (ver memória produto-status-ativo-inativo):
     //   ativo (padrão) => inf <> 'D'  | inativo => inf = 'D' | todos => sem filtro
-    // Obs.: dirigido só por inf='D'; a coluna `excluido` (legado) não filtra.
+    // Obs.: dirigido por inf='D' e excluido=1.
     const filtroStatus =
       status === 'inativo'
         ? `inf = 'D'`
@@ -41,6 +41,9 @@ export default async function handle(
       whereConditions.push(`p.${filtroStatus}`);
       whereConditionsCount.push(filtroStatus);
     }
+    // Sempre filtrar excluídos
+    whereConditions.push(`COALESCE(p.excluido, 0) != 1`);
+    whereConditionsCount.push(`COALESCE(excluido, 0) != 1`);
     const queryParams: any[] = [];
     let paramIndex = 1;
 

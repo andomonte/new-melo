@@ -647,7 +647,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                     <div className="flex items-center gap-4 mt-1 text-xs text-gray-600 dark:text-gray-400">
                       <span><b>Cliente:</b> {data.cliente.codcli} - {data.cliente.nomefant || data.cliente.nome}</span>
                       <span><b>Data:</b> {formatDate(data.venda.data)}</span>
-                      <span><b>Vendedor:</b> {data.venda.codvend}</span>
+                      <span><b>{data.venda.operador_nome ? 'Operador' : 'Vendedor'}:</b> {data.venda.operador_nome || data.venda.vendedor_nome || data.venda.codvend}</span>
                       {data.cliente.cpfcgc ? <span><b>CNPJ/CPF:</b> {data.cliente.cpfcgc}</span> : null}
                       <span className={data.cliente.limite_disponivel > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
                         <b>Limite Disp.:</b> {formatCurrency(data.cliente.limite_disponivel)}
