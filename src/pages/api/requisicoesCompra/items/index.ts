@@ -23,6 +23,7 @@ interface RawRequisitionItem {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  quantidade_atendida?: number;
   quantidade_sugerida?: number;
   base_indicacao?: string;
 
@@ -102,7 +103,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
       -- Product data
       p.descr as produto_descr,
-      p.codmarca as produto_marca,
+      COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), p.codmarca) as produto_marca,
       p.ref as produto_ref,
       '' as produto_aplicacao,
       COALESCE(p.qtest, 0) as produto_estoque,

@@ -46,6 +46,13 @@ interface DataTablePadraoProps {
   onSearchKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
   onSearchBlur?: () => void;
   searchInputPlaceholder?: string;
+  /** Conteúdo renderizado na linha de busca, à esquerda do botão "Opções"
+   *  (ex.: um select de status standalone). */
+  searchRightSlot?: React.ReactNode;
+  /** Se false, o componente NÃO salva/restaura o "Qtd. Itens" nas preferências
+   *  do servidor. Use quando a tela persiste o perPage por conta própria
+   *  (ex.: localStorage), evitando conflito. Padrão: true. */
+  persistPerPage?: boolean;
   loading?: boolean;
   /** Alias para loading (compatibilidade com DataTableFiltro) */
   carregando?: boolean;
@@ -117,6 +124,8 @@ export default function DataTablePadrao({
   onSearchKeyDown,
   searchInputPlaceholder,
   loading,
+  searchRightSlot,
+  persistPerPage = true,
   noDataMessage = 'Nenhum dado encontrado.',
   onFiltroChange,
   colunasFiltro = [],
@@ -207,7 +216,7 @@ export default function DataTablePadrao({
           if (p.sortColumn) setSortColumn(p.sortColumn);
           if (p.sortDirection) setSortDirection(p.sortDirection);
           if (p.customColWidths && typeof p.customColWidths === 'object') setCustomColWidths(p.customColWidths);
-          if (p.perPage && onPerPageChange) onPerPageChange(Number(p.perPage));
+          if (persistPerPage && p.perPage && onPerPageChange) onPerPageChange(Number(p.perPage));
           // Com mostrarFiltrosSempre, a preferência salva não pode escondê-la no load.
           if (!mostrarFiltrosSempre && typeof p.mostrarFiltros === 'boolean') setMostrarFiltros(p.mostrarFiltros);
         }
@@ -227,7 +236,7 @@ export default function DataTablePadrao({
         ordemColunas,
         sortColumn,
         sortDirection,
-        perPage: meta?.perPage,
+        perPage: persistPerPage ? meta?.perPage : undefined,
         mostrarFiltros,
         customColWidths,
         ...overrides,
@@ -544,7 +553,7 @@ export default function DataTablePadrao({
     if (onPerPageChange) {
       onPerPageChange(Number(value));
     }
-    salvarPreferencias({ perPage: Number(value) });
+    if (persistPerPage) salvarPreferencias({ perPage: Number(value) });
   };
 
   const perPageOptions: { value: string; label: string }[] = [
@@ -589,8 +598,9 @@ export default function DataTablePadrao({
             }}
             onKeyDown={onSearchKeyDown}
           />
-          
+
           <div className="flex items-center gap-2">
+            {searchRightSlot}
             {/* Dialog para Filtros Avançados */}
             <Dialog
               open={mostrarModalFiltroAvancado}
@@ -1043,6 +1053,7 @@ export default function DataTablePadrao({
           <SelectInput
             name="itemsPagina"
             label=""
+            required
             value={meta?.perPage?.toString() ?? ''}
             options={perPageOptions}
             onValueChange={handlePerPageChangeInternal}

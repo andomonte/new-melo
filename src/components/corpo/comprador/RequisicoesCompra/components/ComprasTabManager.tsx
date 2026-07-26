@@ -38,7 +38,7 @@ export const ComprasTabManager: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-slate-900">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-900">
       {/* Header compacto */}
       <div className="px-10 pt-4 pb-1 flex-shrink-0">
         {/* Header com título e botão alinhados */}
@@ -100,7 +100,7 @@ export const ComprasTabManager: React.FC = () => {
       {/* Renderização condicional dos componentes - ocupa todo espaço restante */}
       <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab === 'requisicoes' && (
-          <div className="h-full pb-6 overflow-hidden">
+          <div className="h-full pb-6 overflow-hidden flex flex-col">
             <RequisicoesCompraMain
               showNewButton={false}
               triggerNewModal={triggerNewModal}
@@ -109,7 +109,7 @@ export const ComprasTabManager: React.FC = () => {
           </div>
         )}
         {activeTab === 'ordens' && (
-          <div className="px-4 h-full pb-6 overflow-hidden">
+          <div className="px-4 h-full pb-6 overflow-hidden flex flex-col">
             <OrdensComprasListImproved />
           </div>
         )}

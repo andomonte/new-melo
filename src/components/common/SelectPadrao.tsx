@@ -220,25 +220,38 @@ function SearchableDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Calcula posição fixa (funciona dentro de scroll/modal)
-  React.useEffect(() => {
-    if (open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const openUp = spaceBelow < 180;
+  // Calcula posição fixa (funciona dentro de scroll/modal). Reposiciona ao rolar
+  // ou redimensionar — antes a lista ficava “presa” na posição inicial e
+  // desalinhava quando o conteúdo do modal rolava.
+  const reposicionar = React.useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < 180;
+    setDropdownStyle({
+      position: 'fixed',
+      width: rect.width,
+      left: rect.left,
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + 4 }
+        : { top: rect.bottom + 4 }),
+      zIndex: 9999,
+    });
+  }, []);
 
-      setDropdownStyle({
-        position: 'fixed',
-        width: rect.width,
-        left: rect.left,
-        ...(openUp
-          ? { bottom: window.innerHeight - rect.top + 4 }
-          : { top: rect.bottom + 4 }),
-        zIndex: 9999,
-      });
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [open]);
+  React.useEffect(() => {
+    if (!open) return;
+    reposicionar();
+    setTimeout(() => inputRef.current?.focus(), 50);
+    // captura=true pega o scroll de qualquer container interno (modal), não só o window
+    const onScroll = () => reposicionar();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, reposicionar]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
 

@@ -37,8 +37,48 @@ export default async function handler(
   const offset = (Number(page) - 1) * Number(perPage);
   const limit = Number(perPage);
 
+  // O grid (DataTablePadrao) envia o `campo` em minúsculas (header.toLowerCase()).
+  // Normaliza de volta para a chave canônica (camelCase) do mapa de colunas.
+  const campoCanonicoPorLower: Record<string, string> = {};
+  Object.keys(filtroParaColunaSQL).forEach((k) => {
+    campoCanonicoPorLower[k.toLowerCase()] = k;
+  });
+  filtros.forEach((f: { campo: string; tipo: string; valor: string }) => {
+    const canon = campoCanonicoPorLower[String(f.campo).toLowerCase()];
+    if (canon) f.campo = canon;
+  });
+
   const params: any[] = [];
   const whereGroups: string[] = [];
+
+  // Filtro multi-termo por coluna, estilo Delphi/produtos:
+  //   ESPAÇO = E (todas as palavras) · ';' = OU (qualquer grupo)
+  //   Combinável: "robert bosch;marelli" = (ROBERT E BOSCH) OU MARELLI
+  const montarMultiTermo = (
+    exprTexto: string,
+    valorRaw: string,
+    wrap: (t: string) => string,
+  ): string | null => {
+    const grupos = String(valorRaw)
+      .split(';')
+      .map((g) =>
+        g
+          .trim()
+          .split(/\s+/)
+          .map((t) => t.replace(/^%+|%+$/g, '').trim())
+          .filter(Boolean),
+      )
+      .filter((g) => g.length > 0);
+    if (grupos.length === 0) return null;
+    const orConds = grupos.map((termos) => {
+      const andConds = termos.map((t) => {
+        params.push(wrap(t));
+        return `${exprTexto} ILIKE $${params.length}`;
+      });
+      return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
+    });
+    return orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0];
+  };
 
   // Agrupa filtros pelo campo
   const filtrosAgrupados: Record<string, { tipo: string; valor: string }[]> = {};
@@ -118,41 +158,23 @@ export default async function handler(
           valor = String(valor);
           break;
         case 'contém':
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          } else {
-            operador = 'ILIKE';
-            valor = `%${String(filtro.valor)}%`;
-          }
-          break;
         case 'começa':
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `${String(filtro.valor)}%`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `${String(filtro.valor)}%`;
-          } else {
-            operador = 'ILIKE';
-            valor = `${String(filtro.valor)}%`;
-          }
-          break;
-        case 'termina':
-          if (isCampoData) {
-            operador = 'TO_CHAR(COLUMN, \'DD/MM/YYYY\') ILIKE';
-            valor = `%${String(filtro.valor)}`;
-          } else if (isCampoNumerico) {
-            operador = 'CAST(COLUMN AS TEXT) ILIKE';
-            valor = `%${String(filtro.valor)}`;
-          } else {
-            operador = 'ILIKE';
-            valor = `%${String(filtro.valor)}`;
-          }
-          break;
+        case 'termina': {
+          const exprTexto = isCampoData
+            ? `TO_CHAR(${coluna}, 'DD/MM/YYYY')`
+            : isCampoNumerico
+              ? `CAST(${coluna} AS TEXT)`
+              : coluna;
+          const wrap =
+            filtro.tipo === 'contém'
+              ? (t: string) => `%${t}%`
+              : filtro.tipo === 'começa'
+                ? (t: string) => `${t}%`
+                : (t: string) => `%${t}`;
+          const cond = montarMultiTermo(exprTexto, String(filtro.valor), wrap);
+          if (cond) filtrosCampoSQL.push(cond);
+          return;
+        }
         case 'nulo':
           filtrosCampoSQL.push(`${coluna} IS NULL`);
           return;

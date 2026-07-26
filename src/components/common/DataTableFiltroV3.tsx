@@ -88,6 +88,13 @@ interface DataTableProps {
   }[];
   // Mapeamento de campo -> label para exibição
   columnLabels?: Record<string, string>;
+  // Aplica o visual do grid de Produtos (DataTablePadrao): mais compacto,
+  // cabeçalho bg-gray-100/zinc-800 e linhas com divisória sutil (divide-y).
+  estiloProduto?: boolean;
+  // Navegação por teclado / seleção de linha (estilo Delphi). Recebem a linha
+  // formatada e o índice; use um campo oculto (ex.: __index) para mapear de volta.
+  rowClassName?: (row: any, index: number) => string;
+  onRowClick?: (row: any, index: number) => void;
 }
 
 export default function DataTable({
@@ -112,6 +119,9 @@ export default function DataTable({
   exportFileName = 'requisicoes.xlsx',
   customActions = [],
   columnLabels = {},
+  estiloProduto = false,
+  rowClassName,
+  onRowClick,
 }: DataTableProps) {
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<
@@ -430,13 +440,15 @@ export default function DataTable({
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="w-full overflow-x-auto overflow-y-auto flex-1">
           <div className="min-w-full">
-              <table className="table-auto w-full border-collapse text-sm text-center">
-              <thead className="sticky top-0 z-10 dark:bg-gray-100 border-b border-gray-300 dark:border-zinc-700">
+              <table className={`table-auto w-full border-collapse text-center ${estiloProduto ? 'text-xs' : 'text-sm'}`}>
+              <thead className={`sticky top-0 z-10 border-b border-gray-300 dark:border-zinc-700 ${estiloProduto ? 'bg-gray-100 dark:bg-zinc-800' : 'dark:bg-gray-100'}`}>
                 <tr>
                   {orderedHeaders.map((header, index) => (
                     <th
                       key={index}
-                      className={`relative px-2 py-2 bg-gray-200 dark:bg-zinc-800 whitespace-nowrap text-center ${
+                      className={`relative px-2 py-2 whitespace-nowrap text-center ${
+                        estiloProduto ? 'bg-gray-100 dark:bg-zinc-800' : 'bg-gray-200 dark:bg-zinc-800'
+                      } ${
                         isColumnFixed(header) ? 'w-[80px]' : 'min-w-[140px]'
                       }`}
                     >
@@ -523,7 +535,7 @@ export default function DataTable({
                   ))}
                 </tr>
                 {mostrarFiltros && (
-                  <tr className="bg-gray-200 dark:dark:bg-zinc-800">
+                  <tr className={estiloProduto ? 'bg-gray-100 dark:bg-zinc-800' : 'bg-gray-200 dark:bg-zinc-800'}>
                     {orderedHeaders.map((header, index) =>
                       !isColumnFixed(header) ? (
                         <th key={index} className="px-2 py-1 font-normal">
@@ -613,7 +625,7 @@ export default function DataTable({
                 )}
               </thead>
 
-              <tbody>
+              <tbody className={estiloProduto ? 'bg-white dark:bg-zinc-900 divide-y divide-gray-200 dark:divide-zinc-700' : ''}>
                 {carregando ? (
                   <tr>
                     <td colSpan={orderedHeaders.length}>
@@ -632,12 +644,36 @@ export default function DataTable({
                   rows.map((row, rowIndex) => (
                     <tr
                       key={rowIndex}
-                      className="bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all duration-200"
+                      onClick={
+                        onRowClick
+                          ? (e) => {
+                              const alvo = e.target as HTMLElement;
+                              if (
+                                alvo.closest(
+                                  'button, input, a, select, [role="menuitem"], [role="menu"]',
+                                )
+                              )
+                                return;
+                              onRowClick(row, rowIndex);
+                            }
+                          : undefined
+                      }
+                      className={`${
+                        estiloProduto
+                          ? 'bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors'
+                          : 'bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all duration-200'
+                      } ${onRowClick ? 'cursor-pointer' : ''} ${
+                        rowClassName ? rowClassName(row, rowIndex) : ''
+                      }`}
                     >
                       {orderedHeaders.map((header, cellIndex) => (
                         <td
                           key={cellIndex}
-                          className="border-t border-gray-300 dark:border-zinc-600 px-4 py-2 whitespace-nowrap"
+                          className={
+                            estiloProduto
+                              ? 'px-2 py-1 whitespace-nowrap text-xs text-gray-900 dark:text-gray-100'
+                              : 'border-t border-gray-300 dark:border-zinc-600 px-4 py-2 whitespace-nowrap'
+                          }
                         >
                           <div className="truncate">{row[header]}</div>
                         </td>

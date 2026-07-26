@@ -4,7 +4,8 @@ import type { RequisitionDTO } from '@/data/requisicoesCompra/types/requisition'
 import { useOrdens } from '../hooks/useOrdens';
 import { useOrdensTableImproved } from '../hooks/useOrdensTableImproved';
 import { colunasDbOrdem } from '../colunasDbOrdem';
-import DataTableFiltroV3 from '@/components/common/DataTableFiltroV3';
+import DataTable from '@/components/common/DataTablePadrao';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 import { PlusIcon, CircleChevronDown, Package, Send, CheckCircle, XCircle, Eye, Edit3, Trash2, Ban, FileDown, DollarSign, Calendar, Truck, Replace, Archive, Download, CheckSquare, X, FileSpreadsheet, Clock } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import api from '@/components/services/api';
@@ -587,9 +588,10 @@ export default function OrdensComprasListImproved({
   // Add selection checkbox and actions menu columns
   const rows = formattedData.map((row, index) => {
     const item = data[index];
-    
-    const baseRow = {
+
+    const baseRow: Record<string, any> = {
       ...row,
+      __index: index,
       AÇÕES: (
         <div className="flex justify-center">
           <button
@@ -796,23 +798,71 @@ export default function OrdensComprasListImproved({
     return baseRow;
   });
 
+  // ===== Navegação por teclado (estilo Delphi) — Enter abre "Ver Itens" =====
+  const algumModalOrdemAberto =
+    confirmModal.isOpen || verItensModal.isOpen || substituirItemModal.isOpen;
+
+  const { linhaSelecionada, setLinhaSelecionada } =
+    useNavegacaoTecladoTabela<OrdemCompraDTO>({
+      data,
+      ativo: !algumModalOrdemAberto,
+      onEnter: (row) => handleVerItens(row),
+    });
+
+  // Exportação da lista de ordens para Excel (mesmo endpoint do grid antigo).
+  const handleExportarListaOrdem = async () => {
+    try {
+      const res = await fetch('/api/ordens/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ colunas: [], filtros: {}, busca: search }),
+      });
+      if (!res.ok) throw new Error('Falha na exportação');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ordens-compra.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Erro ao exportar ordens:', e);
+    }
+  };
 
   return (
     <>
-      <DataTableFiltroV3
+      <div className="h-full flex flex-col overflow-hidden">
+      <DataTable
+        screenKey="compras-ordens"
+        userName={user?.usuario}
         carregando={loading}
         headers={headers}
         rows={rows}
         meta={meta}
+        semColunaDeAcaoPadrao
+        persistPerPage={false}
+        nonsortableColumns={headers}
+        rowClassName={(_row, idx) =>
+          idx === linhaSelecionada
+            ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
+            : ''
+        }
+        onRowClick={(row) => setLinhaSelecionada((row as any).__index ?? -1)}
         onPageChange={setPage}
         onPerPageChange={setPerPage}
         onColunaSubstituida={handleColumnChange}
+        searchValue={search}
         onSearch={handleSearch}
         onSearchBlur={handleSearchBlur}
         onSearchKeyDown={handleSearchKeyDown}
         searchInputPlaceholder="Pesquisar por ordem, requisição, fornecedor..."
+        colunasFiltro={colunasDbOrdem.map((c) => c.campo)}
+        onFiltroChange={handleFiltroChange}
+        mostrarFiltrosSempre
+        onExportarExcel={handleExportarListaOrdem}
         searchRightSlot={
-          <div className="w-48 flex-shrink-0">
+          <div className="w-44">
             <SelectInput
               name="statusOrdem"
               options={[
@@ -829,19 +879,12 @@ export default function OrdensComprasListImproved({
             />
           </div>
         }
-        colunasFiltro={colunasDbOrdem.map((c) => c.campo)}
-        limiteColunas={limiteColunas}
-        onLimiteColunasChange={handleLimiteColunasChange}
-        colunasFixas={['AÇÕES']}
-        exportEndpoint="/api/ordens/exportar"
-        exportFileName="ordens-compra.xlsx"
-        onFiltroChange={handleFiltroChange}
-        showAdvancedFilters={true}
         columnLabels={colunasDbOrdem.reduce((acc, col) => {
           acc[col.campo] = col.label;
           return acc;
-        }, {} as Record<string, string>)}
+        }, { 'AÇÕES': 'Ações' } as Record<string, string>)}
       />
+      </div>
 
       {/* Modal para alterar previsão de chegada */}
       <AlterarPrevisaoChegadaModal
@@ -1229,6 +1272,7 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
                     <tr className="border-b bg-gray-50 dark:bg-gray-700">
                       <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Código</th>
                       <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Descrição</th>
+                      <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Marca</th>
                       <th className="text-right p-2 font-semibold text-gray-700 dark:text-gray-300">Qtd</th>
                       <th className="text-right p-2 font-semibold text-gray-700 dark:text-gray-300">Atendida</th>
                       <th className="text-right p-2 font-semibold text-gray-700 dark:text-gray-300">Pendência</th>
@@ -1253,6 +1297,7 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
                               <div className="text-xs text-gray-500 dark:text-gray-400">Ref: {item.produto.ref}</div>
                             )}
                           </td>
+                          <td className="p-2 text-gray-900 dark:text-gray-100">{item.produto?.marca || item.produto_marca_nome || '-'}</td>
                           <td className="p-2 text-right text-gray-900 dark:text-gray-100">{formatarQtd(item.quantidade)}</td>
                           <td className="p-2 text-right text-green-600 dark:text-green-400 font-medium">{formatarQtd(atendida)}</td>
                           <td className={`p-2 text-right font-bold ${pendencia > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>

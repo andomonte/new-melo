@@ -217,24 +217,9 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
         return;
       }
 
-      // 2) Marca a NFe como processada (exec='S').
-      const response = await fetch('/api/entrada-xml/gerar-entrada', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nfeId,
-          dadosCompletos: { associatedItems, dadosComplementares },
-        }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        setMessageData({ title: 'Erro ao Processar XML', message: data.error || 'Ocorreu um erro desconhecido', type: 'error' });
-        setShowMessage(true);
-        return;
-      }
-
-      // 3) "Gerar agora": cria a entrada de estoque (dbent) — grava selo/conhecimento
-      //    e deixa pronta para Confirmar Preço/Estoque (onde o frete entra no custo).
+      // 2) "Gerar agora": cria a entrada (dbent) e marca a NFe como processada
+      //    (exec='S') ATOMICAMENTE no gerar-por-chave. Se falhar, a nota continua
+      //    Associada (sem estado órfão). "Gerar depois" só salva a config.
       if (gerarAgora) {
         const rGerar = await fetch('/api/entradas/gerar-por-chave', {
           method: 'POST',

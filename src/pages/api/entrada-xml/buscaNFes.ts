@@ -293,7 +293,8 @@ export default async function handler(
     const nfesFormatted = result.rows.map((nfe: any) => {
       let status = 'RECEBIDA';
       if (nfe.exec === 'S') {
-        status = 'PROCESSADA';
+        // exec='S' SEM entrada (dbent) gerada = estado órfão → "Associada" (pode gerar).
+        status = nfe.codent ? 'PROCESSADA' : 'ASSOCIACAO_CONCLUIDA';
       } else if (nfe.exec === 'A') {
         status = 'EM_ANDAMENTO';
       } else if (nfe.exec === 'C') {

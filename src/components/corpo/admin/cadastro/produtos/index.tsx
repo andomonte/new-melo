@@ -9,6 +9,7 @@ import { Produtos, getProdutos } from '@/data/produtos/produtos';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 import { useDebouncedCallback } from 'use-debounce';
 import DataTable from '@/components/common/DataTablePadrao';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 import { DefaultButton } from '@/components/common/Buttons';
 import SelectInput from '@/components/common/SelectPadrao';
 import { useToast } from '@/hooks/use-toast';
@@ -1166,6 +1167,33 @@ const ProdutosPage = () => {
     setEditarOpen(true);
   };
 
+  // ===== Navegação por teclado (estilo Delphi) =====
+  const algumModalProdutoAberto =
+    cadastrarOpen ||
+    editarOpen ||
+    isZoomOpen ||
+    isCopiarOpen ||
+    isAlteracaoMassaOpen ||
+    isCamposListaOpen ||
+    isSubstituirOpen ||
+    isAtualizarCustoOpen ||
+    isDemandaOpen ||
+    isExtratoOpen ||
+    isEquivalentesOpen ||
+    isRelacionadosOpen;
+
+  const { linhaSelecionada, setLinhaSelecionada } =
+    useNavegacaoTecladoTabela<any>({
+      data: produtos.data,
+      ativo: !algumModalProdutoAberto,
+      onEnter: (row) => {
+        if (row?.codprod) abrirEdicaoComNav(row.codprod);
+      },
+    });
+
+  const codprodSelecionado =
+    linhaSelecionada >= 0 ? produtos.data?.[linhaSelecionada]?.codprod : undefined;
+
   // ========================================
   // EFFECTS
   // ========================================
@@ -1593,6 +1621,18 @@ const ProdutosPage = () => {
           expandableRowRender={(row) => (
             <ProdutoDetalheExpandido produto={(row as any).__produto} />
           )}
+          rowClassName={(row) =>
+            codprodSelecionado && (row as any).__codprod === codprodSelecionado
+              ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
+              : ''
+          }
+          onRowClick={(row) =>
+            setLinhaSelecionada(
+              produtos.data?.findIndex(
+                (p: any) => p.codprod === (row as any).__codprod,
+              ) ?? -1,
+            )
+          }
           onOrderedRowsChange={(ordered) => {
             const ids = ordered
               .map((r) => (r as any).__codprod)

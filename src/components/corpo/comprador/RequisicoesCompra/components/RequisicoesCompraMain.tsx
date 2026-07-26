@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef, useContext, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useContext, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import type { RequisitionDTO } from '@/data/requisicoesCompra/types/requisition';
 import { useRequisitions } from '../hooks/useRequisitions';
 import { useRequisicoesTable } from '../hooks/useRequisicoesTable';
 import { colunasDbRequisicao } from '../colunasDbRequisicao';
 import { formatTableData } from '../utils/tableHelpers';
-import DataTableFiltroV3 from '@/components/common/DataTableFiltroV3';
+import DataTable from '@/components/common/DataTablePadrao';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 import SelectInput from '@/components/common/SelectPadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 // OrdensComprasListImproved removed - managed by ComprasTabManager
@@ -62,6 +63,17 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
   const { toast } = useToast();
   // Confirmação no modal central (padrão do sistema), nunca toast no canto.
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  // Modal central de reprovação (com motivo) — individual ou em lote.
+  const [reprovarAlvo, setReprovarAlvo] = useState<{ itens: RequisitionDTO[] } | null>(null);
+  const [motivoReprovar, setMotivoReprovar] = useState('');
+  // Alerta central (mensagem no meio da tela, botão OK) — para os resultados
+  // das ações (submetido/aprovado/reprovado/cancelado), no lugar do toast do canto.
+  const alertaCentral = useCallback(
+    (title: string, message: string, type: 'success' | 'danger' | 'info' = 'success') => {
+      pedirConfirmacao(() => {}, { title, message, type, somenteOk: true, confirmText: 'OK' });
+    },
+    [pedirConfirmacao],
+  );
 
   // Verifica permissões baseado nas FUNÇÕES do banco (sem hardcode de perfis)
   // Suporta tanto objetos {sigla: '...'} quanto strings diretas
@@ -180,10 +192,6 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
           });
 
           if (response.data.success) {
-            toast({
-              title: "Sucesso",
-              description: "Requisição submetida com sucesso!"
-            });
             // Limpar seleção se o item estava selecionado
             if (selectedItems.has(item.id)) {
               const newSelected = new Set(selectedItems);
@@ -194,12 +202,9 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
               }
             }
             await refetch();
+            alertaCentral('Sucesso', 'Requisição submetida com sucesso!', 'success');
           } else {
-            toast({
-              title: "Erro",
-              description: response.data.message || 'Erro ao submeter requisição',
-              variant: "destructive"
-            });
+            alertaCentral('Erro', response.data.message || 'Erro ao submeter requisição', 'danger');
           }
         } catch (error: any) {
           console.error('Erro ao submeter:', error);
@@ -251,17 +256,10 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
           });
 
           if (response.data.success) {
-            toast({
-              title: "Sucesso",
-              description: "Requisição aprovada com sucesso!"
-            });
             await refetch();
+            alertaCentral('Sucesso', 'Requisição aprovada com sucesso!', 'success');
           } else {
-            toast({
-              title: "Erro",
-              description: response.data.message || 'Erro ao aprovar requisição',
-              variant: "destructive"
-            });
+            alertaCentral('Erro', response.data.message || 'Erro ao aprovar requisição', 'danger');
           }
         } catch (error: any) {
           console.error('Erro ao aprovar:', error);
@@ -301,53 +299,54 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
     
-    // Solicitar motivo da rejeição
-    const reason = prompt(`Motivo da rejeição da requisição ${item.requisicao} (opcional):`);
-    if (reason === null) return; // User cancelled
-    
-    toast({
-      title: "Confirmar rejeição",
-      description: `Tem certeza que deseja rejeitar a requisição ${item.requisicao}?${reason ? ` Motivo: ${reason}` : ''}`,
-      action: (
-        <ToastAction
-          altText="Rejeitar"
-          onClick={async () => {
-            try {
-              const response = await api.put('/api/requisicoesCompra/actions/reject', {
-                requisitionId: item.id,
-                version: item.versao,
-                userId: user?.codusr,
-                userName: user?.usuario,
-                comments: reason || 'Rejeição via interface'
-              });
-              
-              if (response.data.success) {
-                toast({
-                  title: "Sucesso",
-                  description: "Requisição rejeitada com sucesso!"
-                });
-                await refetch();
-              } else {
-                toast({
-                  title: "Erro",
-                  description: response.data.message || 'Erro ao rejeitar requisição',
-                  variant: "destructive"
-                });
-              }
-            } catch (error: any) {
-              console.error('Erro ao rejeitar:', error);
-              toast({
-                title: "Erro",
-                description: error.response?.data?.message || 'Erro interno ao rejeitar requisição',
-                variant: "destructive"
-              });
-            }
-          }}
-        >
-          Rejeitar
-        </ToastAction>
-      )
-    });
+    // Abre o modal central estilizado para informar o motivo (padrão do sistema).
+    setMotivoReprovar('');
+    setReprovarAlvo({ itens: [item] });
+  };
+
+  // Executa a reprovação (individual ou em lote) com o motivo do modal central.
+  const confirmarReprovacao = async () => {
+    const alvo = reprovarAlvo;
+    if (!alvo || alvo.itens.length === 0) return;
+    setReprovarAlvo(null);
+    const motivo = motivoReprovar.trim() || 'Reprovação via interface';
+
+    let successCount = 0;
+    let errorCount = 0;
+    for (const item of alvo.itens) {
+      if (!item.id) { errorCount++; continue; }
+      try {
+        const response = await api.put('/api/requisicoesCompra/actions/reject', {
+          requisitionId: item.id,
+          version: item.versao,
+          userId: user?.codusr,
+          userName: user?.usuario,
+          comments: motivo,
+        });
+        if (response.data.success) successCount++; else errorCount++;
+      } catch (error: any) {
+        console.error('Erro ao reprovar:', error);
+        errorCount++;
+      }
+    }
+
+    setSelectedItems(new Set());
+    setSelectedStatus(null);
+    await refetch();
+
+    if (alvo.itens.length === 1) {
+      alertaCentral(
+        successCount ? 'Sucesso' : 'Erro',
+        successCount ? 'Requisição reprovada com sucesso!' : 'Não foi possível reprovar a requisição.',
+        successCount ? 'success' : 'danger',
+      );
+    } else {
+      alertaCentral(
+        'Reprovação concluída',
+        `${successCount} sucesso(s), ${errorCount} erro(s)`,
+        errorCount > 0 ? 'danger' : 'success',
+      );
+    }
   };
 
 
@@ -361,49 +360,35 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
 
-    toast({
-      title: "Cancelamento",
-      description: `Tem certeza que deseja cancelar a requisição ${item.requisicao}?`,
-      action: (
-        <ToastAction
-          altText="Confirmar"
-          onClick={async () => {
-            try {
-              const response = await api.put('/api/requisicoesCompra/actions/cancel', {
-                requisitionId: item.id,
-                version: item.versao,
-                userId: user?.codusr,
-                userName: user?.usuario,
-                comments: 'Cancelamento via interface'
-              });
+    pedirConfirmacao(
+      async () => {
+        try {
+          const response = await api.put('/api/requisicoesCompra/actions/cancel', {
+            requisitionId: item.id,
+            version: item.versao,
+            userId: user?.codusr,
+            userName: user?.usuario,
+            comments: 'Cancelamento via interface'
+          });
 
-              if (response.data.success) {
-                toast({
-                  title: "Sucesso",
-                  description: "Requisição cancelada com sucesso!"
-                });
-                await refetch();
-              } else {
-                toast({
-                  title: "Erro",
-                  description: response.data.message || 'Erro ao cancelar requisição',
-                  variant: "destructive"
-                });
-              }
-            } catch (error: any) {
-              console.error('Erro ao cancelar:', error);
-              toast({
-                title: "Erro",
-                description: 'Erro interno ao cancelar requisição',
-                variant: "destructive"
-              });
-            }
-          }}
-        >
-          Confirmar
-        </ToastAction>
-      )
-    });
+          if (response.data.success) {
+            await refetch();
+            alertaCentral('Sucesso', 'Requisição cancelada com sucesso!', 'success');
+          } else {
+            alertaCentral('Erro', response.data.message || 'Erro ao cancelar requisição', 'danger');
+          }
+        } catch (error: any) {
+          console.error('Erro ao cancelar:', error);
+          alertaCentral('Erro', 'Erro interno ao cancelar requisição', 'danger');
+        }
+      },
+      {
+        title: 'Confirmar cancelamento',
+        message: `Tem certeza que deseja cancelar a requisição ${item.requisicao}?`,
+        confirmText: 'Sim, cancelar',
+        type: 'danger',
+      },
+    );
   };
 
   const handleDelete = async (item: RequisitionDTO) => {
@@ -546,14 +531,14 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
           }
         }
 
-        toast({
-          title: "Aprovação concluída",
-          description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
-          variant: errorCount > 0 ? "destructive" : "default"
-        });
         setSelectedItems(new Set());
         setSelectedStatus(null);
         await refetch();
+        alertaCentral(
+          'Aprovação concluída',
+          `${successCount} sucesso(s), ${errorCount} erro(s)`,
+          errorCount > 0 ? 'danger' : 'success',
+        );
       },
       {
         title: 'Confirmar aprovação',
@@ -586,58 +571,9 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       return;
     }
 
-    toast({
-      title: "Confirmar reprovação",
-      description: `Tem certeza que deseja reprovar ${submittedRequisitions.length} requisição(ões)? Você pode adicionar um motivo.`,
-      action: (
-        <ToastAction 
-          altText="Reprovar requisições"
-          onClick={async () => {
-          const comments = prompt('Motivo da reprovação (opcional):') || 'Reprovação em lote via interface';
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (const item of submittedRequisitions) {
-        if (!item.id) {
-          console.error('Item sem id:', item);
-          errorCount++;
-          continue;
-        }
-        
-        try {
-          const response = await api.put('/api/requisicoesCompra/actions/reject', {
-            requisitionId: item.id,
-            version: item.versao,
-            userId: user?.codusr,
-            userName: user?.usuario,
-            comments: comments || 'Reprovação em lote via interface'
-          });
-          
-          if (response.data.success) {
-            successCount++;
-          } else {
-            errorCount++;
-          }
-        } catch (error: any) {
-          console.error('Erro ao reprovar:', error);
-          errorCount++;
-        }
-      }
-
-          toast({
-            title: "Reprovação concluída",
-            description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
-            variant: errorCount > 0 ? "destructive" : "default"
-          });
-          setSelectedItems(new Set());
-          setSelectedStatus(null);
-          await refetch();
-        }}
-        >
-          Reprovar
-        </ToastAction>
-      )
-    });
+    // Abre o modal central de reprovação (com motivo) para as selecionadas.
+    setMotivoReprovar('');
+    setReprovarAlvo({ itens: submittedRequisitions });
   };
 
   const handleBulkSubmit = async () => {
@@ -686,14 +622,14 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
           }
         }
 
-        toast({
-          title: "Submissão concluída",
-          description: `${successCount} sucesso(s), ${errorCount} erro(s)`,
-          variant: errorCount > 0 ? "destructive" : "default"
-        });
         setSelectedItems(new Set());
         setSelectedStatus(null);
         await refetch();
+        alertaCentral(
+          'Submissão concluída',
+          `${successCount} sucesso(s), ${errorCount} erro(s)`,
+          errorCount > 0 ? 'danger' : 'success',
+        );
       },
       {
         title: 'Confirmar submissão',
@@ -765,11 +701,33 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
     setIconRotations({ [requisitionId]: true });
     setDropdownPositions({
       [requisitionId]: {
-        top: rect.bottom + 4 + window.scrollY, // Abre abaixo do botão
+        top: rect.bottom + 4 + window.scrollY, // Abre abaixo do botão (ajustado abaixo se não couber)
         left: leftPosition,
       },
     });
   };
+
+  // Se o menu aberto não couber abaixo (últimas linhas), abre para CIMA. Roda
+  // antes do paint (useLayoutEffect) — mede a altura real e reposiciona sem piscar.
+  useLayoutEffect(() => {
+    const abertoId = Object.keys(dropdownStates).find((id) => dropdownStates[parseInt(id, 10)]);
+    if (!abertoId) return;
+    const id = parseInt(abertoId, 10);
+    const menu = dropdownRefs.current[id];
+    const btn = actionButtonRefs.current[id];
+    if (!menu || !btn) return;
+    const menuH = menu.offsetHeight;
+    const btnRect = btn.getBoundingClientRect();
+    const espacoAbaixo = window.innerHeight - btnRect.bottom;
+    if (espacoAbaixo < menuH + 8 && btnRect.top > menuH) {
+      const topCima = btnRect.top + window.scrollY - menuH - 4;
+      setDropdownPositions((prev) => {
+        const atual = prev[id];
+        if (!atual || atual.top === topCima) return prev;
+        return { ...prev, [id]: { ...atual, top: topCima } };
+      });
+    }
+  }, [dropdownStates]);
 
   const closeAllDropdowns = () => {
     setDropdownStates({});
@@ -875,8 +833,9 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
   const rows = formattedData.map((row, index) => {
     const item = data[index];
     
-    const baseRow = {
+    const baseRow: Record<string, any> = {
       ...row,
+      __index: index,
       AÇÕES: (
         <div className="flex justify-center">
           <button
@@ -946,8 +905,8 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                   <FileSpreadsheet className="mr-2 text-emerald-500 dark:text-emerald-400" size={16} />
                   Exportar Excel
                 </button>
-                {/* Só mostra Editar se status for Pendente ou Rejeitada */}
-                {['P', 'Pendente', 'R', 'Rejeitada'].includes(item.statusRequisicao || '') && (
+                {/* Mostra Editar se status for Pendente, Rejeitada ou Submetida */}
+                {['P', 'Pendente', 'R', 'Rejeitada', 'S', 'Submetida'].includes(item.statusRequisicao || '') && (
                   <button
                     onClick={() => { setEditItem(item); closeAllDropdowns(); }}
                     className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full"
@@ -1053,6 +1012,62 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
 
     return baseRow;
   });
+
+  // ===== Navegação por teclado (estilo Delphi) =====
+  const algumModalAberto =
+    isNewOpen ||
+    !!editItem ||
+    !!viewItem ||
+    !!itemsManagerRequisition ||
+    budgetModalOpen ||
+    historicoModalOpen ||
+    !!reprovarAlvo;
+
+  const podeEditarRequisicao = (r: RequisitionDTO | undefined) =>
+    !!r &&
+    ['P', 'Pendente', 'R', 'Rejeitada', 'S', 'Submetida'].includes(
+      r.statusRequisicao || '',
+    );
+
+  const { linhaSelecionada, setLinhaSelecionada } =
+    useNavegacaoTecladoTabela<RequisitionDTO>({
+      data,
+      ativo: !algumModalAberto,
+      onEnter: (row) => {
+        if (podeEditarRequisicao(row)) setEditItem(row);
+      },
+      atalhos: [
+        {
+          key: 'n',
+          ctrl: true,
+          precisaLinha: false,
+          handler: () => {
+            if (showNewButton) setIsNewOpen(true);
+          },
+        },
+      ],
+    });
+
+  // Exportação da lista para Excel (mesmo endpoint que o grid antigo usava).
+  const handleExportarLista = useCallback(async () => {
+    try {
+      const res = await fetch('/api/requisicoesCompra/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ colunas: [], filtros: {}, busca: search }),
+      });
+      if (!res.ok) throw new Error('Falha na exportação');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'requisicoes-compra.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Erro ao exportar requisições:', e);
+    }
+  }, [search]);
 
   // Early return moved after all hooks to prevent hook order issues
   const shouldShowItemsManager = itemsManagerRequisition !== null;
@@ -1185,8 +1200,8 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
 
   return (
     <div className="h-full flex flex-col flex-grow bg-white dark:bg-slate-900">
-      <main className="px-4 w-full">
-        <header className="mb-0">
+      <main className="px-4 w-full flex-1 flex flex-col overflow-hidden">
+        <header className="mb-0 flex-shrink-0">
           
           {showNewButton && (
             <div className="flex justify-end mb-4 mr-6 ml-6">
@@ -1249,20 +1264,31 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
         </header>
 
         {/* Conteúdo de requisições de compra */}
-          <DataTableFiltroV3
+          <div className="flex-1 min-h-20 flex flex-col">
+          <DataTable
+            screenKey="compras-requisicoes"
+            userName={user?.usuario}
             carregando={loading}
             headers={controlledHeaders}
             rows={rows}
             meta={meta}
+            semColunaDeAcaoPadrao
+            persistPerPage={false}
+            nonsortableColumns={controlledHeaders}
             onPageChange={setPage}
             onPerPageChange={handlePerPageChange}
             onColunaSubstituida={handleColumnChange}
+            searchValue={search}
             onSearch={handleSearch}
             onSearchBlur={handleSearchBlur}
             onSearchKeyDown={handleSearchKeyDown}
             searchInputPlaceholder="Pesquisar por requisição, fornecedor, comprador..."
+            colunasFiltro={colunasDbRequisicao.map((c) => c.campo)}
+            onFiltroChange={handleFiltroChange}
+            mostrarFiltrosSempre
+            onExportarExcel={handleExportarLista}
             searchRightSlot={
-              <div className="w-48 flex-shrink-0">
+              <div className="w-44">
                 <SelectInput
                   name="statusRequisicao"
                   options={[
@@ -1282,30 +1308,31 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                 />
               </div>
             }
-            colunasFiltro={colunasDbRequisicao.map((c) => c.campo)}
-            limiteColunas={limiteColunas}
-            onLimiteColunasChange={handleLimiteColunasChange}
-            colunasFixas={
-              (canApproveRequisitions || canSubmitRequisitions) ?
-              ['selecionar', 'AÇÕES'] :
-              ['AÇÕES']
+            customHeaderActions={
+              <button
+                type="button"
+                onClick={() => setBudgetModalOpen(true)}
+                title="Budget"
+                className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
+              >
+                <DollarSign size={16} className="text-green-500 dark:text-green-400" />
+                <span>Budget</span>
+              </button>
             }
-            exportEndpoint="/api/requisicoesCompra/exportar"
-            exportFileName="requisicoes-compra.xlsx"
-            onFiltroChange={handleFiltroChange}
-            showAdvancedFilters={true}
-            customActions={[
-              {
-                label: 'Budget',
-                icon: <DollarSign className="text-green-500 dark:text-green-400" />,
-                onClick: () => setBudgetModalOpen(true)
-              }
-            ]}
+            rowClassName={(_row, idx) =>
+              idx === linhaSelecionada
+                ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
+                : ''
+            }
+            onRowClick={(row) =>
+              setLinhaSelecionada((row as any).__index ?? -1)
+            }
             columnLabels={colunasDbRequisicao.reduce((acc, col) => {
               acc[col.campo] = col.label;
               return acc;
-            }, {} as Record<string, string>)}
+            }, { 'AÇÕES': 'Ações', selecionar: 'Sel.' } as Record<string, string>)}
           />
+          </div>
       </main>
 
       <NovaRequisicaoModal
@@ -1372,6 +1399,57 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
 
       {/* Modal central de confirmação (Submeter / Aprovar) */}
       {ConfirmacaoSalvarModal}
+
+      {/* Modal central de REPROVAÇÃO (com motivo) — individual ou em lote */}
+      {reprovarAlvo && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-slate-800 shadow-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-red-50 dark:bg-red-900/20">
+              <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/40">
+                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-red-700 dark:text-red-300">
+                  Reprovar requisição{reprovarAlvo.itens.length > 1 ? `ões (${reprovarAlvo.itens.length})` : ` ${reprovarAlvo.itens[0]?.requisicao || ''}`}
+                </h3>
+                <p className="text-xs text-red-600/80 dark:text-red-400/80">
+                  Informe o motivo da reprovação (opcional).
+                </p>
+              </div>
+            </div>
+            <div className="p-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Motivo
+              </label>
+              <textarea
+                autoFocus
+                value={motivoReprovar}
+                onChange={(e) => setMotivoReprovar(e.target.value)}
+                rows={4}
+                placeholder="Ex.: fora do orçamento, fornecedor não homologado..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-slate-900/40">
+              <button
+                type="button"
+                onClick={() => setReprovarAlvo(null)}
+                className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarReprovacao}
+                className="px-4 py-2 text-sm rounded-md bg-red-600 hover:bg-red-700 text-white inline-flex items-center gap-2"
+              >
+                <XCircle size={16} />
+                Reprovar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

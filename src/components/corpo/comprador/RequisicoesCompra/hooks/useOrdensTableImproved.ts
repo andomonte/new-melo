@@ -4,14 +4,33 @@ import { useDebouncedCallback } from 'use-debounce';
 const LOCAL_STORAGE_KEYS = {
   HEADERS: 'ordensCompra_headers',
   LIMIT: 'ordensCompra_limiteColunas',
+  PER_PAGE: 'ordensCompra_perPage',
 };
 
 export const useOrdensTableImproved = (colunas: any[]) => {
   const [inputSearch, setInputSearch] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  const [perPage, setPerPageState] = useState(10);
   const [headers, setHeaders] = useState<string[]>([]);
+
+  // Persiste o "Qtd. Itens" por tela (igual à ordem das colunas).
+  const setPerPage = useCallback((value: number) => {
+    setPerPageState(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.PER_PAGE, String(value));
+    }
+  }, []);
+
+  // Carrega o perPage salvo ao montar.
+  useEffect(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.PER_PAGE);
+    if (saved) {
+      const n = Number(saved);
+      if (n > 0) setPerPageState(n);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [limiteColunas, setLimiteColunas] = useState(5);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [filtros, setFiltros] = useState<{ campo: string; tipo: string; valor: string }[]>([]);

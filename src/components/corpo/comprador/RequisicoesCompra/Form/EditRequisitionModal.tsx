@@ -58,6 +58,23 @@ export default function EditRequisitionModal({
     title: 'Confirmar',
     message: '',
   });
+  const alertaCentral = useCallback(
+    (
+      title: string,
+      message: string,
+      type: 'success' | 'danger' | 'info' | 'warning' = 'success',
+      onOk?: () => void,
+    ) => {
+      pedirConfirmacao(() => { onOk?.(); }, {
+        title,
+        message,
+        type,
+        somenteOk: true,
+        confirmText: 'OK',
+      });
+    },
+    [pedirConfirmacao],
+  );
   const { user } = useContext(AuthContext);
   const [formData, setFormData] = useState<FormData>({
     tipo: '',
@@ -298,19 +315,12 @@ export default function EditRequisitionModal({
 
     // Validação de data de previsão - Na edição, permitir datas passadas
     // (apenas alertar se mudou para data muito antiga)
+    let dataAntiga = false;
     if (formData.previsao_chegada) {
       const dataPrevisao = new Date(formData.previsao_chegada);
       const umMesAtras = new Date();
       umMesAtras.setMonth(umMesAtras.getMonth() - 1);
-
-      if (dataPrevisao < umMesAtras) {
-        const continuar = confirm(
-          'A data de previsão é muito antiga (mais de 1 mês atrás). Deseja continuar?',
-        );
-        if (!continuar) {
-          return;
-        }
-      }
+      dataAntiga = dataPrevisao < umMesAtras;
     }
 
     // Validação do fornecedor (CNPJ/CPF)
@@ -352,8 +362,10 @@ export default function EditRequisitionModal({
     // Confirmação antes de salvar (modal central, como no Produto).
     pedirConfirmacao(salvarRequisicao, {
       title: 'Salvar alterações da requisição?',
-      message: 'As alterações desta requisição serão salvas.',
-      type: 'info',
+      message: dataAntiga
+        ? 'A data de previsão é muito antiga (mais de 1 mês atrás). As alterações desta requisição serão salvas. Deseja continuar?'
+        : 'As alterações desta requisição serão salvas.',
+      type: dataAntiga ? 'warning' : 'info',
       confirmText: 'Sim, salvar',
       cancelText: 'Não',
     });
@@ -389,31 +401,31 @@ export default function EditRequisitionModal({
           },
         );
 
-        toast({
-          title: 'Requisição atualizada!',
-          description: 'A requisição foi atualizada com sucesso.',
-          variant: 'default',
-        });
-
-        onClose();
-        if (onSuccess) {
-          onSuccess();
-        }
+        alertaCentral(
+          'Requisição atualizada!',
+          'A requisição foi atualizada com sucesso.',
+          'success',
+          () => {
+            onClose();
+            if (onSuccess) {
+              onSuccess();
+            }
+          },
+        );
       } else {
-        toast({
-          title: 'Erro ao atualizar requisição',
-          description: response.data?.message || 'Ocorreu um erro inesperado.',
-          variant: 'destructive',
-        });
+        alertaCentral(
+          'Erro ao atualizar requisição',
+          response.data?.message || 'Ocorreu um erro inesperado.',
+          'danger',
+        );
       }
     } catch (error) {
       console.error('Erro ao atualizar requisição:', error);
-      toast({
-        title: 'Erro ao atualizar requisição',
-        description:
-          'Não foi possível atualizar a requisição. Tente novamente.',
-        variant: 'destructive',
-      });
+      alertaCentral(
+        'Erro ao atualizar requisição',
+        'Não foi possível atualizar a requisição. Tente novamente.',
+        'danger',
+      );
     } finally {
       setSubmitting(false);
     }

@@ -193,7 +193,9 @@ export default async function handle(
       // Mapear status seguindo o mesmo padrão de nfes-processadas.ts
       let status = 'RECEBIDA';
       if (nfe.exec === 'S') {
-        status = 'PROCESSADA';
+        // exec='S' SEM entrada (dbent) gerada = estado órfão (reset/geração não
+        // concluída) → mostra "Associada" para permitir gerar a entrada.
+        status = nfe.codent ? 'PROCESSADA' : 'ASSOCIACAO_CONCLUIDA';
       } else if (nfe.exec === 'A') {
         status = 'EM_ANDAMENTO'; // FIXED: Era EM_PROCESSAMENTO
       } else if (nfe.exec === 'C') {

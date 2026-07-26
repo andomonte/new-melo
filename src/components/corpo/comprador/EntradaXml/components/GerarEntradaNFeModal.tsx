@@ -233,19 +233,8 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
         throw new Error(e.error || 'Falha ao salvar selo/conhecimento');
       }
 
-      // 2) Marca a NFe como processada (exec='S').
-      const response = await fetch('/api/entrada-xml/gerar-entrada', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nfeId: nfeSelecionada.id }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Erro ao processar XML');
-      }
-
-      // 3) Gera a entrada de estoque (dbent) — grava selo/conhecimento; custo entra
-      //    no Confirmar Preço/Estoque.
+      // 2) Gera a entrada (dbent) e marca a NFe como processada (exec='S')
+      //    ATOMICAMENTE no gerar-por-chave — se falhar, a nota continua Associada.
       const rGerar = await fetch('/api/entradas/gerar-por-chave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

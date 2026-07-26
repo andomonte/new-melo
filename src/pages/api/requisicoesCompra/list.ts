@@ -57,7 +57,7 @@ export default async function handler(
         r.req_status as "statusRequisicao",
         r.req_observacao as observacao,
         r.req_tipo as "tipoSigla",
-        COALESCE(tr.ret_descricao, r.req_tipo) as tipo,
+        COALESCE((SELECT tr.ret_descricao FROM db_manaus.cmp_requisicao_tipo tr WHERE tr.ret_id = r.req_tipo LIMIT 1), r.req_tipo) as tipo,
         r.req_cod_credor as "fornecedorCodigo",
         r.req_codcomprador as "compradorCodigo",
         CAST(f.cod_credor AS TEXT) as "fornecedorCodigoReal",
@@ -96,7 +96,6 @@ export default async function handler(
       LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
       LEFT JOIN db_manaus.cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
       LEFT JOIN db_manaus.cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
-      LEFT JOIN db_manaus.cmp_requisicao_tipo tr ON r.req_tipo = tr.ret_id
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id, orc_data, orc_status
@@ -194,7 +193,6 @@ export default async function handler(
       LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
       LEFT JOIN db_manaus.cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
       LEFT JOIN db_manaus.cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
-      LEFT JOIN db_manaus.cmp_requisicao_tipo tr ON r.req_tipo = tr.ret_id
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id, orc_data, orc_status

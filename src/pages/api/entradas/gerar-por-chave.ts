@@ -68,10 +68,13 @@ export default async function handler(
     const nfeId = nfe.codnfe_ent;
 
     // 2. NFe processada?
-    if (nfe.status !== 'S') {
+    // Aceita NFe associada ('C') ou já marcada como processada ('S'). O exec='S'
+    // é setado por este endpoint SÓ quando o dbent é criado (geração atômica —
+    // evita o estado órfão exec='S' sem entrada).
+    if (nfe.status !== 'S' && nfe.status !== 'C') {
       await client.query('ROLLBACK');
-      const statusLabel = nfe.status === 'A' ? 'em andamento' : nfe.status === 'N' || nfe.status === 'R' ? 'não processada' : nfe.status;
-      return res.status(400).json({ error: `Esta NFe está ${statusLabel}. Processe a NFe primeiro na tela de Entrada XML.` });
+      const statusLabel = nfe.status === 'A' ? 'em andamento' : nfe.status === 'N' || nfe.status === 'R' ? 'não processada/associada' : nfe.status;
+      return res.status(400).json({ error: `Esta NFe está ${statusLabel}. Associe os itens primeiro na tela de Entrada XML.` });
     }
 
     // 3. Já existe entrada (dbent) para esta chave?
@@ -209,6 +212,11 @@ export default async function handler(
     });
     const codent = rDbent.codent;
     const itensProcessados = rDbent.itens.length;
+
+    // Marca a NFe como PROCESSADA ('S') SÓ agora que o dbent existe (geração
+    // atômica na mesma transação). Se algo acima falhar, o rollback mantém a
+    // NFe como Associada ('C') — sem estado órfão.
+    await client.query(`UPDATE db_manaus.dbnfe_ent SET exec = 'S' WHERE codnfe_ent = $1`, [nfeId]);
 
     // 9. Atualizar quantidade atendida nos pedidos + auto-finalizar ordens
     const isImp = nfe.natop === 'ENTRADA_IMPORTACAO';
