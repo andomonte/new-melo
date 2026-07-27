@@ -143,11 +143,15 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       : base;
   }, [filtros, statusFiltro]);
 
+  // Ordenação server-side (ordena todas as páginas, não só a visível).
+  const [ordenacao, setOrdenacao] = useState<{ campo: string; direcao: 'asc' | 'desc' } | null>(null);
+
   const { data, meta, loading, error, refetch } = useRequisitions({
     page,
     perPage,
     search,
     filtros: filtrosComStatus,
+    ordenacao,
   });
 
   // Debounced refetch para evitar múltiplas chamadas
@@ -1274,7 +1278,12 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
             meta={meta}
             semColunaDeAcaoPadrao
             persistPerPage={false}
-            nonsortableColumns={controlledHeaders}
+            ordenacaoServidor
+            onSort={(campo, direcao) => {
+              setOrdenacao({ campo, direcao });
+              setPage(1);
+            }}
+            nonsortableColumns={['AÇÕES', 'selecionar']}
             onPageChange={setPage}
             onPerPageChange={handlePerPageChange}
             onColunaSubstituida={handleColumnChange}
@@ -1319,8 +1328,8 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                 <span>Budget</span>
               </button>
             }
-            rowClassName={(_row, idx) =>
-              idx === linhaSelecionada
+            rowClassName={(row) =>
+              (row as any).__index === linhaSelecionada
                 ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
                 : ''
             }

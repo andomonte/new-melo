@@ -33,7 +33,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { page = 1, perPage = 25, filtros = [] } = req.body;
+  const { page = 1, perPage = 25, filtros = [], ordenacao = null } = req.body;
   const offset = (Number(page) - 1) * Number(perPage);
   const limit = Number(perPage);
 
@@ -47,6 +47,17 @@ export default async function handler(
     const canon = campoCanonicoPorLower[String(f.campo).toLowerCase()];
     if (canon) f.campo = canon;
   });
+
+  // Ordenação server-side (whitelist via mapa de colunas; direção só ASC/DESC).
+  let orderByClause = 'ORDER BY o.orc_data DESC, o.orc_id DESC';
+  if (ordenacao?.campo) {
+    const canonSort = campoCanonicoPorLower[String(ordenacao.campo).toLowerCase()];
+    const colSort = canonSort ? filtroParaColunaSQL[canonSort] : undefined;
+    if (colSort) {
+      const dir = String(ordenacao.direcao).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+      orderByClause = `ORDER BY ${colSort} ${dir} NULLS LAST, o.orc_id DESC`;
+    }
+  }
 
   const params: any[] = [];
   const whereGroups: string[] = [];
@@ -247,7 +258,7 @@ export default async function handler(
       LEFT JOIN db_manaus.cad_unidade_melo ue ON COALESCE(o.orc_unm_id_entrega, r.req_unm_id_entrega) = ue.unm_id
       LEFT JOIN db_manaus.cad_unidade_melo ud ON COALESCE(o.orc_unm_id_destino, r.req_unm_id_destino) = ud.unm_id
       ${whereString}
-      ORDER BY o.orc_data DESC, o.orc_id DESC
+      ${orderByClause}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 

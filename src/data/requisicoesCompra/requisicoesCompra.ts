@@ -160,6 +160,7 @@ export interface GetParams2 {
   page?: number;
   perPage?: number;
   filtros?: { campo: string; tipo: string; valor: string }[];
+  ordenacao?: { campo: string; direcao: 'asc' | 'desc' } | null;
 }
 
 /**
@@ -170,6 +171,7 @@ export async function buscaRequisicoes({
   page = 1,
   perPage = 25,
   filtros = [],
+  ordenacao = null,
 }: GetParams2): Promise<RequisicoesCompraResponse> {
   try {
     const filtrosCorrigidos = filtros.map((filtro) => ({
@@ -186,6 +188,7 @@ export async function buscaRequisicoes({
         page,
         perPage,
         filtros: filtrosCorrigidos,
+        ordenacao,
       }),
     });
 

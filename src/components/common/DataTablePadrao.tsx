@@ -53,6 +53,10 @@ interface DataTablePadraoProps {
    *  do servidor. Use quando a tela persiste o perPage por conta própria
    *  (ex.: localStorage), evitando conflito. Padrão: true. */
   persistPerPage?: boolean;
+  /** Se true, a ordenação é feita no servidor: o componente NÃO reordena as
+   *  linhas localmente (evita double-sort); apenas exibe a seta e chama
+   *  onSort(coluna, direcao) para a tela refazer a busca ordenada. Padrão: false. */
+  ordenacaoServidor?: boolean;
   loading?: boolean;
   /** Alias para loading (compatibilidade com DataTableFiltro) */
   carregando?: boolean;
@@ -126,6 +130,7 @@ export default function DataTablePadrao({
   loading,
   searchRightSlot,
   persistPerPage = true,
+  ordenacaoServidor = false,
   noDataMessage = 'Nenhum dado encontrado.',
   onFiltroChange,
   colunasFiltro = [],
@@ -340,7 +345,7 @@ export default function DataTablePadrao({
 
     // Ordenação local pelas colunas
     let sortedRows = filteredRows;
-    if (sortColumn) {
+    if (sortColumn && !ordenacaoServidor) {
       const colIndex = headers.indexOf(sortColumn);
       if (colIndex !== -1) {
         sortedRows = [...filteredRows].sort((a, b) => {

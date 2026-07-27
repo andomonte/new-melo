@@ -36,12 +36,36 @@ export default async function handler(
     fornecedor,
     comprador,
     dataInicio,
-    dataFim
+    dataFim,
+    sortCampo,
+    sortDirecao,
   } = req.query;
 
   const pageNum = parseInt(page as string) || 1;
   const limitNum = parseInt(limit as string) || 25;
   const offset = (pageNum - 1) * limitNum;
+
+  // Ordenação server-side (whitelist de colunas -> evita SQL injection).
+  const sortMap: Record<string, string> = {
+    requisicao: 'r.req_id',
+    dataRequisicao: 'r.req_data',
+    statusRequisicao: 'r.req_status',
+    tipo: 'r.req_tipo',
+    fornecedorCompleto: 'f.nome',
+    fornecedorNome: 'f.nome',
+    compradorCompleto: 'c.nome',
+    compradorNome: 'c.nome',
+    ordemCompra: 'oc.orc_id',
+    previsaoChegada: 'r.req_previsao_chegada',
+    localEntrega: 'ue.unm_nome',
+    destino: 'ud.unm_nome',
+  };
+  const colOrdenar = sortCampo ? sortMap[String(sortCampo)] : undefined;
+  const dirOrdenar =
+    String(sortDirecao).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const orderByClause = colOrdenar
+    ? `ORDER BY ${colOrdenar} ${dirOrdenar} NULLS LAST, r.req_id DESC`
+    : 'ORDER BY r.req_data DESC, r.req_id DESC';
 
   let client;
   try {
@@ -164,7 +188,7 @@ export default async function handler(
     }
 
     // Ordenação
-    query += ` ORDER BY r.req_data DESC, r.req_id DESC`;
+    query += ` ${orderByClause}`;
 
     // Paginação
     query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;

@@ -193,11 +193,15 @@ export default function OrdensComprasListImproved({
       : base;
   }, [filtros, statusFiltro]);
 
+  // Ordenação server-side (ordena todas as páginas).
+  const [ordenacao, setOrdenacao] = useState<{ campo: string; direcao: 'asc' | 'desc' } | null>(null);
+
   const { data, meta, loading, error, refetch } = useOrdens({
     page,
     perPage,
     search,
     filtros: filtrosComStatus,
+    ordenacao,
   });
 
   const toggleDropdown = (ordemId: number, buttonElement: HTMLButtonElement) => {
@@ -842,9 +846,14 @@ export default function OrdensComprasListImproved({
         meta={meta}
         semColunaDeAcaoPadrao
         persistPerPage={false}
-        nonsortableColumns={headers}
-        rowClassName={(_row, idx) =>
-          idx === linhaSelecionada
+        ordenacaoServidor
+        onSort={(campo, direcao) => {
+          setOrdenacao({ campo, direcao });
+          setPage(1);
+        }}
+        nonsortableColumns={['AÇÕES']}
+        rowClassName={(row) =>
+          (row as any).__index === linhaSelecionada
             ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
             : ''
         }

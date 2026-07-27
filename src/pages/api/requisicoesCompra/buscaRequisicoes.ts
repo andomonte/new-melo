@@ -38,7 +38,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { page = 1, perPage = 25, filtros = [] } = req.body;
+  const { page = 1, perPage = 25, filtros = [], ordenacao = null } = req.body;
   const offset = (Number(page) - 1) * Number(perPage);
   const limit = Number(perPage);
   
@@ -56,6 +56,18 @@ export default async function handler(
     const canon = campoCanonicoPorLower[String(f.campo).toLowerCase()];
     if (canon) f.campo = canon;
   });
+
+  // Ordenação server-side (todas as páginas). A coluna é validada pelo mapa
+  // (whitelist) para evitar SQL injection; direção só ASC/DESC.
+  let orderByClause = 'ORDER BY r.req_data DESC, r.req_id DESC';
+  if (ordenacao?.campo) {
+    const canonSort = campoCanonicoPorLower[String(ordenacao.campo).toLowerCase()];
+    const colSort = canonSort ? filtroParaColunaSQL[canonSort] : undefined;
+    if (colSort) {
+      const dir = String(ordenacao.direcao).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+      orderByClause = `ORDER BY ${colSort} ${dir} NULLS LAST, r.req_id DESC`;
+    }
+  }
 
   // Bypass temporário para debug - remover depois
   if (filtros.length === 0) {
@@ -340,7 +352,7 @@ export default async function handler(
         ORDER BY orc_req_id, orc_req_versao, orc_id DESC
       ) o ON (r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao)
       ${whereString}
-      ORDER BY r.req_data DESC, r.req_id DESC
+      ${orderByClause}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 

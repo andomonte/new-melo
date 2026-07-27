@@ -10,7 +10,31 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const { search = '', page = '1', perPage = '25' } = req.query;
+  const { search = '', page = '1', perPage = '25', sortCampo, sortDirecao } = req.query;
+
+  // Ordenação server-side (whitelist de colunas -> evita SQL injection).
+  const sortMap: Record<string, string> = {
+    ordem: 'o.orc_id',
+    requisicao: 'o.orc_req_id',
+    dataOrdem: 'o.orc_data',
+    statusOrdem: 'o.orc_status',
+    orc_pagamento_configurado: 'o.orc_pagamento_configurado',
+    fornecedor_completo: 'f.nome',
+    fornecedorNome: 'f.nome',
+    comprador_completo: 'c.nome',
+    compradorNome: 'c.nome',
+    statusRequisicao: 'r.req_status',
+    previsaoChegada: 'r.req_previsao_chegada',
+    valorTotal: 'o.orc_valor_total',
+    localEntrega: 'ue.unm_nome',
+    localDestino: 'ud.unm_nome',
+  };
+  const colOrdenar = sortCampo ? sortMap[String(sortCampo)] : undefined;
+  const dirOrdenar =
+    String(sortDirecao).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const orderByClause = colOrdenar
+    ? `ORDER BY ${colOrdenar} ${dirOrdenar} NULLS LAST, o.orc_id DESC`
+    : 'ORDER BY o.orc_data DESC, o.orc_id DESC';
   const pageNum = parseInt(page as string) || 1;
   const limit = parseInt(perPage as string) || 25;
   const offset = (pageNum - 1) * limit;
@@ -131,7 +155,7 @@ export default async function handler(
 
       WHERE 1=1
       ${whereClause.replace('WHERE', 'AND')}
-      ORDER BY o.orc_data DESC, o.orc_id DESC
+      ${orderByClause}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
     

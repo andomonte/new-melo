@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, Loader2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import InputMoeda from '@/components/common/InputMoeda';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -225,7 +226,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
   // ✅ NOVO: Dados de rateio e centro de custo temporários para cada item
   const [tempRateioData, setTempRateioData] = useState<Map<string, {
-    rateio: string;
+    rateio?: string;
     criterioRateio?: string;
     centroCusto?: string;
     meiaNota: boolean;
@@ -847,6 +848,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
             produtoId: item.produtoAssociado?.id || '', // 🐛 FIX: Usar id (codprod) que é a FK correta
             associacoes: item.associacoes,
             meianota: rateioData?.meiaNota || false,
+            precoUnitarioNF: rateioData?.meiaNota ? rateioData?.precoUnitarioNF : undefined,
             rateio: rateioData?.rateio,
             criterioRateio: rateioData?.criterioRateio,
             centroCusto: rateioData?.centroCusto,
@@ -1008,6 +1010,20 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
   const allItemsAssociated = items.every(item => item.status === 'associated');
   const associatedCount = items.filter(i => i.status === 'associated').length;
+
+  // Bloqueia concluir se algum item marcado como Meia Nota estiver com preço
+  // inválido (vazio, zero ou abaixo do preço da NF).
+  const algumaMeiaNotaInvalida = items.some((it) => {
+    if (it.status !== 'associated') return false;
+    const cfg = tempRateioData.get(it.id);
+    if (!cfg?.meiaNota) return false;
+    const precoNf = Number((it as any).valorUnitario) || 0;
+    return (
+      cfg.precoUnitarioNF === undefined ||
+      cfg.precoUnitarioNF <= 0 ||
+      cfg.precoUnitarioNF < precoNf
+    );
+  });
 
   // Função para salvar progresso
   const handleSalvarProgresso = async () => {
@@ -1734,6 +1750,58 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
                       </div>
                     </div>
                   )}
+
+                  {/* Meia Nota — indicador + edição direto no card */}
+                  {item.status === 'associated' && (() => {
+                    const cfg = tempRateioData.get(item.id);
+                    const meia = cfg?.meiaNota || false;
+                    const preco = cfg?.precoUnitarioNF;
+                    const precoNf = Number(item.valorUnitario) || 0;
+                    const invalido = meia && (preco === undefined || preco <= 0 || preco < precoNf);
+                    const atualizarCfg = (patch: { meiaNota?: boolean; precoUnitarioNF?: number }) => {
+                      const novo = new Map(tempRateioData);
+                      const base = novo.get(item.id) || { meiaNota: false };
+                      novo.set(item.id, { ...base, ...patch });
+                      setTempRateioData(novo);
+                    };
+                    return (
+                      <div className={`mt-2 p-2 rounded border ${meia ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-300 dark:border-yellow-700' : 'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'}`}>
+                        <div className="flex items-center flex-wrap gap-2">
+                          <Checkbox
+                            id={`meia-${item.id}`}
+                            checked={meia}
+                            onCheckedChange={(checked) => {
+                              const on = checked as boolean;
+                              atualizarCfg({
+                                meiaNota: on,
+                                precoUnitarioNF: on ? (preco ?? precoNf) : undefined,
+                              });
+                            }}
+                          />
+                          <Label htmlFor={`meia-${item.id}`} className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                            Meia Nota
+                          </Label>
+                          {meia && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-600 dark:text-gray-400">Pr. Unit.:</span>
+                              <div className="w-32">
+                                <InputMoeda
+                                  className="text-xs h-8"
+                                  value={preco}
+                                  onChangeValue={(v) => atualizarCfg({ meiaNota: true, precoUnitarioNF: v })}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {invalido && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                            Pr. Unit. da Meia Nota deve ser ≥ R$ {precoNf.toFixed(4)} (preço da NF)
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -1805,7 +1873,8 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
           {/* Botão unificado: Salvar Progresso ou Concluir Associações */}
           <Button
             onClick={allItemsAssociated ? handleConfirmarAssociacoes : handleSalvarProgresso}
-            disabled={loading || associatedCount === 0 || salvandoAssociacoes}
+            disabled={loading || associatedCount === 0 || salvandoAssociacoes || algumaMeiaNotaInvalida}
+            title={algumaMeiaNotaInvalida ? 'Há item com Meia Nota e preço inválido' : undefined}
             className={`${allItemsAssociated
               ? 'bg-green-600 hover:bg-green-700 text-white'
               : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
@@ -1901,7 +1970,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
               if (configExtra) {
                 tempRateioData.set(selectedItem.id, {
                   meiaNota: configExtra.meiaNota,
-                  precoReal: configExtra.precoUnitarioNF,
+                  precoUnitarioNF: configExtra.precoUnitarioNF,
                   rateio: configExtra.rateio,
                   criterioRateio: configExtra.criterioRateio,
                   centroCusto: configExtra.centroCusto
@@ -2207,7 +2276,16 @@ interface PedidosDisponiveisModalInternalProps {
   isOpen: boolean;
   onClose: () => void;
   item: any; // Item da NFe com dados do produto (pode ser NFeItem ou objeto customizado)
-  onConfirm: (associacoes: ItemAssociation[]) => void;
+  onConfirm: (
+    associacoes: ItemAssociation[],
+    configExtra?: {
+      meiaNota: boolean;
+      precoUnitarioNF?: number;
+      rateio?: string;
+      criterioRateio?: string;
+      centroCusto?: string;
+    },
+  ) => void;
   fornecedorCnpj?: string; // CNPJ do fornecedor da NFe para filtrar ordens
   ordemIdSelecionada?: string; // ID da ordem selecionada no dropdown (quando vem da correspondência)
   associacoesExistentes?: ItemAssociation[]; // Para modo edição
@@ -2224,6 +2302,26 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
 }) => {
   const [pedidos, setPedidos] = useState<OrdemCompra[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // ⭐ MEIA NOTA (estilo Delphi): quando marcado, o preço unitário informado
+  // (real) passa a valer para o cálculo do custo, no lugar do preço do XML.
+  const precoNfXml = Number(item?.valorUnitario) || 0;
+  const [meiaNota, setMeiaNota] = useState<boolean>(false);
+  const [precoUnitarioNF, setPrecoUnitarioNF] = useState<number | undefined>(undefined);
+
+  // Ao marcar, pré-preenche com o preço do XML (usuário edita para o preço real).
+  useEffect(() => {
+    if (meiaNota) {
+      setPrecoUnitarioNF((prev) => (prev === undefined ? precoNfXml : prev));
+    } else {
+      setPrecoUnitarioNF(undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meiaNota]);
+
+  // Regra do legado: preço meia nota deve ser >= preço da NF (XML).
+  const meiaNotaInvalida =
+    meiaNota && (precoUnitarioNF === undefined || precoUnitarioNF <= 0 || precoUnitarioNF < precoNfXml);
 
   // Carregar pedidos disponíveis quando o modal abrir
   useEffect(() => {
@@ -2507,8 +2605,48 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
               </p>
             </div>
           )}
+
+          {/* ⭐ Meia Nota */}
+          <div className="mt-4 border-t border-gray-200 dark:border-zinc-700 pt-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="pedMeiaNota"
+                checked={meiaNota}
+                onCheckedChange={(checked) => setMeiaNota(checked as boolean)}
+              />
+              <Label htmlFor="pedMeiaNota" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Meia Nota
+              </Label>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Marque se o preço na nota difere do preço real de compra. O preço informado passa a valer no cálculo do custo.
+            </p>
+
+            {meiaNota && (
+              <div className="mt-3 p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Pr. Unit.: <span className="text-red-500">*</span>
+                </Label>
+                <InputMoeda
+                  className="text-sm mt-1"
+                  placeholder="Ex: 5.000,00"
+                  value={precoUnitarioNF}
+                  onChangeValue={(v) => setPrecoUnitarioNF(v)}
+                />
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  Valor mínimo permitido (preço da NF): R$ {precoNfXml.toFixed(4)}
+                </p>
+                {precoUnitarioNF !== undefined && precoUnitarioNF < precoNfXml && (
+                  <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded text-xs text-red-700 dark:text-red-200">
+                    <strong>❌ PREÇO UNITÁRIO INVÁLIDO</strong><br />
+                    Deve ser maior ou igual ao valor da NF (R$ {precoNfXml.toFixed(4)})
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        
+
         <div className="flex justify-between items-center p-6 border-t">
           <div className="text-sm text-gray-600">
             {totalAssociado === item.quantidade ? (
@@ -2519,14 +2657,14 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
               </span>
             )}
           </div>
-          
+
           <div className="flex space-x-3">
             <Button variant="outline" onClick={onClose}>
               Cancelar
             </Button>
             <Button
-              onClick={() => onConfirm(associacoes)}
-              disabled={totalAssociado !== item.quantidade}
+              onClick={() => onConfirm(associacoes, { meiaNota, precoUnitarioNF })}
+              disabled={totalAssociado !== item.quantidade || meiaNotaInvalida}
               className="bg-blue-600 hover:bg-blue-700"
             >
               Confirmar Associação

@@ -10,6 +10,7 @@ export function useRequisitions(params: {
   perPage: number;
   search: string;
   filtros?: { campo: string; tipo: string; valor: string }[]; // ← NOVO!
+  ordenacao?: { campo: string; direcao: 'asc' | 'desc' } | null;
 }) {
   const [data, setData] = useState<RequisitionDTO[]>([]);
   const [meta, setMeta] = useState<Meta>({
@@ -38,7 +39,8 @@ export function useRequisitions(params: {
         const result = await buscaRequisicoes({
           page: params.page,
           perPage: params.perPage,
-          filtros: params.filtros
+          filtros: params.filtros,
+          ordenacao: params.ordenacao ?? null,
         });
 
         // Verificar se a requisição foi cancelada
@@ -57,7 +59,9 @@ export function useRequisitions(params: {
         params: {
           page: params.page,
           limit: params.perPage,  // API espera "limit", não "perPage"
-          search: params.search
+          search: params.search,
+          sortCampo: params.ordenacao?.campo,
+          sortDirecao: params.ordenacao?.direcao,
         }
       });
       
@@ -140,7 +144,7 @@ export function useRequisitions(params: {
         setLoading(false);
       }
     }
-  }, [params.page, params.perPage, params.search, JSON.stringify(params.filtros || [])]);
+  }, [params.page, params.perPage, params.search, JSON.stringify(params.filtros || []), JSON.stringify(params.ordenacao || null)]);
 
   useEffect(() => {
     load();

@@ -6,6 +6,7 @@ interface UseOrdensParams {
   perPage?: number;
   search?: string;
   filtros?: { campo: string; tipo: string; valor: string }[];
+  ordenacao?: { campo: string; direcao: 'asc' | 'desc' } | null;
 }
 
 export const useOrdens = (params: UseOrdensParams = {}) => {
@@ -24,8 +25,9 @@ export const useOrdens = (params: UseOrdensParams = {}) => {
     page: params.page || 1,
     perPage: params.perPage || 25,
     search: params.search || '',
-    filtros: params.filtros || []
-  }), [params.page, params.perPage, params.search, JSON.stringify(params.filtros || [])]);
+    filtros: params.filtros || [],
+    ordenacao: params.ordenacao || null,
+  }), [params.page, params.perPage, params.search, JSON.stringify(params.filtros || []), JSON.stringify(params.ordenacao || null)]);
 
   const fetchOrdens = useCallback(async () => {
     try {
@@ -52,6 +54,7 @@ export const useOrdens = (params: UseOrdensParams = {}) => {
             page: memoizedParams.page,
             perPage: memoizedParams.perPage,
             filtros: filtrosCorrigidos,
+            ordenacao: memoizedParams.ordenacao,
           }),
         });
 
@@ -63,7 +66,15 @@ export const useOrdens = (params: UseOrdensParams = {}) => {
         response = { data: jsonResponse }; // Adaptar formato para compatibilidade
       } else {
         console.log('📋 useOrdens: Usando /api/ordens/list padrão com parâmetros:', memoizedParams);
-        response = await api.get('/api/ordens/list', { params: memoizedParams });
+        response = await api.get('/api/ordens/list', {
+          params: {
+            page: memoizedParams.page,
+            perPage: memoizedParams.perPage,
+            search: memoizedParams.search,
+            sortCampo: memoizedParams.ordenacao?.campo,
+            sortDirecao: memoizedParams.ordenacao?.direcao,
+          },
+        });
       }
       
       if (response.data?.success) {
