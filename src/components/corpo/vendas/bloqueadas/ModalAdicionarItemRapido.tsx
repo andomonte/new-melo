@@ -372,11 +372,6 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               setLinhaSelecionada((prev) => {
                 if (prev < 0) return -1;
                 if (prev === 0) {
-                  setSearchInput('');
-                  setCurrentSearch('');
-                  setListaProd([]);
-                  setTotalProd(0);
-                  setPageLoaded(0);
                   const input = modalRef.current?.querySelector('input[type="text"]') as HTMLInputElement;
                   if (input) input.focus();
                   return -1;

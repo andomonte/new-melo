@@ -733,13 +733,18 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
 
         e.preventDefault();
         e.stopImmediatePropagation();
-        // Zoom: abre detalhes do produto selecionado no grid
+        // Zoom: focado no grid OU ultimaCelulaRef
+        let zoomItem: any = null;
         const focusedCell = gridRef.current?.api?.getFocusedCell();
         if (focusedCell) {
           const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(focusedCell.rowIndex);
-          if (rowNode?.data) {
-            setZoomProduto({ codprod: rowNode.data.codprod, ref: rowNode.data.ref, descr: rowNode.data.descricao });
-          }
+          if (rowNode?.data) zoomItem = rowNode.data;
+        }
+        if (!zoomItem && ultimaCelulaRef.current) zoomItem = ultimaCelulaRef.current;
+        if (zoomItem) {
+          setZoomProduto({ codprod: zoomItem.codprod, ref: zoomItem.ref, descr: zoomItem.descricao || zoomItem.descr });
+        } else {
+          toast.error('Selecione um item na planilha');
         }
       } else if (e.key === 'F10' && !modaisAbertosRef.current) {
         const el = e.target as HTMLElement;
@@ -789,8 +794,22 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
         atalhoRef.current.close();
       }
     };
+    // Click fora do grid limpa foco
+    const clickHandler = (e: MouseEvent) => {
+      if (modaisAbertosRef.current) return;
+      const wrapper = gridWrapperRef.current;
+      if (wrapper && !wrapper.contains(e.target as Node)) {
+        gridRef.current?.api?.clearFocusedCell();
+        ultimaCelulaRef.current = null;
+      }
+    };
+
     window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
+    window.addEventListener('mousedown', clickHandler, true);
+    return () => {
+      window.removeEventListener('keydown', handler, true);
+      window.removeEventListener('mousedown', clickHandler, true);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -1004,7 +1023,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
                 <Download size={14} /> Exportar
               </Button>
             </div>
-            <span className="text-xs text-gray-500">{rowData.length} itens | Duplo clique para editar célula</span>
+            <span className="text-xs text-gray-500">{rowData.length} itens | Duplo clique edita | Ctrl+Z Zoom | F9 Equiv. | F10 Hist. | Ctrl++ Adicionar</span>
           </div>
 
           {/* ===== GRID AG GRID ===== */}
@@ -1014,10 +1033,10 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
               .ag-promo-grid .ag-cell[col-id="descricao"] { align-items: flex-start !important; justify-content: flex-start !important; padding: 0 !important; }
               .ag-promo-grid .ag-row { border-bottom: 1px solid #d1d5db !important; }
               .ag-promo-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
-              .ag-promo-grid .ag-header-cell-resize { display: none !important; }
+              .ag-promo-grid .ag-header-cell-resize { width: 4px !important; cursor: col-resize !important; }
               .ag-promo-grid .ag-cell-value { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
-              .ag-promo-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; }
-              .ag-promo-grid .ag-input-field-input, .ag-promo-grid .ag-text-field-input { font-size: 14px !important; text-align: center !important; }
+              .ag-promo-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; text-align: center !important; }
+              .ag-promo-grid .ag-input-field-input, .ag-promo-grid .ag-text-field-input { font-size: 13px !important; text-align: center !important; }
               .ag-promo-grid .ag-header-cell-text { text-align: center !important; width: 100% !important; }
 
               .ag-promo-grid .ag-row,
@@ -1105,7 +1124,7 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
           ) : null}
         </div>
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-52">
+        <ContextMenuContent className={`w-52 ${modaisAbertosRef.current ? 'hidden' : ''}`}>
           <ContextMenuLabel className="text-xs text-gray-500">Ações</ContextMenuLabel>
           <ContextMenuItem onClick={handleSubmit} disabled={isSaving}>
             <Save size={14} className="mr-2" /> Salvar

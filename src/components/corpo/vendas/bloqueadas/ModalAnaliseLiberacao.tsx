@@ -561,7 +561,18 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
             setProdutoEquivalente({ codprod: item.codprod, ref: item.ref, descr: item.descr, codgpe: item.codgpe, origem: item.origem });
             setModalEquivalentes(true);
           } else {
-            toast({ title: 'Produto sem grupo de equivalência' });
+            // Fallback: buscar codgpe via API
+            fetch(`/api/produtos/get/${item.codprod}`)
+              .then(r => r.json())
+              .then(data => {
+                const gpe = (data.codgpe || '').trim();
+                if (gpe) {
+                  setProdutoEquivalente({ codprod: item.codprod, ref: item.ref, descr: item.descr, codgpe: gpe, origem: data.dolar || 'N' });
+                  setModalEquivalentes(true);
+                } else {
+                  toast({ title: 'Produto sem grupo de equivalência' });
+                }
+              }).catch(() => toast({ title: 'Erro ao buscar equivalência' }));
           }
         } else {
           toast({ title: 'Selecione um item na planilha' });
@@ -796,7 +807,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                     .dark .analise-grid .ag-cell-range-single-cell { background-color: rgba(255,255,255,0.05) !important; }
                     .dark .analise-grid .ag-row { border-color: #3f3f46 !important; }
                     .analise-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
-                    .analise-grid .ag-header-cell-resize { display: none !important; }
+                    .analise-grid .ag-header-cell-resize { width: 4px !important; cursor: col-resize !important; }
                     .analise-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; text-align: center !important; }
                     .analise-grid .ag-header-cell-text { text-align: center !important; width: 100% !important; }
                     .analise-grid .ag-input-field-input { font-size: 13px !important; text-align: center !important; }
