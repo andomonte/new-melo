@@ -655,7 +655,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                     {data ? <ScoreBadge score={data.cliente.score} /> : null}
                   </div>
                   {data ? (
-                    <div className="flex items-center gap-4 mt-1 text-xs text-gray-600 dark:text-gray-400">
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-700 dark:text-gray-300">
                       <span><b>Cliente:</b> {data.cliente.codcli} - {data.cliente.nomefant || data.cliente.nome}</span>
                       <span><b>Data:</b> {formatDate(data.venda.data)}</span>
                       <span><b>{data.venda.operador_nome ? 'Operador' : 'Vendedor'}:</b> {data.venda.operador_nome || data.venda.vendedor_nome || data.venda.codvend}</span>
@@ -705,30 +705,30 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                 <div className="px-3 py-2 bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     <div className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-gray-200 dark:border-zinc-700">
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Valor Tabela</p>
-                      <p className="text-base font-bold text-gray-700 dark:text-gray-300">{formatCurrency(totalTabela)}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Valor Tabela</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatCurrency(totalTabela)}</p>
                     </div>
                     <div className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-gray-200 dark:border-zinc-700">
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Total Desconto</p>
-                      <p className="text-base font-bold text-orange-600 dark:text-orange-400">{formatCurrency(totalDesconto)}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Total Desconto</p>
+                      <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{formatCurrency(totalDesconto)}</p>
                     </div>
                     <div className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-gray-200 dark:border-zinc-700">
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">% Desconto</p>
-                      <p className="text-base font-bold text-orange-600 dark:text-orange-400">{percDesconto.toFixed(1)}%</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">% Desconto</p>
+                      <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{percDesconto.toFixed(1)}%</p>
                     </div>
                     <div className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-blue-300 dark:border-blue-700">
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Valor da Venda</p>
-                      <p className="text-base font-bold text-blue-600 dark:text-blue-400">{formatCurrency(totalVendido)}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Valor da Venda</p>
+                      <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{formatCurrency(totalVendido)}</p>
                     </div>
                     <div className="bg-white dark:bg-zinc-900 p-2 rounded-lg border border-gray-200 dark:border-zinc-700">
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Margem Tabela</p>
-                      <p className={`text-base font-bold ${margemTabela >= margemMinEsperada ? 'text-green-600 dark:text-green-400' : margemTabela >= margemMinEsperada * 0.7 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Margem Tabela</p>
+                      <p className={`text-lg font-bold ${margemTabela >= margemMinEsperada ? 'text-green-600 dark:text-green-400' : margemTabela >= margemMinEsperada * 0.7 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
                         {margemTabela.toFixed(2)}%
                       </p>
                     </div>
                     <div className={`p-2 rounded-lg border-2 ${dentroMargem ? 'border-green-400 dark:border-green-700 bg-green-50 dark:bg-green-950/30' : 'border-red-400 dark:border-red-700 bg-red-50 dark:bg-red-950/30'}`}>
-                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Margem Obtida</p>
-                      <p className={`text-base font-bold ${dentroMargem ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Margem Obtida</p>
+                      <p className={`text-lg font-bold ${dentroMargem ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
                         {margemObtida.toFixed(2)}%
                       </p>
                       {itensForaDaMargem > 0 ? (

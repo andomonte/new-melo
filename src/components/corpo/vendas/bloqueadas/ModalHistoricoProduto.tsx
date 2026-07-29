@@ -83,29 +83,29 @@ const ModalHistoricoProduto: React.FC<ModalHistoricoProdutoProps> = ({ isOpen, o
           <div className="flex-1 overflow-auto p-5 space-y-6">
             {/* Cards resumo */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                <div className="flex items-center gap-2 mb-1">
-                  <ShoppingCart size={14} className="text-blue-600" />
-                  <span className="text-xs text-blue-700 dark:text-blue-300 font-medium">Vendas (12m)</span>
+              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <ShoppingCart size={18} className="text-blue-600" />
+                  <span className="text-sm text-blue-700 dark:text-blue-300 font-semibold">Vendas (12m)</span>
                 </div>
-                <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{statsVendas.qtd}</p>
-                <p className="text-[10px] text-blue-500">{statsVendas.total} unid. vendidas</p>
+                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{statsVendas.qtd}</p>
+                <p className="text-sm text-blue-600 font-medium mt-1">{statsVendas.total} unid. vendidas</p>
               </div>
-              <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 border border-green-200 dark:border-green-800">
-                <div className="flex items-center gap-2 mb-1">
-                  <Package size={14} className="text-green-600" />
-                  <span className="text-xs text-green-700 dark:text-green-300 font-medium">Entradas (12m)</span>
+              <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package size={18} className="text-green-600" />
+                  <span className="text-sm text-green-700 dark:text-green-300 font-semibold">Entradas (12m)</span>
                 </div>
-                <p className="text-lg font-bold text-green-700 dark:text-green-300">{statsEntradas.qtd}</p>
-                <p className="text-[10px] text-green-500">{statsEntradas.total} unid. recebidas</p>
+                <p className="text-2xl font-bold text-green-700 dark:text-green-300">{statsEntradas.qtd}</p>
+                <p className="text-sm text-green-600 font-medium mt-1">{statsEntradas.total} unid. recebidas</p>
               </div>
-              <div className={`rounded-lg p-3 border ${pedidosPendentes.length > 0 ? 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Truck size={14} className={pedidosPendentes.length > 0 ? 'text-orange-600' : 'text-gray-400'} />
-                  <span className={`text-xs font-medium ${pedidosPendentes.length > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-gray-500'}`}>Pedidos Pendentes</span>
+              <div className={`rounded-lg p-4 border ${pedidosPendentes.length > 0 ? 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Truck size={18} className={pedidosPendentes.length > 0 ? 'text-orange-600' : 'text-gray-400'} />
+                  <span className={`text-sm font-semibold ${pedidosPendentes.length > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-gray-500'}`}>Pedidos Pendentes</span>
                 </div>
-                <p className={`text-lg font-bold ${pedidosPendentes.length > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-gray-400'}`}>{pedidosPendentes.length}</p>
-                <p className="text-[10px] text-gray-500">{pedidosPendentes.length > 0 ? 'Em andamento' : 'Nenhum'}</p>
+                <p className={`text-2xl font-bold ${pedidosPendentes.length > 0 ? 'text-orange-700 dark:text-orange-300' : 'text-gray-400'}`}>{pedidosPendentes.length}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{pedidosPendentes.length > 0 ? 'Em andamento' : 'Nenhum'}</p>
               </div>
             </div>
 
@@ -120,25 +120,25 @@ const ModalHistoricoProduto: React.FC<ModalHistoricoProdutoProps> = ({ isOpen, o
                   <table className="w-full text-sm">
                     <thead className="bg-orange-50 dark:bg-orange-950/30">
                       <tr>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">Ordem</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">Fornecedor</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 uppercase">Data Pedido</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Qtd</th>
-                        <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Preço Unit.</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 uppercase">Previsão</th>
-                        <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Ordem</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Fornecedor</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Data Pedido</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Qtd</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Preço Unit.</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Previsão</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-zinc-700">
                       {pedidosPendentes.map((p, i) => (
                         <tr key={i} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50">
-                          <td className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">{p.numero_ordem}</td>
-                          <td className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 truncate max-w-[200px]">{p.fornecedor || '-'}</td>
-                          <td className="px-3 py-1.5 text-xs text-center text-gray-600 dark:text-gray-400">{formatDate(p.data_ordem)}</td>
-                          <td className="px-3 py-1.5 text-xs text-right font-semibold text-gray-700 dark:text-gray-300">{p.quantidade?.toFixed(0) || 0}</td>
-                          <td className="px-3 py-1.5 text-xs text-right text-gray-600 dark:text-gray-400">{formatCurrency(p.preco_unitario || 0)}</td>
-                          <td className="px-3 py-1.5 text-xs text-center font-medium text-orange-600 dark:text-orange-400">{formatDate(p.previsao_chegada)}</td>
-                          <td className="px-3 py-1.5 text-xs text-center">
+                          <td className="px-3 py-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{p.numero_ordem}</td>
+                          <td className="px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 truncate max-w-[200px]">{p.fornecedor || '-'}</td>
+                          <td className="px-3 py-1.5 text-sm text-center text-gray-800 dark:text-gray-200">{formatDate(p.data_ordem)}</td>
+                          <td className="px-3 py-1.5 text-sm text-right font-bold text-gray-900 dark:text-gray-100">{p.quantidade?.toFixed(0) || 0}</td>
+                          <td className="px-3 py-1.5 text-sm text-right text-gray-800 dark:text-gray-200">{formatCurrency(p.preco_unitario || 0)}</td>
+                          <td className="px-3 py-1.5 text-sm text-center font-bold text-orange-600 dark:text-orange-400">{formatDate(p.previsao_chegada)}</td>
+                          <td className="px-3 py-1.5 text-sm text-center">
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                               p.status_descricao === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
                               p.status_descricao === 'APROVADO' || p.status_descricao === 'EM TRANSITO' ? 'bg-blue-100 text-blue-700' :
@@ -163,13 +163,13 @@ const ModalHistoricoProduto: React.FC<ModalHistoricoProdutoProps> = ({ isOpen, o
                 <table className="w-full text-sm">
                   <thead className="bg-blue-50 dark:bg-blue-950/30">
                     <tr>
-                      <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">Venda</th>
-                      <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">Cliente</th>
-                      <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 uppercase">Data</th>
-                      <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Qtd</th>
-                      <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Preço Unit.</th>
-                      <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Total</th>
-                      <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Venda</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Cliente</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Data</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Qtd</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Preço Unit.</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Total</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-zinc-700">
@@ -177,13 +177,13 @@ const ModalHistoricoProduto: React.FC<ModalHistoricoProdutoProps> = ({ isOpen, o
                       <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">Nenhuma venda nos últimos 12 meses</td></tr>
                     ) : vendas.map((v, i) => (
                       <tr key={i} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50">
-                        <td className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">{v.codvenda}</td>
-                        <td className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 truncate max-w-[200px]">{v.cliente || '-'}</td>
-                        <td className="px-3 py-1.5 text-xs text-center text-gray-600 dark:text-gray-400">{formatDate(v.data)}</td>
-                        <td className="px-3 py-1.5 text-xs text-right font-semibold text-gray-700 dark:text-gray-300">{v.qtd}</td>
-                        <td className="px-3 py-1.5 text-xs text-right text-gray-600 dark:text-gray-400">{formatCurrency(v.prunit)}</td>
+                        <td className="px-3 py-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{v.codvenda}</td>
+                        <td className="px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 truncate max-w-[200px]">{v.cliente || '-'}</td>
+                        <td className="px-3 py-1.5 text-sm text-center text-gray-800 dark:text-gray-200">{formatDate(v.data)}</td>
+                        <td className="px-3 py-1.5 text-sm text-right font-bold text-gray-900 dark:text-gray-100">{v.qtd}</td>
+                        <td className="px-3 py-1.5 text-sm text-right text-gray-800 dark:text-gray-200">{formatCurrency(v.prunit)}</td>
                         <td className="px-3 py-1.5 text-xs text-right font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(v.total)}</td>
-                        <td className="px-3 py-1.5 text-xs text-center">
+                        <td className="px-3 py-1.5 text-sm text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                             v.status === 'F' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                             v.status === 'B' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
@@ -207,12 +207,12 @@ const ModalHistoricoProduto: React.FC<ModalHistoricoProdutoProps> = ({ isOpen, o
                 <table className="w-full text-sm">
                   <thead className="bg-green-50 dark:bg-green-950/30">
                     <tr>
-                      <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">Documento</th>
-                      <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">NF</th>
-                      <th className="px-3 py-2 text-left text-[11px] font-medium text-gray-500 uppercase">Fornecedor</th>
-                      <th className="px-3 py-2 text-center text-[11px] font-medium text-gray-500 uppercase">Data</th>
-                      <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Qtd</th>
-                      <th className="px-3 py-2 text-right text-[11px] font-medium text-gray-500 uppercase">Preço Unit.</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Documento</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">NF</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Fornecedor</th>
+                      <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Data</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Qtd</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">Preço Unit.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-zinc-700">
@@ -221,11 +221,11 @@ const ModalHistoricoProduto: React.FC<ModalHistoricoProdutoProps> = ({ isOpen, o
                     ) : entradas.map((e, i) => (
                       <tr key={i} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50">
                         <td className="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300">{e.numero_documento || '-'}</td>
-                        <td className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">{e.nota_fiscal || '-'}</td>
-                        <td className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 truncate max-w-[200px]">{e.fornecedor || '-'}</td>
-                        <td className="px-3 py-1.5 text-xs text-center text-gray-600 dark:text-gray-400">{formatDate(e.data_entrada)}</td>
+                        <td className="px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200">{e.nota_fiscal || '-'}</td>
+                        <td className="px-3 py-1.5 text-sm text-gray-800 dark:text-gray-200 truncate max-w-[200px]">{e.fornecedor || '-'}</td>
+                        <td className="px-3 py-1.5 text-sm text-center text-gray-800 dark:text-gray-200">{formatDate(e.data_entrada)}</td>
                         <td className="px-3 py-1.5 text-xs text-right font-semibold text-green-600 dark:text-green-400">+{e.quantidade?.toFixed(0) || 0}</td>
-                        <td className="px-3 py-1.5 text-xs text-right text-gray-600 dark:text-gray-400">{formatCurrency(e.preco_unitario)}</td>
+                        <td className="px-3 py-1.5 text-sm text-right text-gray-800 dark:text-gray-200">{formatCurrency(e.preco_unitario)}</td>
                       </tr>
                     ))}
                   </tbody>
