@@ -50,7 +50,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Metodo nao permitido' });
   }
 
-  const { page = 1, perPage = 10, filtros = [], search = '' } = req.body;
+  const { page = 1, perPage = 10, filtros = [], search = '', sortCampo = '', sortDirecao = '' } = req.body;
   const offset = (Number(page) - 1) * Number(perPage);
   const limit = Number(perPage);
 
@@ -236,6 +236,14 @@ export default async function handler(
 
   const whereString = whereGroups.length > 0 ? `WHERE ${whereGroups.join(' AND ')}` : '';
 
+  // Ordenação dinâmica (whitelist = filtroParaColunaSQL). Sem sort válido, mantém
+  // o padrão (mais recentes primeiro).
+  const colOrdenacao = filtroParaColunaSQL[String(sortCampo)];
+  const direcaoOrdenacao = String(sortDirecao).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  const orderByClause = colOrdenacao
+    ? `ORDER BY ${colOrdenacao} ${direcaoOrdenacao} NULLS LAST, n.dtimport DESC`
+    : `ORDER BY n.dtimport DESC, n.demi DESC`;
+
   const pool = getPgPool(filial);
   let client;
 
@@ -267,7 +275,7 @@ export default async function handler(
         FROM dbent d WHERE d.chave = n.chave
       ) ent ON true
       ${whereString}
-      ORDER BY n.dtimport DESC, n.demi DESC
+      ${orderByClause}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 

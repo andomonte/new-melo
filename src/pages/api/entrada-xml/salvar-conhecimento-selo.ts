@@ -54,6 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       protocolo?: string;
       nomebarco?: string;
       placacarreta?: string;
+      nfesVinculadas?: string[];
     } | null;
     uname?: string;
   };
@@ -127,6 +128,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
            ON CONFLICT (codtransp, nrocon, chavenfe) DO NOTHING`,
           [c.codtransp, c.nrocon, chaveNfe],
         );
+      }
+
+      // Vincula TODAS as demais NF-e que o CTe transporta (do XML) e "reconhece"
+      // o conhecimento nelas: ao processar cada nota, o frete é rateado (o motor
+      // de custo lê temcon/nrocon/codtransp → dbconhecimentoent). Não sobrescreve
+      // nota que já tenha outro conhecimento (guard temcon <> 'S').
+      const vinculadas = Array.isArray(c.nfesVinculadas)
+        ? Array.from(new Set(c.nfesVinculadas.map((s) => String(s).replace(/\D/g, '')).filter(Boolean)))
+        : [];
+      const outras = vinculadas.filter((ch) => ch && ch !== chaveNfe);
+      let seq = 1; // 1 = a nota atual
+      for (const ch of outras) {
+        seq += 1;
+        await client.query(
+          `INSERT INTO db_manaus.dbconhecimentoentnf (codtransp, nrocon, chavenfe, sequencia, dtinclusao)
+           VALUES ($1,$2,$3,$4, now())
+           ON CONFLICT (codtransp, nrocon, chavenfe) DO NOTHING`,
+          [c.codtransp, c.nrocon, ch, seq],
+        );
+
+        // Reconhece o conhecimento na NFe correspondente (se ela existir no sistema).
+        const nrow = await client.query(
+          `SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = $1`, [ch]);
+        const codnfe = nrow.rows[0]?.codnfe_ent;
+        if (!codnfe) continue;
+
+        const u = await client.query(
+          `UPDATE db_manaus.dbnfe_ent_aux
+              SET temcon='S', nrocon=$2, codtransp=$3
+            WHERE codnfe_ent=$1 AND (temcon IS NULL OR temcon <> 'S')`,
+          [codnfe, c.nrocon, c.codtransp]);
+        if (u.rowCount === 0) {
+          const ex = await client.query(
+            `SELECT 1 FROM db_manaus.dbnfe_ent_aux WHERE codnfe_ent=$1`, [codnfe]);
+          if (ex.rowCount === 0) {
+            await client.query(
+              `INSERT INTO db_manaus.dbnfe_ent_aux (codnfe_ent, temcon, nrocon, codtransp)
+               VALUES ($1,'S',$2,$3)`,
+              [codnfe, c.nrocon, c.codtransp]);
+          }
+        }
       }
     }
 

@@ -7,6 +7,7 @@ interface InputMoedaProps {
   className?: string;
   disabled?: boolean;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
 function paraNumero(v: number | string | null | undefined): number {
@@ -39,10 +40,12 @@ const InputMoeda: React.FC<InputMoedaProps> = ({
   className,
   disabled,
   placeholder,
+  autoFocus,
 }) => {
   return (
     <Input
       inputMode="numeric"
+      autoFocus={autoFocus}
       disabled={disabled}
       placeholder={placeholder}
       className={className}

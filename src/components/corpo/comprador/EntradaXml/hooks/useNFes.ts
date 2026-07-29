@@ -22,6 +22,7 @@ interface UseNFesParams {
   search?: string;
   filters?: { campo: string; tipo: string; valor: string }[];
   advancedFilters?: NFeFiltersAdvanced;
+  ordenacao?: { campo: string; direcao: 'asc' | 'desc' } | null;
 }
 
 interface UseNFesReturn {
@@ -33,7 +34,7 @@ interface UseNFesReturn {
   updateNFeStatus: (nfeId: string | number, newStatus: string) => void;
 }
 
-export const useNFes = ({ page, perPage, search, filters, advancedFilters }: UseNFesParams): UseNFesReturn => {
+export const useNFes = ({ page, perPage, search, filters, advancedFilters, ordenacao }: UseNFesParams): UseNFesReturn => {
   const [data, setData] = useState<NFeDTO[]>([]);
   const [meta, setMeta] = useState<NFesMeta>({
     total: 0,
@@ -50,8 +51,9 @@ export const useNFes = ({ page, perPage, search, filters, advancedFilters }: Use
     page: page || 1,
     perPage: perPage || 10,
     search: search || '',
-    filters: filters || []
-  }), [page, perPage, search, JSON.stringify(filters || [])]);
+    filters: filters || [],
+    ordenacao: ordenacao || null,
+  }), [page, perPage, search, JSON.stringify(filters || []), JSON.stringify(ordenacao || null)]);
 
   const fetchNFes = useCallback(async () => {
     setLoading(true);
@@ -79,6 +81,8 @@ export const useNFes = ({ page, perPage, search, filters, advancedFilters }: Use
             perPage: memoizedParams.perPage,
             search: memoizedParams.search,
             filtros: filtrosCorrigidos,
+            sortCampo: memoizedParams.ordenacao?.campo,
+            sortDirecao: memoizedParams.ordenacao?.direcao,
           }),
         });
 
@@ -108,7 +112,9 @@ export const useNFes = ({ page, perPage, search, filters, advancedFilters }: Use
           page: memoizedParams.page,
           perPage: memoizedParams.perPage,
           search: memoizedParams.search,
-          filters: advancedFilters
+          filters: advancedFilters,
+          sortCampo: memoizedParams.ordenacao?.campo,
+          sortDirecao: memoizedParams.ordenacao?.direcao,
         });
       }
 

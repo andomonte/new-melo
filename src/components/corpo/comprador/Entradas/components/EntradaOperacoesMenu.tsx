@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CircleChevronDown, Eye, RotateCcw, List, Warehouse, DollarSign, PackageCheck, Ban } from 'lucide-react';
 import {
   DropdownMenu,
@@ -13,7 +13,7 @@ import RomaneioModal from '@/components/entradas/RomaneioModal';
 import { ConfirmarPrecoModal } from './ConfirmarPrecoModal';
 import { ConfirmarEstoqueModal } from './ConfirmarEstoqueModal';
 import { ConsultaEntradaModal, ConsultaTipo } from './ConsultaEntradaModal';
-import { Truck, ShoppingCart, FileText } from 'lucide-react';
+import { Truck, ShoppingCart, FileText, FileSpreadsheet, FileDown } from 'lucide-react';
 
 interface EntradaOperacoesMenuProps {
   entrada: {
@@ -27,18 +27,23 @@ interface EntradaOperacoesMenuProps {
   onView?: () => void;
   onRefresh?: () => void;
   onViewItems?: () => void;
+  /** Notifica a página quando algum modal/confirmação deste menu abre/fecha
+   *  (para a navegação por teclado da lista pausar enquanto houver modal). */
+  onOperacaoAtiva?: (ativa: boolean) => void;
 }
 
 export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   entrada,
   onView,
   onRefresh,
-  onViewItems
+  onViewItems,
+  onOperacaoAtiva
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showConfirmReabrir, setShowConfirmReabrir] = useState(false);
   const [showRomaneio, setShowRomaneio] = useState(false);
   const [showConfirmarPreco, setShowConfirmarPreco] = useState(false);
+  const [showConfirmarSemCusto, setShowConfirmarSemCusto] = useState(false);
   const [showConfirmarEstoque, setShowConfirmarEstoque] = useState(false);
   const [consultaTipo, setConsultaTipo] = useState<ConsultaTipo | null>(null);
   const [showConfirmCancelar, setShowConfirmCancelar] = useState(false);
@@ -46,11 +51,93 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
   const [loading, setLoading] = useState(false);
 
+  // Sinaliza à página quando há qualquer modal/confirmação deste menu aberto,
+  // para pausar a navegação por teclado da lista (evita empilhar modais).
+  const algumModalOperacaoAberto =
+    showConfirmReabrir || showRomaneio || showConfirmarPreco || showConfirmarSemCusto ||
+    showConfirmarEstoque || showConfirmCancelar || showMessage || consultaTipo !== null;
+  useEffect(() => {
+    onOperacaoAtiva?.(algumModalOperacaoAberto);
+  }, [algumModalOperacaoAberto, onOperacaoAtiva]);
+
   // Pode fazer romaneio se ainda nao tem romaneio
   const canFazerRomaneio = !entrada.temRomaneio;
 
   // Pode confirmar preco se ainda nao foi confirmado
   const canConfirmarPreco = !entrada.precoConfirmado;
+
+  // Igual ao Delphi (spValidaRomaneio): o Confirmar Preço exige o romaneio feito.
+  // Sem romaneio, avisa e não abre a confirmação.
+  const handleAbrirConfirmarPreco = () => {
+    setIsOpen(false);
+    if (!entrada.temRomaneio) {
+      setMessageData({
+        title: 'Romaneio pendente',
+        message:
+          'Faça o Romaneio (distribuição dos itens por armazém) antes de confirmar o preço.\n\nUse a opção "Fazer Romaneio" no menu de Ações.',
+        type: 'warning',
+      });
+      setShowMessage(true);
+      return;
+    }
+    setShowConfirmarPreco(true);
+  };
+
+  // "Confirmar sem Custo" (Delphi): confirma a entrada sem recalcular o custo
+  // médio/preço dos produtos. Exige romaneio, igual ao Confirmar Preço.
+  const handleAbrirConfirmarSemCusto = () => {
+    setIsOpen(false);
+    if (!entrada.temRomaneio) {
+      setMessageData({
+        title: 'Romaneio pendente',
+        message:
+          'Faça o Romaneio (distribuição dos itens por armazém) antes de confirmar a entrada.\n\nUse a opção "Fazer Romaneio" no menu de Ações.',
+        type: 'warning',
+      });
+      setShowMessage(true);
+      return;
+    }
+    setShowConfirmarSemCusto(true);
+  };
+
+  const handleConfirmarSemCusto = async () => {
+    setShowConfirmarSemCusto(false);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/entradas/${entrada.id}/confirmar-preco`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ semCusto: true, atualizarPrecoVenda: false }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMessageData({
+          title: 'Entrada Confirmada (sem custo)',
+          message: 'A entrada foi confirmada sem recalcular o custo médio/preço dos produtos.',
+          type: 'success',
+        });
+        setShowMessage(true);
+        if (onRefresh) setTimeout(() => onRefresh(), 1000);
+      } else {
+        setMessageData({
+          title: 'Erro ao Confirmar sem Custo',
+          message: data.error || 'Ocorreu um erro desconhecido',
+          type: 'error',
+        });
+        setShowMessage(true);
+      }
+    } catch (error) {
+      console.error('Erro ao confirmar sem custo:', error);
+      setMessageData({
+        title: 'Erro de Comunicação',
+        message: 'Não foi possível conectar com o servidor. Tente novamente.',
+        type: 'error',
+      });
+      setShowMessage(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Confirmar estoque so DEPOIS do preco (workflow PRECO_CONFIRMADO), como no Delphi.
   const canConfirmarEstoque =
@@ -164,6 +251,12 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Exporta os itens da entrada (Excel/PDF) — "Copiar para o Excel" do Delphi.
+  const handleExportarItens = (formato: 'excel' | 'pdf') => {
+    setIsOpen(false);
+    window.open(`/api/entradas/${entrada.id}/exportar-itens?formato=${formato}`, '_blank');
   };
 
   const handleConfirmarCancelar = async () => {
@@ -287,6 +380,17 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               Consultar Notas Fiscais
             </DropdownMenuItem>
 
+            {/* Exportar itens (Excel/PDF) — "Copiar para o Excel" do Delphi */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleExportarItens('excel')}>
+              <FileSpreadsheet className="mr-2 h-4 w-4 text-green-700" />
+              Exportar Itens (Excel)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExportarItens('pdf')}>
+              <FileDown className="mr-2 h-4 w-4 text-red-600" />
+              Exportar Itens (PDF)
+            </DropdownMenuItem>
+
             {/* Fazer Romaneio */}
             {canFazerRomaneio && (
               <>
@@ -298,11 +402,19 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               </>
             )}
 
-            {/* Confirmar Preco */}
+            {/* Confirmar Preco (exige romaneio, como no Delphi) */}
             {canConfirmarPreco && (
-              <DropdownMenuItem onClick={() => setShowConfirmarPreco(true)}>
+              <DropdownMenuItem onClick={handleAbrirConfirmarPreco}>
                 <DollarSign className="mr-2 h-4 w-4 text-green-600" />
                 Confirmar Preco
+              </DropdownMenuItem>
+            )}
+
+            {/* Confirmar sem Custo (Delphi): confirma sem recalcular custo médio */}
+            {canConfirmarPreco && (
+              <DropdownMenuItem onClick={handleAbrirConfirmarSemCusto}>
+                <DollarSign className="mr-2 h-4 w-4 text-amber-600" />
+                Confirmar sem Custo
               </DropdownMenuItem>
             )}
 
@@ -367,6 +479,18 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
         type="danger"
         confirmText="Sim, Cancelar Entrada"
         cancelText="Voltar"
+        loading={loading}
+      />
+
+      <ConfirmationModal
+        isOpen={showConfirmarSemCusto}
+        onClose={() => setShowConfirmarSemCusto(false)}
+        onConfirm={handleConfirmarSemCusto}
+        title="Confirmar sem Custo"
+        message={`Confirmar a entrada ${entrada.numeroNF} SEM recalcular o custo?\n\n• O custo do item é calculado normalmente\n• O custo médio e o preço de venda dos produtos NÃO são atualizados\n\n(Equivale ao "Confirmar Entrada sem CUSTO" do sistema antigo.)`}
+        type="warning"
+        confirmText="Sim, Confirmar sem Custo"
+        cancelText="Cancelar"
         loading={loading}
       />
 

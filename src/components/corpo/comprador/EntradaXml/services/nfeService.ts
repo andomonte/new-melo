@@ -17,6 +17,8 @@ export const nfeService = {
     perPage?: number;
     search?: string;
     filters?: Record<string, any>;
+    sortCampo?: string;
+    sortDirecao?: string;
   }): Promise<NFeListResponse> {
     try {
       const queryParams = new URLSearchParams();
@@ -24,6 +26,8 @@ export const nfeService = {
       if (params.page) queryParams.append('page', params.page.toString());
       if (params.perPage) queryParams.append('perPage', params.perPage.toString());
       if (params.search) queryParams.append('search', params.search);
+      if (params.sortCampo) queryParams.append('sortCampo', params.sortCampo);
+      if (params.sortDirecao) queryParams.append('sortDirecao', params.sortDirecao);
 
       // Filtros avançados
       if (params.filters) {

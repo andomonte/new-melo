@@ -698,6 +698,7 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
           setShowCadastroConhecimento(false);
         }}
         valorTotalNfe={nfeSelecionada?.valor_total}
+        chaveNfe={nfeSelecionada?.chave_nfe}
       />
     </>
   );

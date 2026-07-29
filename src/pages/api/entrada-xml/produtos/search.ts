@@ -4,6 +4,7 @@ import { getPgPool } from '@/lib/pgClient';
 interface Produto {
   id: string;
   referencia: string;
+  ref?: string; // Referência de fábrica (dbprod.ref)
   descricao: string;
   codigoBarras?: string;
   marca: string;
@@ -52,6 +53,7 @@ export default async function handler(
       SELECT
         p.codprod as id,
         p.codprod as referencia,
+        p.ref as ref,
         p.descr as descricao,
         p.codbar as codigo_barras,
         COALESCE(m.descr, 'SEM MARCA') as marca,
@@ -78,6 +80,7 @@ export default async function handler(
         SELECT
           p.codprod as id,
           p.codprod as referencia,
+          p.ref as ref,
           p.descr as descricao,
           p.codbar as codigo_barras,
           COALESCE(m.descr, 'SEM MARCA') as marca,
@@ -123,6 +126,7 @@ export default async function handler(
     const produtos: Produto[] = result.rows.map((row: any) => ({
       id: row.id,
       referencia: row.referencia,
+      ref: row.ref || '',
       descricao: row.descricao || 'Descrição não informada',
       codigoBarras: row.codigo_barras,
       marca: row.marca || 'MARCA NÃO INFORMADA',

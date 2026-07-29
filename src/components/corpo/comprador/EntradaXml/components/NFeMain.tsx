@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { usePermissions } from '@/hooks/usePermissions';
 import { AuthContext } from '@/contexts/authContexts';
-import DataTableNFe from './DataTableNFe';
+import DataTablePadrao from '@/components/common/DataTablePadrao';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 import { UploadXmlModal } from './UploadXmlModal';
 import { ViewNFeModal } from './ViewNFeModal';
 import { ProcessNFeModal } from './ProcessNFeModal';
@@ -42,6 +43,8 @@ export const NFeMain: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<NFeDTO | null>(null);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const [itemToReset, setItemToReset] = useState<NFeDTO | null>(null);
+  // NFe aguardando confirmação de "Liberar NFe" (null = nenhuma).
+  const [itemToLiberar, setItemToLiberar] = useState<NFeDTO | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
@@ -104,6 +107,8 @@ export const NFeMain: React.FC = () => {
   // Filtro rápido por status (dropdown, estilo Requisições). Injeta um filtro
   // 'status' (igual) no array enviado à busca — n.exec no backend.
   const [statusFiltro, setStatusFiltro] = useState('');
+  // Ordenação server-side por cabeçalho (todas as páginas).
+  const [ordenacao, setOrdenacao] = useState<{ campo: string; direcao: 'asc' | 'desc' } | null>(null);
   const filtrosCombinados = useMemo(() => {
     const semStatus = filtros.filter((f) => f.campo !== 'status');
     return statusFiltro
@@ -117,6 +122,7 @@ export const NFeMain: React.FC = () => {
     search,
     filters: filtrosCombinados,
     advancedFilters,
+    ordenacao,
   });
 
   const {
@@ -609,6 +615,210 @@ export const NFeMain: React.FC = () => {
   };
 
 
+  // Exportação da lista para Excel (mesmo endpoint que o grid antigo usava).
+  const handleExportarExcel = async () => {
+    try {
+      const res = await fetch('/api/entrada-xml/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ colunas: [], filtros: {}, busca: search }),
+      });
+      if (!res.ok) throw new Error('Falha na exportação');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'nfes.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Erro ao exportar NFes:', e);
+      toast.error('Erro ao exportar a lista');
+    }
+  };
+
+  // Ação primária de cada NFe (usada no Enter da navegação por teclado).
+  const executarAcaoPrimaria = (nfe: NFeDTO) => {
+    if (!canEdit) {
+      handleView(nfe);
+      return;
+    }
+    switch (nfe.status) {
+      case 'RECEBIDA':
+        handleProcess(nfe);
+        break;
+      case 'EM_ANDAMENTO':
+        handleContinuar(nfe);
+        break;
+      case 'ASSOCIACAO_CONCLUIDA':
+        handleGerarEntrada(nfe);
+        break;
+      default:
+        handleView(nfe);
+    }
+  };
+
+  // Enquanto qualquer modal/menu estiver aberto, a navegação da lista fica inativa.
+  const algumModalAberto =
+    isUploadOpen ||
+    isGerarEntradaOpen ||
+    isGerarEntradaVerdeOpen ||
+    !!viewItem ||
+    !!processItem ||
+    !!configureItem ||
+    !!itemsAssociationItem ||
+    showDeleteConfirmation ||
+    showResetConfirmation ||
+    !!itemToLiberar ||
+    showMessage ||
+    showGerarCobranca ||
+    showSelecionarAntecipados ||
+    showGerarEntradaDireta ||
+    showFiltrosAvancados ||
+    showHistorico ||
+    Object.values(dropdownStates).some(Boolean);
+
+  // ⌨️ Navegação estilo Delphi: ↑/↓ move a linha; Enter dispara a ação primária.
+  // Atalhos por letra abrem a ação correspondente do menu (V=Ver, H=Histórico, etc.).
+  const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<NFeDTO>({
+    data,
+    ativo: !algumModalAberto,
+    onEnter: (row) => executarAcaoPrimaria(row),
+    atalhos: [
+      { key: 'v', handler: (row) => row && handleView(row) },
+      {
+        key: 'h',
+        handler: (row) => {
+          if (!row) return;
+          setNfeParaHistorico(row);
+          setShowHistorico(true);
+        },
+      },
+      {
+        key: 'l',
+        handler: (row) => {
+          // Só quando o botão "Liberar NFe" está visível para esta linha.
+          if (
+            row &&
+            canEdit &&
+            row.processandoPor &&
+            row.processandoPor === user?.codusr &&
+            row.status !== 'PROCESSADA'
+          ) {
+            setItemToLiberar(row);
+          }
+        },
+      },
+      {
+        key: 'p',
+        handler: (row) => {
+          if (!row || !canEdit) return;
+          if (row.status === 'RECEBIDA') handleProcess(row);
+          else if (row.status === 'EM_ANDAMENTO') handleContinuar(row);
+        },
+      },
+      {
+        key: 'g',
+        handler: (row) => {
+          if (!row || !canEdit) return;
+          if (['RECEBIDA', 'EM_ANDAMENTO', 'ASSOCIACAO_CONCLUIDA'].includes(row.status || '')) {
+            handleGerarCobranca(row);
+          }
+        },
+      },
+      {
+        key: 'e',
+        handler: (row) => {
+          if (!row || !canEdit) return;
+          if (row.status === 'ASSOCIACAO_CONCLUIDA') handleGerarEntrada(row);
+        },
+      },
+      {
+        key: 'Delete',
+        handler: (row) => {
+          if (!row || !canEdit) return;
+          if (['RECEBIDA', 'EM_ANDAMENTO'].includes(row.status || '')) handleDelete(row);
+        },
+      },
+    ],
+  });
+
+  // Esc fecha o modal aberto no topo (os abertos pelos atalhos V/H/P/G/E/Del e
+  // pelos botões). O modal de associação de itens trata o próprio Esc e por isso
+  // não é fechado aqui.
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (itemsAssociationItem) return; // tem Esc próprio (recolher/sub-modal)
+
+      if (showMessage) {
+        setShowMessage(false);
+      } else if (showResetConfirmation && !isResetting) {
+        setShowResetConfirmation(false);
+        setItemToReset(null);
+      } else if (showDeleteConfirmation) {
+        setShowDeleteConfirmation(false);
+        setItemToDelete(null);
+      } else if (itemToLiberar) {
+        setItemToLiberar(null);
+      } else if (showHistorico) {
+        setShowHistorico(false);
+        setNfeParaHistorico(null);
+      } else if (showGerarEntradaDireta) {
+        setShowGerarEntradaDireta(false);
+        setNfeParaEntradaDireta(null);
+        setAssociacoesCarregadas([]);
+      } else if (showGerarCobranca) {
+        setShowGerarCobranca(false);
+        setNfeParaCobranca(null);
+        setOrdensAntecipadasSelecionadas([]);
+        setValorAntecipadoSelecionado(0);
+      } else if (showSelecionarAntecipados) {
+        setShowSelecionarAntecipados(false);
+        setNfeParaAntecipados(null);
+      } else if (isGerarEntradaOpen) {
+        setIsGerarEntradaOpen(false);
+        setSelectedNFeId('');
+        setAssociatedItemsData([]);
+      } else if (isGerarEntradaVerdeOpen) {
+        setIsGerarEntradaVerdeOpen(false);
+      } else if (configureItem) {
+        setConfigureItem(null);
+      } else if (processItem) {
+        setProcessItem(null);
+        refetch();
+      } else if (viewItem) {
+        setViewItem(null);
+      } else if (isUploadOpen) {
+        setIsUploadOpen(false);
+      } else {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [
+    itemsAssociationItem,
+    showMessage,
+    showResetConfirmation,
+    isResetting,
+    showDeleteConfirmation,
+    itemToLiberar,
+    showHistorico,
+    showGerarEntradaDireta,
+    showGerarCobranca,
+    showSelecionarAntecipados,
+    isGerarEntradaOpen,
+    isGerarEntradaVerdeOpen,
+    configureItem,
+    processItem,
+    viewItem,
+    isUploadOpen,
+    refetch,
+  ]);
+
   // Função para renderizar ações seguindo padrão das requisições
   const renderActions = (nfe: NFeDTO) => {
     return (
@@ -666,6 +876,7 @@ export const NFeMain: React.FC = () => {
               >
                 <Eye className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                 Ver
+                <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">V</kbd>
               </button>
 
               {/* Histórico sempre disponível */}
@@ -682,6 +893,7 @@ export const NFeMain: React.FC = () => {
               >
                 <History className="mr-2 text-purple-500 dark:text-purple-400" size={16} />
                 Historico
+                <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">H</kbd>
               </button>
 
               {/* Liberar NFe - apenas para quem esta processando */}
@@ -690,7 +902,7 @@ export const NFeMain: React.FC = () => {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleLiberarNfe(nfe.id);
+                    setItemToLiberar(nfe);
                     setDropdownStates(prev => ({ ...prev, [nfe.id]: false }));
                   }}
                   className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full"
@@ -698,6 +910,7 @@ export const NFeMain: React.FC = () => {
                 >
                   <Unlock className="mr-2 text-orange-500 dark:text-orange-400" size={16} />
                   Liberar NFe
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">L</kbd>
                 </button>
               )}
 
@@ -715,6 +928,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <Settings className="mr-2 text-green-500 dark:text-green-400" size={16} />
                     Processar
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">P</kbd>
                   </button>
                   <button
                     onClick={() => {
@@ -726,6 +940,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <DollarSign className="mr-2 text-yellow-500 dark:text-yellow-400" size={16} />
                     Gerar Cobrança
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">G</kbd>
                   </button>
                   <button
                     onClick={() => {
@@ -737,6 +952,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <Trash2 className="mr-2 text-red-500 dark:text-red-400" size={16} />
                     Excluir
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">Del</kbd>
                   </button>
                 </>
               )}
@@ -754,6 +970,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <Settings className="mr-2 text-green-500 dark:text-green-400" size={16} />
                     Continuar
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">P</kbd>
                   </button>
                   <button
                     onClick={() => {
@@ -765,6 +982,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <DollarSign className="mr-2 text-yellow-500 dark:text-yellow-400" size={16} />
                     Gerar Cobrança
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">G</kbd>
                   </button>
                   <button
                     onClick={() => {
@@ -776,6 +994,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <Trash2 className="mr-2 text-red-500 dark:text-red-400" size={16} />
                     Excluir
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">Del</kbd>
                   </button>
                 </>
               )}
@@ -793,6 +1012,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <DollarSign className="mr-2 text-green-500 dark:text-green-400" size={16} />
                     Gerar Cobrança
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">G</kbd>
                   </button>
                   <button
                     onClick={() => {
@@ -804,6 +1024,7 @@ export const NFeMain: React.FC = () => {
                   >
                     <Play className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                     Gerar Entrada
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">E</kbd>
                   </button>
                 </>
               )}
@@ -842,8 +1063,9 @@ export const NFeMain: React.FC = () => {
 
   // Função para formatar os dados para o DataTableFiltroV3
   const formatTableData = () => {
-    return data.map((nfe) => ({
+    return data.map((nfe, index) => ({
       ...nfe,
+      __index: index,
       numeroNF: nfe.numeroNF || '',
       serie: nfe.serie || '',
       chaveNFe: nfe.chaveNFe ? nfe.chaveNFe.substring(0, 20) + '...' : '',
@@ -956,7 +1178,7 @@ export const NFeMain: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white dark:bg-slate-900">
+    <div className="h-full flex flex-col flex-grow bg-white dark:bg-slate-900 overflow-hidden">
       {/* Header compacto - seguindo padrão do sistema */}
       <div className="px-10 pt-4 pb-1 flex-shrink-0">
         <div className="flex justify-between items-center mb-2">
@@ -993,26 +1215,46 @@ export const NFeMain: React.FC = () => {
       </div>
 
       {/* Tabela de NFes */}
-      <div className="flex-1 min-h-0 px-4">
-        <DataTableNFe
+      <div className="flex-1 min-h-0 min-w-0 px-4 flex flex-col overflow-hidden">
+        <DataTablePadrao
+          screenKey="entrada-xml-nfe"
+          userName={user?.usuario}
           headers={headers}
           rows={formatTableData()}
           meta={meta}
           carregando={loading}
-          limiteColunas={limiteColunas}
-          onLimiteColunasChange={handleLimiteColunasChange}
+          semColunaDeAcaoPadrao
+          persistPerPage={false}
+          searchValue={search}
           onSearch={handleSearchChange}
           onSearchBlur={handleSearchBlur}
           onSearchKeyDown={handleSearchKeyDown}
           onPageChange={handlePageChange}
           onPerPageChange={handlePerPageChange}
           onFiltroChange={handleFiltroChange}
-          onColunaSubstituida={handleColunaSubstituida}
           colunasFiltro={colunasDbNFe.map(col => col.campo)}
-          colunasFixas={['acoes', 'AÇÕES']}
+          ordenacaoServidor
+          onSort={(campo, direcao) => {
+            setOrdenacao({ campo, direcao });
+            handlePageChange(1);
+          }}
+          nonsortableColumns={['acoes', 'AÇÕES']}
+          mostrarFiltrosSempre
+          onExportarExcel={handleExportarExcel}
           searchInputPlaceholder="Buscar por NFe, chave, emitente..."
-          exportEndpoint="/api/entrada-xml/exportar"
-          exportFileName="nfes.xlsx"
+          columnLabels={colunasDbNFe.reduce(
+            (acc, col) => {
+              acc[col.campo] = col.label;
+              return acc;
+            },
+            { acoes: 'Ações', AÇÕES: 'Ações' } as Record<string, string>,
+          )}
+          rowClassName={(row) =>
+            (row as any).__index === linhaSelecionada
+              ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
+              : ''
+          }
+          onRowClick={(row) => setLinhaSelecionada((row as any).__index ?? -1)}
           searchRightSlot={
             <div className="w-44 shrink-0">
               <SelectPadrao
@@ -1170,6 +1412,24 @@ export const NFeMain: React.FC = () => {
         message={itemToDelete ? `Deseja realmente excluir a NFe ${itemToDelete.numeroNF}/${itemToDelete.serie}?` : ''}
         type="danger"
         confirmText="Sim, Excluir"
+        cancelText="Cancelar"
+      />
+
+      <ConfirmationModal
+        isOpen={!!itemToLiberar}
+        onClose={() => setItemToLiberar(null)}
+        onConfirm={() => {
+          if (itemToLiberar) handleLiberarNfe(itemToLiberar.id);
+          setItemToLiberar(null);
+        }}
+        title="Liberar NFe"
+        message={
+          itemToLiberar
+            ? `Deseja liberar a NFe ${itemToLiberar.numeroNF}/${itemToLiberar.serie}?\n\nEla ficará disponível para outro usuário processar.`
+            : ''
+        }
+        type="warning"
+        confirmText="Sim, Liberar"
         cancelText="Cancelar"
       />
 

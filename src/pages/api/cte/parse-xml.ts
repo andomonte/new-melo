@@ -18,10 +18,19 @@ interface CteData {
   cfop: string;
   dtcon: string;
 
-  // Transportadora
+  // Transportadora (emitente do CTe) — dados completos p/ pré-cadastro
   transp_cnpj: string;
   transp_nome: string;
   transp_uf: string;
+  transp_fant?: string;
+  transp_ie?: string;
+  transp_ender?: string;
+  transp_numero?: string;
+  transp_bairro?: string;
+  transp_municipio?: string;
+  transp_codmunicipio?: string;
+  transp_cep?: string;
+  transp_fone?: string;
 
   // Remetente
   rem_cnpj: string;
@@ -172,6 +181,15 @@ export default async function handler(
     const transp_cnpj = getVal(emit, 'CNPJ') || '';
     const transp_nome = getVal(emit, 'xNome') || getVal(emit, 'xFant') || '';
     const transp_uf = getVal(enderEmit, 'UF') || '';
+    const transp_fant = getVal(emit, 'xFant') || '';
+    const transp_ie = getVal(emit, 'IE') || '';
+    const transp_ender = getVal(enderEmit, 'xLgr') || '';
+    const transp_numero = getVal(enderEmit, 'nro') || '';
+    const transp_bairro = getVal(enderEmit, 'xBairro') || '';
+    const transp_municipio = getVal(enderEmit, 'xMun') || '';
+    const transp_codmunicipio = getVal(enderEmit, 'cMun') || '';
+    const transp_cep = getVal(enderEmit, 'CEP') || '';
+    const transp_fone = getVal(enderEmit, 'fone') || '';
 
     // Remetente
     const rem = infCte.rem || {};
@@ -189,8 +207,15 @@ export default async function handler(
 
     // Valores da prestação
     const vPrest = infCte.vPrest || {};
+    // totalcon = valor do frete (prestação do serviço).
     const totalcon = parseFloat(getVal(vPrest, 'vTPrest') || '0');
-    const totaltransp = parseFloat(getVal(vPrest, 'vRec') || getVal(vPrest, 'vTPrest') || '0');
+    // totaltransp = VALOR TRANSPORTADO (mercadoria) = infCarga/vCarga. É o denominador
+    // do rateio (coef = totalcon/totaltransp). NÃO usar vRec/vTPrest (é o próprio frete,
+    // daria coef≈1). Fallback p/ vRec só se vCarga não vier.
+    const vCarga = parseFloat(getVal(infCte.infCTeNorm?.infCarga || {}, 'vCarga') || '0');
+    const totaltransp = vCarga > 0
+      ? vCarga
+      : parseFloat(getVal(vPrest, 'vRec') || getVal(vPrest, 'vTPrest') || '0');
 
     // ICMS
     const imp = infCte.imp || {};
@@ -257,6 +282,15 @@ export default async function handler(
       transp_cnpj,
       transp_nome,
       transp_uf,
+      transp_fant,
+      transp_ie,
+      transp_ender,
+      transp_numero,
+      transp_bairro,
+      transp_municipio,
+      transp_codmunicipio,
+      transp_cep,
+      transp_fone,
 
       rem_cnpj,
       rem_nome,

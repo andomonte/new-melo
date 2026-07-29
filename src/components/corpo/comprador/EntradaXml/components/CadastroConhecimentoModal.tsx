@@ -33,6 +33,8 @@ interface DadosConhecimento {
   protocolo?: string;
   nomebarco?: string;
   placacarreta?: string;
+  /** Chaves das NF-e que o CTe transporta (do XML) — para vincular todas ao conhecimento. */
+  nfesVinculadas?: string[];
 }
 
 interface CtePendente {
@@ -89,6 +91,44 @@ interface CamposPreenchidos {
   protocolo: boolean;
 }
 
+/**
+ * CFOP de ENTRADA do conhecimento de frete. O 1º dígito indica a origem do
+ * serviço em relação ao nosso estado (AM): 1 = dentro do estado, 2 = interestadual.
+ *
+ * O CTe traz o CFOP de SAÍDA do emitente (transportadora): 5xxx = interno,
+ * 6xxx = interestadual. Convertendo para a entrada mantendo os 3 últimos dígitos:
+ *   5352 -> 1352 (dentro do AM) · 6352 -> 2352 (outro estado).
+ *
+ * Fallback (CFOP sem prefixo 5/6): usa a UF do emitente pelos 2 primeiros dígitos
+ * da chave (13 = AM). O campo permanece editável para ajuste manual.
+ */
+export function derivarCfopEntradaConhecimento(cteCfop: string, chave?: string): string {
+  const digitos = (cteCfop || '').replace(/\D/g, '');
+  const sufixo = digitos.slice(-3);
+  if (sufixo.length < 3) return cteCfop || '';
+
+  const primeiroCte = digitos.charAt(0);
+  let primeiro: string;
+  if (primeiroCte === '5') {
+    primeiro = '1'; // saída interna do emitente → entrada interna (AM)
+  } else if (primeiroCte === '6') {
+    primeiro = '2'; // saída interestadual → entrada interestadual
+  } else {
+    const ufEmitente = (chave || '').replace(/\D/g, '').substring(0, 2);
+    primeiro = ufEmitente === '13' ? '1' : '2'; // 13 = AM
+  }
+  return primeiro + sufixo;
+}
+
+/** Extrai número e série da NF-e a partir da chave de acesso (44 dígitos). */
+export function dadosDaChaveNFe(chave: string): { numero: string; serie: string; chave: string } {
+  const c = (chave || '').replace(/\D/g, '');
+  if (c.length !== 44) return { numero: '', serie: '', chave: c };
+  const serie = String(parseInt(c.substring(22, 25), 10) || 0);
+  const numero = String(parseInt(c.substring(25, 34), 10) || 0);
+  return { numero, serie, chave: c };
+}
+
 const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
   isOpen,
   onClose,
@@ -138,6 +178,18 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
   const [protocolo, setProtocolo] = useState('');
   const [nomebarco, setNomebarco] = useState('');
   const [placacarreta, setPlacacarreta] = useState('');
+  // NF-e que o CTe transporta (chaves extraídas do XML).
+  const [nfesVinculadas, setNfesVinculadas] = useState<string[]>([]);
+  // Subconjunto marcado para RECEBER o frete (rateio por valor). Default: todas.
+  const [nfesComFrete, setNfesComFrete] = useState<string[]>([]);
+  // A NFe do fluxo atual NÃO consta nas notas deste CTe (checado no upload manual).
+  const [nfeNaoPertence, setNfeNaoPertence] = useState(false);
+  // Dados da transportadora extraídos do XML do CTe (para buscar / pré-cadastrar).
+  const [transportadoraXml, setTransportadoraXml] = useState<{
+    cnpj?: string; nome?: string; fant?: string; ie?: string;
+    ender?: string; numero?: string; bairro?: string; municipio?: string;
+    codmunicipio?: string; uf?: string; cep?: string; fone?: string;
+  } | null>(null);
 
   // Limpar formulário
   const limparFormulario = useCallback(() => {
@@ -159,6 +211,10 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
     setProtocolo('');
     setNomebarco('');
     setPlacacarreta('');
+    setNfesVinculadas([]);
+    setNfesComFrete([]);
+    setNfeNaoPertence(false);
+    setTransportadoraXml(null);
     setXmlFileName(null);
     setCteEncontrado(null);
     setCamposPreenchidos({
@@ -176,7 +232,7 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
     setCodtransp(cte.codtransp);
     setNrocon(cte.nrocon);
     setSerie(cte.serie);
-    setCfop(cte.cfop);
+    setCfop(derivarCfopEntradaConhecimento(cte.cfop, cte.chave));
     setIcms(cte.icms);
     setBaseicms(cte.baseicms);
     setTotalcon(cte.totalcon);
@@ -188,6 +244,10 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
     setKgcub(cte.kgcub);
     setChave(cte.chave);
     setProtocolo(cte.protocolo);
+    setNfesVinculadas(cte.nfes_vinculadas || []);
+    setNfesComFrete(cte.nfes_vinculadas || []); // default: todas recebem frete
+    setNfeNaoPertence(false); // fluxo automático: pertencimento garantido pela busca
+    setTransportadoraXml({ cnpj: cte.transp_cnpj || '', nome: cte.transp_nome || '' });
     setCteEncontrado(cte);
 
     // Marcar todos os campos como preenchidos (exceto transportadora se não veio)
@@ -233,6 +293,36 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Busca a transportadora pelo CNPJ (só dígitos) e, se encontrar, seleciona.
+   * A API retorna o CNPJ em `cpfcgc` (o campo `cnpj_cpf` não existe no retorno —
+   * era esse o motivo do auto-match falhar sempre). Retorna true se selecionou.
+   */
+  const buscarESelecionarTranspPorCnpj = async (cnpj?: string): Promise<boolean> => {
+    const digitos = (cnpj || '').replace(/\D/g, '');
+    if (!digitos) return false;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/transportadoras?search=${encodeURIComponent(digitos)}`);
+      const data = await res.json();
+      const lista: Transportadora[] = data?.data || [];
+      setTransportadoras(lista);
+      const norm = (s?: string) => (s || '').replace(/\D/g, '');
+      const match = lista.find(
+        (t) => norm((t as any).cpfcgc) === digitos || norm(t.cnpj_cpf) === digitos,
+      );
+      if (match) {
+        setCodtransp(match.codtransp);
+        return true;
+      }
+    } catch (error) {
+      console.error('Erro ao buscar transportadora por CNPJ:', error);
+    } finally {
+      setLoading(false);
+    }
+    return false;
   };
 
   // Buscar CTe automático pela chave da NFe
@@ -298,21 +388,31 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
       if (data.success && data.data) {
         const cteData = data.data;
 
-        // Tentar encontrar transportadora pelo CNPJ
-        const transp = transportadoras.find(t =>
-          t.cnpj_cpf?.replace(/\D/g, '') === cteData.transp_cnpj?.replace(/\D/g, '')
-        );
+        // Guarda os dados da transportadora do XML (para busca e pré-cadastro).
+        setTransportadoraXml({
+          cnpj: cteData.transp_cnpj || '',
+          nome: cteData.transp_nome || '',
+          fant: cteData.transp_fant || '',
+          ie: cteData.transp_ie || '',
+          ender: cteData.transp_ender || '',
+          numero: cteData.transp_numero || '',
+          bairro: cteData.transp_bairro || '',
+          municipio: cteData.transp_municipio || '',
+          codmunicipio: cteData.transp_codmunicipio || '',
+          uf: cteData.transp_uf || '',
+          cep: cteData.transp_cep || '',
+          fone: cteData.transp_fone || '',
+        });
 
-        const temTransportadora = !!transp;
-        if (transp) {
-          setCodtransp(transp.codtransp);
-        } else {
-          toast.warning('Transportadora não encontrada no cadastro. Selecione manualmente.');
+        // Busca a transportadora pelo CNPJ do XML e seleciona automaticamente.
+        const temTransportadora = await buscarESelecionarTranspPorCnpj(cteData.transp_cnpj);
+        if (!temTransportadora) {
+          toast.warning(`Transportadora "${cteData.transp_nome}" não encontrada no cadastro. Busque pelo CNPJ ${cteData.transp_cnpj} ou cadastre.`);
         }
 
         setNrocon(cteData.nrocon);
         setSerie(cteData.serie);
-        setCfop(cteData.cfop);
+        setCfop(derivarCfopEntradaConhecimento(cteData.cfop, cteData.chave));
         setDtcon(cteData.dtcon);
         setTotalcon(cteData.totalcon);
         setTotaltransp(cteData.totaltransp || cteData.totalcon);
@@ -322,6 +422,18 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
         setKgcub(cteData.kgcub);
         setChave(cteData.chave);
         setProtocolo(cteData.protocolo);
+        const listaNfes: string[] = cteData.nfes_vinculadas || [];
+        setNfesVinculadas(listaNfes);
+        setNfesComFrete(listaNfes); // default: todas recebem frete
+
+        // Validação de pertencimento: a NFe do fluxo consta neste CTe?
+        const norm = (s?: string) => (s || '').replace(/\D/g, '');
+        const pertence = !chaveNfe || listaNfes.map(norm).includes(norm(chaveNfe));
+        setNfeNaoPertence(!pertence);
+        if (!pertence) {
+          toast.warning('Atenção: a NFe atual não consta nas notas deste CTe.');
+        }
+
         setCif(cteData.cif);
         setTipocon(cteData.tipocon);
 
@@ -350,7 +462,7 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
         if (!temTransportadora) camposFaltando.push('Transportadora');
         setFaltaCampos(camposFaltando);
 
-        const qtdNfes = data.nfes_vinculadas || 0;
+        const qtdNfes = cteData.nfes_vinculadas?.length || 0;
         toast.success(`CTe ${cteData.nrocon} processado com sucesso.${qtdNfes > 0 ? ` ${qtdNfes} NF-e(s) vinculada(s).` : ''}`);
 
         // Vai para aba de formulário para confirmar/completar dados
@@ -450,7 +562,9 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
         chave: chave || undefined,
         protocolo: protocolo || undefined,
         nomebarco: nomebarco || undefined,
-        placacarreta: placacarreta || undefined
+        placacarreta: placacarreta || undefined,
+        // Só as notas MARCADAS recebem o frete (rateio por valor entre elas).
+        nfesVinculadas: nfesComFrete.length > 0 ? nfesComFrete : undefined
       };
 
       onSalvar(dados);
@@ -716,6 +830,19 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
           {/* Formulário (após upload ou seleção automática) */}
           {activeTab === 'formulario' && (
             <>
+              {/* Alerta: a NFe atual não consta nas notas deste CTe */}
+              {nfeNaoPertence && (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <span className="text-red-800 dark:text-red-300 text-sm font-medium">
+                      A NFe que você está processando <strong>não consta</strong> nas notas deste CTe.
+                      Confira se subiu o XML correto antes de confirmar.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Alerta de campos faltantes */}
               {faltaCampos.length > 0 && (
                 <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg">
@@ -772,6 +899,12 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
                     loading={loading}
                     disabled={camposPreenchidos.codtransp}
                   />
+                  {!codtransp && transportadoraXml?.cnpj && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Do XML: <strong>{transportadoraXml.nome}</strong> · CNPJ {transportadoraXml.cnpj}
+                      {transportadoraXml.uf ? ` · ${transportadoraXml.uf}` : ''}
+                    </p>
+                  )}
                   {!camposPreenchidos.codtransp && (
                     <button
                       type="button"
@@ -779,7 +912,7 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
                       className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400"
                     >
                       <Plus size={12} />
-                      Não encontrou? Cadastrar transportadora
+                      Não encontrou? Cadastrar transportadora {transportadoraXml?.cnpj ? '(dados do XML)' : ''}
                     </button>
                   )}
                 </div>
@@ -848,13 +981,16 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     value={cfop}
-                    onChange={(e) => setCfop(e.target.value)}
-                    disabled={camposPreenchidos.cfop}
-                    placeholder="5353"
+                    onChange={(e) => setCfop(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="1352"
                     maxLength={4}
-                    className={`w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white ${camposPreenchidos.cfop ? 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-zinc-700' : ''}`}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-zinc-800 dark:text-white"
                   />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    1º dígito: <strong>1</strong> = dentro do AM · <strong>2</strong> = outro estado. Ajuste se necessário.
+                  </p>
                 </div>
               </div>
 
@@ -1054,6 +1190,80 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Notas Fiscais vinculadas (extraídas do XML do CTe — somente leitura) */}
+              <h4 className="font-medium text-gray-700 dark:text-gray-300 mt-6 mb-3 flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Notas Fiscais vinculadas
+                {nfesVinculadas.length > 0 && (
+                  <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                    ({nfesVinculadas.length})
+                  </span>
+                )}
+              </h4>
+              {nfesVinculadas.length === 0 ? (
+                <div className="mb-4 p-3 rounded-lg border border-dashed border-gray-300 dark:border-zinc-700 text-sm text-gray-500 dark:text-gray-400">
+                  Nenhuma NF-e vinculada foi encontrada no XML deste CTe.
+                </div>
+              ) : (
+                <div className="mb-4 border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300">
+                      <tr>
+                        <th className="px-3 py-2 text-center w-16">Frete</th>
+                        <th className="px-3 py-2 text-left w-10">#</th>
+                        <th className="px-3 py-2 text-left w-28">Nº Nota</th>
+                        <th className="px-3 py-2 text-left w-16">Série</th>
+                        <th className="px-3 py-2 text-left">Chave de Acesso</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nfesVinculadas.map((ch, idx) => {
+                        const d = dadosDaChaveNFe(ch);
+                        const soDig = (s?: string) => (s || '').replace(/\D/g, '');
+                        const ehAtual = !!chaveNfe && soDig(ch) === soDig(chaveNfe);
+                        const marcado = ehAtual || nfesComFrete.some((x) => soDig(x) === soDig(ch));
+                        return (
+                          <tr key={ch || idx} className="border-t border-gray-200 dark:border-zinc-700">
+                            <td className="px-3 py-2 text-center">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-blue-600 disabled:opacity-60"
+                                checked={marcado}
+                                disabled={ehAtual}
+                                title={ehAtual ? 'Nota atual — sempre recebe o frete' : 'Marque para esta nota receber o frete'}
+                                onChange={(e) => {
+                                  setNfesComFrete((prev) => {
+                                    const sem = prev.filter((x) => soDig(x) !== soDig(ch));
+                                    return e.target.checked ? [...sem, ch] : sem;
+                                  });
+                                }}
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-gray-500">{idx + 1}</td>
+                            <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">
+                              {d.numero || '—'}
+                              {ehAtual && (
+                                <span className="ml-1 text-[10px] px-1 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                                  atual
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{d.serie || '—'}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600 dark:text-gray-400 break-all">
+                              {d.chave}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                As notas são lidas do XML do CTe. O frete é rateado <strong>por valor</strong> entre as notas
+                <strong> marcadas</strong> — desmarque as que não devem receber frete (ex.: deixar só em uma).
+              </p>
             </>
           )}
         </div>
@@ -1100,9 +1310,28 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
         <CadastroTransportadoraModal
           isOpen={showCadastroTransp}
           onClose={() => setShowCadastroTransp(false)}
+          dadosIniciais={
+            transportadoraXml
+              ? ({
+                  tipo: 'J',
+                  nome: transportadoraXml.nome || '',
+                  nomefant: transportadoraXml.fant || transportadoraXml.nome || '',
+                  cpfcgc: transportadoraXml.cnpj || '',
+                  iest: transportadoraXml.ie || '',
+                  ender: transportadoraXml.ender || '',
+                  numero: transportadoraXml.numero || '',
+                  bairro: transportadoraXml.bairro || '',
+                  cidade: transportadoraXml.municipio || '',
+                  codmunicipio: transportadoraXml.codmunicipio || '',
+                  uf: transportadoraXml.uf || '',
+                  cep: transportadoraXml.cep || '',
+                  codpais: 1058,
+                } as any)
+              : undefined
+          }
           onSuccess={(busca?: string) => {
             setShowCadastroTransp(false);
-            carregarTransportadoras(busca || '');
+            carregarTransportadoras(busca || transportadoraXml?.cnpj || '');
             toast.success('Transportadora cadastrada! Busque e selecione na lista.');
           }}
         />

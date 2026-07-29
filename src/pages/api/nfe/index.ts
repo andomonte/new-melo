@@ -28,8 +28,37 @@ export default async function handle(
     dataFim = '',
     valorMinimo = '',
     valorMaximo = '',
-    temAssociacao = ''
+    temAssociacao = '',
+    sortCampo = '',
+    sortDirecao = ''
   } = req.query;
+
+  // Ordenação dinâmica — whitelist de colunas presentes no SELECT.
+  const sortColunaSQL: Record<string, string> = {
+    numeroNF: 'n.nnf',
+    serie: 'n.serie',
+    chaveNFe: 'n.chave',
+    emitente: 'e.xnome',
+    fornecedorCnpj: 'e.cpf_cnpj',
+    dataEmissao: 'n.demi',
+    dataUpload: 'n.dtimport',
+    valorTotal: 'n.vnf',
+    status: 'n.exec',
+    codent: 'ent.codent',
+    natOperacao: 'n.natop',
+    protocolo: 'n.nprot',
+    versao: 'n.versao',
+    totalProdutos: 'n.vprod',
+    totalIcms: 'n.vicms',
+    totalIpi: 'n.vipi',
+    pesoLiquido: 'n.pesol',
+    pesoBruto: 'n.pesob',
+  };
+  const colOrdenacao = sortColunaSQL[String(sortCampo)];
+  const direcaoOrdenacao = String(sortDirecao).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  const orderByClause = colOrdenacao
+    ? `ORDER BY ${colOrdenacao} ${direcaoOrdenacao} NULLS LAST, n.dtimport DESC`
+    : `ORDER BY n.dtimport DESC, n.demi DESC`;
 
   const pool = getPgPool(filial);
   let client;
@@ -172,7 +201,7 @@ export default async function handle(
         FROM dbent d WHERE d.chave = n.chave
       ) ent ON true
       ${whereSQL}
-      ORDER BY n.dtimport DESC, n.demi DESC
+      ${orderByClause}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
     

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, Loader2, Wand2 } from 'lucide-react';
+import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, ChevronUp, Loader2, Wand2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import InputMoeda from '@/components/common/InputMoeda';
@@ -19,6 +19,7 @@ import { CentroCustoModal } from './CentroCustoModal';
 import { SugestaoInteligenteAlert } from './SugestaoInteligenteAlert';
 import { ListaSugestoesInteligentes } from './ListaSugestoesInteligentes';
 import { useSugestaoInteligente } from '../hooks/useSugestaoInteligente';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 import { toast } from 'sonner';
 
 interface NFeItemsAssociationModalProps {
@@ -51,6 +52,7 @@ interface NFeItem {
 interface Produto {
   id: string;
   referencia: string;
+  ref?: string; // Referência de fábrica (dbprod.ref)
   descricao: string;
   codigoBarras?: string;
   marca: string;
@@ -213,6 +215,8 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
   const [showProductDetails, setShowProductDetails] = useState(false);
   const [showPedidosModal, setShowPedidosModal] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  // Item aguardando confirmação de "Desassociar" (null = nenhum).
+  const [itemParaDesassociar, setItemParaDesassociar] = useState<NFeItem | null>(null);
   const [showMessage, setShowMessage] = useState(false);
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -250,6 +254,11 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
   const [sugestaoUnica, setSugestaoUnica] = useState<any>(null);
   const [sugestoesMultiplas, setSugestoesMultiplas] = useState<any[]>([]);
 
+  // Sugestão automática começa COLAPSADA (dá espaço à tabela); o usuário abre se quiser.
+  const [mostrarSugestao, setMostrarSugestao] = useState<boolean>(false);
+  // Tabela compacta de itens: linha expandida (detalhes) e filtro por status.
+  const [itemExpandido, setItemExpandido] = useState<string | null>(null);
+  const [filtroStatusItem, setFiltroStatusItem] = useState<'todos' | 'pending' | 'associated'>('todos');
   // ⚡ BUSCA AUTOMÁTICA DE ORDEM (xPed / infCpl)
   const [ordemAutomatica, setOrdemAutomatica] = useState<OrdemAutomatica | null>(null);
   const [ordensAutomaticas, setOrdensAutomaticas] = useState<OrdemAutomatica[]>([]);
@@ -521,26 +530,24 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
       return;
     }
 
-    // 🎯 PRIORIDADE 0: Se há ordem automática detectada com itens disponíveis
-    if (ordemAutomatica && ordemAutomatica.itens_oc && ordemAutomatica.itens_oc.length > 0) {
-      const itensPendentes = items.filter(i => i.status === 'pending');
-
-      // Se há apenas 1 item pendente, marcar e informar que pode clicar direto na OC
-      if (itensPendentes.length === 1) {
-        setSelectedItem(item);
-        toast.info(`Item selecionado! Clique em "Associar" no produto da Ordem de Compra acima.`, {
-          duration: 3000
-        });
+    // 🎯 PRIORIDADE 0: Se o match automático encontrou uma OC para ESTE item,
+    // associa o produto e abre DIRETO o modal de ordens (mesmo caminho do botão
+    // "Associar" da tabela de correspondência) — sem mensagem guiada.
+    if (ordemAutomatica && ordemAutomatica.itens_match && ordemAutomatica.itens_match.length > 0) {
+      const match = ordemAutomatica.itens_match.find((m) => m.nItem_nfe === item.id);
+      if (match) {
+        const itemOC: ItemOC = {
+          codprod: match.codprod,
+          descricao: match.descricao,
+          quantidade_oc: match.quantidade_oc,
+          quantidade_atendida: match.quantidade_oc - match.quantidade_disponivel,
+          quantidade_disponivel: match.quantidade_disponivel,
+          valor_unitario: 0,
+        };
+        handleAssociarItemOC(itemOC, item);
         return;
       }
-
-      // Se há múltiplos itens pendentes, marcar o selecionado
-      setSelectedItem(item);
-      toast.success(`Item "${item.descricao?.substring(0, 30)}..." selecionado!`, {
-        description: `Agora clique em "Associar" no produto da Ordem acima (${itensPendentes.length} itens pendentes)`,
-        duration: 4000
-      });
-      return;
+      // Sem match para este item específico → segue para as demais prioridades.
     }
 
     // 🧠 PRIORIDADE 1: Tentar SUGESTÃO INTELIGENTE (produtos aprendidos)
@@ -786,6 +793,27 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
       console.error('Erro ao associar item da OC:', error);
       toast.error('Erro ao associar produto');
     }
+  };
+
+  // Desassocia um item: remove produto + associações e volta para "pendente".
+  // A remoção fica no estado; é persistida ao clicar em "Salvar Progresso"
+  // ou "Concluir Associações".
+  const handleDesassociarItem = (item: NFeItem) => {
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, produtoAssociado: undefined, associacoes: [], status: 'pending' as const }
+          : i,
+      ),
+    );
+    setTempRateioData((prev) => {
+      const m = new Map(prev);
+      m.delete(item.id);
+      return m;
+    });
+    if (itemExpandido === item.id) setItemExpandido(null);
+    setItemParaDesassociar(null);
+    toast.info('Item desassociado. Salve o progresso para confirmar.');
   };
 
   const handleConfirmarAssociacoes = async () => {
@@ -1145,6 +1173,59 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
     setShowMessage(true);
   };
 
+  // Itens visíveis (após o filtro por status) — base da navegação por teclado.
+  const itensVisiveis = items.filter((i) =>
+    filtroStatusItem === 'todos'
+      ? true
+      : filtroStatusItem === 'associated'
+        ? i.status === 'associated'
+        : i.status !== 'associated',
+  );
+
+  // Enquanto qualquer sub-modal estiver aberto, a navegação da lista fica inativa
+  // (o sub-modal de associação tem seu próprio Esc/Enter).
+  const algumSubmodalAberto =
+    showProductSearch ||
+    showProductDetails ||
+    showPedidosModal ||
+    showConfirmation ||
+    showMessage ||
+    showDecisionModal ||
+    showSugestoesModal ||
+    showSugestoesAutomaticas ||
+    showSugestaoUnica ||
+    showSugestoesMultiplas ||
+    itemParaDesassociar !== null;
+
+  // ⌨️ Navegação estilo Delphi: ↑/↓ move a linha, Enter abre a associação.
+  // Espaço abre/recolhe os detalhes da linha; Esc recolhe; Delete desassocia.
+  const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<NFeItem>({
+    data: itensVisiveis,
+    ativo: isOpen && !algumSubmodalAberto,
+    onEnter: (row) => handleAssociarProduto(row),
+    atalhos: [
+      {
+        key: ' ',
+        handler: (row) => {
+          if (row) setItemExpandido((cur) => (cur === row.id ? null : row.id));
+        },
+      },
+      {
+        key: 'Escape',
+        precisaLinha: false,
+        handler: () => setItemExpandido(null),
+      },
+      {
+        key: 'Delete',
+        handler: (row) => {
+          if (row && (row.produtoAssociado || (row.associacoes?.length ?? 0) > 0)) {
+            setItemParaDesassociar(row);
+          }
+        },
+      },
+    ],
+  });
+
   if (!isOpen) return null;
 
   return (
@@ -1160,7 +1241,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
           -moz-appearance: textfield;
         }
       `}</style>
-      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-7xl w-full mx-4 max-h-[95vh] flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl w-[96vw] max-w-[1600px] mx-4 h-[95vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700 flex-shrink-0">
           <div className="flex items-center space-x-3">
@@ -1207,7 +1288,20 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
         {/* Content */}
         <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Lista de Itens */}
-          <div className="w-2/3 p-6 overflow-y-auto flex-shrink-0">
+          <div className="w-full flex flex-col min-h-0">
+            {/* Sugestão automática (colapsável) — scroll próprio, não empurra os itens */}
+            <div className="flex-shrink-0 px-6 pt-4 border-b border-gray-100 dark:border-zinc-800">
+              {ordemAutomatica && !loadingOrdemAutomatica && (
+                <button
+                  type="button"
+                  onClick={() => setMostrarSugestao((v) => !v)}
+                  className="mb-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {mostrarSugestao ? '▲ Ocultar sugestão automática' : '▼ Mostrar sugestão automática'}
+                </button>
+              )}
+              {mostrarSugestao && (
+                <div className="max-h-[42vh] overflow-y-auto pr-1 pb-2">
             {/* ⚡ Banner de Ordem Encontrada Automaticamente */}
             {loadingOrdemAutomatica && (
               <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -1613,254 +1707,206 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
                 autoLoad={true}
               />
             </div> */}
-            <div className="space-y-4">
-              {items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className={`border rounded-lg p-4 transition-all duration-200 ${getStatusColor(item.status)}`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(item.status)}
-                      <span className="font-medium">Item {index + 1}</span>
-                      <span className="text-sm">
-                        ({item.status === 'associated'
-                          ? 'Associado'
-                          : item.status === 'error'
-                          ? 'Erro na associação'
-                          : 'Pendente'})
-                      </span>
-
-                      {/* Indicador de Divergência de Preço */}
-                      {item.status === 'associated' && item.associacoes && item.associacoes.length > 0 && (
-                        <>
-                          {item.associacoes.map((assoc, idx) => {
-                            const diferencaPercentual = item.valorUnitario && assoc.valorUnitario
-                              ? Math.abs((item.valorUnitario - assoc.valorUnitario) / assoc.valorUnitario * 100)
-                              : 0;
-
-                            if (diferencaPercentual > 5) {
-                              return (
-                                <div
-                                  key={idx}
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                                    diferencaPercentual > 20
-                                      ? 'bg-red-100 text-red-700'
-                                      : diferencaPercentual > 10
-                                      ? 'bg-orange-100 text-orange-700'
-                                      : 'bg-yellow-100 text-yellow-700'
-                                  }`}
-                                  title={`Preço NFe: ${formatCurrency(item.valorUnitario)} | Preço OC: ${formatCurrency(assoc.valorUnitario)}`}
-                                >
-                                  <AlertCircle size={12} />
-                                  <span>Divergência {diferencaPercentual.toFixed(0)}%</span>
-                                </div>
-                              );
-                            }
-                            return null;
-                          })}
-                        </>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={item.status === 'associated' ? 'default' : 'outline'}
-                      onClick={() => handleAssociarProduto(item)}
-                      disabled={loading}
-                      className={
-                        item.status === 'associated' 
-                          ? 'bg-green-600 hover:bg-green-700 text-white' 
-                          : item.status === 'error'
-                          ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200'
-                          : ''
-                      }
-                    >
-                      <Search size={16} className="mr-1" />
-                      {item.status === 'associated' 
-                        ? 'Reeditar' 
-                        : item.status === 'error'
-                        ? 'Corrigir'
-                        : 'Associar'}
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-                    <div>
-                      <Label className="font-medium">Referência</Label>
-                      <div>{item.referencia}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Descrição</Label>
-                      <div className="truncate" title={item.descricao}>
-                        {item.descricao}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Código Barras</Label>
-                      <div>{item.codigoBarras || '-'}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">NCM</Label>
-                      <div>{item.ncm}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">CFOP</Label>
-                      <div>{item.cfop}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Unid.</Label>
-                      <div>{item.unidade}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Qtde Trib.</Label>
-                      <div>{item.quantidade}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Qtde NF</Label>
-                      <div>{item.quantidade}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Qtde Ass.</Label>
-                      <div className={`font-bold ${
-                        item.status === 'associated' 
-                          ? 'text-green-600' 
-                          : item.status === 'error'
-                          ? 'text-red-600'
-                          : 'text-gray-400'
-                      }`}>
-                        {item.associacoes?.reduce((sum, a) => sum + a.quantidade, 0) || 0}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Valor Prod.</Label>
-                      <div>{formatCurrency(item.valorTotal)}</div>
-                    </div>
-                    <div>
-                      <Label className="font-medium">Desc</Label>
-                      <div>-</div>
-                    </div>
-                  </div>
-
-                  {/* Produto Associado */}
-                  {item.produtoAssociado && (
-                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200">
-                      <Label className="font-medium text-blue-700">Produto Associado:</Label>
-                      <div className="text-sm text-blue-800">
-                        {item.produtoAssociado.referencia} - {item.produtoAssociado.descricao}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Meia Nota — indicador + edição direto no card */}
-                  {item.status === 'associated' && (() => {
-                    const cfg = tempRateioData.get(item.id);
-                    const meia = cfg?.meiaNota || false;
-                    const preco = cfg?.precoUnitarioNF;
-                    const precoNf = Number(item.valorUnitario) || 0;
-                    const invalido = meia && (preco === undefined || preco <= 0 || preco < precoNf);
-                    const atualizarCfg = (patch: { meiaNota?: boolean; precoUnitarioNF?: number }) => {
-                      const novo = new Map(tempRateioData);
-                      const base = novo.get(item.id) || { meiaNota: false };
-                      novo.set(item.id, { ...base, ...patch });
-                      setTempRateioData(novo);
-                    };
-                    return (
-                      <div className={`mt-2 p-2 rounded border ${meia ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-300 dark:border-yellow-700' : 'bg-gray-50 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700'}`}>
-                        <div className="flex items-center flex-wrap gap-2">
-                          <Checkbox
-                            id={`meia-${item.id}`}
-                            checked={meia}
-                            onCheckedChange={(checked) => {
-                              const on = checked as boolean;
-                              atualizarCfg({
-                                meiaNota: on,
-                                precoUnitarioNF: on ? (preco ?? precoNf) : undefined,
-                              });
-                            }}
-                          />
-                          <Label htmlFor={`meia-${item.id}`} className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                            Meia Nota
-                          </Label>
-                          {meia && (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-600 dark:text-gray-400">Pr. Unit.:</span>
-                              <div className="w-32">
-                                <InputMoeda
-                                  className="text-xs h-8"
-                                  value={preco}
-                                  onChangeValue={(v) => atualizarCfg({ meiaNota: true, precoUnitarioNF: v })}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {invalido && (
-                          <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                            Pr. Unit. da Meia Nota deve ser ≥ R$ {precoNf.toFixed(4)} (preço da NF)
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
                 </div>
-              ))}
+              )}
+            </div>
+            {/* Lista de itens da NFe — tabela compacta (rolagem própria) */}
+            <div className="flex-1 min-h-0 flex flex-col px-6 py-3">
+              {/* Filtro por status */}
+              <div className="flex-shrink-0 flex items-center gap-2 mb-2 text-xs text-gray-600 dark:text-gray-400">
+                <span>Filtrar:</span>
+                <select
+                  value={filtroStatusItem}
+                  onChange={(e) => setFiltroStatusItem(e.target.value as any)}
+                  className="border border-gray-300 dark:border-zinc-600 rounded px-2 py-1 bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-100"
+                >
+                  <option value="todos">Todos ({items.length})</option>
+                  <option value="pending">Pendentes ({items.filter((i) => i.status !== 'associated').length})</option>
+                  <option value="associated">Associados ({items.filter((i) => i.status === 'associated').length})</option>
+                </select>
+                <span className="ml-auto italic">Clique na linha para ver os detalhes (NCM, CFOP, etc.)</span>
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-auto border border-gray-200 dark:border-zinc-700 rounded-lg">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300">
+                    <tr>
+                      <th className="w-6"></th>
+                      <th className="px-2 py-2 text-center w-10">St</th>
+                      <th className="px-2 py-2 text-center w-8">#</th>
+                      <th className="px-2 py-2 text-left">Ref. / Descrição (NF)</th>
+                      <th className="px-2 py-2 text-right w-16">Qt NF</th>
+                      <th className="px-2 py-2 text-left">Produto Melo</th>
+                      <th className="px-2 py-2 text-center w-20">Qt Ass.</th>
+                      <th className="px-2 py-2 text-center w-44">Meia Nota</th>
+                      <th className="px-2 py-2 text-center w-28">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itensVisiveis
+                      .map((item, visIndex) => {
+                        const index = items.indexOf(item);
+                        const selecionada = visIndex === linhaSelecionada;
+                        const qtdAss = item.associacoes?.reduce((s, a) => s + a.quantidade, 0) || 0;
+                        const expandido = itemExpandido === item.id;
+                        const cfg = tempRateioData.get(item.id);
+                        const meia = cfg?.meiaNota || false;
+                        const preco = cfg?.precoUnitarioNF;
+                        const rowBg =
+                          item.status === 'associated'
+                            ? 'bg-blue-50/50 dark:bg-blue-900/10'
+                            : item.status === 'error'
+                              ? 'bg-red-50/50 dark:bg-red-900/10'
+                              : '';
+                        const dotCor =
+                          item.status === 'associated'
+                            ? 'bg-blue-500'
+                            : item.status === 'error'
+                              ? 'bg-red-500'
+                              : 'bg-gray-400';
+                        return (
+                          <React.Fragment key={item.id}>
+                            <tr
+                              className={`border-t border-gray-200 dark:border-zinc-700 ${
+                                selecionada
+                                  ? `${CLASSE_LINHA_ATIVA} bg-blue-100 dark:bg-blue-900/40 ring-1 ring-inset ring-blue-400`
+                                  : rowBg
+                              } hover:bg-gray-50 dark:hover:bg-zinc-800/60 cursor-pointer`}
+                              onClick={() => {
+                                setLinhaSelecionada(visIndex);
+                                setItemExpandido(expandido ? null : item.id);
+                              }}
+                            >
+                              <td className="px-1 text-center text-gray-400">
+                                {expandido ? <ChevronUp size={14} className="inline" /> : <ChevronDown size={14} className="inline" />}
+                              </td>
+                              <td className="px-2 py-1.5 text-center">
+                                <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotCor}`} title={item.status} />
+                              </td>
+                              <td className="px-2 py-1.5 text-center text-gray-500">{index + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <div className="font-medium text-gray-900 dark:text-gray-100">{item.referencia}</div>
+                                <div className="text-gray-500 dark:text-gray-400 truncate max-w-[240px]" title={item.descricao}>
+                                  {item.descricao}
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 text-right font-medium">{item.quantidade}</td>
+                              <td className="px-2 py-1.5">
+                                {item.produtoAssociado ? (
+                                  <span className="text-blue-700 dark:text-blue-300">
+                                    {item.produtoAssociado.referencia} - {item.produtoAssociado.descricao}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td
+                                className={`px-2 py-1.5 text-center font-bold ${
+                                  item.status === 'associated'
+                                    ? 'text-green-600'
+                                    : item.status === 'error'
+                                      ? 'text-red-600'
+                                      : 'text-gray-400'
+                                }`}
+                              >
+                                {qtdAss}/{item.quantidade}
+                              </td>
+                              <td className="px-2 py-1.5 text-center">
+                                {item.status === 'associated' && meia ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-[0.7rem] font-medium">
+                                    ✔ R$ {(preco ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant={item.status === 'associated' ? 'default' : 'outline'}
+                                    onClick={() => handleAssociarProduto(item)}
+                                    disabled={loading}
+                                    className={`h-7 text-xs ${
+                                      item.status === 'associated'
+                                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                                        : item.status === 'error'
+                                          ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200'
+                                          : ''
+                                    }`}
+                                  >
+                                    <Search size={13} className="mr-1" />
+                                    {item.status === 'associated' ? 'Reeditar' : item.status === 'error' ? 'Corrigir' : 'Associar'}
+                                  </Button>
+                                  {(item.produtoAssociado || (item.associacoes?.length ?? 0) > 0) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setItemParaDesassociar(item)}
+                                      disabled={loading}
+                                      title="Desassociar item (Delete)"
+                                      className="h-7 px-2 text-xs border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+                                    >
+                                      <Trash2 size={13} />
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            {expandido && (
+                              <tr className={rowBg}>
+                                <td colSpan={9} className="px-4 py-3 bg-gray-50 dark:bg-zinc-900/40 border-t border-gray-100 dark:border-zinc-800">
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                    <div><Label className="font-medium">NCM</Label><div>{item.ncm}</div></div>
+                                    <div><Label className="font-medium">CFOP</Label><div>{item.cfop}</div></div>
+                                    <div><Label className="font-medium">Unid.</Label><div>{item.unidade}</div></div>
+                                    <div><Label className="font-medium">Cód. Barras</Label><div>{item.codigoBarras || '-'}</div></div>
+                                    <div><Label className="font-medium">Qtde Trib.</Label><div>{item.quantidade}</div></div>
+                                    <div><Label className="font-medium">Valor Prod.</Label><div>{formatCurrency(item.valorTotal)}</div></div>
+                                    <div><Label className="font-medium">Desc</Label><div>-</div></div>
+                                  </div>
+
+                                  {/* Meia Nota (somente leitura — editar em "Reeditar") */}
+                                  {item.status === 'associated' && meia && (
+                                    <div className="mt-3 flex items-center gap-2 text-xs">
+                                      <span className="font-medium text-gray-700 dark:text-gray-300">Meia Nota — Pr. Unit.:</span>
+                                      <span className="text-yellow-800 dark:text-yellow-300 font-medium">
+                                        R$ {(preco ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      </span>
+                                      <span className="text-gray-400">(altere em “Reeditar”)</span>
+                                    </div>
+                                  )}
+
+                                  {/* Divergência de preço NF x OC */}
+                                  {item.status === 'associated' && item.associacoes?.map((assoc, idx) => {
+                                    const dif = item.valorUnitario && assoc.valorUnitario
+                                      ? Math.abs((item.valorUnitario - assoc.valorUnitario) / assoc.valorUnitario * 100)
+                                      : 0;
+                                    if (dif <= 5) return null;
+                                    return (
+                                      <div key={idx} className="mt-2 inline-flex items-center gap-1 text-xs text-orange-700 dark:text-orange-300">
+                                        <AlertCircle size={12} />
+                                        Divergência de preço {dif.toFixed(0)}% (NF {formatCurrency(item.valorUnitario)} × OC {formatCurrency(assoc.valorUnitario)})
+                                      </div>
+                                    );
+                                  })}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          {/* Painel Lateral - Informações */}
-          <div className="w-1/3 border-l border-gray-200 dark:border-zinc-700 p-6 bg-gray-50 dark:bg-zinc-800">
-            <h3 className="text-lg font-medium mb-4 text-gray-800 dark:text-gray-100">Status da Associação</h3>
-            
-            <div className="space-y-3 mb-6 text-gray-700 dark:text-gray-300">
-              <div className="flex justify-between">
-                <span>Total de Itens:</span>
-                <span className="font-medium">{items.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Associados:</span>
-                <span className="font-medium text-blue-600">
-                  {items.filter(i => i.status === 'associated').length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Pendentes:</span>
-                <span className="font-medium text-orange-600">
-                  {items.filter(i => i.status === 'pending').length}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                <span>Associado com sucesso</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-red-500 rounded"></div>
-                <span>Associado parcialmente</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-gray-400 rounded"></div>
-                <span>Não associado</span>
-              </div>
-            </div>
-
-            {/* Instruções */}
-            <div className="mt-6 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 rounded">
-              <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
-                Instruções:
-              </h4>
-              <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
-                <li>• Todos os itens devem estar associados</li>
-                <li>• Quantidade associada = Quantidade da nota</li>
-                <li>• Use o código de barras quando possível</li>
-              </ul>
-            </div>
-          </div>
+          {/* Painel lateral removido — status resumido no rodapé para dar espaço à tabela */}
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-between items-center p-6 border-t border-gray-200 dark:border-gray-600 flex-shrink-0">
+        {/* Footer com resumo do status */}
+        <div className="flex justify-between items-center gap-4 px-6 py-3 border-t border-gray-200 dark:border-gray-600 flex-shrink-0">
           <Button
             variant="outline"
             onClick={onClose}
@@ -1869,6 +1915,25 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
             <X size={16} className="mr-2" />
             Cancelar
           </Button>
+
+          {/* Resumo do status (antes era o painel lateral) */}
+          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+            <span>Total: <strong className="text-gray-900 dark:text-gray-100">{items.length}</strong></span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500" />
+              Associados: <strong className="text-blue-600">{items.filter(i => i.status === 'associated').length}</strong>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-400" />
+              Pendentes: <strong className="text-orange-600">{items.filter(i => i.status !== 'associated').length}</strong>
+            </span>
+            {items.some(i => i.status === 'error') && (
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
+                Parciais: <strong className="text-red-600">{items.filter(i => i.status === 'error').length}</strong>
+              </span>
+            )}
+          </div>
 
           {/* Botão unificado: Salvar Progresso ou Concluir Associações */}
           <Button
@@ -1898,6 +1963,22 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
           </Button>
         </div>
       </div>
+
+      {/* Confirmação de Desassociação */}
+      <ConfirmationModal
+        isOpen={itemParaDesassociar !== null}
+        type="danger"
+        title="Desassociar item"
+        message={
+          itemParaDesassociar
+            ? `Remover a associação do item "${(itemParaDesassociar.descricao || '').substring(0, 60)}"?\n\nO produto e as ordens vinculadas serão removidos e o item voltará para "pendente". Salve o progresso para confirmar no banco.`
+            : ''
+        }
+        confirmText="Desassociar"
+        cancelText="Cancelar"
+        onClose={() => setItemParaDesassociar(null)}
+        onConfirm={() => itemParaDesassociar && handleDesassociarItem(itemParaDesassociar)}
+      />
 
       {/* Modal de Busca de Produtos */}
       {showProductSearch && (
@@ -1961,6 +2042,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
           fornecedorCnpj={nfe.cnpjEmitente} // Filtrar ordens apenas do fornecedor da NFe
           ordemIdSelecionada={ordemAutomatica?.orc_id?.toString()} // Filtrar pela ordem selecionada no dropdown
           associacoesExistentes={selectedItem.associacoes} // 🔄 Passar associações existentes para modo edição
+          configExtraExistente={tempRateioData.get(selectedItem.id) || null} // 🔄 Reeditar: recarrega a Meia Nota salva
           onConfirm={(associacoes, configExtra) => {
             if (selectedItem) {
               const totalAssociado = associacoes.reduce((sum: number, a: any) => sum + a.quantidade, 0);
@@ -2159,6 +2241,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
         const produtosMapeados: Produto[] = apiData.data.map((produto: any) => ({
           id: produto.id,
           referencia: produto.referencia,
+          ref: produto.ref,
           descricao: produto.descricao,
           codigoBarras: produto.codigoBarras,
           marca: produto.marca,
@@ -2249,7 +2332,12 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-gray-100">{produto.referencia}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        <span>Cód: {produto.id}</span>
+                        {produto.ref && (
+                          <span className="text-blue-700 dark:text-blue-300 font-mono text-sm">Ref: {produto.ref}</span>
+                        )}
+                      </div>
                       <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">{produto.descricao}</div>
                       <div className="flex gap-4 text-xs text-gray-500 dark:text-gray-400 mt-2">
                         <span>Marca: {produto.marca}</span>
@@ -2289,6 +2377,7 @@ interface PedidosDisponiveisModalInternalProps {
   fornecedorCnpj?: string; // CNPJ do fornecedor da NFe para filtrar ordens
   ordemIdSelecionada?: string; // ID da ordem selecionada no dropdown (quando vem da correspondência)
   associacoesExistentes?: ItemAssociation[]; // Para modo edição
+  configExtraExistente?: { meiaNota?: boolean; precoUnitarioNF?: number } | null; // Reeditar: recarrega meia nota
 }
 
 const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = ({
@@ -2298,7 +2387,8 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
   onConfirm,
   fornecedorCnpj,
   ordemIdSelecionada,
-  associacoesExistentes
+  associacoesExistentes,
+  configExtraExistente
 }) => {
   const [pedidos, setPedidos] = useState<OrdemCompra[]>([]);
   const [loading, setLoading] = useState(false);
@@ -2309,15 +2399,15 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
   const [meiaNota, setMeiaNota] = useState<boolean>(false);
   const [precoUnitarioNF, setPrecoUnitarioNF] = useState<number | undefined>(undefined);
 
-  // Ao marcar, pré-preenche com o preço do XML (usuário edita para o preço real).
+  // Reeditar: recarrega a Meia Nota já salva ao (re)abrir o modal.
   useEffect(() => {
-    if (meiaNota) {
-      setPrecoUnitarioNF((prev) => (prev === undefined ? precoNfXml : prev));
-    } else {
-      setPrecoUnitarioNF(undefined);
+    if (isOpen) {
+      const on = configExtraExistente?.meiaNota || false;
+      setMeiaNota(on);
+      setPrecoUnitarioNF(on ? configExtraExistente?.precoUnitarioNF : undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meiaNota]);
+  }, [isOpen]);
 
   // Regra do legado: preço meia nota deve ser >= preço da NF (XML).
   const meiaNotaInvalida =
@@ -2338,7 +2428,9 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
             // Construir URL com parâmetros de filtro
             const params = new URLSearchParams();
             if (fornecedorCnpj) params.append('fornecedorCnpj', fornecedorCnpj);
-            if (ordemIdSelecionada) params.append('ordemId', ordemIdSelecionada);
+            // NÃO filtra por ordemId: lista TODAS as OCs abertas do produto para
+            // permitir dividir a quantidade entre várias ordens (a OC sugerida
+            // pelo match automático é apenas pré-selecionada abaixo).
 
             const queryString = params.toString() ? `?${params.toString()}` : '';
             const response = await fetch(`/api/entrada-xml/pedidos-disponiveis/${codigoProduto}${queryString}`);
@@ -2368,6 +2460,27 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
               }));
               
               setPedidos(ordensMapeadas);
+
+              // Pré-seleciona a OC sugerida (match automático) com a quantidade
+              // possível — para o caso simples (uma OC) ser 1 clique. As demais
+              // OCs ficam visíveis para o usuário dividir a quantidade.
+              if ((!associacoesExistentes || associacoesExistentes.length === 0) && ordemIdSelecionada) {
+                const sugerida = ordensMapeadas.find(
+                  (o) => String(o.id) === String(ordemIdSelecionada),
+                );
+                if (sugerida) {
+                  const qtd = Math.min(sugerida.quantidadeDisponivel, item.quantidade);
+                  if (qtd > 0) {
+                    setAssociacoes([
+                      {
+                        pedidoId: sugerida.id,
+                        quantidade: qtd,
+                        valorUnitario: sugerida.valorUnitario,
+                      },
+                    ]);
+                  }
+                }
+              }
             } else {
               setPedidos([]);
             }
@@ -2379,9 +2492,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
               if (fornecedorCnpj) {
                 params.append('fornecedorCnpj', fornecedorCnpj);
               }
-              if (ordemIdSelecionada) {
-                params.append('ordemId', ordemIdSelecionada);
-              }
+              // Sem filtro por ordemId: mostra todas as OCs do fornecedor.
               const response = await fetch(`/api/entrada-xml/ordens-compra-disponiveis?${params.toString()}`);
               const data = await response.json();
 
@@ -2485,13 +2596,40 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
   };
 
   const totalAssociado = associacoes.reduce((sum, a) => sum + a.quantidade, 0);
+  const podeConfirmar = totalAssociado === item.quantidade && !meiaNotaInvalida;
+
+  // ⌨️ Esc fecha; Enter salva (quando a associação está válida). O foco pode
+  // estar no input de quantidade ou na Meia Nota — Enter salva mesmo assim.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key === 'Enter') {
+        // Se o foco estiver num botão, deixa o clique nativo agir.
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'BUTTON') return;
+        if (podeConfirmar) {
+          e.preventDefault();
+          e.stopPropagation();
+          onConfirm(associacoes, { meiaNota, precoUnitarioNF });
+        }
+      }
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [isOpen, podeConfirmar, associacoes, meiaNota, precoUnitarioNF, onClose, onConfirm]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[80vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
+      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl w-[92vw] max-w-[1400px] mx-4 max-h-[88vh] flex flex-col overflow-hidden">
+        <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
           <div>
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Ordens de Compra Disponíveis</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -2505,7 +2643,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto max-h-96">
+        <div className="p-6 overflow-y-auto flex-1 min-h-0">
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -2534,9 +2672,14 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                   <div>Qtde Assoc.</div>
                 </div>
 
-                {pedidos.map((ordem, index) => (
-                  <div key={ordem.id} className={`grid grid-cols-9 gap-2 p-2 text-xs border-b border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 ${index % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-gray-50 dark:bg-zinc-800'} hover:bg-gray-100 dark:hover:bg-zinc-700`}>
-                    <div className="font-medium text-blue-600">{ordem.id}</div>
+                {pedidos.map((ordem, index) => {
+                  const sugerida = ordemIdSelecionada && String(ordem.id) === String(ordemIdSelecionada);
+                  return (
+                  <div key={ordem.id} className={`grid grid-cols-9 gap-2 p-2 text-xs border-b border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 ${sugerida ? 'bg-green-50 dark:bg-green-900/20 ring-1 ring-green-400' : index % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-gray-50 dark:bg-zinc-800'} hover:bg-gray-100 dark:hover:bg-zinc-700`}>
+                    <div className="font-medium text-blue-600 flex items-center gap-1">
+                      {ordem.id}
+                      {sugerida && <span className="text-[0.6rem] px-1 rounded bg-green-600 text-white">sugerida</span>}
+                    </div>
                     <div>{ordem.filial}</div>
                     <div>{ordem.codCredor}</div>
                     <div className="truncate" title={ordem.fornecedor}>{ordem.fornecedor}</div>
@@ -2548,6 +2691,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                       <Button
                         size="sm"
                         variant="outline"
+                        tabIndex={-1}
                         onClick={() => {
                           const currentQty = associacoes.find(a => a.pedidoId === ordem.id)?.quantidade || 0;
                           handleQuantidadeChange(ordem.id, Math.max(0, currentQty - 1));
@@ -2567,6 +2711,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                       <Button
                         size="sm"
                         variant="outline"
+                        tabIndex={-1}
                         onClick={() => {
                           const currentQty = associacoes.find(a => a.pedidoId === ordem.id)?.quantidade || 0;
                           const maxQty = Math.min(ordem.quantidadeDisponivel, item.quantidade - totalAssociado + currentQty);
@@ -2578,7 +2723,8 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Informações adicionais */}
@@ -2612,7 +2758,13 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
               <Checkbox
                 id="pedMeiaNota"
                 checked={meiaNota}
-                onCheckedChange={(checked) => setMeiaNota(checked as boolean)}
+                onCheckedChange={(checked) => {
+                  const on = checked as boolean;
+                  setMeiaNota(on);
+                  // Ao marcar, pré-preenche com o preço do XML (se ainda vazio);
+                  // ao desmarcar, limpa. (No onChange, sem race de effect.)
+                  setPrecoUnitarioNF((prev) => (on ? (prev ?? precoNfXml) : undefined));
+                }}
               />
               <Label htmlFor="pedMeiaNota" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Meia Nota
@@ -2628,6 +2780,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                   Pr. Unit.: <span className="text-red-500">*</span>
                 </Label>
                 <InputMoeda
+                  autoFocus
                   className="text-sm mt-1"
                   placeholder="Ex: 5.000,00"
                   value={precoUnitarioNF}
@@ -2647,7 +2800,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
           </div>
         </div>
 
-        <div className="flex justify-between items-center p-6 border-t">
+        <div className="flex-shrink-0 flex justify-between items-center p-6 border-t border-gray-200 dark:border-zinc-700">
           <div className="text-sm text-gray-600">
             {totalAssociado === item.quantidade ? (
               <span className="text-green-600 font-medium">✓ Quantidade correta associada</span>
@@ -2664,8 +2817,9 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
             </Button>
             <Button
               onClick={() => onConfirm(associacoes, { meiaNota, precoUnitarioNF })}
-              disabled={totalAssociado !== item.quantidade || meiaNotaInvalida}
+              disabled={!podeConfirmar}
               className="bg-blue-600 hover:bg-blue-700"
+              title="Enter para salvar · Esc para fechar"
             >
               Confirmar Associação
             </Button>

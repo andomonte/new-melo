@@ -15,6 +15,8 @@ interface ConfirmarPrecoRequest {
   observacao?: string;
   atualizarPrecoVenda?: boolean;
   itensEditados?: ItemEditado[];
+  /** "Confirmar sem Custo" (Delphi): confirma sem recalcular média/preço do produto. */
+  semCusto?: boolean;
 }
 
 interface ConfirmarPrecoResponse {
@@ -38,7 +40,7 @@ export default async function handler(
   }
 
   const { id } = req.query;
-  const { observacao, itensEditados }: ConfirmarPrecoRequest = req.body || {};
+  const { observacao, itensEditados, semCusto }: ConfirmarPrecoRequest = req.body || {};
 
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'ID (codent) da entrada é obrigatório' });
@@ -71,6 +73,19 @@ export default async function handler(
       throw new Error(`Não é possível confirmar preço. Status atual: ${ent.rec_status}. Esperado: PENDENTE`);
     }
 
+    // Paridade Delphi (spValidaRomaneio): exige romaneio (alocação por armazém)
+    // feito antes de confirmar o preço. est_alocado=1 OU linhas em dbitent_armazem.
+    const romaneioRow = await client.query(
+      `SELECT (COALESCE(e.est_alocado,0) = 1
+               OR EXISTS (SELECT 1 FROM db_manaus.dbitent_armazem a WHERE a.codent = e.codent)
+              ) AS tem_romaneio
+         FROM db_manaus.dbent e WHERE e.codent = $1`,
+      [id]
+    );
+    if (!romaneioRow.rows[0]?.tem_romaneio) {
+      throw new Error('Faça o romaneio (distribuição dos itens por armazém) antes de confirmar o preço.');
+    }
+
     // Aplica preços/unidades editados na tela aos itens da entrada (dbitent por produto)
     if (Array.isArray(itensEditados)) {
       for (const item of itensEditados) {
@@ -92,8 +107,15 @@ export default async function handler(
     const zonaRow = await client.query(`SELECT "ZONA_ISENTIVADA" AS zona FROM db_manaus.dbuf_n WHERE "UF" = $1`, [uf]);
     const empresa = { uf, zona_isentivada: zonaRow.rows[0]?.zona || 'S' };
 
-    // Motor de custo: custo por item + média ponderada + reprecificação de venda
-    const r = await confirmarPrecoEntrada(client, id, empresa);
+    // "Sem Custo" (Delphi): registra temcusto='N' e NÃO atualiza média/preço do produto.
+    if (semCusto) {
+      await client.query(`UPDATE db_manaus.dbent SET temcusto = 'N' WHERE codent = $1`, [id]);
+    }
+
+    // Motor de custo: custo por item (+ média/reprecificação, exceto quando "sem custo")
+    const r = await confirmarPrecoEntrada(client, id, empresa, 0, {
+      atualizarProdutoOverride: semCusto ? false : undefined,
+    });
 
     // Fecha a entrada (custo feito) e avança o workflow físico
     await client.query(`UPDATE db_manaus.dbent SET status = 'F' WHERE codent = $1`, [id]);

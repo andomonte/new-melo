@@ -173,7 +173,8 @@ export async function confirmarPrecoEntrada(
   client: any,
   codent: string,
   empresa: EmpresaZona,
-  frete = 0
+  frete = 0,
+  opts: { atualizarProdutoOverride?: boolean } = {}
 ): Promise<ResultadoConfirmacao> {
   await client.query('SET LOCAL search_path TO db_manaus, public');
 
@@ -182,8 +183,12 @@ export async function confirmarPrecoEntrada(
        from db_manaus.dbent where codent=$1`, [codent])).rows[0];
   if (!ent) throw new Error(`Entrada ${codent} não encontrada em dbent`);
   // temcusto='N' (Cálculo do Custo desmarcado) = confirma SEM atualizar média/preço do produto
-  // (espelha Confirmar_Sem_Preco do Delphi): calcula só o custo do item.
-  const atualizaProduto = (ent.temcusto ?? 'S') !== 'N';
+  // (espelha Confirmar_Sem_Custo do Delphi): calcula só o custo do item.
+  // O override permite forçar "sem custo" na chamada (ação "Confirmar sem Custo").
+  const atualizaProduto =
+    opts.atualizarProdutoOverride !== undefined
+      ? opts.atualizarProdutoOverride
+      : (ent.temcusto ?? 'S') !== 'N';
   const header = {
     custofin: Number(ent.custofin || 0), desconto: Number(ent.desconto || 0),
     verba_tmk: Number(ent.verba_tmk || 0), acrescimo: Number(ent.acrescimo || 0),

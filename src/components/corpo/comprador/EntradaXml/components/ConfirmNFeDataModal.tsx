@@ -798,38 +798,46 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
       });
     }
 
-    // Fornecedor é OBRIGATÓRIO (do cadastro) — como no Delphi.
-    if (!formData.fornecedor) {
+    // ===== Travas OBRIGATÓRIAS (bloqueiam sempre, sem bypass) =====
+
+    // Fornecedor: precisa estar associado ao cadastro OU marcado "Usar dados da
+    // NFe". Considera a flag `usarFornecedorNfe` (a mesma que o salvamento usa),
+    // senão a trava fica inconsistente entre um clique e outro.
+    if (!formData.usarFornecedorNfe && !formData.fornecedor) {
       return pedirConfirmacao(() => {}, {
         title: 'Fornecedor obrigatório',
-        message: 'Associe um fornecedor do cadastro à NFe: selecione na busca/lista ou cadastre-o.',
+        message: 'Associe um fornecedor do cadastro à NFe (selecione na busca/lista ou cadastre-o) ou marque "Usar dados da NFe".',
         type: 'warning',
         confirmText: 'OK',
         somenteOk: true,
       });
     }
 
+    // Transportadora: quando a nota tem transportadora, precisa estar associada
+    // ao cadastro OU marcada "Usar dados da NFe". Verificada ANTES do aviso de
+    // CNPJ divergente (que permite prosseguir), para não ser pulada.
+    const notaTemTransp = !!soDigitos(transportadoraXml?.cpf_cnpj);
+    if (notaTemTransp && !formData.usarTransportadoraNfe && !formData.transportadora) {
+      return pedirConfirmacao(() => {}, {
+        title: 'Transportadora obrigatória',
+        message: 'Associe uma transportadora do cadastro à NFe (selecione na busca/lista ou cadastre-a) ou marque "Usar dados da NFe".',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+
+    // ===== Avisos que PERMITEM prosseguir (só depois das travas) =====
+
     // CNPJ do fornecedor diverge da nota (aviso — permite prosseguir).
     const cnpjForn = soDigitos(formData.fornecedor?.cpf_cgc);
-    if (cnpjForn && cnpjNota && cnpjForn !== cnpjNota) {
+    if (!formData.usarFornecedorNfe && cnpjForn && cnpjNota && cnpjForn !== cnpjNota) {
       return pedirConfirmacao(prosseguirConfirmacao, {
         title: 'CNPJ do fornecedor diverge da nota',
         message: `O CNPJ do fornecedor selecionado (${formData.fornecedor?.cpf_cgc}) é diferente do emitente da nota (${nfe.cnpjEmitente}). Deseja prosseguir mesmo assim?`,
         type: 'warning',
         confirmText: 'Sim, prosseguir',
         cancelText: 'Revisar',
-      });
-    }
-
-    // Transportadora é OBRIGATÓRIA quando a nota tem transportadora — como no Delphi.
-    const notaTemTransp = !!soDigitos(transportadoraXml?.cpf_cnpj);
-    if (notaTemTransp && !formData.transportadora) {
-      return pedirConfirmacao(() => {}, {
-        title: 'Transportadora obrigatória',
-        message: 'Associe uma transportadora do cadastro à NFe: selecione na busca/lista ou cadastre-a.',
-        type: 'warning',
-        confirmText: 'OK',
-        somenteOk: true,
       });
     }
 
