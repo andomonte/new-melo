@@ -210,39 +210,21 @@ export default async function handler(
     for (const item of itens) {
       const codprod = item.codprod || item.codigo;
       let ref = item.ref || '';
-      let descr = item.descr || item.nome || '';
-      let aliquotas: AliquotasProduto = {
-        icms: 0,
-        ipi: 0,
-        pis: 0,
-        cofins: 0,
-        ncm: '',
-      };
+      let descr = item.descr || item.descricao || item.nome || '';
+      let ncm = '';
 
+      // Buscar ref, descr e ncm do produto se não vieram no draft
       if (codprod) {
         const queryProd = `
-          SELECT
-            p.ref,
-            p.descr,
-            p.clasfiscal as ncm,
-            COALESCE(p.ipi, 0) as ipi,
-            COALESCE(p.pis, 1.65) as pis,
-            COALESCE(p.cofins, 7.60) as cofins
-          FROM dbprod p
-          WHERE p.codprod = $1
+          SELECT p.ref, p.descr, p.clasfiscal as ncm
+          FROM dbprod p WHERE p.codprod = $1
         `;
         const resultProd = await client.query(queryProd, [codprod]);
         if (resultProd.rows.length > 0) {
           const prod = resultProd.rows[0];
-          ref = prod.ref || ref || '';
+          ref = ref || prod.ref || '';
           if (!descr) descr = prod.descr || '';
-          aliquotas = {
-            icms: 18,
-            ipi: Number(prod.ipi) || 0,
-            pis: Number(prod.pis) || 1.65,
-            cofins: Number(prod.cofins) || 7.6,
-            ncm: prod.ncm || '',
-          };
+          ncm = prod.ncm || '';
         }
       }
 
@@ -251,11 +233,17 @@ export default async function handler(
       const desconto = Number(item.desconto || 0);
       const totalItem = qtd * prunit * (1 - desconto / 100);
 
-      const baseCalculo = totalItem;
-      const icmsValor = baseCalculo * (aliquotas.icms / 100);
-      const ipiValor = baseCalculo * (aliquotas.ipi / 100);
-      const pisValor = baseCalculo * (aliquotas.pis / 100);
-      const cofinsValor = baseCalculo * (aliquotas.cofins / 100);
+      // Usar impostos JÁ CALCULADOS do draft (campos ou impostos)
+      const aliqIcms = Number(item.aliquotas?.icms || item.campos?.icms || 0);
+      const aliqIpi = Number(item.aliquotas?.ipi || item.campos?.ipi || 0);
+      const aliqPis = Number(item.aliquotas?.pis || item.campos?.pis || 0);
+      const aliqCofins = Number(item.aliquotas?.cofins || item.campos?.cofins || 0);
+
+      const icmsValor = Number(item.impostos?.valorICMS || item.campos?.totalicms || 0);
+      const ipiValor = Number(item.impostos?.valorIPI || item.campos?.totalipi || 0);
+      const pisValor = Number(item.impostos?.valorPIS || item.campos?.valorpis || 0);
+      const cofinsValor = Number(item.impostos?.valorCOFINS || item.campos?.valorcofins || 0);
+      const stValor = Number(item.impostos?.valorICMS_Subst || item.campos?.totalsubst_trib || 0);
 
       totalIcms += icmsValor;
       totalIpi += ipiValor;
@@ -270,15 +258,15 @@ export default async function handler(
         prunit,
         desconto,
         total: totalItem,
-        icms_aliquota: aliquotas.icms,
+        icms_aliquota: aliqIcms,
         icms_valor: icmsValor,
-        ipi_aliquota: aliquotas.ipi,
+        ipi_aliquota: aliqIpi,
         ipi_valor: ipiValor,
-        pis_aliquota: aliquotas.pis,
+        pis_aliquota: aliqPis,
         pis_valor: pisValor,
-        cofins_aliquota: aliquotas.cofins,
+        cofins_aliquota: aliqCofins,
         cofins_valor: cofinsValor,
-        ncm: aliquotas.ncm,
+        ncm: ncm || item.campos?.ncm || item.ncm || '',
       });
     }
 
@@ -474,8 +462,9 @@ export default async function handler(
 
     doc.setFontSize(12);
     doc.setTextColor(0, 51, 102);
-    doc.text('TOTAL C/ IMPOSTOS:', 14, boxY + 35);
+    // Total a pagar = subtotal + IPI (por fora) — ICMS/PIS/COFINS já embutidos no preço
     const totalComImpostos = dadosOrcamento.total + dadosOrcamento.total_ipi;
+    doc.text('TOTAL A PAGAR:', 14, boxY + 35);
     doc.text(`R$ ${totalComImpostos.toFixed(2)}`, 14, boxY + 43);
 
     // Condições de pagamento

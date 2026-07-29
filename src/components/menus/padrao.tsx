@@ -91,6 +91,7 @@ import ConsultaFaturasPage from '../corpo/faturamento/ConsultaFatura/ConsultaFat
 const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
 const NovasVendas = lazy(() => import('@/components/corpo/vendas/novaVenda'));
 const CentralVendas = lazy(() => import('@/components/corpo/vendas/centralVendas'));
+const CentralVendasV2 = lazy(() => import('@/components/corpo/vendas/centralVendasV2'));
 const Promocoes = lazy(() => import('@/components/corpo/vendas/promocoes'));
 const VendasDashboard = lazy(() => import('../corpo/vendas/dashboard'));
 const VendasBloqueadasPage = lazy(() => import('../corpo/vendas/bloqueadas'));
@@ -380,6 +381,12 @@ export const menus = [
             href: '/vendas/centralVendas',
             icon: ShoppingBag,
             corpo: CentralVendas,
+          },
+          {
+            name: 'Central V2',
+            href: '/vendas/centralVendasV2',
+            icon: ShoppingBag,
+            corpo: CentralVendasV2,
           },
           {
             name: 'Promoções',

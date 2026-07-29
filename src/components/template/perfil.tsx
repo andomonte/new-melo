@@ -14,6 +14,7 @@ import { RiLockPasswordLine } from 'react-icons/ri';
 import { FaUser } from 'react-icons/fa';
 import { LogOut, ZoomIn } from 'lucide-react';
 import { useEscalaUI } from '@/hooks/useEscalaUI';
+import SelectInput from '@/components/common/SelectPadrao';
 
 interface DadosPerfil {
   usuario?: string;
@@ -86,22 +87,14 @@ const PerfilPagina: React.FC<LayoutPaginaProps> = ({ perfilUser }) => {
                 <ZoomIn className="mx-2 h-5 w-5 text-primary transition-all" />
                 <span className="text-xs">Escala da tela</span>
               </div>
-              <div className="flex gap-1 px-2">
-                {escalas.map((e) => (
-                  <button
-                    key={e.valor}
-                    type="button"
-                    onClick={() => setEscala(e.valor)}
-                    title={`${e.label} (${e.valor}%)`}
-                    className={`flex-1 rounded border px-1 py-1 text-[0.625rem] transition-colors ${
-                      escala === e.valor
-                        ? 'border-blue-500 bg-blue-500 text-white'
-                        : 'border-gray-300 dark:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-700'
-                    }`}
-                  >
-                    {e.label}
-                  </button>
-                ))}
+              <div className="px-2">
+                <SelectInput
+                  name="escalaUI"
+                  required
+                  options={escalas.map((e) => ({ value: String(e.valor), label: `${e.label} (${e.valor}%)` }))}
+                  value={String(escala)}
+                  onValueChange={(val) => setEscala(Number(val))}
+                />
               </div>
             </div>
 
