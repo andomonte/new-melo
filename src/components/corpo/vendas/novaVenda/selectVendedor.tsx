@@ -33,6 +33,8 @@ const SelectVendedor: React.FC<ChildProps> = ({ handleVendedor }) => {
   const [loadingVendedor, setLoadingVendedor] = React.useState(false);
   const [showVendedor, setShowVendedor] = React.useState(false);
   const [dentroProd, setDentroProd] = React.useState(false);
+  const [focusIdx, setFocusIdx] = React.useState(-1);
+  const listaRef = React.useRef<HTMLDivElement>(null);
 
   const handleBuscarVendedor = async () => {
     await api
@@ -149,26 +151,62 @@ const SelectVendedor: React.FC<ChildProps> = ({ handleVendedor }) => {
                         setDentroProd(false);
                       }}
                       onKeyDown={(event) => {
-                        if (
-                          event.key.toLowerCase() === 'enter' &&
-                          pesquisa.length > 2
-                        ) {
-                          setMensagem('');
-                          setIconeInfo('');
-                          setLoadingVendedor(true);
-                          setShowVendedor(false);
-                          handleBuscarVendedor();
-                          // handleBuscarPreco();
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          event.stopImmediatePropagation();
+                          handleVendedor({ codigo: 'nulo', nome: 'fechar vendedor' });
+                          return;
                         }
 
-                        if (
-                          event.key.toLowerCase() === 'enter' &&
-                          pesquisa.length < 3
-                        ) {
-                          setMensagem('');
-                          setIconeInfo('');
-                          setLoadingVendedor(false);
-                          setVendedor([]);
+                        if (event.key === 'ArrowDown' && showVendedor && vendedor.length > 0) {
+                          event.preventDefault();
+                          setFocusIdx((prev) => {
+                            const next = Math.min(prev + 1, vendedor.length - 1);
+                            setTimeout(() => {
+                              const el = listaRef.current?.children[next] as HTMLElement;
+                              el?.scrollIntoView({ block: 'nearest' });
+                            }, 0);
+                            return next;
+                          });
+                          return;
+                        }
+
+                        if (event.key === 'ArrowUp' && showVendedor && vendedor.length > 0) {
+                          event.preventDefault();
+                          setFocusIdx((prev) => {
+                            const next = Math.max(prev - 1, 0);
+                            setTimeout(() => {
+                              const el = listaRef.current?.children[next] as HTMLElement;
+                              el?.scrollIntoView({ block: 'nearest' });
+                            }, 0);
+                            return next;
+                          });
+                          return;
+                        }
+
+                        if (event.key.toLowerCase() === 'enter') {
+                          // Se tem item focado na lista, seleciona
+                          if (showVendedor && focusIdx >= 0 && vendedor[focusIdx]) {
+                            event.preventDefault();
+                            handleVendedor(vendedor[focusIdx]);
+                            return;
+                          }
+
+                          if (pesquisa.length > 2) {
+                            setMensagem('');
+                            setIconeInfo('');
+                            setLoadingVendedor(true);
+                            setShowVendedor(false);
+                            setFocusIdx(-1);
+                            handleBuscarVendedor();
+                          }
+
+                          if (pesquisa.length < 3) {
+                            setMensagem('');
+                            setIconeInfo('');
+                            setLoadingVendedor(false);
+                            setVendedor([]);
+                          }
                         }
                       }}
                       disabled={false}
@@ -217,19 +255,22 @@ const SelectVendedor: React.FC<ChildProps> = ({ handleVendedor }) => {
                       Vendedor
                     </label>
                   </div>
-                  <div
-                    className="w-32 ml-4"
-                    onClick={() => {
-                      handleVendedor({
-                        codigo: 'nulo',
-                        nome: 'fechar vendedor',
-                      });
-                    }}
-                  >
-                    {' '}
+                  <div className="w-32 ml-4">
                     <Button
-                      className={`bg-indigo-500 hover:bg-indigo-700 w-full text-[8px] md:text-[10px] 
+                      className={`bg-indigo-500 hover:bg-indigo-700 w-full text-[8px] md:text-[10px]
                                 font-bold   flex items-center `}
+                      onClick={() => {
+                        handleVendedor({
+                          codigo: 'nulo',
+                          nome: 'fechar vendedor',
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleVendedor({ codigo: 'nulo', nome: 'fechar vendedor' });
+                        }
+                      }}
                     >
                       FECHAR
                     </Button>
@@ -244,14 +285,17 @@ const SelectVendedor: React.FC<ChildProps> = ({ handleVendedor }) => {
                         {loadingVendedor ? (
                           <Carregamento />
                         ) : (
-                          <div className="flex-grow w-full h-[100%]   overflow-auto ">
+                          <div ref={listaRef} className="flex-grow w-full h-[100%]   overflow-auto ">
                             {vendedor.map((val, index) => (
                               <div
                                 key={index}
-                                className="w-full flex justify-start cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 text-primary font-bold  "
+                                tabIndex={0}
+                                role="button"
+                                className={`w-full flex justify-start cursor-pointer ${index === focusIdx ? 'bg-indigo-100 dark:bg-indigo-900' : 'hover:bg-gray-100 dark:hover:bg-gray-600'} text-primary font-bold`}
                                 onClick={() => {
                                   handleVendedor(val);
                                 }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleVendedor(val); } }}
                               >
                                 <div className=" text-primary font-bold flex justify-center px-2 py-3 sm:flex sm:flex-row-reverse sm:px-2">
                                   {val.codigo} - {val.nome}

@@ -29,6 +29,7 @@ interface ItemAdicionado {
   codmarca: string;
   marca_nome: string;
   origem: string;
+  estoque?: number;
   _novo: boolean;
 }
 
@@ -258,6 +259,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       codmarca: produto.codmarca || '',
       marca_nome: produto.marca_nome || produto.codmarca || '',
       origem: produto.dolar || 'N',
+      estoque: Number(produto.estoque_disponivel) || 0,
       _novo: true,
     };
 

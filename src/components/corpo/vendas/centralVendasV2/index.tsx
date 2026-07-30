@@ -20,6 +20,7 @@ import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
 import ModalVerItensVenda from '../centralVendas/ModalVerItensVenda';
 import CompartilharOrcamentoModal from '../centralVendas/CompartilharOrcamentoModal';
+import NovaVendaV2 from '../novaVendaV2';
 import { useRouter } from 'next/router';
 
 // Tipos e Interfaces
@@ -100,6 +101,7 @@ const VendasPage = () => {
   const [isLoadingVendedor, setIsLoadingVendedor] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<string | null>('data');
   const [sortDir, setSortDir] = useState<SortDir>('desc'); // Padrão: 'desc' (mais recente/maior)
+  const [modalNovaVenda, setModalNovaVenda] = useState(false);
   const [vendas, setVendas] = useState<Vendas>({
     data: [],
     meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 },
@@ -1008,14 +1010,7 @@ const VendasPage = () => {
   }
 
   function handleNovaVendaClick() {
-    // zera estado anterior
-    limparStoragesNovaVenda();
-
-    // diz ao roteador raiz qual tela abrir
-    sessionStorage.setItem('telaAtualMelo', JSON.stringify(NOVA_VENDA_PATH));
-
-    // navega via index (igual ao Editar)
-    router.replace('/');
+    setModalNovaVenda(true);
   }
 
   // Constrói um "draft-like" a partir de uma VENDA finalizada (dbvenda)
@@ -1652,6 +1647,25 @@ const VendasPage = () => {
           </div>
         </div>
       )}
+
+      {/* Modal Nova Venda V2 */}
+      {modalNovaVenda ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800">
+            <h2 className="text-lg font-bold text-[#347AB6] dark:text-gray-100">Nova Venda</h2>
+            <button
+              onClick={() => setModalNovaVenda(false)}
+              className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-700"
+              title="Fechar (Esc)"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <NovaVendaV2 />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
