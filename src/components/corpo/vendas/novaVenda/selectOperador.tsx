@@ -33,6 +33,8 @@ const SelectOperador: React.FC<ChildProps> = ({ handleOperador }) => {
   const [loadingOperador, setLoadingOperador] = React.useState(false);
   const [showOperador, setShowOperador] = React.useState(false);
   const [dentroProd, setDentroProd] = React.useState(false);
+  const [focusIdx, setFocusIdx] = React.useState(-1);
+  const listaRef = React.useRef<HTMLDivElement>(null);
 
   const handleBuscarOperador = async () => {
     await api
@@ -149,26 +151,61 @@ const SelectOperador: React.FC<ChildProps> = ({ handleOperador }) => {
                         setDentroProd(false);
                       }}
                       onKeyDown={(event) => {
-                        if (
-                          event.key.toLowerCase() === 'enter' &&
-                          pesquisa.length > 2
-                        ) {
-                          setMensagem('');
-                          setIconeInfo('');
-                          setLoadingOperador(true);
-                          setShowOperador(false);
-                          handleBuscarOperador();
-                          // handleBuscarPreco();
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          event.stopImmediatePropagation();
+                          handleOperador({ codigo: 'nulo', nome: 'fechar Operador' });
+                          return;
                         }
 
-                        if (
-                          event.key.toLowerCase() === 'enter' &&
-                          pesquisa.length < 3
-                        ) {
-                          setMensagem('');
-                          setIconeInfo('');
-                          setLoadingOperador(false);
-                          setOperador([]);
+                        if (event.key === 'ArrowDown' && showOperador && operador.length > 0) {
+                          event.preventDefault();
+                          setFocusIdx((prev) => {
+                            const next = Math.min(prev + 1, operador.length - 1);
+                            setTimeout(() => {
+                              const el = listaRef.current?.children[next] as HTMLElement;
+                              el?.scrollIntoView({ block: 'nearest' });
+                            }, 0);
+                            return next;
+                          });
+                          return;
+                        }
+
+                        if (event.key === 'ArrowUp' && showOperador && operador.length > 0) {
+                          event.preventDefault();
+                          setFocusIdx((prev) => {
+                            const next = Math.max(prev - 1, 0);
+                            setTimeout(() => {
+                              const el = listaRef.current?.children[next] as HTMLElement;
+                              el?.scrollIntoView({ block: 'nearest' });
+                            }, 0);
+                            return next;
+                          });
+                          return;
+                        }
+
+                        if (event.key.toLowerCase() === 'enter') {
+                          if (showOperador && focusIdx >= 0 && operador[focusIdx]) {
+                            event.preventDefault();
+                            handleOperador(operador[focusIdx]);
+                            return;
+                          }
+
+                          if (pesquisa.length > 2) {
+                            setMensagem('');
+                            setIconeInfo('');
+                            setLoadingOperador(true);
+                            setShowOperador(false);
+                            setFocusIdx(-1);
+                            handleBuscarOperador();
+                          }
+
+                          if (pesquisa.length < 3) {
+                            setMensagem('');
+                            setIconeInfo('');
+                            setLoadingOperador(false);
+                            setOperador([]);
+                          }
                         }
                       }}
                       disabled={false}
@@ -217,19 +254,22 @@ const SelectOperador: React.FC<ChildProps> = ({ handleOperador }) => {
                       Operador
                     </label>
                   </div>
-                  <div
-                    className="w-32 ml-4"
-                    onClick={() => {
-                      handleOperador({
-                        codigo: 'nulo',
-                        nome: 'fechar Operador',
-                      });
-                    }}
-                  >
-                    {' '}
+                  <div className="w-32 ml-4">
                     <Button
-                      className={`bg-lime-500 hover:bg-lime-700 w-full text-[8px] md:text-[10px] 
+                      className={`bg-lime-500 hover:bg-lime-700 w-full text-[8px] md:text-[10px]
                                 font-bold   flex items-center `}
+                      onClick={() => {
+                        handleOperador({
+                          codigo: 'nulo',
+                          nome: 'fechar Operador',
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleOperador({ codigo: 'nulo', nome: 'fechar Operador' });
+                        }
+                      }}
                     >
                       FECHAR
                     </Button>
@@ -244,14 +284,17 @@ const SelectOperador: React.FC<ChildProps> = ({ handleOperador }) => {
                         {loadingOperador ? (
                           <Carregamento />
                         ) : (
-                          <div className="flex-grow w-full h-[100%]   overflow-auto ">
+                          <div ref={listaRef} className="flex-grow w-full h-[100%]   overflow-auto ">
                             {operador.map((val, index) => (
                               <div
                                 key={index}
-                                className="w-full flex justify-start cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 text-primary font-bold  "
+                                tabIndex={0}
+                                role="button"
+                                className={`w-full flex justify-start cursor-pointer ${index === focusIdx ? 'bg-lime-100 dark:bg-lime-900' : 'hover:bg-gray-100 dark:hover:bg-gray-600'} text-primary font-bold`}
                                 onClick={() => {
                                   handleOperador(val);
                                 }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleOperador(val); } }}
                               >
                                 <div className=" text-primary font-bold flex justify-center px-2 py-3 sm:flex sm:flex-row-reverse sm:px-2">
                                   {val.codigo} - {val.nome}

@@ -90,6 +90,7 @@ import ConsultaFaturasPage from '../corpo/faturamento/ConsultaFatura/ConsultaFat
 // Vendas / Operacional - Lazy loading para componentes pesados
 const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
 const NovasVendas = lazy(() => import('@/components/corpo/vendas/novaVenda'));
+const NovaVendaV2 = lazy(() => import('@/components/corpo/vendas/novaVendaV2'));
 const CentralVendas = lazy(() => import('@/components/corpo/vendas/centralVendas'));
 const CentralVendasV2 = lazy(() => import('@/components/corpo/vendas/centralVendasV2'));
 const Promocoes = lazy(() => import('@/components/corpo/vendas/promocoes'));
@@ -375,6 +376,12 @@ export const menus = [
             href: '/vendas/novaVenda',
             icon: Plus,
             corpo: NovasVendas,
+          },
+          {
+            name: 'Nova V2',
+            href: '/vendas/novaVendaV2',
+            icon: Plus,
+            corpo: NovaVendaV2,
           },
           {
             name: 'Central',
