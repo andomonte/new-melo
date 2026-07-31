@@ -101,7 +101,9 @@ const VendasPage = () => {
   const [isLoadingVendedor, setIsLoadingVendedor] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<string | null>('data');
   const [sortDir, setSortDir] = useState<SortDir>('desc'); // Padrão: 'desc' (mais recente/maior)
-  const [modalNovaVenda, setModalNovaVenda] = useState(false);
+  const [modalNovaVenda, setModalNovaVenda] = useState(() => {
+    try { return sessionStorage.getItem('centralV2_modalAberto') === 'novaVenda'; } catch { return false; }
+  });
   const [vendas, setVendas] = useState<Vendas>({
     data: [],
     meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 },
@@ -1011,6 +1013,12 @@ const VendasPage = () => {
 
   function handleNovaVendaClick() {
     setModalNovaVenda(true);
+    sessionStorage.setItem('centralV2_modalAberto', 'novaVenda');
+  }
+
+  function fecharModalNovaVenda() {
+    setModalNovaVenda(false);
+    sessionStorage.removeItem('centralV2_modalAberto');
   }
 
   // Constrói um "draft-like" a partir de uma VENDA finalizada (dbvenda)
@@ -1654,7 +1662,7 @@ const VendasPage = () => {
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800">
             <h2 className="text-lg font-bold text-[#347AB6] dark:text-gray-100">Nova Venda</h2>
             <button
-              onClick={() => setModalNovaVenda(false)}
+              onClick={fecharModalNovaVenda}
               className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-700"
               title="Fechar (Esc)"
             >
