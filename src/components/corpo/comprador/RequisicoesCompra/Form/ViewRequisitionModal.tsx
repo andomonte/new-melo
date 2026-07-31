@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { X, Building2, User, Calendar, Package, MapPin, CreditCard } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { X, Building2, User, Calendar, Package, MapPin, CreditCard, ChevronDown, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import api from '@/components/services/api';
 import type { RequisitionDTO } from '@/data/requisicoesCompra/types/requisition';
+import { useNavegacaoTecladoTabela } from '@/hooks/useNavegacaoTecladoTabela';
 
 interface ViewRequisitionModalProps {
   isOpen: boolean;
@@ -42,6 +43,9 @@ interface RequisitionItem {
   preco_total: string;
   observacao: string;
   base_indicacao: string;
+  quantidade_sugerida?: string | number | null;
+  quantidade_atendida?: string | number | null;
+  aplicacao?: string | null;
   produto_nome?: string;
   produto_ref?: string;
   produto_marca_nome?: string;
@@ -51,6 +55,12 @@ interface RequisitionItem {
     marca?: string;
   };
 }
+
+// Formata quantidade com 3 casas, tolerando null/vazio.
+const fmtQtd = (v: unknown): string => {
+  const n = parseFloat(String(v ?? ''));
+  return Number.isFinite(n) ? n.toFixed(3) : '-';
+};
 
 export default function ViewRequisitionModal({
   isOpen,
@@ -73,13 +83,37 @@ export default function ViewRequisitionModal({
   const [filiais, setFiliais] = useState<Filial[]>([]);
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<RequisitionItem[]>([]);
+  // Detalhes (cabeçalho) começam recolhidos; os ITENS ficam sempre visíveis.
+  const [detalhesAbertos, setDetalhesAbertos] = useState(false);
+
+  // Navegação por teclado nos itens (estilo Delphi): ↑/↓ movem a linha; o
+  // primeiro item já vem selecionado ao abrir, para conferência rápida.
+  const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<RequisitionItem>({
+    data: items,
+    ativo: isOpen,
+  });
 
   // Carregar dados quando modal abrir
   useEffect(() => {
     if (isOpen && requisition) {
+      setDetalhesAbertos(false);
       loadInitialData();
     }
   }, [isOpen, requisition]);
+
+  // Seleciona o primeiro item assim que a lista carrega.
+  useEffect(() => {
+    if (isOpen && items.length > 0) setLinhaSelecionada(0);
+  }, [isOpen, items, setLinhaSelecionada]);
+
+  // Rola a linha selecionada para dentro da área visível DO MODAL (o scroll do
+  // hook global pegaria a linha da lista atrás — por isso rolamos aqui via ref).
+  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
+  useEffect(() => {
+    if (linhaSelecionada >= 0) {
+      rowRefs.current[linhaSelecionada]?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [linhaSelecionada]);
 
   // Carregar dados da requisição após filiais serem carregadas
   useEffect(() => {
@@ -223,6 +257,18 @@ export default function ViewRequisitionModal({
               </div>
             ) : (
               <>
+                {/* Toggle de detalhes — recolhidos por padrão */}
+                <button
+                  type="button"
+                  onClick={() => setDetalhesAbertos((v) => !v)}
+                  className="flex items-center gap-1 text-sm font-medium text-[#347AB6] hover:underline"
+                >
+                  {detalhesAbertos ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  {detalhesAbertos ? 'Ocultar detalhes' : 'Ver detalhes'}
+                </button>
+
+                {detalhesAbertos && (
+                <div className="space-y-6">
                 {/* Primeira linha - Tipo, Comprador, Entrega, Destino */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="w-full">
@@ -326,14 +372,18 @@ export default function ViewRequisitionModal({
                     className="mt-1 bg-gray-100 dark:bg-zinc-800 border-gray-300 dark:border-gray-700"
                   />
                 </div>
+                </div>
+                )}
 
-                {/* Tabela de Itens */}
-                {items.length > 0 && (
-                  <div className="mt-8">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                {/* Itens da Requisição — SEMPRE visíveis, navegáveis por teclado */}
+                <div className="mt-4">
+                    <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
                       <Package className="h-5 w-5" />
                       Itens da Requisição ({items.length})
                     </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Use ↑/↓ para navegar entre os itens (o primeiro já vem selecionado).
+                    </p>
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
                         <thead>
@@ -341,9 +391,12 @@ export default function ViewRequisitionModal({
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Código</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Referência</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Descrição</th>
+                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Aplicação</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Marca</th>
-                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Sugestão</th>
+                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Indicação</th>
+                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Qt. Sugerida</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Quantidade</th>
+                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Qt. Atendida</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Múltiplo</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Preço Unit.</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Preço Total</th>
@@ -351,7 +404,14 @@ export default function ViewRequisitionModal({
                         </thead>
                         <tbody>
                           {items.map((item, index) => (
-                            <tr key={item.id || index} className="hover:bg-gray-50 dark:hover:bg-zinc-600">
+                            <tr
+                              key={item.id || index}
+                              ref={(el) => { rowRefs.current[index] = el; }}
+                              onClick={() => setLinhaSelecionada(index)}
+                              className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-600 ${
+                                index === linhaSelecionada ? 'bg-blue-100 dark:bg-blue-900/40' : ''
+                              }`}
+                            >
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-mono">
                                 {item.codprod}
                               </td>
@@ -362,21 +422,22 @@ export default function ViewRequisitionModal({
                                 {item.produto_nome || item.produto?.descr || '-'}
                               </td>
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
+                                {item.aplicacao || '-'}
+                              </td>
+                              <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
                                 {item.produto_marca_nome || item.produto?.marca || '-'}
                               </td>
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
-                                {item.base_indicacao === 'SUGESTAO' ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                    Sim
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
-                                    Não
-                                  </span>
-                                )}
+                                {item.base_indicacao || '-'}
+                              </td>
+                              <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">
+                                {fmtQtd(item.quantidade_sugerida)}
                               </td>
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">
                                 {parseFloat(item.quantidade).toFixed(3)}
+                              </td>
+                              <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">
+                                {fmtQtd(item.quantidade_atendida)}
                               </td>
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
                                 {item.multiplo_compra || 1}
@@ -389,19 +450,27 @@ export default function ViewRequisitionModal({
                               </td>
                             </tr>
                           ))}
+                          {items.length === 0 && (
+                            <tr>
+                              <td colSpan={12} className="border border-gray-300 dark:border-gray-600 px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                                Nenhum item nesta requisição.
+                              </td>
+                            </tr>
+                          )}
+                          {items.length > 0 && (
                           <tr className="bg-gray-100 dark:bg-zinc-700 font-semibold">
-                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2" colSpan={8}>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2" colSpan={11}>
                               Total Geral:
                             </td>
                             <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">
                               R$ {items.reduce((total, item) => total + parseFloat(item.preco_total), 0).toFixed(2)}
                             </td>
                           </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                )}
+                </div>
               </>
             )}
           </div>

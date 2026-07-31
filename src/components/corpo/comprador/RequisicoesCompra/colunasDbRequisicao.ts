@@ -28,6 +28,10 @@ export const colunasDbRequisicao = [
   { campo: 'destino', label: 'Destinado para' },
   { campo: 'condicoesPagamento', label: 'Cond. Pagamento' },
   { campo: 'observacao', label: 'Observação' },
+  { campo: 'cliente', label: 'Cliente' },
+  { campo: 'vendedor', label: 'Vendedor' },
+  { campo: 'usuario', label: 'Usuário' },
+  { campo: 'valorTotal', label: 'Total Requisição' },
 
   // Coluna de ações (sempre última e fixa)
   { campo: 'AÇÕES', label: 'Ações', fixo: true, tipo: 'acao' },

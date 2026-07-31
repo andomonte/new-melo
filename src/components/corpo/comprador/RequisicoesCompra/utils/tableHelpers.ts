@@ -69,6 +69,14 @@ export const formatTableData = (data: RequisitionDTO[], headers: string[]) => {
         v = '-';
       }
 
+      // Valor total da requisição em moeda (R$)
+      if (col === 'valorTotal') {
+        const n = parseFloat(String(v ?? 0));
+        v = `R$ ${(Number.isFinite(n) ? n : 0).toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+        })}`;
+      }
+
       row[col] = v ?? '-';
     });
 

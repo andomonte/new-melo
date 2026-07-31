@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AlertTriangle, CheckCircle, Info, AlertCircle, X } from 'lucide-react';
 
 interface MessageModalProps {
@@ -18,6 +18,19 @@ const MessageModal: React.FC<MessageModalProps> = ({
   type = 'info',
   buttonText = 'OK'
 }) => {
+  // Enter/Esc fecham o aviso.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const getIcon = () => {

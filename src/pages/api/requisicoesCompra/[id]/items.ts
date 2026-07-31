@@ -39,6 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ri.itr_base_indicacao as observacao,
           p.descr as produto_nome,
           p.ref as produto_ref,
+          p.aplic_extendida as aplicacao,
           p.codmarca as produto_marca_codigo,
           m.descr as produto_marca_nome,
           COALESCE(p.multiplo, 1) as multiplo,

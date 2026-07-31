@@ -61,7 +61,7 @@ export const cadastroFornecedorSchema = z.object({
   imun: z
     .object({
       isentoIm: z.boolean(),
-      imun: z.string().optional(),
+      imun: z.string().nullish(),
     })
     .refine((data) => data.isentoIm || (!data.isentoIm && data.imun), {
       message:
@@ -70,7 +70,7 @@ export const cadastroFornecedorSchema = z.object({
   iest: z
     .object({
       isentoIe: z.boolean(),
-      iest: z.string().optional(),
+      iest: z.string().nullish(),
     })
     .refine((data) => data.isentoIe || (!data.isentoIe && data.iest), {
       message:
@@ -79,7 +79,7 @@ export const cadastroFornecedorSchema = z.object({
   isuframa: z
     .object({
       isentoSuf: z.boolean(),
-      isuframa: z.string().optional(),
+      isuframa: z.string().nullish(),
     })
     .refine((data) => data.isentoSuf || (!data.isentoSuf && data.isuframa), {
       message:
@@ -173,7 +173,7 @@ export const edicaoFornecedorSchema = z.object({
   imun: z
     .object({
       isentoIm: z.boolean(),
-      imun: z.string().optional(),
+      imun: z.string().nullish(),
     })
     .refine((data) => data.isentoIm || (!data.isentoIm && data.imun), {
       message:
@@ -182,7 +182,7 @@ export const edicaoFornecedorSchema = z.object({
   iest: z
     .object({
       isentoIe: z.boolean(),
-      iest: z.string().optional(),
+      iest: z.string().nullish(),
     })
     .refine((data) => data.isentoIe || (!data.isentoIe && data.iest), {
       message:
@@ -191,7 +191,7 @@ export const edicaoFornecedorSchema = z.object({
   isuframa: z
     .object({
       isentoSuf: z.boolean(),
-      isuframa: z.string().optional(),
+      isuframa: z.string().nullish(),
     })
     .refine((data) => data.isentoSuf || (!data.isentoSuf && data.isuframa), {
       message:

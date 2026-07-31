@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, PlusIcon } from 'lucide-react';
+import { ChevronDown, PlusIcon, FileSpreadsheet, FileDown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -9,11 +9,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { RequisicoesCompraMain } from './RequisicoesCompraMain';
 import OrdensComprasListImproved from './OrdemCompraManagerV2';
+import PendenciasCompraModal from './PendenciasCompraModal';
+import ExportarPedidoFornecedorModal from './ExportarPedidoFornecedorModal';
 
 export const ComprasTabManagerOrdens: React.FC = () => {
   // Inicia diretamente na tab de ordens
   const [activeTab, setActiveTab] = useState<'requisicoes' | 'ordens'>('ordens');
   const [triggerNewModal, setTriggerNewModal] = useState(false);
+  const [pendenciasModalOpen, setPendenciasModalOpen] = useState(false);
+  const [exportarPedidoOpen, setExportarPedidoOpen] = useState(false);
 
   const handleTabChange = (tab: 'requisicoes' | 'ordens') => {
     console.log('🔄 Changing tab from', activeTab, 'to', tab);
@@ -22,6 +26,10 @@ export const ComprasTabManagerOrdens: React.FC = () => {
 
   const handleNewRequisition = () => {
     setTriggerNewModal(true);
+  };
+
+  const handleOpenPendencias = () => {
+    setPendenciasModalOpen(true);
   };
 
   return (
@@ -36,13 +44,33 @@ export const ComprasTabManagerOrdens: React.FC = () => {
           
           {/* Botão Nova Requisição - só aparece na tab de requisições */}
           {activeTab === 'requisicoes' && (
-            <Button 
+            <Button
               onClick={handleNewRequisition}
               className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
             >
               <PlusIcon size={18} />
               Nova Requisição
             </Button>
+          )}
+
+          {/* Botões da tab de ordens */}
+          {activeTab === 'ordens' && (
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setExportarPedidoOpen(true)}
+                className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
+              >
+                <FileDown size={18} />
+                Exportar Pedido Fornecedor
+              </Button>
+              <Button
+                onClick={handleOpenPendencias}
+                className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <FileSpreadsheet size={18} />
+                Relatório de Pendências
+              </Button>
+            </div>
           )}
         </div>
 
@@ -89,6 +117,18 @@ export const ComprasTabManagerOrdens: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal de Relatório de Pendências */}
+      <PendenciasCompraModal
+        isOpen={pendenciasModalOpen}
+        onClose={() => setPendenciasModalOpen(false)}
+      />
+
+      {/* Exportar Pedido Fornecedor */}
+      <ExportarPedidoFornecedorModal
+        isOpen={exportarPedidoOpen}
+        onClose={() => setExportarPedidoOpen(false)}
+      />
     </div>
   );
 };

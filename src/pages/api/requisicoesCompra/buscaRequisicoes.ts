@@ -27,7 +27,12 @@ const filtroParaColunaSQL: Record<string, string> = {
 
   // Campos de ordem de compra
   ordemCompra: 'o.orc_id',
-  valorTotal: 'COALESCE((SELECT SUM(itr_quantidade * itr_pr_unitario) FROM db_manaus.cmp_it_requisicao WHERE itr_req_id = r.req_id), 0)'
+  valorTotal: 'COALESCE((SELECT SUM(itr_quantidade * itr_pr_unitario) FROM db_manaus.cmp_it_requisicao WHERE itr_req_id = r.req_id), 0)',
+
+  // Cliente / Vendedor (venda casada) e Usuário que cadastrou
+  cliente: 'cli.nome',
+  vendedor: 'v.nome',
+  usuario: 'usr.nomeusr',
 };
 
 export default async function handler(
@@ -335,6 +340,9 @@ export default async function handler(
           END, ''
         ) as "compradorCompleto",
         COALESCE(o.orc_id::text, '0') as "ordemCompra",
+        cli.nome as "cliente",
+        v.nome as "vendedor",
+        usr.nomeusr as "usuario",
         COALESCE((
           SELECT SUM(itr_quantidade * itr_pr_unitario)
           FROM db_manaus.cmp_it_requisicao
@@ -345,6 +353,10 @@ export default async function handler(
       LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
       LEFT JOIN db_manaus.cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
       LEFT JOIN db_manaus.cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
+      LEFT JOIN db_manaus.dbusuario usr ON r.req_codusr = usr.codusr
+      LEFT JOIN db_manaus.cmp_venda_casada vc ON (r.req_id = vc.vec_req_id AND r.req_versao = vc.vec_req_versao)
+      LEFT JOIN db_manaus.dbclien cli ON vc.vec_codcli = cli.codcli
+      LEFT JOIN db_manaus.dbvend v ON vc.vec_codvend = v.codvend
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id
@@ -369,6 +381,10 @@ export default async function handler(
       FROM db_manaus.cmp_requisicao r
       LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
       LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
+      LEFT JOIN db_manaus.dbusuario usr ON r.req_codusr = usr.codusr
+      LEFT JOIN db_manaus.cmp_venda_casada vc ON (r.req_id = vc.vec_req_id AND r.req_versao = vc.vec_req_versao)
+      LEFT JOIN db_manaus.dbclien cli ON vc.vec_codcli = cli.codcli
+      LEFT JOIN db_manaus.dbvend v ON vc.vec_codvend = v.codvend
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id
@@ -409,7 +425,10 @@ export default async function handler(
       previsaoChegada: row.previsaoChegada,
       ordemCompra: row.ordemCompra,
       valorTotal: row.valorTotal,
-      
+      cliente: row.cliente,
+      vendedor: row.vendedor,
+      usuario: row.usuario,
+
       // Dados do fornecedor
       fornecedorCodigo: row.fornecedorCodigoReal || row.fornecedorCodigo,
       fornecedorNome: row.fornecedorNome,

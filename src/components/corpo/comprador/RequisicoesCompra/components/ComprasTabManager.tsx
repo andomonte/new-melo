@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, PlusIcon, FileSpreadsheet } from 'lucide-react';
+import { ChevronDown, PlusIcon, FileSpreadsheet, FileDown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { RequisicoesCompraMain } from './RequisicoesCompraMain';
 import OrdensComprasListImproved from './OrdemCompraManagerV2';
 import PendenciasCompraModal from './PendenciasCompraModal';
+import ExportarPedidoFornecedorModal from './ExportarPedidoFornecedorModal';
 
 type TabType = 'requisicoes' | 'ordens';
 
@@ -22,6 +23,7 @@ export const ComprasTabManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('requisicoes');
   const [triggerNewModal, setTriggerNewModal] = useState(false);
   const [pendenciasModalOpen, setPendenciasModalOpen] = useState(false);
+  const [exportarPedidoOpen, setExportarPedidoOpen] = useState(false);
 
   const handleTabChange = (tab: TabType) => {
     console.log('Changing tab from', activeTab, 'to', tab);
@@ -58,15 +60,24 @@ export const ComprasTabManager: React.FC = () => {
             </Button>
           )}
 
-          {/* Botão Relatório de Pendências - só aparece na tab de ordens */}
+          {/* Botões da tab de ordens */}
           {activeTab === 'ordens' && (
-            <Button
-              onClick={handleOpenPendencias}
-              className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-amber-600 hover:bg-amber-700 text-white"
-            >
-              <FileSpreadsheet size={18} />
-              Relatório de Pendências
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setExportarPedidoOpen(true)}
+                className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
+              >
+                <FileDown size={18} />
+                Exportar Pedido Fornecedor
+              </Button>
+              <Button
+                onClick={handleOpenPendencias}
+                className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <FileSpreadsheet size={18} />
+                Relatório de Pendências
+              </Button>
+            </div>
           )}
         </div>
 
@@ -119,6 +130,12 @@ export const ComprasTabManager: React.FC = () => {
       <PendenciasCompraModal
         isOpen={pendenciasModalOpen}
         onClose={() => setPendenciasModalOpen(false)}
+      />
+
+      {/* Exportar Pedido Fornecedor */}
+      <ExportarPedidoFornecedorModal
+        isOpen={exportarPedidoOpen}
+        onClose={() => setExportarPedidoOpen(false)}
       />
     </div>
   );

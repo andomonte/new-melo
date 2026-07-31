@@ -62,7 +62,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
   const { user } = useContext(AuthContext);
   const { toast } = useToast();
   // Confirmação no modal central (padrão do sistema), nunca toast no canto.
-  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  const { pedirConfirmacao, ConfirmacaoSalvarModal, aberto: confirmacaoAberta } = useConfirmarSalvar();
   // Modal central de reprovação (com motivo) — individual ou em lote.
   const [reprovarAlvo, setReprovarAlvo] = useState<{ itens: RequisitionDTO[] } | null>(null);
   const [motivoReprovar, setMotivoReprovar] = useState('');
@@ -884,6 +884,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                 >
                   <Eye className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                   Ver
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">V</kbd>
                 </button>
                 <button
                   onClick={() => { handleDuplicate(item); closeAllDropdowns(); }}
@@ -892,6 +893,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                 >
                   <Copy className="mr-2 text-purple-500 dark:text-purple-400" size={16} />
                   Duplicar
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">D</kbd>
                 </button>
                 <button
                   onClick={() => { handleHistorico(item); }}
@@ -900,6 +902,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                 >
                   <History className="mr-2 text-indigo-500 dark:text-indigo-400" size={16} />
                   Histórico
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">H</kbd>
                 </button>
                 <button
                   onClick={() => { handleExportExcel(item); }}
@@ -918,6 +921,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                   >
                     <Edit3 className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                     Editar
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">E</kbd>
                   </button>
                 )}
                 <button
@@ -927,6 +931,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                 >
                   <Package className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                   Itens
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">I</kbd>
                 </button>
                 {item.statusRequisicao === 'P' && (
                   <button
@@ -936,6 +941,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                   >
                     <Send className="mr-2 text-green-500 dark:text-green-400" size={16} />
                     Submeter
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">S</kbd>
                   </button>
                 )}
                 {item.statusRequisicao && item.statusRequisicao === 'S' && canApproveRequisitions && (
@@ -947,6 +953,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                     >
                       <CheckCircle className="mr-2 text-green-500 dark:text-green-400" size={16} />
                       Aprovar
+                      <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">A</kbd>
                     </button>
                     <button
                       onClick={() => { handleReject(item); closeAllDropdowns(); }}
@@ -966,6 +973,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
                   >
                     <Ban className="mr-2 text-red-400 dark:text-red-500" size={16} />
                     Cancelar
+                    <kbd className="ml-auto rounded border border-red-300 dark:border-red-700 px-1.5 text-[10px] font-semibold text-red-500 dark:text-red-400">Del</kbd>
                   </button>
                 )}
               </div>
@@ -1025,7 +1033,8 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
     !!itemsManagerRequisition ||
     budgetModalOpen ||
     historicoModalOpen ||
-    !!reprovarAlvo;
+    !!reprovarAlvo ||
+    confirmacaoAberta; // confirmação central aberta → pausa navegação por teclado
 
   const podeEditarRequisicao = (r: RequisitionDTO | undefined) =>
     !!r &&
@@ -1038,7 +1047,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       data,
       ativo: !algumModalAberto,
       onEnter: (row) => {
-        if (podeEditarRequisicao(row)) setEditItem(row);
+        if (row) handleView(row);
       },
       atalhos: [
         {
@@ -1049,8 +1058,48 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
             if (showNewButton) setIsNewOpen(true);
           },
         },
+        // Atalhos de ação na linha selecionada (mesmas regras do menu Ações).
+        { key: 'v', handler: (row) => row && handleView(row) },
+        { key: 'd', handler: (row) => row && handleDuplicate(row) },
+        { key: 'h', handler: (row) => row && handleHistorico(row) },
+        { key: 'i', handler: (row) => row && handleManageItems(row) },
+        { key: 'e', handler: (row) => { if (podeEditarRequisicao(row)) setEditItem(row!); } },
+        {
+          key: 's',
+          handler: (row) => { if (row && row.statusRequisicao === 'P') handleSubmit(row); },
+        },
+        {
+          key: 'a',
+          handler: (row) => {
+            if (row && row.statusRequisicao === 'S' && canApproveRequisitions) handleApprove(row);
+          },
+        },
+        {
+          key: 'Delete',
+          handler: (row) => {
+            if (row && ['P', 'S'].includes(row.statusRequisicao || '') && canApproveRequisitions) {
+              handleCancel(row);
+            }
+          },
+        },
       ],
     });
+
+  // Esc fecha o modal aberto no topo (os confirmes tratam o próprio Esc/Enter).
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (itemsManagerRequisition) setItemsManagerRequisition(null);
+      else if (editItem) setEditItem(null);
+      else if (viewItem) setViewItem(null);
+      else if (historicoModalOpen) { setHistoricoModalOpen(false); setHistoricoItem(null); }
+      else if (isNewOpen) setIsNewOpen(false);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [itemsManagerRequisition, editItem, viewItem, historicoModalOpen, isNewOpen]);
 
   // Exportação da lista para Excel (mesmo endpoint que o grid antigo usava).
   const handleExportarLista = useCallback(async () => {

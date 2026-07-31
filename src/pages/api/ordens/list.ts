@@ -10,7 +10,7 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const { search = '', page = '1', perPage = '25', sortCampo, sortDirecao } = req.query;
+  const { search = '', page = '1', perPage = '25', sortCampo, sortDirecao, status } = req.query;
 
   // Ordenação server-side (whitelist de colunas -> evita SQL injection).
   const sortMap: Record<string, string> = {
@@ -64,7 +64,13 @@ export default async function handler(
       `;
       params.push(`%${search}%`);
     }
-    
+
+    // Filtro opcional por status da ordem (ex.: 'A' = aberta)
+    if (status && typeof status === 'string') {
+      params.push(status);
+      whereClause += `${whereClause ? ' AND' : 'WHERE'} o.orc_status = $${params.length}`;
+    }
+
     // Query para contar total de registros
     const countQuery = `
       SELECT COUNT(*) as total

@@ -103,6 +103,11 @@ export interface RequisitionDTO {
   compradorCodigo?: string;              // req_codcomprador
   compradorNome?: string;                // Via include: requisicao_comprador.nome
   compradorCompleto?: string;            // Concatenação: código + " - " + nome
+
+  // Cliente / Vendedor (venda casada) e Usuário que cadastrou
+  cliente?: string;                      // Via cmp_venda_casada -> dbclien.nome
+  vendedor?: string;                     // Via cmp_venda_casada -> dbvend.nome
+  usuario?: string;                      // req_codusr -> dbusuario.nomeusr
   
   // Dados de entrega e destino
   localEntrega?: string;                 // Via include: requisicao_entrega.unm_nome

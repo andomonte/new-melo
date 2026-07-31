@@ -459,6 +459,12 @@ export const menus = [
             corpo: RequisicoesCompra,
           },
           {
+            name: 'Ordem de Compra',
+            href: '/compras/ordens-compra',
+            icon: FileCheck,
+            corpo: ComprasTabManagerOrdens,
+          },
+          {
             name: 'Histórico de Compras',
             href: '/comprador/historicoCompra',
             icon: LiaFileInvoiceSolid,
@@ -756,6 +762,7 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
       const ORDEM_COMPRAS = [
         'Dashboard',
         'Requisições de Compra',
+        'Ordem de Compra',
         'Entrada por XML de NFe',
         'Entradas',
         'Importação',

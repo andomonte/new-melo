@@ -4,15 +4,35 @@ import { getPgPool } from '@/lib/pgClient';
 import ExcelJS from 'exceljs';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getLogoMeloBase64, ajustarProporcao } from '@/lib/compras/logoRelatorio';
+import { getLogoFornecedorBase64 } from '@/lib/compras/logoFornecedor';
 
 /**
- * GET /api/entradas/[id]/exportar-itens?formato=excel|pdf
+ * GET /api/entradas/[id]/exportar-itens?formato=excel|pdf&colunas=ref,descr,...
  *
- * Exporta TODOS os itens de UMA entrada (modelo Delphi "Copiar para o Excel"),
- * em Excel ou PDF. Colunas espelham o grid de itens da entrada.
+ * Exporta os itens de UMA entrada (modelo Delphi "Copiar para o Excel") em
+ * Excel ou PDF, com logos da Melo (esquerda) e do fornecedor (direita) no
+ * cabeçalho — mesma estrutura do PDF da Ordem de Compra. As colunas do
+ * relatório podem ser escolhidas via `colunas` (chaves separadas por vírgula).
  */
 const moeda = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+
+type TipoColuna = 'texto' | 'numero' | 'moeda';
+
+// Todas as colunas disponíveis (a ordem aqui é a ordem no relatório).
+const TODAS_COLUNAS: { key: string; header: string; width: number; tipo: TipoColuna }[] = [
+  { key: 'referencia', header: 'Referência', width: 16, tipo: 'texto' },
+  { key: 'produto_descricao', header: 'Descrição', width: 40, tipo: 'texto' },
+  { key: 'ordem_compra', header: 'Ordem de Compra', width: 18, tipo: 'texto' },
+  { key: 'estoque_anterior', header: 'Est. Ant.', width: 12, tipo: 'numero' },
+  { key: 'quantidade', header: 'Qtd', width: 10, tipo: 'numero' },
+  { key: 'unimed', header: 'Unid.', width: 8, tipo: 'texto' },
+  { key: 'valor_unitario', header: 'Preço Unit.', width: 14, tipo: 'moeda' },
+  { key: 'custo', header: 'Custo', width: 14, tipo: 'moeda' },
+  { key: 'valor_total', header: 'Total', width: 16, tipo: 'moeda' },
+  { key: 'armazens', header: 'Armazéns', width: 28, tipo: 'texto' },
+];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -20,11 +40,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const { id, formato = 'excel' } = req.query;
+  const { id, formato = 'excel', colunas: colunasParam } = req.query;
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'ID (codent) da entrada é obrigatório' });
   }
   const fmt = String(formato).toLowerCase() === 'pdf' ? 'pdf' : 'excel';
+
+  // Colunas selecionadas (preserva a ordem de TODAS_COLUNAS). Sem seleção = todas.
+  let colunas = TODAS_COLUNAS;
+  if (colunasParam) {
+    const set = new Set(String(colunasParam).split(',').map((s) => s.trim()).filter(Boolean));
+    const filtradas = TODAS_COLUNAS.filter((c) => set.has(c.key));
+    if (filtradas.length > 0) colunas = filtradas;
+  }
 
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo || cookies.filial || 'MANAUS';
@@ -34,9 +62,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = getPgPool(filial);
     client = await pool.connect();
 
-    // Cabeçalho da entrada
+    // Cabeçalho da entrada (inclui cod_credor para a logo do fornecedor)
     const headRes = await client.query(
-      `SELECT e.codent, e.dtent, e.totalnf, nfe.nnf AS nfe_numero,
+      `SELECT e.codent, e.dtent, e.totalnf, e.cod_credor, nfe.nnf AS nfe_numero,
               COALESCE(emit.xnome, 'SISTEMA') AS fornecedor_nome
          FROM db_manaus.dbent e
          LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
@@ -82,19 +110,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const tituloEntrada = `Entrada ${h.codent} — NF ${numeroNF} — ${h.fornecedor_nome} — ${dataFmt}`;
     const nomeArquivo = `entrada-${h.codent}`;
 
-    const colunas = [
-      { header: 'Referência', key: 'referencia', width: 16 },
-      { header: 'Descrição', key: 'produto_descricao', width: 40 },
-      { header: 'Ordem de Compra', key: 'ordem_compra', width: 18 },
-      { header: 'Est. Ant.', key: 'estoque_anterior', width: 12 },
-      { header: 'Qtd', key: 'quantidade', width: 10 },
-      { header: 'Unid.', key: 'unimed', width: 8 },
-      { header: 'Preço Unit.', key: 'valor_unitario', width: 14 },
-      { header: 'Custo', key: 'custo', width: 14 },
-      { header: 'Total', key: 'valor_total', width: 16 },
-      { header: 'Armazéns', key: 'armazens', width: 28 },
-    ];
+    // Logos: Melo (fixa) + fornecedor (por cod_credor)
+    const logoMelo = getLogoMeloBase64();
+    const logoForn = await getLogoFornecedorBase64(client, h.cod_credor);
 
+    // Valor bruto de cada linha (por chave)
     const linhas = itens.map((it) => ({
       referencia: it.referencia || it.codprod,
       produto_descricao: it.produto_descricao,
@@ -106,44 +126,71 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       custo: Number(it.custo),
       valor_total: Number(it.valor_total),
       armazens: it.armazens || '',
-    }));
+    })) as Record<string, any>[];
 
-    const totalGeral = linhas.reduce((acc, l) => acc + l.valor_total, 0);
+    const totalGeral = linhas.reduce((acc, l) => acc + Number(l.valor_total || 0), 0);
+    const idxTotal = colunas.findIndex((c) => c.key === 'valor_total');
 
     // ===== PDF =====
     if (fmt === 'pdf') {
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-      doc.setFontSize(12);
-      doc.text('Itens da Entrada', 40, 36);
-      doc.setFontSize(9);
-      doc.text(tituloEntrada, 40, 52);
+      const pageW = doc.internal.pageSize.getWidth();
+      const margem = 40;
 
-      autoTable(doc, {
-        startY: 64,
-        head: [colunas.map((c) => c.header)],
-        body: linhas.map((l) => [
-          l.referencia,
-          l.produto_descricao,
-          l.ordem_compra,
-          l.estoque_anterior.toLocaleString('pt-BR'),
-          l.quantidade.toLocaleString('pt-BR'),
-          l.unimed,
-          moeda(l.valor_unitario),
-          moeda(l.custo),
-          moeda(l.valor_total),
-          l.armazens,
-        ]),
-        styles: { fontSize: 7, cellPadding: 2 },
-        headStyles: { fillColor: [52, 122, 182], textColor: 255, fontSize: 7 },
-        columnStyles: {
-          3: { halign: 'right' }, 4: { halign: 'right' },
-          6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' },
-        },
+      // Cabeçalho com logos (Melo à esquerda, fornecedor à direita) — mesma
+      // estrutura da Ordem de Compra, em caixa de mesmo tamanho.
+      const LOGO_MAXW = 150;
+      const LOGO_MAXH = 50;
+      const yLogo = 24;
+      if (logoMelo) {
+        try {
+          const { w, h: hh } = ajustarProporcao(logoMelo.largura || LOGO_MAXW, logoMelo.altura || LOGO_MAXH, LOGO_MAXW, LOGO_MAXH);
+          doc.addImage(`data:image/png;base64,${logoMelo.base64}`, 'PNG', margem, yLogo + (LOGO_MAXH - hh) / 2, w, hh);
+        } catch (e) {
+          console.log('Erro ao inserir logo Melo no PDF:', e);
+        }
+      }
+      if (logoForn?.base64) {
+        try {
+          const { w, h: hh } = ajustarProporcao(logoForn.largura || LOGO_MAXW, logoForn.altura || LOGO_MAXH, LOGO_MAXW, LOGO_MAXH);
+          doc.addImage(`data:image/png;base64,${logoForn.base64}`, 'PNG', pageW - margem - w, yLogo + (LOGO_MAXH - hh) / 2, w, hh);
+        } catch (e) {
+          console.log('Erro ao inserir logo do fornecedor no PDF:', e);
+        }
+      }
+
+      let y = yLogo + LOGO_MAXH + 20;
+      doc.setFontSize(12);
+      doc.setTextColor(41, 84, 144);
+      doc.text('Itens da Entrada', margem, y);
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(9);
+      doc.text(tituloEntrada, margem, y + 14);
+
+      const formatarCelula = (l: Record<string, any>, tipo: TipoColuna, key: string) => {
+        const v = l[key];
+        if (tipo === 'moeda') return moeda(Number(v));
+        if (tipo === 'numero') return Number(v).toLocaleString('pt-BR');
+        return String(v ?? '');
+      };
+
+      const columnStyles: Record<number, any> = {};
+      colunas.forEach((c, i) => {
+        if (c.tipo === 'numero' || c.tipo === 'moeda') columnStyles[i] = { halign: 'right' };
       });
 
-      const finalY = (doc as any).lastAutoTable?.finalY || 80;
+      autoTable(doc, {
+        startY: y + 26,
+        head: [colunas.map((c) => c.header)],
+        body: linhas.map((l) => colunas.map((c) => formatarCelula(l, c.tipo, c.key))),
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [52, 122, 182], textColor: 255, fontSize: 7 },
+        columnStyles,
+      });
+
+      const finalY = (doc as any).lastAutoTable?.finalY || y + 40;
       doc.setFontSize(9);
-      doc.text(`Total geral: ${moeda(totalGeral)}   ·   ${linhas.length} item(ns)`, 40, finalY + 18);
+      doc.text(`Total geral: ${moeda(totalGeral)}   ·   ${linhas.length} item(ns)`, margem, finalY + 18);
 
       const pdf = Buffer.from(doc.output('arraybuffer'));
       res.setHeader('Content-Type', 'application/pdf');
@@ -156,34 +203,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const workbook = new ExcelJS.Workbook();
     const ws = workbook.addWorksheet(`Entrada ${h.codent}`.slice(0, 31));
 
-    ws.mergeCells(1, 1, 1, colunas.length);
-    ws.getCell(1, 1).value = tituloEntrada;
-    ws.getCell(1, 1).font = { bold: true, size: 12 };
-    ws.addRow([]);
+    // Larguras das colunas
+    colunas.forEach((c, i) => (ws.getColumn(i + 1).width = c.width));
 
-    ws.columns = colunas.map((c) => ({ header: c.header, key: c.key, width: c.width }));
-    // Recoloca o header na linha 3 (as duas primeiras são título/espaço)
-    const headerRow = ws.getRow(3);
+    // Reserva as 3 primeiras linhas para os logos
+    ws.getRow(1).height = 20;
+    ws.getRow(2).height = 20;
+    ws.getRow(3).height = 16;
+
+    if (logoMelo) {
+      try {
+        const { w, h: hh } = ajustarProporcao(logoMelo.largura || 150, logoMelo.altura || 50, 150, 50);
+        const imgId = workbook.addImage({ base64: logoMelo.base64, extension: 'png' });
+        ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: w, height: hh } });
+      } catch (e) {
+        console.log('Erro ao inserir logo Melo no Excel:', e);
+      }
+    }
+    if (logoForn?.base64) {
+      try {
+        const { w, h: hh } = ajustarProporcao(logoForn.largura || 150, logoForn.altura || 50, 150, 50);
+        const imgId = workbook.addImage({ base64: logoForn.base64, extension: 'png' });
+        // Ancorado nas últimas colunas (canto direito)
+        const colDir = Math.max(0, colunas.length - 2);
+        ws.addImage(imgId, { tl: { col: colDir, row: 0 }, ext: { width: w, height: hh } });
+      } catch (e) {
+        console.log('Erro ao inserir logo do fornecedor no Excel:', e);
+      }
+    }
+
+    // Título na linha 4
+    ws.mergeCells(4, 1, 4, colunas.length);
+    ws.getCell(4, 1).value = tituloEntrada;
+    ws.getCell(4, 1).font = { bold: true, size: 12 };
+
+    // Cabeçalho na linha 5
+    const headerRow = ws.getRow(5);
     colunas.forEach((c, i) => (headerRow.getCell(i + 1).value = c.header));
-    headerRow.font = { bold: true };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF347AB6' } };
-    headerRow.eachCell((cell) => (cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }));
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF347AB6' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    });
 
+    // Dados a partir da linha 6
+    let linhaAtual = 6;
     linhas.forEach((l) => {
-      ws.addRow([
-        l.referencia, l.produto_descricao, l.ordem_compra, l.estoque_anterior,
-        l.quantidade, l.unimed, l.valor_unitario, l.custo, l.valor_total, l.armazens,
-      ]);
+      const row = ws.getRow(linhaAtual++);
+      colunas.forEach((c, i) => (row.getCell(i + 1).value = l[c.key]));
     });
 
-    // Formato moeda nas colunas de valor (7=PrUnit, 8=Custo, 9=Total)
-    [7, 8, 9].forEach((col) => {
-      ws.getColumn(col).numFmt = 'R$ #,##0.00';
+    // Formato moeda nas colunas de valor
+    colunas.forEach((c, i) => {
+      if (c.tipo === 'moeda') ws.getColumn(i + 1).numFmt = 'R$ #,##0.00';
     });
 
-    const totalRow = ws.addRow(['', '', '', '', '', '', '', 'Total:', totalGeral, '']);
-    totalRow.font = { bold: true };
-    totalRow.getCell(9).numFmt = 'R$ #,##0.00';
+    // Linha de total (só se a coluna Total estiver selecionada)
+    if (idxTotal >= 0) {
+      const totalRow = ws.getRow(linhaAtual++);
+      if (idxTotal > 0) totalRow.getCell(idxTotal).value = 'Total:';
+      const cell = totalRow.getCell(idxTotal + 1);
+      cell.value = totalGeral;
+      cell.numFmt = 'R$ #,##0.00';
+      totalRow.font = { bold: true };
+    }
 
     const buffer = await workbook.xlsx.writeBuffer();
     const xlsxBuf = Buffer.from(buffer as ArrayBuffer);

@@ -32,7 +32,8 @@ type ItemEntradaComDistribuicao = {
 type Props = {
   open: boolean;
   onClose?: () => void;
-  entradaId: number;
+  /** codent da entrada (string zero-padded, ex.: "000179208"). Aceita number por compat. */
+  entradaId: string | number;
   numeroEntrada: string;
   obrigatorio?: boolean;
   onSalvoComSucesso?: () => void;

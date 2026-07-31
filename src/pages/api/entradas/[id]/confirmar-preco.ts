@@ -73,19 +73,6 @@ export default async function handler(
       throw new Error(`Não é possível confirmar preço. Status atual: ${ent.rec_status}. Esperado: PENDENTE`);
     }
 
-    // Paridade Delphi (spValidaRomaneio): exige romaneio (alocação por armazém)
-    // feito antes de confirmar o preço. est_alocado=1 OU linhas em dbitent_armazem.
-    const romaneioRow = await client.query(
-      `SELECT (COALESCE(e.est_alocado,0) = 1
-               OR EXISTS (SELECT 1 FROM db_manaus.dbitent_armazem a WHERE a.codent = e.codent)
-              ) AS tem_romaneio
-         FROM db_manaus.dbent e WHERE e.codent = $1`,
-      [id]
-    );
-    if (!romaneioRow.rows[0]?.tem_romaneio) {
-      throw new Error('Faça o romaneio (distribuição dos itens por armazém) antes de confirmar o preço.');
-    }
-
     // Aplica preços/unidades editados na tela aos itens da entrada (dbitent por produto)
     if (Array.isArray(itensEditados)) {
       for (const item of itensEditados) {

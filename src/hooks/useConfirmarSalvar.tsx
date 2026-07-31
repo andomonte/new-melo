@@ -76,7 +76,9 @@ export function useConfirmarSalvar(opcoes?: OpcoesConfirmarSalvar) {
     />
   );
 
-  return { pedirConfirmacao, ConfirmacaoSalvarModal };
+  // `aberto` permite a tela desativar navegação por teclado enquanto a
+  // confirmação está na frente (evita o Enter da lista disparar junto).
+  return { pedirConfirmacao, ConfirmacaoSalvarModal, aberto: !!estado };
 }
 
 export default useConfirmarSalvar;

@@ -3,6 +3,7 @@ import DadosCadastrais from './_forms/DadosCadastrais';
 import DadosFinanceiros from './_forms/DadosFinanceiros';
 import { campoParaAba } from './_forms/campoParaAba';
 import RegrasFaturamento from './_forms/RegrasFaturamento';
+import LogoFornecedor from './_forms/LogoFornecedor';
 import { z } from 'zod';
 import {
   ClassesFornecedor,
@@ -29,6 +30,7 @@ const tabs = [
   { name: 'Dados Cadastrais', key: 'dadosCadastrais' },
   { name: 'Dados Financeiros', key: 'dadosFinanceiros' },
   { name: 'Regras Faturamento', key: 'regraFaturamento' },
+  { name: 'Logo', key: 'logo' },
 ];
 
 interface ModalProps {
@@ -78,6 +80,7 @@ export default function CustomModal({
     dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf'],
     dadosFinanceiros: ['regime_tributacao'],
     regrasFaturamento: [],
+    logo: [],
   };
 
   const handleActiveTab = (tab: string) => {
@@ -508,6 +511,8 @@ export default function CustomModal({
             disableFields={disableFields}
           />
         );
+      case 'logo':
+        return <LogoFornecedor codCredor={fornecedor.cod_credor || ''} />;
       default:
         return null;
     }

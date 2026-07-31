@@ -42,6 +42,7 @@ export default async function handler(
   const codprod = (req.query.codprod as string) ?? '';
   const marca = (req.query.marca as string) ?? '';
   const grupoproduto = (req.query.grupoproduto as string) ?? '';
+  const codCredor = (req.query.codCredor as string) ?? '';
   const offset = (page - 1) * perPage;
 
   let client;
@@ -82,6 +83,25 @@ export default async function handler(
     if (grupoproduto) {
       whereConditions.push(`p.codgpp ILIKE $${paramCounter}`);
       params.push(`%${grupoproduto}%`);
+      paramCounter++;
+    }
+
+    // Filtro pela MARCA do fornecedor (codCredor) — derivada da referência de
+    // fábrica (dbref_fabrica). Se o fornecedor não tem marca cadastrada, não filtra.
+    if (codCredor) {
+      const idx = paramCounter;
+      whereConditions.push(`(
+        NOT EXISTS (
+          SELECT 1 FROM db_manaus.dbref_fabrica rf
+          WHERE lpad(trim(rf.codcredor), 5, '0') = lpad(trim($${idx}), 5, '0')
+            AND rf.codmarca IS NOT NULL AND trim(rf.codmarca) <> ''
+        )
+        OR trim(p.codmarca) IN (
+          SELECT trim(rf.codmarca) FROM db_manaus.dbref_fabrica rf
+          WHERE lpad(trim(rf.codcredor), 5, '0') = lpad(trim($${idx}), 5, '0')
+        )
+      )`);
+      params.push(codCredor);
       paramCounter++;
     }
 

@@ -721,6 +721,7 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
             setShowProdutosModal(false);
           }}
           produtosJaAdicionados={produtosSelecionados}
+          codCredor={formData.fornecedor?.cod_credor}
         />
       )}
 

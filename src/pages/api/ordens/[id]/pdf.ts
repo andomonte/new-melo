@@ -4,6 +4,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import fs from 'fs';
 import path from 'path';
+import { getLogoFornecedorBase64 } from '@/lib/compras/logoFornecedor';
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -23,6 +24,12 @@ interface OrdemCompraPDFData {
     cpfCnpj: string;
     endereco: string;
   };
+  /** Logo do fornecedor (base64 PNG + dimensões) para o cabeçalho, se cadastrada. */
+  logoFornecedor?: {
+    base64: string;
+    largura: number | null;
+    altura: number | null;
+  } | null;
   valorTotal: number;
   prazoEntrega: number;
   justificativa: string;
@@ -62,6 +69,7 @@ async function buscarDadosOrdem(orcId: string): Promise<OrdemCompraPDFData | nul
         'Compras' as comprador_setor,
 
         -- Dados do Fornecedor (via requisição)
+        f.cod_credor as fornecedor_cod_credor,
         f.nome as fornecedor_nome,
         f.cpf_cgc as fornecedor_cpf_cnpj,
         f.endereco as fornecedor_endereco,
@@ -130,6 +138,7 @@ async function buscarDadosOrdem(orcId: string): Promise<OrdemCompraPDFData | nul
         cpfCnpj: ordem.fornecedor_cpf_cnpj || '',
         endereco: endereco_completo || 'Endereço não informado',
       },
+      logoFornecedor: await getLogoFornecedorBase64(client, ordem.fornecedor_cod_credor),
       valorTotal: valorTotal,
       prazoEntrega: 30, // Padrão de 30 dias
       justificativa: ordem.justificativa || 'Compra necessária para operação',
@@ -167,6 +176,31 @@ function formatarData(data: Date): string {
   return new Intl.DateTimeFormat('pt-BR').format(data);
 }
 
+// Lê largura/altura do cabeçalho PNG (IHDR) — para preservar a proporção.
+function lerDimensoesPng(buf: Buffer): { w: number; h: number } | null {
+  if (buf.length >= 24 && buf.readUInt32BE(0) === 0x89504e47) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  return null;
+}
+
+// Ajusta (wpx,hpx) para caber em (maxW,maxH) preservando a proporção.
+function ajustarProporcao(
+  wpx: number,
+  hpx: number,
+  maxW: number,
+  maxH: number,
+): { w: number; h: number } {
+  const ratio = wpx > 0 && hpx > 0 ? wpx / hpx : maxW / maxH;
+  let w = maxW;
+  let h = w / ratio;
+  if (h > maxH) {
+    h = maxH;
+    w = h * ratio;
+  }
+  return { w, h };
+}
+
 function gerarPDF(dados: OrdemCompraPDFData): Buffer {
   // Criar PDF em formato A4
   const pdf = new jsPDF('portrait', 'mm', 'a4');
@@ -175,40 +209,65 @@ function gerarPDF(dados: OrdemCompraPDFData): Buffer {
   const margemEsquerda = 15;
   const margemDireita = 15;
   const larguraPagina = 210 - margemEsquerda - margemDireita; // 180mm
-  let posicaoY = 20;
+  // ===== CABEÇALHO — Linha 1: logos (Melo à esquerda, fornecedor à direita) =====
+  // Os dois logos usam a MESMA caixa (mesmo tamanho) e ficam centralizados
+  // verticalmente nela, na mesma linha — cada um preserva sua proporção.
+  const LOGO_BOX_W = 55;
+  const LOGO_BOX_H = 22;
+  const yLogos = 14;
 
-  // CABEÇALHO PROFISSIONAL MELO PEÇAS
+  // Logo Melo (esquerda)
   try {
     const logoPath = path.join(process.cwd(), 'public', 'images', 'logoPdf.png');
     if (fs.existsSync(logoPath)) {
-      const logoData = fs.readFileSync(logoPath).toString('base64');
-      // Logo posicionada à esquerda, menor e sem sobrepor
-      pdf.addImage(`data:image/png;base64,${logoData}`, 'PNG', margemEsquerda, posicaoY, 50, 25);
+      const buf = fs.readFileSync(logoPath);
+      const dim = lerDimensoesPng(buf);
+      const { w, h } = ajustarProporcao(dim?.w || LOGO_BOX_W, dim?.h || LOGO_BOX_H, LOGO_BOX_W, LOGO_BOX_H);
+      const y = yLogos + (LOGO_BOX_H - h) / 2; // centraliza na caixa
+      pdf.addImage(`data:image/png;base64,${buf.toString('base64')}`, 'PNG', margemEsquerda, y, w, h);
     }
   } catch (error) {
-    console.log('Erro ao carregar logo:', error);
+    console.log('Erro ao carregar logo Melo:', error);
   }
 
-  // Título ORDEM DE COMPRA - posicionado à direita da logo
+  // Logo do fornecedor (direita) — mesma caixa, alinhado à direita e centralizado
+  if (dados.logoFornecedor?.base64) {
+    try {
+      const { w, h } = ajustarProporcao(
+        dados.logoFornecedor.largura || LOGO_BOX_W,
+        dados.logoFornecedor.altura || LOGO_BOX_H,
+        LOGO_BOX_W,
+        LOGO_BOX_H,
+      );
+      const x = 210 - margemDireita - w; // borda direita da caixa na margem
+      const y = yLogos + (LOGO_BOX_H - h) / 2;
+      pdf.addImage(`data:image/png;base64,${dados.logoFornecedor.base64}`, 'PNG', x, y, w, h);
+    } catch (error) {
+      console.log('Erro ao carregar logo do fornecedor:', error);
+    }
+  }
+
+  let posicaoY = yLogos + LOGO_BOX_H + 6; // abaixo da linha de logos
+
+  // ===== Linha 2: título ORDEM DE COMPRA + caixa do número =====
   pdf.setTextColor(41, 84, 144); // Azul Melo
   pdf.setFontSize(18);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('ORDEM DE COMPRA', margemEsquerda + 70, posicaoY + 15);
+  pdf.text('ORDEM DE COMPRA', margemEsquerda, posicaoY + 8);
 
-  // Número da OC (caixa elegante no canto direito)
   const larguraCaixaOC = 35;
   const posicaoXCaixaOC = 210 - margemDireita - larguraCaixaOC;
   pdf.setDrawColor(41, 84, 144);
   pdf.setLineWidth(1);
-  pdf.rect(posicaoXCaixaOC, posicaoY, larguraCaixaOC, 25);
-  pdf.setFontSize(9);
+  pdf.rect(posicaoXCaixaOC, posicaoY - 4, larguraCaixaOC, 16);
+  pdf.setFontSize(8);
   pdf.setTextColor(0, 0, 0);
-  pdf.text('Nº DA ORDEM', posicaoXCaixaOC + larguraCaixaOC/2, posicaoY + 8, { align: 'center' });
-  pdf.setFontSize(14);
+  pdf.text('Nº DA ORDEM', posicaoXCaixaOC + larguraCaixaOC / 2, posicaoY + 1, { align: 'center' });
+  pdf.setFontSize(13);
   pdf.setFont('helvetica', 'bold');
-  pdf.text(dados.numeroOC, posicaoXCaixaOC + larguraCaixaOC/2, posicaoY + 18, { align: 'center' });
+  pdf.text(dados.numeroOC, posicaoXCaixaOC + larguraCaixaOC / 2, posicaoY + 9, { align: 'center' });
 
-  posicaoY += 35;
+  posicaoY += 18;
 
   // INFORMAÇÕES DA ORDEM - Layout profissional com dados reais
   pdf.setFont('helvetica', 'normal');

@@ -641,6 +641,7 @@ export default function OrdensComprasListImproved({
                 >
                   <Package className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                   Ver Itens
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">I</kbd>
                 </button>
 
                 {/* Exportar PDF */}
@@ -655,6 +656,7 @@ export default function OrdensComprasListImproved({
                 >
                   <FileDown className="mr-2 text-red-500 dark:text-red-400" size={16} />
                   Exportar PDF
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">P</kbd>
                 </button>
 
                 {/* Exportar Excel */}
@@ -665,6 +667,7 @@ export default function OrdensComprasListImproved({
                 >
                   <FileSpreadsheet className="mr-2 text-emerald-500 dark:text-emerald-400" size={16} />
                   Exportar Excel
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">X</kbd>
                 </button>
 
                 {/* Pagamento Antecipado */}
@@ -681,6 +684,7 @@ export default function OrdensComprasListImproved({
                 >
                   <DollarSign className="mr-2 text-orange-500 dark:text-orange-400" size={16} />
                   Pagamento Antecipado
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">G</kbd>
                 </button>
 
                 {/* Verificar Pagamento (Grid de Parcelas) */}
@@ -704,6 +708,7 @@ export default function OrdensComprasListImproved({
                 >
                   <DollarSign className="mr-2 text-blue-500 dark:text-blue-400" size={16} />
                   Verificar Pagamento
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">V</kbd>
                 </button>
 
                 {/* Ver Histórico */}
@@ -721,6 +726,7 @@ export default function OrdensComprasListImproved({
                 >
                   <Clock className="mr-2 text-indigo-500 dark:text-indigo-400" size={16} />
                   Ver Histórico
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">H</kbd>
                 </button>
 
                 {/* Alterar previsão de chegada */}
@@ -731,6 +737,7 @@ export default function OrdensComprasListImproved({
                 >
                   <Calendar className="mr-2 text-orange-500 dark:text-orange-400 flex-shrink-0" size={16} />
                   Alterar Previsão
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">R</kbd>
                 </button>
                 
                 {/* Substituir Item */}
@@ -741,6 +748,7 @@ export default function OrdensComprasListImproved({
                 >
                   <Replace className="mr-2 text-purple-500 dark:text-purple-400" size={16} />
                   Substituir Item
+                  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">S</kbd>
                 </button>
                 
                 {/* Fechar Item - apenas se ordem estiver aberta */}
@@ -758,6 +766,7 @@ export default function OrdensComprasListImproved({
                   >
                     <Archive className="mr-2 text-green-600 dark:text-green-400" size={16} />
                     Fechar Item
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">F</kbd>
                   </button>
                 )}
 
@@ -776,6 +785,7 @@ export default function OrdensComprasListImproved({
                   >
                     <CheckSquare className="mr-2 text-green-500 dark:text-green-400" size={16} />
                     Baixar Pendência
+                    <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">B</kbd>
                   </button>
                 )}
 
@@ -788,6 +798,7 @@ export default function OrdensComprasListImproved({
                   >
                     <Ban className="mr-2" size={16} />
                     Cancelar Ordem
+                    <kbd className="ml-auto rounded border border-red-300 dark:border-red-700 px-1.5 text-[10px] font-semibold text-red-500 dark:text-red-400">Del</kbd>
                   </button>
                 )}
               </div>
@@ -804,14 +815,91 @@ export default function OrdensComprasListImproved({
 
   // ===== Navegação por teclado (estilo Delphi) — Enter abre "Ver Itens" =====
   const algumModalOrdemAberto =
-    confirmModal.isOpen || verItensModal.isOpen || substituirItemModal.isOpen;
+    confirmModal.isOpen || verItensModal.isOpen || substituirItemModal.isOpen ||
+    alterarPrevisaoModal.isOpen || pagamentoModal.isOpen || verificarPagamentoModal.isOpen ||
+    historicoModal.isOpen || fecharItemModal.isOpen || baixarPendenciaModal.isOpen;
 
   const { linhaSelecionada, setLinhaSelecionada } =
     useNavegacaoTecladoTabela<OrdemCompraDTO>({
       data,
       ativo: !algumModalOrdemAberto,
       onEnter: (row) => handleVerItens(row),
+      atalhos: [
+        // Atalhos de ação na linha selecionada (mesmas regras do menu Ações).
+        { key: 'i', handler: (row) => row && handleVerItens(row) },
+        { key: 'p', handler: (row) => row && window.open(`/api/ordens/${row.orc_id}/pdf`, '_blank') },
+        { key: 'x', handler: (row) => row && handleExportExcel(row) },
+        { key: 'g', handler: (row) => row && setPagamentoModal({ isOpen: true, ordem: row }) },
+        {
+          key: 'v',
+          handler: (row) => {
+            if (!row) return;
+            setVerificarPagamentoModal({
+              isOpen: true,
+              ordem: {
+                ...row,
+                orc_id: row.orc_id,
+                orc_valor_total: row.orc_valor_total,
+                fornecedor_nome: row.fornecedor_nome || 'Fornecedor não informado',
+                comprador_nome: row.comprador_nome || 'Comprador não informado',
+                orc_data: row.orc_data,
+              },
+            });
+          },
+        },
+        {
+          key: 'h',
+          handler: (row) => {
+            if (!row) return;
+            setHistoricoModal({ isOpen: true, ordemId: row.orc_id, ordemNumero: `Ordem #${row.orc_id}` });
+          },
+        },
+        { key: 'r', handler: (row) => row && handleAlterarPrevisao(row) },
+        { key: 's', handler: (row) => row && handleSubstituirItem(row) },
+        { key: 'f', handler: (row) => { if (row && row.orc_status === 'A') setFecharItemModal({ isOpen: true, ordem: row }); } },
+        { key: 'b', handler: (row) => { if (row && row.orc_status === 'A') setBaixarPendenciaModal({ isOpen: true, ordem: row }); } },
+        { key: 'Delete', handler: (row) => { if (row && row.orc_status === 'A') handleCancelarOrdem(row); } },
+      ],
     });
+
+  // Esc fecha o modal aberto no topo (os confirmes tratam o próprio Esc/Enter).
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (substituirItemModal.isOpen) setSubstituirItemModal((p) => ({ ...p, isOpen: false }));
+      else if (verItensModal.isOpen) setVerItensModal((p) => ({ ...p, isOpen: false }));
+      else if (baixarPendenciaModal.isOpen) setBaixarPendenciaModal((p) => ({ ...p, isOpen: false }));
+      else if (fecharItemModal.isOpen) setFecharItemModal((p) => ({ ...p, isOpen: false }));
+      else if (verificarPagamentoModal.isOpen) setVerificarPagamentoModal((p) => ({ ...p, isOpen: false }));
+      else if (pagamentoModal.isOpen) setPagamentoModal((p) => ({ ...p, isOpen: false }));
+      else if (historicoModal.isOpen) setHistoricoModal((p) => ({ ...p, isOpen: false }));
+      else if (alterarPrevisaoModal.isOpen) setAlterarPrevisaoModal((p) => ({ ...p, isOpen: false }));
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [
+    substituirItemModal.isOpen, verItensModal.isOpen, baixarPendenciaModal.isOpen,
+    fecharItemModal.isOpen, verificarPagamentoModal.isOpen, pagamentoModal.isOpen,
+    historicoModal.isOpen, alterarPrevisaoModal.isOpen,
+  ]);
+
+  // Enter confirma / Esc cancela o modal de confirmação (Cancelar Ordem etc.).
+  useEffect(() => {
+    if (!confirmModal.isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmModal.onConfirm?.();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirmModal.isOpen, confirmModal.onConfirm]);
 
   // Exportação da lista de ordens para Excel (mesmo endpoint do grid antigo).
   const handleExportarListaOrdem = async () => {

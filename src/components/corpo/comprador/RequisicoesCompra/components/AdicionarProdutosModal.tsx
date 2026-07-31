@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Search } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Search, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import FormFooter2 from '@/components/common/FormFooter2';
@@ -13,6 +13,7 @@ import { motivoBloqueioRequisicao, rotuloStatus } from '../statusRequisicao';
 import SugestaoAutomatica, { ItemSugestao } from './SugestaoAutomatica';
 import CadastroProdutoModal from '@/components/corpo/admin/cadastro/produtos/modalCadastrar';
 import { Plus } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface ProdutoSelecionado extends Produto {
   quantidade: number;
@@ -26,6 +27,8 @@ interface AdicionarProdutosModalProps {
   onClose: () => void;
   onConfirm: (produtos: ProdutoSelecionado[]) => void;
   produtosJaAdicionados?: ProdutoSelecionado[];
+  /** Fornecedor da requisição — filtra a busca/import pela marca do fornecedor. */
+  codCredor?: string;
 }
 
 export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
@@ -33,6 +36,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   onClose,
   onConfirm,
   produtosJaAdicionados = [],
+  codCredor,
 }) => {
   const { toast } = useToast();
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
@@ -102,6 +106,18 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   };
   const [busca, setBusca] = useState('');
   const [debouncedBusca] = useDebounce(busca, 500);
+  // Importação de planilha (CSV) REF;QUANTIDADE
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importando, setImportando] = useState(false);
+  // Fluxo por teclado (estilo Delphi): Enter na busca foca a quantidade;
+  // Enter na quantidade volta o foco pra busca (próximo item).
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [focarQtdCodprod, setFocarQtdCodprod] = useState<string | null>(null);
+  // Referências que a última importação NÃO encontrou (para ficar visível na tela).
+  const [refsNaoImportadas, setRefsNaoImportadas] = useState<
+    { ref: string; qtd: number; motivo: 'nao_encontrado' | 'bloqueado' }[]
+  >([]);
   const [loading, setLoading] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(1);
@@ -124,6 +140,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
           search: termoBusca,
           page: paginaAtual,
           perPage: 10,
+          ...(codCredor ? { codCredor } : {}),
         },
       });
 
@@ -131,17 +148,58 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
         setProdutos(response.data.data);
         setTotalPaginas(response.data.meta?.lastPage || 1);
         setTotalItens(response.data.meta?.total || 0);
+        return response.data.data as Produto[];
       } else {
         setProdutos([]);
         setTotalPaginas(1);
         setTotalItens(0);
+        return [];
       }
     } catch (error) {
       console.error('Erro ao buscar produtos:', error);
       setProdutos([]);
+      return [];
     } finally {
       setLoading(false);
     }
+  };
+
+  // Foca o campo de quantidade do produto recém-selecionado (após a linha existir).
+  useEffect(() => {
+    if (!focarQtdCodprod) return;
+    const el = qtyInputRefs.current[focarQtdCodprod];
+    if (el) {
+      el.focus();
+      el.select();
+      setFocarQtdCodprod(null);
+    }
+  }, [focarQtdCodprod, produtos, produtosSelecionados]);
+
+  // Enter na busca: se houver 1 produto (busca imediata, sem debounce), seleciona
+  // e foca a quantidade. Com vários, apenas exibe a lista.
+  const handleSearchEnter = async () => {
+    const termo = busca.trim();
+    if (!termo) return;
+    const resultados = await buscarProdutos(termo, 1);
+    setPagina(1);
+    if (resultados.length === 1) {
+      const prod = resultados[0];
+      if (rotuloStatus(prod.inf)) {
+        adicionarProduto(prod); // trata bloqueio/substituto (modal)
+      } else {
+        if (!produtoEstaSelecionado(prod.codprod)) inserirProduto(prod);
+        setFocarQtdCodprod(prod.codprod);
+      }
+    }
+  };
+
+  // Enter na quantidade: item já está no carrinho; limpa a busca e volta o foco
+  // pro campo de busca (pronto pro próximo item), como no Delphi.
+  const handleQtdEnter = () => {
+    setBusca('');
+    setProdutos([]);
+    setTotalItens(0);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
   useEffect(() => {
@@ -275,6 +333,138 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
     );
   };
 
+  // Importação de planilha (CSV ou Excel): lê colunas REF;QUANTIDADE, casa a REF
+  // com o cadastro (dbprod.ref) e adiciona ao carrinho com o preço de compra.
+  const parseQtd = (v: any): number => {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+    const s = String(v ?? '').trim();
+    if (!s) return NaN;
+    // Ignora valores que parecem DATA (ex.: 20.07.2026, 20/07/26) — não é quantidade.
+    if (/\d{1,2}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*\d{2,4}/.test(s)) return NaN;
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')); // trata milhar/decimal pt-BR
+  };
+
+  // Identifica a linha de cabeçalho (REF / QTE|QTD|PEDIDO|QUANTIDADE) para começar
+  // a ler os itens SÓ depois dela (ignora nome do fornecedor + data no topo).
+  const ehLinhaCabecalho = (c0: string, c1: string): boolean => {
+    const a = c0.toLowerCase().replace(/[^a-z]/g, '');
+    const b = c1.toLowerCase().replace(/[^a-z]/g, '');
+    return a.startsWith('ref') && (b.startsWith('qt') || b.includes('quant') || b.includes('pedido'));
+  };
+
+  const extrairItens = (rows: any[][]): { ref: string; qtd: number }[] => {
+    // Começa após a linha de cabeçalho, se houver; senão, do início.
+    let inicio = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const c0 = String(rows[i]?.[0] ?? '').trim();
+      const c1 = String(rows[i]?.[1] ?? '').trim();
+      if (ehLinhaCabecalho(c0, c1)) { inicio = i + 1; break; }
+    }
+    const itens: { ref: string; qtd: number }[] = [];
+    for (let i = inicio; i < rows.length; i++) {
+      const cols = rows[i];
+      const ref = String(cols?.[0] ?? '').replace(/^﻿/, '').trim();
+      const qtd = parseQtd(cols?.[1]);
+      const refUpper = ref.toUpperCase().replace(/[^A-Z]/g, '');
+      if (!ref || refUpper === 'REF') continue; // ignora cabeçalho/nome fornecedor
+      if (!Number.isFinite(qtd) || qtd <= 0) continue; // ignora linhas sem quantidade
+      itens.push({ ref, qtd });
+    }
+    return itens;
+  };
+
+  const lerArquivoComoItens = async (file: File): Promise<{ ref: string; qtd: number }[]> => {
+    const nome = file.name.toLowerCase();
+    if (nome.endsWith('.xlsx') || nome.endsWith('.xls')) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, blankrows: false, raw: true });
+      return extrairItens(rows);
+    }
+    // CSV / TXT (separador ; , ou tab)
+    const texto = await file.text();
+    const rows = texto
+      .replace(/^﻿/, '')
+      .split(/\r?\n/)
+      .map((l) => l.split(/[;,\t]/));
+    return extrairItens(rows);
+  };
+
+  const handleImportarArquivo = async (file: File) => {
+    setImportando(true);
+    try {
+      const itens = await lerArquivoComoItens(file);
+      if (itens.length === 0) {
+        pedirConfirmacao(() => {}, {
+          title: 'Planilha sem itens',
+          message: 'Não encontrei linhas no formato REF;QUANTIDADE no arquivo.',
+          type: 'warning',
+          confirmText: 'OK',
+          somenteOk: true,
+        });
+        return;
+      }
+
+      const resp = await api.post('/api/compras/produtos/por-referencias', {
+        refs: itens.map((i) => i.ref),
+        ...(codCredor ? { codCredor } : {}),
+      });
+      const encontrados: any[] = resp.data?.data || [];
+      // O backend retorna `ref_busca` = a referência de entrada que casou.
+      const mapa = new Map(
+        encontrados.map((p) => [String(p.ref_busca ?? p.ref ?? '').trim().toLowerCase(), p]),
+      );
+
+      const naoEncontrados: { ref: string; qtd: number; motivo: 'nao_encontrado' | 'bloqueado' }[] = [];
+      const cart = new Map(produtosSelecionados.map((p) => [p.codprod, p]));
+
+      for (const it of itens) {
+        const prod = mapa.get(it.ref.trim().toLowerCase());
+        if (!prod) { naoEncontrados.push({ ref: it.ref, qtd: it.qtd, motivo: 'nao_encontrado' }); continue; }
+        if (motivoBloqueioRequisicao(prod.inf)) { naoEncontrados.push({ ref: it.ref, qtd: it.qtd, motivo: 'bloqueado' }); continue; }
+        const preco = Number(prod.prcompra) || 0;
+        const anterior = cart.get(prod.codprod) as any;
+        cart.set(prod.codprod, {
+          ...anterior,
+          ...prod,
+          quantidade: it.qtd,
+          preco_unitario: preco,
+          preco_total: it.qtd * preco,
+          observacao: anterior?.observacao || '',
+        } as ProdutoSelecionado);
+      }
+
+      setProdutosSelecionados(Array.from(cart.values()));
+      setRefsNaoImportadas(naoEncontrados);
+      setAbaAdd('buscar');
+
+      const totalOk = itens.length - naoEncontrados.length;
+      const msgs: string[] = [`${totalOk} de ${itens.length} item(ns) importado(s).`];
+      if (naoEncontrados.length) {
+        msgs.push(`${naoEncontrados.length} referência(s) não importada(s) — veja a lista destacada na tela para buscar ou cadastrar.`);
+      }
+      pedirConfirmacao(() => {}, {
+        title: 'Importação concluída',
+        message: msgs.join('\n'),
+        type: naoEncontrados.length ? 'warning' : 'success',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    } catch (error) {
+      console.error('Erro ao importar planilha:', error);
+      pedirConfirmacao(() => {}, {
+        title: 'Erro na importação',
+        message: 'Não foi possível ler o arquivo. Use um CSV com as colunas REF e QUANTIDADE (separador ; ou ,).',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    } finally {
+      setImportando(false);
+    }
+  };
+
   const handleConfirmar = () => {
     // Não permitir itens com valor 0 — obrigatório valor > 0 para adicionar
     const semValor = produtosSelecionados.filter(
@@ -362,19 +552,116 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
 
             {abaAdd === 'buscar' && (
             <>
-            {/* Campo de busca */}
-            <div className="flex gap-4">
+            {/* Campo de busca + importar planilha */}
+            <div className="flex gap-4 items-center">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Buscar produtos por código, descrição ou marca..."
+                  ref={searchInputRef}
+                  placeholder="Buscar produtos por código, descrição ou marca... (Enter seleciona)"
                   value={busca}
                   onChange={(e) => handleBuscaChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearchEnter();
+                    }
+                  }}
                   className="pl-10 bg-gray-50 dark:bg-zinc-800 border-gray-300 dark:border-gray-700"
                   autoFocus
                 />
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv,.txt,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImportarArquivo(file);
+                  e.target.value = ''; // permite reimportar o mesmo arquivo
+                }}
+              />
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importando}
+                className="whitespace-nowrap bg-emerald-600 hover:bg-emerald-700 text-white inline-flex items-center gap-2"
+                title="Importar planilha Excel/CSV (colunas: REF e QUANTIDADE)"
+              >
+                <Upload size={16} />
+                {importando ? 'Importando...' : 'Importar Planilha'}
+              </Button>
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+              Aceita <strong>Excel</strong> (.xlsx/.xls) ou <strong>CSV</strong>, com as colunas
+              <strong> REF</strong> e <strong>QUANTIDADE</strong>. A referência é casada pela marca do
+              fornecedor e o preço vem do produto.
+            </p>
+
+            {/* Referências que a importação NÃO encontrou — visível para buscar/cadastrar */}
+            {refsNaoImportadas.length > 0 && (
+              <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-sm font-bold text-amber-700 dark:text-amber-300">
+                    Referências não importadas ({refsNaoImportadas.length})
+                  </h5>
+                  <button
+                    type="button"
+                    onClick={() => setRefsNaoImportadas([])}
+                    className="text-xs text-amber-700 dark:text-amber-300 hover:underline"
+                  >
+                    Limpar lista
+                  </button>
+                </div>
+                <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
+                  Clique em <strong>Buscar</strong> para procurar no cadastro (filtrando pela marca do
+                  fornecedor) ou use <strong>Cadastrar Produto</strong>.
+                </p>
+                <div className="max-h-40 overflow-y-auto divide-y divide-amber-200/60 dark:divide-amber-800/60">
+                  {refsNaoImportadas.map((r, i) => (
+                    <div key={`${r.ref}-${i}`} className="flex items-center gap-2 py-1.5 text-sm">
+                      <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{r.ref}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Qtd: {r.qtd}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          r.motivo === 'bloqueado'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                            : 'bg-gray-200 text-gray-600 dark:bg-zinc-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {r.motivo === 'bloqueado' ? 'desativado/substituído' : 'não encontrado'}
+                      </span>
+                      <div className="ml-auto flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setBusca(r.ref)}
+                          className="text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Buscar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRefsNaoImportadas((prev) => prev.filter((_, idx) => idx !== i))}
+                          title="Remover da lista"
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCadastroProduto(true)}
+                  className="inline-flex items-center gap-1 text-xs text-green-700 dark:text-green-400 hover:underline"
+                >
+                  <Plus size={12} />
+                  Cadastrar produto novo
+                </button>
+              </div>
+            )}
 
             {/* Estatísticas */}
             {totalItens > 0 && (
@@ -505,11 +792,18 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                                   −
                                 </button>
                                 <input
+                                  ref={(el) => { qtyInputRefs.current[produto.codprod] = el; }}
                                   type="number"
                                   min="1"
                                   step="1"
                                   value={produtoSelecionado?.quantidade || 1}
                                   onChange={(e) => definirQuantidade(produto.codprod, Number(e.target.value))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleQtdEnter();
+                                    }
+                                  }}
                                   className="flex-1 text-center text-sm font-bold bg-transparent text-gray-900 dark:text-gray-100 outline-none border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   style={{ minWidth: '0' }}
                                 />
@@ -641,12 +935,31 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                           {p.marca ? ` · Marca: ${p.marca}` : ''}
                         </div>
                       </div>
-                      <div className="text-right whitespace-nowrap">
-                        <span className="text-gray-600 dark:text-gray-300">
-                          {p.quantidade} × R${' '}
-                          {Number(p.preco_unitario || 0).toFixed(2)}
-                        </span>
-                        <span className="ml-2 font-bold text-green-600 dark:text-green-400">
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <span className="text-gray-600 dark:text-gray-300">{p.quantidade} ×</span>
+                        {/* Preço unitário editável (útil quando vem 0 do cadastro) */}
+                        <div
+                          className={`flex items-center rounded border h-8 ${
+                            Number(p.preco_unitario) > 0
+                              ? 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900'
+                              : 'border-red-400 bg-red-50 dark:bg-red-900/20'
+                          }`}
+                          title={Number(p.preco_unitario) > 0 ? undefined : 'Sem preço — informe um valor'}
+                        >
+                          <span className="pl-2 pr-1 text-xs text-gray-500 dark:text-gray-400">R$</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={formataMoedaBR(p.preco_unitario || 0)}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => {
+                              const digitos = e.target.value.replace(/\D/g, '');
+                              alterarPreco(p.codprod, digitos ? parseInt(digitos, 10) / 100 : 0);
+                            }}
+                            className="w-24 px-1 text-right text-sm font-bold bg-transparent text-gray-900 dark:text-gray-100 outline-none border-none"
+                          />
+                        </div>
+                        <span className="font-bold text-green-600 dark:text-green-400">
                           R$ {Number(p.preco_total || 0).toFixed(2)}
                         </span>
                       </div>

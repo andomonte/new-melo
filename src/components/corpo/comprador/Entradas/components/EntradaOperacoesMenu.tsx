@@ -13,6 +13,7 @@ import RomaneioModal from '@/components/entradas/RomaneioModal';
 import { ConfirmarPrecoModal } from './ConfirmarPrecoModal';
 import { ConfirmarEstoqueModal } from './ConfirmarEstoqueModal';
 import { ConsultaEntradaModal, ConsultaTipo } from './ConsultaEntradaModal';
+import ExportarItensEntradaModal from './ExportarItensEntradaModal';
 import { Truck, ShoppingCart, FileText, FileSpreadsheet, FileDown } from 'lucide-react';
 
 interface EntradaOperacoesMenuProps {
@@ -50,12 +51,17 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   const [showMessage, setShowMessage] = useState(false);
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
   const [loading, setLoading] = useState(false);
+  const [exportarItensModal, setExportarItensModal] = useState<{ open: boolean; formato: 'excel' | 'pdf' }>({
+    open: false,
+    formato: 'excel',
+  });
 
   // Sinaliza à página quando há qualquer modal/confirmação deste menu aberto,
   // para pausar a navegação por teclado da lista (evita empilhar modais).
   const algumModalOperacaoAberto =
     showConfirmReabrir || showRomaneio || showConfirmarPreco || showConfirmarSemCusto ||
-    showConfirmarEstoque || showConfirmCancelar || showMessage || consultaTipo !== null;
+    showConfirmarEstoque || showConfirmCancelar || showMessage || consultaTipo !== null ||
+    exportarItensModal.open;
   useEffect(() => {
     onOperacaoAtiva?.(algumModalOperacaoAberto);
   }, [algumModalOperacaoAberto, onOperacaoAtiva]);
@@ -66,37 +72,17 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   // Pode confirmar preco se ainda nao foi confirmado
   const canConfirmarPreco = !entrada.precoConfirmado;
 
-  // Igual ao Delphi (spValidaRomaneio): o Confirmar Preço exige o romaneio feito.
-  // Sem romaneio, avisa e não abre a confirmação.
+  // Confirmar Preço — não depende do romaneio (o romaneio é opcional; se não
+  // houver, a alocação por armazém segue no padrão).
   const handleAbrirConfirmarPreco = () => {
     setIsOpen(false);
-    if (!entrada.temRomaneio) {
-      setMessageData({
-        title: 'Romaneio pendente',
-        message:
-          'Faça o Romaneio (distribuição dos itens por armazém) antes de confirmar o preço.\n\nUse a opção "Fazer Romaneio" no menu de Ações.',
-        type: 'warning',
-      });
-      setShowMessage(true);
-      return;
-    }
     setShowConfirmarPreco(true);
   };
 
-  // "Confirmar sem Custo" (Delphi): confirma a entrada sem recalcular o custo
-  // médio/preço dos produtos. Exige romaneio, igual ao Confirmar Preço.
+  // "Confirmar sem Custo": confirma sem recalcular o custo médio/preço dos
+  // produtos. Também não depende do romaneio.
   const handleAbrirConfirmarSemCusto = () => {
     setIsOpen(false);
-    if (!entrada.temRomaneio) {
-      setMessageData({
-        title: 'Romaneio pendente',
-        message:
-          'Faça o Romaneio (distribuição dos itens por armazém) antes de confirmar a entrada.\n\nUse a opção "Fazer Romaneio" no menu de Ações.',
-        type: 'warning',
-      });
-      setShowMessage(true);
-      return;
-    }
     setShowConfirmarSemCusto(true);
   };
 
@@ -254,9 +240,10 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   };
 
   // Exporta os itens da entrada (Excel/PDF) — "Copiar para o Excel" do Delphi.
+  // Abre um modal para o usuário escolher as colunas antes de gerar.
   const handleExportarItens = (formato: 'excel' | 'pdf') => {
     setIsOpen(false);
-    window.open(`/api/entradas/${entrada.id}/exportar-itens?formato=${formato}`, '_blank');
+    setExportarItensModal({ open: true, formato });
   };
 
   const handleConfirmarCancelar = async () => {
@@ -502,10 +489,17 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
         type={messageData.type}
       />
 
+      <ExportarItensEntradaModal
+        isOpen={exportarItensModal.open}
+        onClose={() => setExportarItensModal((s) => ({ ...s, open: false }))}
+        entradaId={entrada.id}
+        formato={exportarItensModal.formato}
+      />
+
       <RomaneioModal
         open={showRomaneio}
         onClose={() => setShowRomaneio(false)}
-        entradaId={parseInt(entrada.id)}
+        entradaId={entrada.id}
         numeroEntrada={entrada.numeroEntrada || entrada.numeroNF}
         obrigatorio={false}
         onSalvoComSucesso={() => {

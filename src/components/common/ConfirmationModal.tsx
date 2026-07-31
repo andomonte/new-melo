@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle, Info, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -28,6 +28,23 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   loading = false,
   hideCancel = false,
 }) => {
+  // Teclado: Enter confirma, Esc cancela/fecha (padrão do sistema antigo).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (loading) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onConfirm();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, loading, onConfirm, onClose]);
+
   if (!isOpen || typeof document === 'undefined') return null;
 
   const getIcon = () => {
