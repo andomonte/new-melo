@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
 import {
-  X, Loader2, Plus, Trash2, Keyboard, User, ShoppingCart,
+  X, Loader2, Plus, Trash2, Keyboard, ShoppingCart,
   CheckCircle, AlertTriangle, Search,
 } from 'lucide-react';
 import {
@@ -18,8 +18,10 @@ import ProductZoomModal from '@/components/common/ProductZoomModal';
 import ModalAdicionarItemRapido from '../bloqueadas/ModalAdicionarItemRapido';
 import ModalEquivalentes from '../bloqueadas/ModalEquivalentes';
 import ModalHistoricoProduto from '../bloqueadas/ModalHistoricoProduto';
-import SelecionarVendedor from '../novaVenda/selectVendedor';
-import SelecionarOperador from '../novaVenda/selectOperador';
+import SelecionarTransporte from '../novaVenda/selectTransporte';
+import SelecionarDocumento from '../novaVenda/selectDocumento';
+import ModalPrazoParcelas from '../novaVenda/prazo';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import api from '@/components/services/api';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -65,14 +67,25 @@ const NovaVendaV2 = () => {
   const clienteInputRef = useRef<HTMLInputElement>(null);
   const resultadosRef = useRef<HTMLDivElement>(null);
 
-  // ---------- Estados do vendedor/operador ----------
-  const [dadosVendedor, setDadosVendedor] = useState<any[]>([]);
-  const [checkVendedor, setCheckVendedor] = useState(false);
-  const [openVendedor, setOpenVendedor] = useState(false);
+  // ---------- Estados do vendedor ----------
   const [vendedorSel, setVendedorSel] = useState<{ codigo: string; nome: string }>({ codigo: '', nome: '' });
-  const [checkOperador, setCheckOperador] = useState(false);
-  const [openOperador, setOpenOperador] = useState(false);
+  const [buscaVendedor, setBuscaVendedor] = useState('');
+  const [resultadosVendedor, setResultadosVendedor] = useState<any[]>([]);
+  const [showResultadosVendedor, setShowResultadosVendedor] = useState(false);
+  const [vendedorIdx, setVendedorIdx] = useState(-1);
+  const [loadingVendedor, setLoadingVendedor] = useState(false);
+  const vendedorInputRef = useRef<HTMLInputElement>(null);
+  const resultadosVendedorRef = useRef<HTMLDivElement>(null);
+
+  // ---------- Estados do operador ----------
   const [operadorSel, setOperadorSel] = useState<{ codigo: string; nome: string }>({ codigo: '', nome: '' });
+  const [buscaOperador, setBuscaOperador] = useState('');
+  const [resultadosOperador, setResultadosOperador] = useState<any[]>([]);
+  const [showResultadosOperador, setShowResultadosOperador] = useState(false);
+  const [operadorIdx, setOperadorIdx] = useState(-1);
+  const [loadingOperador, setLoadingOperador] = useState(false);
+  const operadorInputRef = useRef<HTMLInputElement>(null);
+  const resultadosOperadorRef = useRef<HTMLDivElement>(null);
 
   // ---------- Estados do grid ----------
   const [itensGrid, setItensGrid] = useState<any[]>([]);
@@ -82,6 +95,22 @@ const NovaVendaV2 = () => {
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
   const [modalHistProduto, setModalHistProduto] = useState(false);
   const [produtoHist, setProdutoHist] = useState<any>(null);
+
+  // ---------- Estados da finalização ----------
+  const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>({ COD_OPERACAO: '', DESCR: '' });
+  const [dadosDocumento, setDadosDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }[]>([]);
+  const [prazo, setPrazo] = useState('');
+  const [openModalPrazo, setOpenModalPrazo] = useState(false);
+  const [fPagamento, setFPagamento] = useState('');
+  const [opcoesFP, setOpcoesFP] = useState<{ id: string; descricao: string }[]>([]);
+  const [transporteSel, setTransporteSel] = useState<{ CODTPTRANSP: string; DESCR: string }>({ CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' });
+  const [dadosTransporte, setDadosTransporte] = useState<{ CODTPTRANSP: string; DESCR: string }[]>([]);
+  const [valTransp, setValTransp] = useState('R$ 0,00');
+  const [valTranspDec, setValTranspDec] = useState(0);
+  const [obsFat, setObsFat] = useState('');
+  const [pedido, setPedido] = useState('');
+  const [obs, setObs] = useState('');
+  const [requisicao, setRequisicao] = useState('');
 
   const gridRef = useRef<any>(null);
   const gridWrapperRef = useRef<HTMLDivElement>(null);
@@ -102,59 +131,294 @@ const NovaVendaV2 = () => {
     }
   }, [user]);
 
+  // ---------- Persistência largura colunas ----------
+  const SCREEN_KEY = 'nova-venda-v2';
+  const saveColTimeoutRef = useRef<any>(null);
+
+  const salvarPrefsGrid = useCallback(() => {
+    if (!user?.usuario) return;
+    if (saveColTimeoutRef.current) clearTimeout(saveColTimeoutRef.current);
+    saveColTimeoutRef.current = setTimeout(() => {
+      const a = gridRef.current?.api;
+      if (!a) return;
+      const cols = a.getAllDisplayedColumns();
+      const colWidths: Record<string, number> = {};
+      const colOrder: string[] = [];
+      cols.forEach((col: any) => {
+        const id = col.getColId();
+        colWidths[id] = col.getActualWidth();
+        colOrder.push(id);
+      });
+      fetch('/api/userPreferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: user.usuario, screen: SCREEN_KEY, preferences: { colWidths, colOrder } }),
+      }).catch(() => {});
+    }, 1000);
+  }, [user]);
+
+  const onColumnResized = useCallback((e: any) => {
+    if (e.finished && e.column) salvarPrefsGrid();
+  }, [salvarPrefsGrid]);
+
+  const onColumnMoved = useCallback((e: any) => {
+    if (e.finished) salvarPrefsGrid();
+  }, [salvarPrefsGrid]);
+
+  const onGridReady = useCallback(() => {
+    if (!user?.usuario) return;
+    fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=${encodeURIComponent(SCREEN_KEY)}`)
+      .then(r => r.json())
+      .then(data => {
+        const prefs = data?.preferences;
+        if (!prefs) return;
+        const a = gridRef.current?.api;
+        if (!a) return;
+
+        // Restaurar ordem das colunas
+        if (Array.isArray(prefs.colOrder) && prefs.colOrder.length > 0) {
+          a.moveColumns(prefs.colOrder, 0);
+        }
+
+        // Restaurar larguras
+        if (prefs.colWidths && typeof prefs.colWidths === 'object') {
+          Object.entries(prefs.colWidths).forEach(([colId, width]) => {
+            const col = a.getColumn(colId);
+            if (col) a.setColumnWidths([{ key: colId, newWidth: width as number }]);
+          });
+        }
+      })
+      .catch(() => {});
+  }, [user]);
+
+  // ---------- Carregar dados de finalização ----------
+  useEffect(() => {
+    // Transportadoras
+    api.post('/api/dbOracle/buscarTransporte').then(r => {
+      if (r.data) setDadosTransporte(r.data);
+    }).catch(() => {});
+    // Formas de pagamento
+    api.get('/api/vendas/fpagamento').then(r => {
+      if (r.data) setOpcoesFP(Array.isArray(r.data) ? r.data : []);
+    }).catch(() => {});
+    // Documentos
+    api.post('/api/dbOracle/buscarDocumento').then(r => {
+      if (r.data) setDadosDocumento(r.data);
+    }).catch(() => {});
+  }, []);
+
+  // Filtrar formas de pagamento por prazo
+  const opcoesFPFiltradas = useMemo(() => {
+    if (!opcoesFP.length) return [];
+    const prazoStr = String(prazo).trim().toUpperCase();
+    const isAvista = !prazoStr || prazoStr === 'A VISTA' || prazoStr === '0';
+    if (isAvista) {
+      return opcoesFP.filter(fp => ['PIX', 'DINHEIRO', 'CARTAO DEBITO', 'CARTAO CREDITO', 'DEBITO', 'CREDITO'].some(t => fp.descricao?.toUpperCase().includes(t)));
+    }
+    return opcoesFP.filter(fp => !fp.descricao?.toUpperCase().includes('OUTROS'));
+  }, [opcoesFP, prazo]);
+
   // ---------- Foco inicial no input cliente ----------
   useEffect(() => {
     setTimeout(() => clienteInputRef.current?.focus(), 200);
   }, []);
 
-  // ---------- Carregar vendedores ----------
+  // ---------- Permissão EV (trocar vendedor) ----------
+  const temEV = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'EV');
+  }, [user]);
+  const temBPV = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'BPV');
+  }, [user]);
+  const temMPV = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'MPV');
+  }, [user]);
+
+  // ---------- Auto-set operador do usuário logado ----------
   useEffect(() => {
-    api.post('/api/dbOracle/buscarVendedor').then((response) => {
-      if (response.data) setDadosVendedor(response.data);
-    }).catch(() => {});
+    if (user?.codusr && operadorSel.codigo === '') {
+      api.post('/api/dbOracle/buscarVendedorCod', { descricao: user.codusr }).then((res) => {
+        const data = res.data || [];
+        const found = data.find((v: any) => v.CODVEND === user.codusr);
+        if (found) {
+          setOperadorSel({ codigo: found.CODVEND, nome: found.NOME });
+          setBuscaOperador(`${found.CODVEND} - ${found.NOME}`);
+        }
+      }).catch(() => {});
+    }
+  }, [user]);
+
+  // ---------- Buscar vendedor/operador (mesma API) ----------
+  const buscarVendedorOperador = useCallback(async (termo: string, tipo: 'vendedor' | 'operador') => {
+    if (termo.trim().length < 3) return;
+    const setLoading = tipo === 'vendedor' ? setLoadingVendedor : setLoadingOperador;
+    const setResultados = tipo === 'vendedor' ? setResultadosVendedor : setResultadosOperador;
+    const setShow = tipo === 'vendedor' ? setShowResultadosVendedor : setShowResultadosOperador;
+    const setIdx = tipo === 'vendedor' ? setVendedorIdx : setOperadorIdx;
+
+    setLoading(true);
+    try {
+      const res = await api.post('/api/dbOracle/buscarVendedorCod', { descricao: termo.trim() });
+      const data = res.data || [];
+      setResultados(data.map((v: any) => ({ codigo: v.CODVEND, nome: v.NOME || '' })));
+      setShow(true);
+      setIdx(0);
+    } catch {
+      toast({ title: `Erro ao buscar ${tipo}`, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  const selecionarVendedor = useCallback((v: { codigo: string; nome: string }) => {
+    setVendedorSel(v);
+    setBuscaVendedor(`${v.codigo} - ${v.nome}`);
+    setShowResultadosVendedor(false);
+    // Foco no X após render
+    setTimeout(() => {
+      const btn = vendedorInputRef.current?.parentElement?.querySelector('button') as HTMLElement;
+      if (btn) btn.focus();
+    }, 50);
   }, []);
 
-  // ---------- Auto-set vendedor do usuário logado ----------
-  useEffect(() => {
-    if (dadosVendedor.length > 0 && vendedorSel.codigo === '' && user?.codusr) {
-      const vendedorUsuario = dadosVendedor.filter(
-        (val: any) => val.CODVEND === user.codusr,
-      );
-      if (vendedorUsuario.length) {
-        setVendedorSel({ nome: vendedorUsuario[0].NOME, codigo: vendedorUsuario[0].CODVEND });
-      }
-    }
-  }, [dadosVendedor, user, vendedorSel]);
-
-  // ---------- Handlers vendedor/operador ----------
-  const handleVendedor = useCallback((vendedor: { codigo: string; nome: string }) => {
-    if (vendedor.nome !== 'fechar vendedor') {
-      setVendedorSel(vendedor);
-    } else {
-      setCheckVendedor(false);
-      // Restaura para o vendedor do usuário logado
-      const vendedorUsuario = dadosVendedor.filter(
-        (val: any) => val.CODVEND === user?.codusr,
-      );
-      if (vendedorUsuario.length) {
-        setVendedorSel({ nome: vendedorUsuario[0].NOME, codigo: vendedorUsuario[0].CODVEND });
-      }
-    }
-    setOpenVendedor(false);
-  }, [dadosVendedor, user]);
-
-  const handleOperador = useCallback((operador: { codigo: string; nome: string }) => {
-    if (operador.nome !== 'fechar Operador') {
-      setOperadorSel(operador);
-    } else {
-      setCheckOperador(false);
-      setOperadorSel({ codigo: '', nome: '' });
-    }
-    setOpenOperador(false);
+  const selecionarOperador = useCallback((v: { codigo: string; nome: string }) => {
+    setOperadorSel(v);
+    setBuscaOperador(`${v.codigo} - ${v.nome}`);
+    setShowResultadosOperador(false);
+    setTimeout(() => {
+      const btn = operadorInputRef.current?.parentElement?.querySelector('button') as HTMLElement;
+      if (btn) btn.focus();
+    }, 50);
   }, []);
 
   // ---------- Sync modais abertos ----------
-  modaisAbertosRef.current = addItemOpen || !!zoomProduto || modalEquivalentes || modalHistProduto || openVendedor || openOperador;
+  modaisAbertosRef.current = addItemOpen || !!zoomProduto || modalEquivalentes || modalHistProduto;
+
+  // Refs para dropdowns (evitar stale closures no handler global)
+  const dropdownAbertoRef = useRef(false);
+  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador;
+
+  // ---------- Navegação por teclado (Tab + Setas) ----------
+  const cabecalhoRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const painelFinRef = useRef<HTMLDivElement>(null);
+  const COLUNAS_EDITAVEIS = useMemo(() => ['desconto_percentual', 'qtd', 'prunit'], []);
+
+  // Coleta todos os elementos focáveis fora do grid (cabeçalho + toolbar + painel finalização)
+  const getTodosFocaveis = useCallback((): HTMLElement[] => {
+    const els: HTMLElement[] = [];
+    [cabecalhoRef.current, toolbarRef.current, painelFinRef.current].forEach(container => {
+      if (!container) return;
+      container.querySelectorAll<HTMLElement>('input:not([tabindex="-1"]):not([disabled]), button:not([tabindex="-1"]):not([disabled]), select:not([tabindex="-1"]):not([disabled])').forEach(el => {
+        if (el.offsetParent !== null) els.push(el);
+      });
+    });
+    return els;
+  }, []);
+
+  // Navega para próximo/anterior elemento focável (cicla incluindo grid)
+  const navegarFocavel = useCallback((direcao: 'next' | 'prev') => {
+    const focaveis = getTodosFocaveis();
+    if (focaveis.length === 0) return;
+
+    const active = document.activeElement as HTMLElement;
+    const estaNoGrid = gridWrapperRef.current?.contains(active);
+    const a = gridRef.current?.api;
+    const temItensGrid = a && a.getDisplayedRowCount() > 0;
+
+    if (estaNoGrid) {
+      // Está no grid — sair para painel (next) ou toolbar (prev)
+      if (direcao === 'next') {
+        const painelEls = painelFinRef.current?.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled]), select:not([disabled])');
+        if (painelEls && painelEls.length > 0) painelEls[0].focus();
+        else focaveis[0].focus();
+      } else {
+        // Voltar pro último do toolbar
+        const tbEls = toolbarRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])');
+        if (tbEls && tbEls.length > 0) tbEls[tbEls.length - 1].focus();
+        else focaveis[focaveis.length - 1].focus();
+      }
+      return;
+    }
+
+    const idx = focaveis.indexOf(active);
+    if (idx < 0) { focaveis[0].focus(); return; }
+
+    if (direcao === 'next') {
+      if (idx < focaveis.length - 1) {
+        focaveis[idx + 1].focus();
+      } else {
+        // Último elemento: ir pro grid se tem itens, senão cicla
+        if (temItensGrid) {
+          const col = a.getColumn(COLUNAS_EDITAVEIS[0]);
+          a.setFocusedCell(0, col || 'ref');
+        } else {
+          focaveis[0].focus();
+        }
+      }
+    } else {
+      if (idx > 0) {
+        focaveis[idx - 1].focus();
+      } else {
+        // Primeiro elemento: ir pro grid (última célula) se tem itens, senão cicla
+        if (temItensGrid) {
+          const lastRow = a.getDisplayedRowCount() - 1;
+          const col = a.getColumn(COLUNAS_EDITAVEIS[COLUNAS_EDITAVEIS.length - 1]);
+          a.setFocusedCell(lastRow, col || 'ref');
+        } else {
+          focaveis[focaveis.length - 1].focus();
+        }
+      }
+    }
+  }, [getTodosFocaveis, COLUNAS_EDITAVEIS]);
+
+  // Tab dentro do grid: pula entre células editáveis
+  const tabToNextCellHandler = useCallback((params: any) => {
+    const { backwards, previousCellPosition } = params;
+    const a = gridRef.current?.api;
+    if (!a || !previousCellPosition) return previousCellPosition;
+
+    const totalRows = a.getDisplayedRowCount();
+    if (totalRows === 0) return previousCellPosition;
+
+    const row = previousCellPosition.rowIndex ?? 0;
+    const col = previousCellPosition.column?.getColId?.() ?? '';
+    const editIdx = COLUNAS_EDITAVEIS.indexOf(col);
+
+    if (!backwards) {
+      if (editIdx >= 0 && editIdx < COLUNAS_EDITAVEIS.length - 1) {
+        return { rowIndex: row, column: a.getColumn(COLUNAS_EDITAVEIS[editIdx + 1]) };
+      }
+      if (row + 1 < totalRows) {
+        return { rowIndex: row + 1, column: a.getColumn(COLUNAS_EDITAVEIS[0]) };
+      }
+      // Fim do grid: vai para o painel de finalização
+      setTimeout(() => {
+        const focaveis = getTodosFocaveis();
+        // Primeiro input do painel de finalização (após toolbar)
+        const painelEls = painelFinRef.current?.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled]), select:not([disabled])');
+        if (painelEls && painelEls.length > 0) painelEls[0].focus();
+        else if (focaveis.length > 0) focaveis[0].focus();
+      }, 0);
+      return previousCellPosition;
+    } else {
+      if (editIdx > 0) {
+        return { rowIndex: row, column: a.getColumn(COLUNAS_EDITAVEIS[editIdx - 1]) };
+      }
+      if (row > 0) {
+        return { rowIndex: row - 1, column: a.getColumn(COLUNAS_EDITAVEIS[COLUNAS_EDITAVEIS.length - 1]) };
+      }
+      // Início do grid: volta pro toolbar
+      setTimeout(() => {
+        const tbEls = toolbarRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])');
+        if (tbEls && tbEls.length > 0) tbEls[tbEls.length - 1].focus();
+      }, 0);
+      return previousCellPosition;
+    }
+  }, [COLUNAS_EDITAVEIS, getTodosFocaveis]);
 
   // ---------- Selecionar cliente — busca crédito e atraso como tela original ----------
   const selecionarCliente = useCallback(async (cli: any) => {
@@ -203,7 +467,26 @@ const NovaVendaV2 = () => {
       kickback: cli.KICKBACK || cli.kickback || false,
     });
 
+    // Auto-set vendedor do cliente
+    const codvend = cli.CODVEND || cli.codvend || '';
+    if (codvend) {
+      try {
+        const resVend = await api.post('/api/dbOracle/buscarVendedorCod', { descricao: codvend });
+        const vendedores = resVend.data || [];
+        const found = vendedores.find((v: any) => v.CODVEND === codvend);
+        if (found) {
+          setVendedorSel({ codigo: found.CODVEND, nome: found.NOME });
+          setBuscaVendedor(`${found.CODVEND} - ${found.NOME}`);
+        }
+      } catch {}
+    }
+
     toast({ title: `Cliente ${nome} selecionado` });
+    // Foco no X após render
+    setTimeout(() => {
+      const btn = clienteInputRef.current?.parentElement?.querySelector('button') as HTMLElement;
+      if (btn) btn.focus();
+    }, 50);
   }, [toast]);
 
   // ---------- Buscar cliente ----------
@@ -234,7 +517,7 @@ const NovaVendaV2 = () => {
         // Não encontrou — mostra dropdown
         setResultadosCliente(data);
         setShowResultadosCliente(true);
-        setClienteIdx(-1);
+        setClienteIdx(0);
       } catch {
         toast({ title: 'Erro ao buscar cliente', variant: 'destructive' });
       } finally {
@@ -256,7 +539,7 @@ const NovaVendaV2 = () => {
       const campo = res.data?.campoBusca || 'nome';
       setResultadosCliente(Array.isArray(data) ? data.map((c: any) => ({ ...c, _campoBusca: campo })) : []);
       setShowResultadosCliente(true);
-      setClienteIdx(-1);
+      setClienteIdx(0);
     } catch {
       toast({ title: 'Erro ao buscar clientes', variant: 'destructive' });
     } finally {
@@ -288,10 +571,18 @@ const NovaVendaV2 = () => {
           const idx = prev.findIndex((r) => r.codprod === item.codprod);
           if (idx >= 0) {
             const novos = [...prev];
-            novos[idx] = { ...novos[idx], qtd: item.qtd, total_item: item.qtd * novos[idx].prunit };
+            const descAtVista = novos[idx].desconto_percentual || 0; // preserva desc à vista existente
+            novos[idx] = {
+              ...novos[idx],
+              qtd: item.qtd,
+              prunit: item.prunit,
+              prvenda_original: item.prvenda_original ?? novos[idx].prvenda_original,
+              desconto_percentual: descAtVista,
+              total_item: item.qtd * item.prunit * (1 - descAtVista / 100),
+            };
             return novos;
           }
-          return [{ ...item, _novo: true }, ...prev];
+          return [{ ...item, _novo: true, desconto_percentual: 0 }, ...prev];
         });
       }
     });
@@ -313,25 +604,40 @@ const NovaVendaV2 = () => {
     setItensGrid((prev) => {
       const novos = [...prev];
       const row = { ...novos[rowIndex] };
+
       if (field === 'qtd') {
         row.qtd = Number(event.newValue) || 0;
-        row.total_item = row.qtd * row.prunit;
       } else if (field === 'prunit') {
         row.prunit = Number(event.newValue) || 0;
-        row.total_item = row.qtd * row.prunit;
-        if (row.prvenda_original > 0) row.desconto_percentual = ((row.prvenda_original - row.prunit) / row.prvenda_original) * 100;
       } else if (field === 'desconto_percentual') {
-        const desc = Math.min(Math.max(Number(event.newValue) || 0, 0), 100);
-        row.desconto_percentual = desc;
-        if (row.prvenda_original > 0) {
-          row.prunit = row.prvenda_original * (1 - desc / 100);
-          row.total_item = row.qtd * row.prunit;
-        }
+        row.desconto_percentual = Math.min(Math.max(Number(event.newValue) || 0, 0), 2);
       }
+
+      // Calcular preço efetivo (preço vendido - desconto à vista)
+      const desc = Number(row.desconto_percentual) || 0;
+      const precoEfetivo = row.prunit * (1 - desc / 100);
+
+      // Verificar margem: preço efetivo vs custo × (1 + margem%)
+      const prcompra = Number(row.prcompra) || 0;
+      const isImp = row.origem !== 'N';
+      const margemPerc = isImp ? 40 : 20;
+      const precoMinimo = prcompra > 0 ? prcompra * (1 + margemPerc / 100) : 0;
+
+      // Se preço efetivo ficou abaixo da margem, limitar o desconto
+      if (precoMinimo > 0 && precoEfetivo < precoMinimo && desc > 0 && !temMPV) {
+        // Calcular desconto máximo que mantém na margem
+        const descMax = row.prunit > 0 ? ((row.prunit - precoMinimo) / row.prunit) * 100 : 0;
+        row.desconto_percentual = Math.max(Math.round(descMax * 100) / 100, 0);
+      }
+
+      // Recalcular total com desconto à vista
+      const descFinal = Number(row.desconto_percentual) || 0;
+      row.total_item = row.qtd * row.prunit * (1 - descFinal / 100);
+
       novos[rowIndex] = row;
       return novos;
     });
-  }, []);
+  }, [temMPV]);
 
   const ProdutoCellRenderer = useCallback((props: any) => {
     const d = props.data;
@@ -341,7 +647,6 @@ const NovaVendaV2 = () => {
         <div title={d.descr || ''} style={{ fontWeight: 600, fontSize: 13, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word' }}>{d.descr || '-'}</div>
         <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
           <img src={d.origem === 'N' ? '/images/brasil.png' : '/images/importado.png'} alt={d.origem === 'N' ? 'Nacional' : 'Importado'} style={{ width: 16, height: 11, objectFit: 'contain' }} />
-          {d._novo ? <span style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', backgroundColor: '#dbeafe', padding: '1px 5px', borderRadius: 4 }}>NOVO</span> : null}
         </div>
       </div>
     );
@@ -363,7 +668,7 @@ const NovaVendaV2 = () => {
       cellRendererSelector: () => ({ component: DeleteItemRenderer }),
     },
     { headerName: 'Ref', field: 'ref', width: 100, cellStyle: { fontWeight: 500 } },
-    { headerName: 'Produto', field: 'descr', flex: 2, minWidth: 180, autoHeight: true,
+    { headerName: 'Produto', field: 'descr', flex: 2, minWidth: 150, autoHeight: true,
       cellStyle: { textAlign: 'left', justifyContent: 'flex-start', alignItems: 'flex-start', padding: 0 },
       cellRendererSelector: () => ({ component: ProdutoCellRenderer }),
     },
@@ -373,26 +678,39 @@ const NovaVendaV2 = () => {
         return <div title={val} style={{ lineHeight: 1.3, padding: '4px 0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word', fontSize: 12 }}>{val}</div>;
       },
     },
-    { headerName: 'Estoque', field: 'estoque', width: 70,
+    { headerName: 'Estoque', field: 'estoque', width: 80, minWidth: 80,
       cellStyle: { fontWeight: 600, color: '#2563eb' },
-    },
-    { headerName: 'Preço Tabela', field: 'prvenda_original', width: 100, valueFormatter: (p: any) => fmtMoeda(p.value) },
-    { headerName: 'Desc. à Vista', field: 'desconto_percentual', width: 85, editable: true,
-      cellStyle: { backgroundColor: '#f5f3ff', fontWeight: 600 },
-      valueParser: (p: any) => {
-        const v = parseFloat(String(p.newValue).replace('%', '').replace(',', '.').trim()) || 0;
-        return Math.min(Math.max(v, 0), 100);
-      },
-      valueFormatter: (p: any) => fmtPerc(p.value),
     },
     { headerName: 'Qtd', field: 'qtd', width: 60, editable: true,
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
       valueParser: (p: any) => parseInt(String(p.newValue)) || 0,
     },
-    { headerName: 'Preço Vendido', field: 'prunit', width: 100, editable: true,
+    { headerName: 'Preço Tabela', field: 'prvenda_original', width: 100, valueFormatter: (p: any) => fmtMoeda(p.value) },
+    { headerName: clienteSelecionado?.tipoPreco ? `Preço ${clienteSelecionado.tipoPreco}` : 'Preço Vendido', field: 'prunit', width: 110, editable: true,
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
       valueParser: (p: any) => parseFloat(String(p.newValue).replace('R$', '').replace(',', '.').trim()) || 0,
-      valueFormatter: (p: any) => fmtMoeda(p.value),
+      cellRenderer: (p: any) => {
+        const prunit = Number(p.value) || 0;
+        const original = Number(p.data?.prvenda_original) || 0;
+        const editado = original > 0 && Math.abs(prunit - original) > 0.01;
+        const abaixo = prunit < original;
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            {fmtMoeda(prunit)}
+            {editado ? (
+              <span style={{ fontSize: 10, color: abaixo ? '#dc2626' : '#16a34a' }}>{abaixo ? '▼' : '▲'}</span>
+            ) : null}
+          </span>
+        );
+      },
+    },
+    { headerName: 'Desc. à Vista', field: 'desconto_percentual', width: 85, editable: true,
+      cellStyle: { backgroundColor: '#f5f3ff', fontWeight: 600 },
+      valueParser: (p: any) => {
+        const v = parseFloat(String(p.newValue).replace('%', '').replace(',', '.').trim()) || 0;
+        return Math.min(Math.max(v, 0), 2);
+      },
+      valueFormatter: (p: any) => fmtPerc(p.value),
     },
     { headerName: 'Total c/ Imp.', field: 'total_com_impostos', width: 100,
       cellStyle: { fontWeight: 500, color: '#6b7280' },
@@ -407,7 +725,7 @@ const NovaVendaV2 = () => {
       cellStyle: { fontWeight: 700, color: '#16a34a' },
       valueFormatter: (p: any) => fmtMoeda(p.value),
     },
-  ], []);
+  ], [clienteSelecionado?.tipoPreco]);
 
   // ---------- Cálculos ----------
   const totalVenda = itensGrid.reduce((acc, i) => acc + (Number(i.total_item) || 0), 0);
@@ -420,22 +738,24 @@ const NovaVendaV2 = () => {
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       if (modaisAbertosRef.current) return;
 
-      // Setas no grid
-      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !emInput) {
-        const wrapper = gridWrapperRef.current;
-        if (wrapper && wrapper.contains(e.target as Node)) {
-          const a = gridRef.current?.api;
-          if (!a) return;
-          const focused = a.getFocusedCell();
-          if (!focused) return;
-          e.preventDefault(); e.stopImmediatePropagation();
-          const total = a.getDisplayedRowCount();
-          const col = focused.column?.getColId?.() || 'ref';
-          const next = e.key === 'ArrowDown' ? Math.min(focused.rowIndex + 1, total - 1) : Math.max(focused.rowIndex - 1, 0);
-          a.setFocusedCell(next, col);
-          a.ensureIndexVisible(next);
-          return;
-        }
+      const dropdownAberto = dropdownAbertoRef.current;
+      const estaNoGrid = gridWrapperRef.current?.contains(e.target as Node);
+
+      // Tab fora do grid: usa navegarFocavel
+      if (e.key === 'Tab' && !dropdownAberto && !estaNoGrid) {
+        e.preventDefault();
+        navegarFocavel(e.shiftKey ? 'prev' : 'next');
+        return;
+      }
+
+      // ← → ↑ ↓ fora do grid: mesmo que Tab
+      // Só bloqueia se input editável COM texto (cursor precisa mover)
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') && !dropdownAberto && !estaNoGrid) {
+        const inputEl = e.target as HTMLInputElement;
+        const inputEditavelComTexto = emInput && !inputEl?.readOnly && (inputEl?.value || '').length > 0;
+        if (inputEditavelComTexto) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        navegarFocavel((e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 'next' : 'prev');
         return;
       }
 
@@ -446,6 +766,13 @@ const NovaVendaV2 = () => {
         const rd = ultimaCelulaRef.current;
         if (rd) setZoomProduto({ codprod: rd.codprod, ref: rd.ref, descr: rd.descr });
         else toast({ title: 'Selecione um item na planilha' });
+        return;
+      }
+
+      // Ctrl++ adicionar (funciona mesmo em input)
+      if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.key === 'Add')) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        setAddItemOpen(true);
         return;
       }
 
@@ -477,26 +804,18 @@ const NovaVendaV2 = () => {
         return;
       }
 
-      // Ctrl++ adicionar
-      if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.key === 'Add')) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        setAddItemOpen(true);
-        return;
-      }
-
       // F3 vendedor
       if (e.key === 'F3') {
         e.preventDefault(); e.stopImmediatePropagation();
-        setCheckVendedor(true);
-        setOpenVendedor(true);
+        if (temEV) vendedorInputRef.current?.focus();
+        else toast({ title: 'Sem permissão para trocar vendedor' });
         return;
       }
 
       // F4 operador
       if (e.key === 'F4') {
         e.preventDefault(); e.stopImmediatePropagation();
-        setCheckOperador(true);
-        setOpenOperador(true);
+        operadorInputRef.current?.focus();
         return;
       }
     };
@@ -528,172 +847,216 @@ const NovaVendaV2 = () => {
       <ContextMenuTrigger asChild>
         <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
           {/* Cabeçalho */}
-          <div className="px-5 py-3 border-b border-gray-200 dark:border-zinc-700">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-[#347AB6] dark:text-gray-100">Nova Venda</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-blue-600">{formatCurrency(totalVenda)}</span>
-                <span className="text-sm font-semibold text-gray-500">({totalItens} itens)</span>
-              </div>
-            </div>
-
-            {/* Linha do cliente + vendedor + operador */}
-            <div className="flex items-center gap-4 mt-2">
+          <div className="px-5 py-3 border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-slate-900">
+            {/* Linha do cliente + vendedor + operador — 3 colunas iguais */}
+            <div ref={cabecalhoRef} className="flex items-start gap-3 mt-2">
               {/* Busca cliente */}
-              <div className="w-[50%] relative">
-                <div className="flex items-center gap-2">
-                  <User size={16} className="text-gray-400 shrink-0" />
-                  <div className="relative flex-1">
-                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    {clienteSelecionado ? (
-                      <button onClick={() => {
-                        setClienteSelecionado(null);
-                        setBuscaCliente('');
-                        setVendedorSel({ codigo: '', nome: '' });
-                        setCheckVendedor(false);
-                        setOperadorSel({ codigo: '', nome: '' });
-                        setCheckOperador(false);
-                        clienteInputRef.current?.focus();
-                      }} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar cliente">
-                        <X size={14} />
-                      </button>
-                    ) : null}
-                    <input
-                      ref={clienteInputRef}
-                      type="text"
-                      value={buscaCliente}
-                      onChange={(e) => setBuscaCliente(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          // Se tem item focado no dropdown, seleciona
-                          if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) {
-                            e.preventDefault();
-                            selecionarCliente(resultadosCliente[clienteIdx]);
-                            return;
-                          }
-                          // Buscar (buscarCliente já trata mín chars internamente)
-                          if (buscaCliente.trim().length >= 1) {
-                            buscarCliente(buscaCliente);
-                          }
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Cliente</label>
+                <div className="relative">
+                  {clienteSelecionado ? (
+                    <button onClick={() => {
+                      setClienteSelecionado(null);
+                      setBuscaCliente('');
+                      setVendedorSel({ codigo: '', nome: '' });
+                      setBuscaVendedor('');
+                      clienteInputRef.current?.focus();
+                    }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar cliente (Enter)">
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  )}
+                  <input
+                    ref={clienteInputRef}
+                    tabIndex={clienteSelecionado ? -1 : 0}
+                    type="text"
+                    value={buscaCliente}
+                    readOnly={!!clienteSelecionado}
+                    onChange={(e) => { if (!clienteSelecionado) setBuscaCliente(e.target.value); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) {
+                          e.preventDefault();
+                          selecionarCliente(resultadosCliente[clienteIdx]);
                           return;
                         }
-                        if (e.key === 'ArrowDown' && showResultadosCliente && resultadosCliente.length > 0) {
-                          e.preventDefault();
-                          setClienteIdx((prev) => Math.min(prev + 1, resultadosCliente.length - 1));
-                        }
-                        if (e.key === 'ArrowUp' && showResultadosCliente) {
-                          e.preventDefault();
-                          setClienteIdx((prev) => Math.max(prev - 1, 0));
-                        }
-                        if (e.key === 'Escape') setShowResultadosCliente(false);
-                      }}
-                      placeholder="Buscar cliente (nome, código, CNPJ ou UF) + Enter"
-                      className="w-full h-9 pl-8 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate"
-                    />
-                    {loadingCliente ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-blue-500" /> : null}
-
-                    {/* Dropdown resultados */}
-                    {showResultadosCliente && resultadosCliente.length > 0 ? (
-                      <div ref={resultadosRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
-                        {resultadosCliente.map((cli, idx) => {
-                          const nome = cli.NOMEFANT || cli.NOME || '';
-                          const razao = cli.NOMEFANT ? cli.NOME : '';
-                          const campo = cli._campoBusca || 'nome';
-                          return (
-                            <div key={cli.CODCLI || idx}
-                              tabIndex={0}
-                              role="button"
-                              className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 ${idx === clienteIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                              onClick={() => selecionarCliente(cli)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarCliente(cli); } }}
-                            >
-                              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                <span className={campo === 'codcli' ? 'text-blue-600' : ''}>{cli.CODCLI}</span>
-                                <span className="mx-1 text-gray-300">—</span>
-                                <span className={campo === 'nome' ? 'text-blue-600' : ''}>{nome}</span>
-                              </div>
-                              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                                {razao ? <span className={campo === 'nome' ? 'text-blue-500' : ''}>{razao}</span> : null}
-                                {cli.CPFCGC ? <span className={campo === 'cpfcgc' ? 'text-blue-600 font-semibold' : ''}>{cli.CPFCGC}</span> : null}
-                                {cli.UF ? <span className={campo === 'uf' ? 'text-blue-600 font-semibold' : ''}>{cli.CIDADE ? `${cli.CIDADE}/${cli.UF}` : cli.UF}</span> : null}
-                              </div>
+                        if (buscaCliente.trim().length >= 1) buscarCliente(buscaCliente);
+                        return;
+                      }
+                      if (e.key === 'ArrowDown' && showResultadosCliente && resultadosCliente.length > 0) {
+                        e.preventDefault();
+                        setClienteIdx((prev) => Math.min(prev + 1, resultadosCliente.length - 1));
+                      }
+                      if (e.key === 'ArrowUp' && showResultadosCliente) {
+                        e.preventDefault();
+                        setClienteIdx((prev) => Math.max(prev - 1, 0));
+                      }
+                      if (e.key === 'Escape') setShowResultadosCliente(false);
+                    }}
+                    placeholder="Nome, código, CNPJ ou UF"
+                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${clienteSelecionado ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                  />
+                  {loadingCliente ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-blue-500" /> : null}
+                  {showResultadosCliente && resultadosCliente.length > 0 ? (
+                    <div ref={resultadosRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {resultadosCliente.map((cli, idx) => {
+                        const nome = cli.NOMEFANT || cli.NOME || '';
+                        const razao = cli.NOMEFANT ? cli.NOME : '';
+                        const campo = cli._campoBusca || 'nome';
+                        return (
+                          <div key={cli.CODCLI || idx}
+                            tabIndex={0} role="button"
+                            className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 ${idx === clienteIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                            onClick={() => selecionarCliente(cli)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarCliente(cli); } }}
+                          >
+                            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              <span className={campo === 'codcli' ? 'text-blue-600' : ''}>{cli.CODCLI}</span>
+                              <span className="mx-1 text-gray-300">—</span>
+                              <span className={campo === 'nome' ? 'text-blue-600' : ''}>{nome}</span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
+                            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                              {razao ? <span className={campo === 'nome' ? 'text-blue-500' : ''}>{razao}</span> : null}
+                              {cli.CPFCGC ? <span className={campo === 'cpfcgc' ? 'text-blue-600 font-semibold' : ''}>{cli.CPFCGC}</span> : null}
+                              {cli.UF ? <span className={campo === 'uf' ? 'text-blue-600 font-semibold' : ''}>{cli.CIDADE ? `${cli.CIDADE}/${cli.UF}` : cli.UF}</span> : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
-              {/* Vendedor + Operador — 50% dividido em 2, altura total = h-9 */}
-              <div className="w-[50%] flex gap-3">
-                {/* Vendedor */}
-                <div className="flex-1 h-9 flex flex-col justify-between px-1 py-0.5">
-                  <div className="flex items-center gap-1 leading-none">
-                    <input
-                      type="checkbox"
-                      checked={checkVendedor}
-                      onChange={() => {
-                        const novoCheck = !checkVendedor;
-                        if (novoCheck) {
-                          setOpenVendedor(true);
-                        } else {
-                          // Restaura vendedor do usuário logado
-                          const vendedorUsuario = dadosVendedor.filter(
-                            (val: any) => val.CODVEND === user?.codusr,
-                          );
-                          if (vendedorUsuario.length) {
-                            setVendedorSel({ nome: vendedorUsuario[0].NOME, codigo: vendedorUsuario[0].CODVEND });
-                          }
-                        }
-                        setCheckVendedor(novoCheck);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+              {/* Busca vendedor */}
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 mb-0.5 block">Vendedor</label>
+                <div className="relative">
+                  {vendedorSel.codigo && temEV ? (
+                    <button onClick={() => {
+                      setVendedorSel({ codigo: '', nome: '' });
+                      setBuscaVendedor('');
+                      vendedorInputRef.current?.focus();
+                    }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar vendedor (Enter)">
+                      <X size={14} />
+                    </button>
+                  ) : !vendedorSel.codigo ? (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  ) : null}
+                  <input
+                    ref={vendedorInputRef}
+                    tabIndex={vendedorSel.codigo ? -1 : 0}
+                    type="text"
+                    value={buscaVendedor}
+                    onChange={(e) => { if (temEV && !vendedorSel.codigo) setBuscaVendedor(e.target.value); }}
+                    readOnly={!temEV || !!vendedorSel.codigo}
+                    onKeyDown={(e) => {
+                      if (!temEV || vendedorSel.codigo) return;
+                      if (e.key === 'Enter') {
+                        if (showResultadosVendedor && vendedorIdx >= 0 && resultadosVendedor[vendedorIdx]) {
                           e.preventDefault();
-                          (e.target as HTMLInputElement).click();
+                          selecionarVendedor(resultadosVendedor[vendedorIdx]);
+                          return;
                         }
-                      }}
-                      className="accent-indigo-600 w-3 h-3"
-                    />
-                    <span className="text-[10px] font-medium text-indigo-600">Vendedor <span className="text-[8px] text-gray-400">(F3)</span></span>
-                  </div>
-                  <div className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate leading-none">
-                    {vendedorSel.codigo ? `${vendedorSel.codigo} - ${vendedorSel.nome.substring(0, 30)}` : '-'}
-                  </div>
-                  {openVendedor ? <SelecionarVendedor handleVendedor={handleVendedor} /> : null}
+                        if (buscaVendedor.trim().length >= 3) buscarVendedorOperador(buscaVendedor, 'vendedor');
+                        return;
+                      }
+                      if (e.key === 'ArrowDown' && showResultadosVendedor && resultadosVendedor.length > 0) {
+                        e.preventDefault();
+                        setVendedorIdx((prev) => Math.min(prev + 1, resultadosVendedor.length - 1));
+                      }
+                      if (e.key === 'ArrowUp' && showResultadosVendedor) {
+                        e.preventDefault();
+                        setVendedorIdx((prev) => Math.max(prev - 1, 0));
+                      }
+                      if (e.key === 'Escape') setShowResultadosVendedor(false);
+                    }}
+                    placeholder={temEV ? 'Buscar vendedor' : 'Sem permissão'}
+                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${!temEV || vendedorSel.codigo ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 truncate`}
+                  />
+                  {loadingVendedor ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-indigo-500" /> : null}
+                  {showResultadosVendedor && resultadosVendedor.length > 0 ? (
+                    <div ref={resultadosVendedorRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {resultadosVendedor.map((v, idx) => (
+                        <div key={v.codigo || idx}
+                          tabIndex={0} role="button"
+                          className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 text-sm font-semibold text-gray-900 dark:text-gray-100 ${idx === vendedorIdx ? 'bg-indigo-50 dark:bg-indigo-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onClick={() => selecionarVendedor(v)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarVendedor(v); } }}
+                        >
+                          {v.codigo} - {v.nome}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
+              </div>
 
-                {/* Operador */}
-                <div className="flex-1 h-9 flex flex-col justify-between px-1 py-0.5">
-                  <div className="flex items-center gap-1 leading-none">
-                    <input
-                      type="checkbox"
-                      checked={checkOperador}
-                      onChange={() => {
-                        const novoCheck = !checkOperador;
-                        setCheckOperador(novoCheck);
-                        if (novoCheck) {
-                          setOpenOperador(true);
-                        } else {
-                          setOperadorSel({ codigo: '', nome: '' });
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+              {/* Busca operador */}
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-lime-600 dark:text-lime-400 mb-0.5 block">Operador</label>
+                <div className="relative">
+                  {operadorSel.codigo ? (
+                    <button onClick={() => {
+                      setOperadorSel({ codigo: '', nome: '' });
+                      setBuscaOperador('');
+                      operadorInputRef.current?.focus();
+                    }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar operador (Enter)">
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  )}
+                  <input
+                    ref={operadorInputRef}
+                    tabIndex={operadorSel.codigo ? -1 : 0}
+                    type="text"
+                    value={buscaOperador}
+                    readOnly={!!operadorSel.codigo}
+                    onChange={(e) => { if (!operadorSel.codigo) setBuscaOperador(e.target.value); }}
+                    onKeyDown={(e) => {
+                      if (operadorSel.codigo) return;
+                      if (e.key === 'Enter') {
+                        if (showResultadosOperador && operadorIdx >= 0 && resultadosOperador[operadorIdx]) {
                           e.preventDefault();
-                          (e.target as HTMLInputElement).click();
+                          selecionarOperador(resultadosOperador[operadorIdx]);
+                          return;
                         }
-                      }}
-                      className="accent-lime-600 w-3 h-3"
-                    />
-                    <span className="text-[10px] font-medium text-lime-600">Operador <span className="text-[8px] text-gray-400">(F4)</span></span>
-                  </div>
-                  <div className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate leading-none">
-                    {operadorSel.nome ? operadorSel.nome.substring(0, 30) : '-'}
-                  </div>
-                  {openOperador ? <SelecionarOperador handleOperador={handleOperador} /> : null}
+                        if (buscaOperador.trim().length >= 3) buscarVendedorOperador(buscaOperador, 'operador');
+                        return;
+                      }
+                      if (e.key === 'ArrowDown' && showResultadosOperador && resultadosOperador.length > 0) {
+                        e.preventDefault();
+                        setOperadorIdx((prev) => Math.min(prev + 1, resultadosOperador.length - 1));
+                      }
+                      if (e.key === 'ArrowUp' && showResultadosOperador) {
+                        e.preventDefault();
+                        setOperadorIdx((prev) => Math.max(prev - 1, 0));
+                      }
+                      if (e.key === 'Escape') setShowResultadosOperador(false);
+                    }}
+                    placeholder="Buscar operador"
+                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${operadorSel.codigo ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-lime-400 truncate`}
+                  />
+                  {loadingOperador ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-lime-500" /> : null}
+                  {showResultadosOperador && resultadosOperador.length > 0 ? (
+                    <div ref={resultadosOperadorRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {resultadosOperador.map((v, idx) => (
+                        <div key={v.codigo || idx}
+                          tabIndex={0} role="button"
+                          className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 text-sm font-semibold text-gray-900 dark:text-gray-100 ${idx === operadorIdx ? 'bg-lime-50 dark:bg-lime-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onClick={() => selecionarOperador(v)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarOperador(v); } }}
+                        >
+                          {v.codigo} - {v.nome}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -712,7 +1075,7 @@ const NovaVendaV2 = () => {
           {/* Grid de itens */}
           <div className="flex-1 flex flex-col px-3 py-2 overflow-hidden">
             {/* Toolbar */}
-            <div className="flex items-center justify-between py-1">
+            <div ref={toolbarRef} className="flex items-center justify-between py-1">
               <div className="flex items-center gap-3">
                 <button onClick={() => setAddItemOpen(true)}
                   className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md">
@@ -742,7 +1105,11 @@ const NovaVendaV2 = () => {
               .venda-grid .ag-row .ag-cell[col-id="prunit"] { background-color: #eff6ff !important; }
               .venda-grid .ag-row .ag-cell[col-id="desconto_percentual"] { background-color: #f5f3ff !important; }
               .venda-grid .ag-cell-focus { outline: 2px solid #a8a29e !important; outline-offset: -2px; background-color: rgba(0,0,0,0.05) !important; }
+              .venda-grid .ag-root-wrapper { border: 1px solid #d1d5db !important; }
+              .venda-grid .ag-header { background-color: #f3f4f6 !important; border-bottom: 2px solid #d1d5db !important; }
               .venda-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
+              .venda-grid .ag-header-cell:last-child { border-right: none !important; }
+              .venda-grid .ag-row .ag-cell:last-child { border-right: none !important; }
               .venda-grid .ag-header-cell-resize { width: 4px !important; cursor: col-resize !important; }
               .venda-grid .ag-header-cell-label { justify-content: center !important; font-size: 11px !important; text-align: center !important; }
               .venda-grid .ag-header-cell-text { text-align: center !important; width: 100% !important; }
@@ -766,7 +1133,17 @@ const NovaVendaV2 = () => {
                 rowData={itensGrid}
                 columnDefs={itensColumnDefs}
                 defaultColDef={{ sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true }}
+                onGridReady={onGridReady}
+                onColumnResized={onColumnResized}
+                onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
+                onCellKeyDown={(e: any) => {
+                  if (e.event?.key === 'Enter' && e.column?.getColId() === '_delete' && e.data?.codprod) {
+                    e.event.preventDefault();
+                    e.event.stopImmediatePropagation();
+                    handleRemoverItem(e.data.codprod);
+                  }
+                }}
                 onCellFocused={(e: any) => {
                   if (e.rowIndex != null) {
                     const rowNode = gridRef.current?.api?.getDisplayedRowAtIndex(e.rowIndex);
@@ -783,23 +1160,161 @@ const NovaVendaV2 = () => {
                 }}
                 stopEditingWhenCellsLoseFocus={true}
                 singleClickEdit={false}
-                enterNavigatesVertically={true}
-                enterNavigatesVerticallyAfterEdit={true}
+                enterNavigatesVertically={false}
+                enterNavigatesVerticallyAfterEdit={false}
                 alwaysShowVerticalScroll={true}
                 suppressHorizontalScroll={true}
                 getRowId={(params: any) => params.data.codprod}
                 suppressRowHoverHighlight={true}
+                suppressHeaderFocus={true}
+                overlayNoRowsTemplate={'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:#9ca3af"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;opacity:0.4"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg><span style="font-size:14px;font-weight:600">Carrinho vazio</span><span style="font-size:12px;margin-top:4px">Adicione itens com o botão acima ou Ctrl++</span></div>'}
+                tabToNextCell={tabToNextCellHandler as any}
                 rowHeight={48}
               />
             </div>
           </div>
 
-          {/* Rodapé resumo */}
-          <div className="px-3 py-2 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-sm">
+          {/* Painel de finalização */}
+          <div ref={painelFinRef} className="shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-4 py-3">
+            {/* Linha 1: Documento, Prazo, Forma Pagamento */}
+            <div className="grid grid-cols-3 gap-3">
+              {/* Documento */}
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Documento</label>
+                <SelecionarDocumento
+                  dadosDocumento={dadosDocumento}
+                  handleDocumento={(doc: any) => setDocumento(doc)}
+                />
+              </div>
+
+              {/* Prazo */}
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Prazo</label>
+                <input type="text" readOnly value={
+                  clienteSelecionado && (Number(clienteSelecionado.saldo || 0) - totalVenda <= 0) ? 'À VISTA' : prazo || ''
+                }
+                  onFocus={() => {
+                    if (clienteSelecionado && (Number(clienteSelecionado.saldo || 0) - totalVenda > 0)) {
+                      setOpenModalPrazo(true);
+                    }
+                  }}
+                  placeholder="Clique para definir prazo"
+                  className={`w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400 ${!prazo && clienteSelecionado ? 'bg-red-50 dark:bg-red-900/20' : ''}`} />
+              </div>
+
+              {/* Forma de Pagamento */}
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Forma Pagamento</label>
+                <Select value={fPagamento} onValueChange={(v) => setFPagamento(v)}>
+                  <SelectTrigger className={`h-8 text-xs ${!fPagamento ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opcoesFPFiltradas.map((fp) => (
+                      <SelectItem key={fp.id} value={fp.id}>{fp.descricao}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Linha 3: Transportadora, Valor Transporte, Obs Fat, Pedido */}
+            <div className="grid grid-cols-4 gap-3 mt-2">
+              {/* Transportadora (componente já tem label interno) */}
+              <div>
+                <SelecionarTransporte
+                  dadosTransporte={dadosTransporte}
+                  transporteSel={transporteSel}
+                  obrigTransporte={false}
+                  handleTransporteSel={(t: any) => setTransporteSel(t)}
+                />
+              </div>
+
+              {/* Valor Transporte — máscara R$ */}
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Valor Transporte</label>
+                <input type="text" value={valTransp}
+                  onFocus={(e) => { e.target.select(); }}
+                  onChange={(e) => {
+                    const nums = e.target.value.replace(/\D/g, '');
+                    const dec = Number(nums) / 100;
+                    setValTranspDec(dec);
+                    setValTransp(dec.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' }));
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const next = (e.target as HTMLElement).closest('.grid')?.querySelector<HTMLElement>('input:not([readonly]) + div input, input:not([readonly])'); if (next && next !== e.target) next.focus(); else navegarFocavel('next'); } }}
+                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+
+              {/* Obs Fat */}
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Obs. Faturamento</label>
+                <input type="text" value={obsFat} onChange={(e) => setObsFat(e.target.value)} placeholder="Obs. Fat"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+
+              {/* Pedido */}
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Pedido</label>
+                <input type="text" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+            </div>
+
+            {/* Linha 4: Obs + Requisição */}
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Observação</label>
+                <input type="text" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Observação"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Requisição</label>
+                <input type="text" value={requisicao} onChange={(e) => setRequisicao(e.target.value)} placeholder="Requisição"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              </div>
+            </div>
+
+            {/* Modal Prazo */}
+            {openModalPrazo ? (
+              <ModalPrazoParcelas
+                onClose={() => setOpenModalPrazo(false)}
+                onConfirm={(prazos: any[]) => {
+                  const prazoStr = prazos.map((p: any) => p.dias).join(' ');
+                  setPrazo(prazoStr);
+                  setOpenModalPrazo(false);
+                }}
+              />
+            ) : null}
+
+            {/* Linha final: Totais + Saldo + Botões */}
+            <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center gap-4">
                 <span className="text-sm font-semibold text-gray-500">{totalItens} itens</span>
                 <span className="font-bold text-xl text-blue-600">Total: {formatCurrency(totalVenda)}</span>
+                {clienteSelecionado ? (
+                  <>
+                    <span className="text-xs text-gray-500">Saldo: <span className={Number(clienteSelecionado.saldo || 0) > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0))}</span></span>
+                    <span className="text-xs text-gray-500">Pós venda: <span className={Number(clienteSelecionado.saldo || 0) - totalVenda > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0) - totalVenda)}</span></span>
+                  </>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={totalItens === 0 || !clienteSelecionado}
+                  className="px-4 py-1.5 text-xs font-bold rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Salvar Orçamento
+                </button>
+                <button
+                  disabled={totalItens === 0 || !clienteSelecionado}
+                  className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Finalizar Venda
+                </button>
               </div>
             </div>
           </div>
@@ -844,6 +1359,40 @@ const NovaVendaV2 = () => {
           <span className="ml-auto text-[10px] text-gray-400">F10</span>
         </ContextMenuItem>
       </ContextMenuContent>
+
+      {/* Modais */}
+      <ModalAdicionarItemRapido
+        isOpen={addItemOpen}
+        onClose={() => { setAddItemOpen(false); restaurarFocoGrid(); }}
+        onAdicionarItens={handleAdicionarItens}
+        itensExistentes={itensGrid.map((i) => i.codprod)}
+      />
+
+      {zoomProduto ? (
+        <ProductZoomModal
+          open={!!zoomProduto}
+          onOpenChange={(open) => { if (!open) { setZoomProduto(null); restaurarFocoGrid(); } }}
+          productId={zoomProduto.codprod}
+        />
+      ) : null}
+
+      {modalEquivalentes && produtoEquivalente ? (
+        <ModalEquivalentes
+          isOpen={modalEquivalentes}
+          onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); restaurarFocoGrid(); }}
+          onAdicionarItens={handleAdicionarItens}
+          itensExistentes={itensGrid.map((i) => i.codprod)}
+          produto={produtoEquivalente}
+        />
+      ) : null}
+
+      {modalHistProduto && produtoHist ? (
+        <ModalHistoricoProduto
+          isOpen={modalHistProduto}
+          onClose={() => { setModalHistProduto(false); setProdutoHist(null); restaurarFocoGrid(); }}
+          produto={produtoHist}
+        />
+      ) : null}
     </ContextMenu>
   );
 };
