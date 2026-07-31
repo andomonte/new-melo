@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Play, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import MessageModal from '@/components/common/MessageModal';
@@ -23,8 +23,6 @@ export const ProcessNFeModal: React.FC<ProcessNFeModalProps> = ({
   const [showMessage, setShowMessage] = useState(false);
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
 
-  if (!isOpen) return null;
-
   const handleProcess = async () => {
     try {
       // Todos os itens são obrigatórios, processar todos
@@ -41,6 +39,26 @@ export const ProcessNFeModal: React.FC<ProcessNFeModalProps> = ({
       setShowMessage(true);
     }
   };
+
+  // Enter processa, Esc cancela (não interfere no MessageModal aninhado).
+  useEffect(() => {
+    if (!isOpen || showMessage) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (loading) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleProcess();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, showMessage, loading]);
+
+  if (!isOpen) return null;
 
   const totalValue = nfe.itens?.reduce((sum, item) => sum + item.valorTotal, 0) || 0;
 

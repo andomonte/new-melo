@@ -311,10 +311,12 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
 }) => {
   const { toast } = useToast();
   const { user } = useContext(AuthContext);
-  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+  const { pedirConfirmacao, ConfirmacaoSalvarModal, aberto: confirmacaoAberta } = useConfirmarSalvar({
     title: 'Confirmar',
     message: '',
   });
+  // Corpo rolável do modal — para rolar com ↑/↓.
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [transportadoraXml, setTransportadoraXml] = useState<TransportadoraXml | null>(null);
   // Status do casamento automático por CNPJ (espelha CON_FORNECEDOR/CON_TRANSP
@@ -800,6 +802,28 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
 
     // ===== Travas OBRIGATÓRIAS (bloqueiam sempre, sem bypass) =====
 
+    // Vários cadastros com o MESMO CNPJ: obriga escolher UM específico. O modo
+    // "Usar dados da NFe" não define qual dos cadastros usar, então sem escolha
+    // explícita não pode avançar (antes passava direto).
+    if (matchFornec === 'multiplos' && !formData.fornecedor) {
+      return pedirConfirmacao(() => {}, {
+        title: 'Fornecedor obrigatório',
+        message: 'Há vários cadastros com esse CNPJ. Selecione o fornecedor correto na lista.',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+    if (matchTransp === 'multiplos' && !formData.transportadora) {
+      return pedirConfirmacao(() => {}, {
+        title: 'Transportadora obrigatória',
+        message: 'Há vários cadastros com esse CNPJ. Selecione a transportadora correta na lista.',
+        type: 'warning',
+        confirmText: 'OK',
+        somenteOk: true,
+      });
+    }
+
     // Fornecedor: precisa estar associado ao cadastro OU marcado "Usar dados da
     // NFe". Considera a flag `usarFornecedorNfe` (a mesma que o salvamento usa),
     // senão a trava fica inconsistente entre um clique e outro.
@@ -855,6 +879,44 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     }
   };
 
+  // Enter avança (Avançar), Esc volta (fecha). Enter é ignorado ao digitar num
+  // campo e quando a confirmação estilizada está aberta.
+  useEffect(() => {
+    if (!isOpen || confirmacaoAberta) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (loading) return;
+      const ae = document.activeElement as HTMLElement | null;
+      const emCampo =
+        !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable);
+      // Campo de texto realmente editável (readonly não conta — nele a seta rola).
+      const emCampoEditavel =
+        !!ae &&
+        ((ae.tagName === 'INPUT' && !(ae as HTMLInputElement).readOnly && !(ae as HTMLInputElement).disabled) ||
+          ae.tagName === 'TEXTAREA' ||
+          ae.tagName === 'SELECT' ||
+          ae.isContentEditable);
+
+      if (e.key === 'Enter') {
+        if (emCampo) return;
+        e.preventDefault();
+        handleConfirm();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !emCampoEditavel) {
+        // Rola o corpo do modal com as setas (fora de campos editáveis).
+        const el = scrollBodyRef.current;
+        if (el) {
+          e.preventDefault();
+          el.scrollBy({ top: e.key === 'ArrowDown' ? 80 : -80, behavior: 'smooth' });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, confirmacaoAberta, loading]);
+
   if (!isOpen) return null;
 
   return (
@@ -877,7 +939,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(95vh-140px)]">
+        <div ref={scrollBodyRef} className="p-6 space-y-6 overflow-y-auto max-h-[calc(95vh-140px)]">
           {/* Dados da Nota Fiscal (Read-only) */}
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
             <h3 className="text-lg font-medium text-blue-800 dark:text-blue-200 mb-4 flex items-center">

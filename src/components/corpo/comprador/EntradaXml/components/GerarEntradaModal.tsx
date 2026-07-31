@@ -70,7 +70,7 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
   });
 
   // Ao finalizar: gerar a entrada agora (cria dbent) ou salvar e gerar depois (fila).
-  const [gerarAgora, setGerarAgora] = useState(true);
+  const [gerarAgora, setGerarAgora] = useState(false);
 
   const [confirmacoesPendentes, setConfirmacoesPendentes] = useState<string[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -260,6 +260,31 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
       setShowMessage(true);
     }
   };
+
+  // Enter dispara a ação principal (Gerar Entrada / Salvar Configuração) e Esc
+  // cancela — só quando nenhum sub-modal está aberto e a ação está habilitada.
+  // Enter é ignorado enquanto o foco está num campo de texto (ex.: Observações).
+  useEffect(() => {
+    if (!isOpen) return;
+    if (showConfirmation || showMessage || showConfigPagamentoNFe || showCadastroConhecimento) return;
+    const onKey = (e: KeyboardEvent) => {
+      const ae = document.activeElement as HTMLElement | null;
+      const emCampo =
+        !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable);
+      if (e.key === 'Enter') {
+        if (emCampo || loading || !pagamentoNFeConfigurado) return;
+        e.preventDefault();
+        handleGerarEntrada();
+      } else if (e.key === 'Escape') {
+        if (loading) return;
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, showConfirmation, showMessage, showConfigPagamentoNFe, showCadastroConhecimento, loading, pagamentoNFeConfigurado, gerarAgora]);
 
   if (!isOpen) return null;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, ChevronUp, Loader2, Wand2, Trash2 } from 'lucide-react';
+import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, ChevronUp, ChevronLeft, Loader2, Wand2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import InputMoeda from '@/components/common/InputMoeda';
@@ -28,6 +28,8 @@ interface NFeItemsAssociationModalProps {
   onClose: () => void;
   onComplete: (associatedItems: AssociatedItem[]) => void;
   onRefetch?: () => void;
+  /** Volta para a etapa anterior (Confirmação dos Dados da Nota). */
+  onVoltar?: () => void;
   loading?: boolean;
   userId?: string;
   userName?: string;
@@ -204,6 +206,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
   onClose,
   onComplete,
   onRefetch,
+  onVoltar,
   loading = false,
   userId,
   userName
@@ -1202,7 +1205,16 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
   const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<NFeItem>({
     data: itensVisiveis,
     ativo: isOpen && !algumSubmodalAberto,
-    onEnter: (row) => handleAssociarProduto(row),
+    onEnter: (row) => {
+      // Se tudo já foi associado, Enter CONCLUI; senão abre a associação da linha.
+      const podeConcluir =
+        allItemsAssociated && associatedCount > 0 && !loading && !salvandoAssociacoes && !algumaMeiaNotaInvalida;
+      if (podeConcluir) {
+        handleConfirmarAssociacoes();
+      } else if (row) {
+        handleAssociarProduto(row);
+      }
+    },
     atalhos: [
       {
         key: ' ',
@@ -1907,14 +1919,26 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
         {/* Footer com resumo do status */}
         <div className="flex justify-between items-center gap-4 px-6 py-3 border-t border-gray-200 dark:border-gray-600 flex-shrink-0">
-          <Button
-            variant="outline"
-            onClick={onClose}
-            disabled={loading}
-          >
-            <X size={16} className="mr-2" />
-            Cancelar
-          </Button>
+          <div className="flex items-center gap-2">
+            {onVoltar && (
+              <Button
+                variant="outline"
+                onClick={onVoltar}
+                disabled={loading}
+              >
+                <ChevronLeft size={16} className="mr-2" />
+                Voltar
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={loading}
+            >
+              <X size={16} className="mr-2" />
+              Cancelar
+            </Button>
+          </div>
 
           {/* Resumo do status (antes era o painel lateral) */}
           <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">

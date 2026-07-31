@@ -110,6 +110,9 @@ export default async function handler(
         COALESCE(oc.orc_id, 0) as "ordemCompra",
         oc.orc_data as "dataOrdem",
         oc.orc_status as "statusOrdem",
+        cli.nome as "cliente",
+        v.nome as "vendedor",
+        usr.nomeusr as "usuario",
         COALESCE((
           SELECT SUM(itr_quantidade * itr_pr_unitario)
           FROM db_manaus.cmp_it_requisicao
@@ -120,6 +123,10 @@ export default async function handler(
       LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
       LEFT JOIN db_manaus.cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
       LEFT JOIN db_manaus.cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
+      LEFT JOIN db_manaus.dbusuario usr ON r.req_codusr = usr.codusr
+      LEFT JOIN db_manaus.cmp_venda_casada vc ON (r.req_id = vc.vec_req_id AND r.req_versao = vc.vec_req_versao)
+      LEFT JOIN db_manaus.dbclien cli ON vc.vec_codcli = cli.codcli
+      LEFT JOIN db_manaus.dbvend v ON vc.vec_codvend = v.codvend
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id, orc_data, orc_status
@@ -304,6 +311,9 @@ export default async function handler(
       ordemCompra: row.ordemCompra,
       dataOrdem: row.dataOrdem,
       statusOrdem: row.statusOrdem,
+      cliente: row.cliente,
+      vendedor: row.vendedor,
+      usuario: row.usuario,
       valorTotal: parseFloat(row.valorTotal) || 0
     }));
 

@@ -43,7 +43,10 @@ export const formatTableData = (data: RequisitionDTO[], headers: string[]) => {
       // Format status with simple text
       if (col.toLowerCase().includes('status')) {
         // Se for statusOrdem e não tiver ordem, mostrar '-'
-        if (col.toLowerCase().includes('ordem') && (!item.ordemCompra || item.ordemCompra === 0)) {
+        if (
+          col.toLowerCase().includes('ordem') &&
+          (!item.ordemCompra || item.ordemCompra === '0')
+        ) {
           v = '-';
         } else {
           // Determinar se é status de requisição ou ordem

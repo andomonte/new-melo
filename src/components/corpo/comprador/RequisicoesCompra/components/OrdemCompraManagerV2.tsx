@@ -187,10 +187,14 @@ export default function OrdensComprasListImproved({
   // de coluna usa "contém" com o rótulo, que não bate com o código 'A'/'F'/'C').
   const [statusFiltro, setStatusFiltro] = useState<string>('');
   const filtrosComStatus = useMemo(() => {
-    const base = (filtros || []).filter((f: any) => f.campo !== 'statusOrdem');
-    return statusFiltro
-      ? [...base, { campo: 'statusOrdem', tipo: 'igual', valor: statusFiltro }]
-      : base;
+    // Dropdown do topo tem precedência (filtra por código). Sem ele, o filtro
+    // rápido da COLUNA "Status Ordem" passa direto — o backend (buscaOrdens)
+    // agora traduz o rótulo digitado ("Cancelada"/"canc"/"C") para o código.
+    if (statusFiltro) {
+      const base = (filtros || []).filter((f: any) => f.campo !== 'statusOrdem');
+      return [...base, { campo: 'statusOrdem', tipo: 'igual', valor: statusFiltro }];
+    }
+    return filtros || [];
   }, [filtros, statusFiltro]);
 
   // Ordenação server-side (ordena todas as páginas).
@@ -460,11 +464,26 @@ export default function OrdensComprasListImproved({
     };
   }, [dropdownStates]);
 
+  // Todas as colunas conhecidas (para formatar e para o `headers` do grid),
+  // evitando célula em branco quando a coluna vem das preferências mas não
+  // está no subconjunto do hook (mesmo ajuste da tela de requisições).
+  const colunasParaFormatar = useMemo(
+    () => colunasDbOrdem.map((c) => c.campo).filter((c) => c !== 'AÇÕES' && c !== 'selecionar'),
+    [],
+  );
+  const controlledHeaders = useMemo(() => {
+    const resultado = [...headers];
+    colunasDbOrdem.forEach((c) => {
+      if (!resultado.includes(c.campo)) resultado.push(c.campo);
+    });
+    return resultado;
+  }, [headers]);
+
   // Format table data for orders
   const formattedData = data.map((item) => {
     const row: Record<string, any> = {};
 
-    headers.forEach((col) => {
+    colunasParaFormatar.forEach((col) => {
       if (col === 'selecionar' || col === 'AÇÕES') return;
 
       let v = item[col as keyof OrdemCompraDTO];
@@ -929,7 +948,7 @@ export default function OrdensComprasListImproved({
         screenKey="compras-ordens"
         userName={user?.usuario}
         carregando={loading}
-        headers={headers}
+        headers={controlledHeaders}
         rows={rows}
         meta={meta}
         semColunaDeAcaoPadrao
@@ -1266,6 +1285,10 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
   const [baixarQuantidade, setBaixarQuantidade] = useState(1);
   const [baixarSubmitting, setBaixarSubmitting] = useState(false);
 
+  // Navegação por teclado nos itens: ↑/↓ movem a linha e o scroll acompanha.
+  const [linhaItem, setLinhaItem] = useState<number>(-1);
+  const itemRowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
+
   const fetchItens = async () => {
     try {
       setLoading(true);
@@ -1283,6 +1306,39 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
   useEffect(() => {
     fetchItens();
   }, [ordem, refreshKey]);
+
+  // Seleciona a primeira linha e mantém a seleção válida conforme os itens mudam.
+  useEffect(() => {
+    setLinhaItem((i) => {
+      if (itens.length === 0) return -1;
+      if (i < 0) return 0;
+      return Math.min(i, itens.length - 1);
+    });
+  }, [itens.length]);
+
+  // Scroll acompanha a linha selecionada (dentro do corpo do modal).
+  useEffect(() => {
+    if (linhaItem >= 0) itemRowRefs.current[linhaItem]?.scrollIntoView({ block: 'nearest' });
+  }, [linhaItem]);
+
+  // ↑/↓ navegam os itens — só fora de campos de digitação (ex.: input de baixa).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (itens.length === 0) return;
+      const ae = document.activeElement as HTMLElement | null;
+      const tag = ae?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae?.isContentEditable) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setLinhaItem((i) => Math.min(itens.length - 1, (i < 0 ? -1 : i) + 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setLinhaItem((i) => Math.max(0, (i < 0 ? 0 : i) - 1));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [itens.length]);
 
   // Calcular pendência de um item
   const calcularPendencia = (item: any) => {
@@ -1386,7 +1442,14 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
                       const maxBaixar = pendencia - 1; // Máximo = pendência - 1 (se for total, usar Fechar Item)
 
                       return (
-                        <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <tr
+                          key={index}
+                          ref={(el) => { itemRowRefs.current[index] = el; }}
+                          onClick={() => setLinhaItem(index)}
+                          className={`border-b dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                            index === linhaItem ? 'bg-blue-100 dark:bg-blue-900/40' : ''
+                          }`}
+                        >
                           <td className="p-2 text-gray-900 dark:text-gray-100 font-mono text-sm">{item.codprod}</td>
                           <td className="p-2 text-gray-900 dark:text-gray-100">
                             <div>{item.produto?.descr || item.produto_descr || item.descricao || 'Produto não encontrado'}</div>

@@ -62,6 +62,13 @@ export default async function handler(
   const params: any[] = [];
   const whereGroups: string[] = [];
 
+  // Rótulos dos status (o banco guarda CÓDIGO; a tela mostra o RÓTULO).
+  // Usado para traduzir o texto digitado no filtro → código(s).
+  const rotulosStatus: Record<string, Record<string, string>> = {
+    statusRequisicao: { P: 'Pendente', A: 'Aprovada', R: 'Reprovada', C: 'Cancelada', S: 'Submetida', E: 'Em Análise', F: 'Finalizada' },
+    statusOrdem: { P: 'Pendente', A: 'Aberta', F: 'Finalizada', C: 'Cancelada' },
+  };
+
   // Filtro multi-termo por coluna, estilo Delphi/produtos:
   //   ESPAÇO = E (todas as palavras) · ';' = OU (qualquer grupo)
   //   Combinável: "robert bosch;marelli" = (ROBERT E BOSCH) OU MARELLI
@@ -108,6 +115,43 @@ export default async function handler(
   Object.entries(filtrosAgrupados).forEach(([campo, filtrosDoCampo]) => {
     const coluna = filtroParaColunaSQL[campo];
     if (!coluna) return;
+
+    // Colunas de status: traduz o texto digitado (rótulo completo/parcial ou
+    // o próprio código) para o(s) código(s) e filtra por igualdade (IN).
+    if (rotulosStatus[campo]) {
+      const labels = rotulosStatus[campo];
+      const codigos = new Set<string>();
+      let temValor = false;
+      filtrosDoCampo.forEach((f) => {
+        String(f.valor || '')
+          .split(';')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((termo) => {
+            temValor = true;
+            const up = termo.toUpperCase();
+            if (labels[up]) {
+              codigos.add(up);
+            } else {
+              Object.entries(labels).forEach(([code, label]) => {
+                if (label.toUpperCase().includes(up)) codigos.add(code);
+              });
+            }
+          });
+      });
+      if (temValor) {
+        if (codigos.size > 0) {
+          const ph = [...codigos].map((code) => {
+            params.push(code);
+            return `$${params.length}`;
+          });
+          whereGroups.push(`(${coluna} IN (${ph.join(', ')}))`);
+        } else {
+          whereGroups.push(`(${coluna} = '__SEM_MATCH__')`);
+        }
+      }
+      return; // status tratado; não cai no processamento genérico
+    }
 
     // Identificar tipos de campo
     const camposData = ['dataOrdem', 'dataFinalizacao', 'previsaoChegada', 'prazoEntrega'];

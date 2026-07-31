@@ -348,6 +348,13 @@ export const NFeMain: React.FC = () => {
   };
 
   // Handler para fechar modal de associacao (NAO libera - usuario continua como dono)
+  // Volta da associação para a etapa anterior (Confirmação dos Dados da Nota).
+  const handleVoltarParaConfirmacao = () => {
+    const nfe = itemsAssociationItem;
+    setItemsAssociationItem(null);
+    if (nfe) setConfigureItem(nfe);
+  };
+
   const handleCloseItemsAssociationModal = () => {
     setItemsAssociationItem(null);
     // Atualiza lista para mostrar status atual
@@ -1335,6 +1342,7 @@ export const NFeMain: React.FC = () => {
           isOpen={!!itemsAssociationItem}
           nfe={itemsAssociationItem}
           onClose={handleCloseItemsAssociationModal}
+          onVoltar={handleVoltarParaConfirmacao}
           onComplete={handleItemsAssociationComplete}
           onRefetch={refetch}
           loading={actionLoading}

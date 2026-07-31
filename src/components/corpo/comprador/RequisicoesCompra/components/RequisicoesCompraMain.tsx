@@ -137,10 +137,14 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
   // um filtro igual pelo código, combinando com os demais filtros de coluna.
   const [statusFiltro, setStatusFiltro] = useState<string>('');
   const filtrosComStatus = useMemo(() => {
-    const base = (filtros || []).filter((f) => f.campo !== 'statusRequisicao');
-    return statusFiltro
-      ? [...base, { campo: 'statusRequisicao', tipo: 'igual', valor: statusFiltro }]
-      : base;
+    // Dropdown do topo tem precedência (filtra por código). Sem ele, o filtro
+    // rápido da COLUNA "Status Requisição" passa direto — o backend traduz o
+    // rótulo digitado ("Aprovada"/"aprov"/"A") para o código.
+    if (statusFiltro) {
+      const base = (filtros || []).filter((f) => f.campo !== 'statusRequisicao');
+      return [...base, { campo: 'statusRequisicao', tipo: 'igual', valor: statusFiltro }];
+    }
+    return filtros || [];
   }, [filtros, statusFiltro]);
 
   // Ordenação server-side (ordena todas as páginas, não só a visível).
@@ -827,11 +831,26 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
     };
   }, [dropdownStates]);
 
-  // Format table data
-  const controlledHeaders = headers;
-  
-  // Format table data with controlled headers
-  const formattedData = formatTableData(data, controlledHeaders);
+  // O DataTablePadrao só renderiza a CÉLULA de uma coluna se ela existir no
+  // `headers` (usa headers.indexOf(coluna); -1 => pula a célula). A visibilidade
+  // real vem das preferências (ordemColunas/colunasVisiveis) e pode conter
+  // colunas fora do subconjunto do hook (ex.: Status Ordem) — por isso a célula
+  // "sumia". Garantimos que `headers` contenha TODAS as colunas conhecidas.
+  const controlledHeaders = React.useMemo(() => {
+    const resultado = [...headers];
+    colunasDbRequisicao.forEach((c) => {
+      if (!resultado.includes(c.campo)) resultado.push(c.campo);
+    });
+    return resultado;
+  }, [headers]);
+
+  // Formata TODAS as colunas possíveis (não só as visíveis do momento), para
+  // que qualquer coluna exibida sempre tenha célula preenchida.
+  const colunasParaFormatar = React.useMemo(
+    () => colunasDbRequisicao.map((c) => c.campo).filter((c) => c !== 'AÇÕES' && c !== 'selecionar'),
+    [],
+  );
+  const formattedData = formatTableData(data, colunasParaFormatar);
   
   // Add selection checkbox and actions menu columns
   const rows = formattedData.map((row, index) => {

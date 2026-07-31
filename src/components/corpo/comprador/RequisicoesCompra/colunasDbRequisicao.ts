@@ -17,7 +17,7 @@ export const colunasDbRequisicao = [
   // Ordem de Compra (colunas substituíveis)
   { campo: 'ordemCompra', label: 'Ordem Compra' },
   { campo: 'dataOrdem', label: 'Data O.C.' },
-  { campo: 'statusOrdem', label: 'Status O.C.' },
+  { campo: 'statusOrdem', label: 'Status Ordem' },
   { campo: 'previsaoChegada', label: 'Prev. Chegada' },
 
   // Detalhes (colunas substituíveis)

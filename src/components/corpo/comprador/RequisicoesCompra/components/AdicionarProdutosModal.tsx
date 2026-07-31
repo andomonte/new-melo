@@ -114,6 +114,10 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [focarQtdCodprod, setFocarQtdCodprod] = useState<string | null>(null);
+  // Navegação por teclado na lista "Itens no Carrinho": ↑/↓ movem a linha
+  // selecionada e o scroll acompanha (não interfere ao digitar em inputs).
+  const [linhaCarrinho, setLinhaCarrinho] = useState<number>(-1);
+  const carrinhoRowRefs = useRef<Record<number, HTMLDivElement | null>>({});
   // Referências que a última importação NÃO encontrou (para ficar visível na tela).
   const [refsNaoImportadas, setRefsNaoImportadas] = useState<
     { ref: string; qtd: number; motivo: 'nao_encontrado' | 'bloqueado' }[]
@@ -131,6 +135,43 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
       setProdutosSelecionados([]);
     }
   }, [isOpen, produtosJaAdicionados]);
+
+  // Mantém a linha selecionada válida conforme o carrinho muda (seleciona a
+  // primeira quando passa a ter itens; limita ao tamanho ao remover).
+  useEffect(() => {
+    setLinhaCarrinho((i) => {
+      if (produtosSelecionados.length === 0) return -1;
+      if (i < 0) return 0;
+      return Math.min(i, produtosSelecionados.length - 1);
+    });
+  }, [produtosSelecionados.length]);
+
+  // Scroll acompanha a linha selecionada (dentro do container do carrinho).
+  useEffect(() => {
+    if (linhaCarrinho >= 0) {
+      carrinhoRowRefs.current[linhaCarrinho]?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [linhaCarrinho]);
+
+  // ↑/↓ navegam o carrinho — só fora de campos de digitação (busca/preço/qtd).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (produtosSelecionados.length === 0) return;
+      const ae = document.activeElement as HTMLElement | null;
+      const tag = ae?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || ae?.isContentEditable) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setLinhaCarrinho((i) => Math.min(produtosSelecionados.length - 1, (i < 0 ? -1 : i) + 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setLinhaCarrinho((i) => Math.max(0, (i < 0 ? 0 : i) - 1));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, produtosSelecionados.length]);
 
   const buscarProdutos = async (termoBusca: string, paginaAtual: number = 1) => {
     setLoading(true);
@@ -920,10 +961,14 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                   </span>
                 </div>
                 <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-600">
-                  {produtosSelecionados.map((p) => (
+                  {produtosSelecionados.map((p, idx) => (
                     <div
                       key={p.codprod}
-                      className="flex items-center gap-3 py-2 text-sm"
+                      ref={(el) => { carrinhoRowRefs.current[idx] = el; }}
+                      onClick={() => setLinhaCarrinho(idx)}
+                      className={`flex items-center gap-3 py-2 px-2 text-sm cursor-pointer rounded ${
+                        idx === linhaCarrinho ? 'bg-blue-100 dark:bg-blue-900/40' : ''
+                      }`}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate text-gray-900 dark:text-gray-100">

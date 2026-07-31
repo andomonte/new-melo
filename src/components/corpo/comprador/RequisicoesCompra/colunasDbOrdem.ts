@@ -24,7 +24,7 @@ export const colunasDbOrdem = [
   { campo: 'usuarioResponsavel', label: 'Responsável' },
 
   // Detalhes adicionais (colunas substituíveis) - apenas campos que existem na API
-  { campo: 'valorTotal', label: 'Valor Total' },
+  { campo: 'valorTotal', label: 'Total da Ordem' },
   { campo: 'observacao', label: 'Observação' },
 
   // Coluna de ações (sempre última e fixa)

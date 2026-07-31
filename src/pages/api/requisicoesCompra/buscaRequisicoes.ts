@@ -27,6 +27,8 @@ const filtroParaColunaSQL: Record<string, string> = {
 
   // Campos de ordem de compra
   ordemCompra: 'o.orc_id',
+  statusOrdem: 'o.orc_status',
+  dataOrdem: 'o.orc_data',
   valorTotal: 'COALESCE((SELECT SUM(itr_quantidade * itr_pr_unitario) FROM db_manaus.cmp_it_requisicao WHERE itr_req_id = r.req_id), 0)',
 
   // Cliente / Vendedor (venda casada) e Usuário que cadastrou
@@ -81,6 +83,13 @@ export default async function handler(
 
   const params: any[] = [];
   const whereGroups: string[] = [];
+
+  // Rótulos dos status (o banco guarda CÓDIGO; a tela mostra o RÓTULO).
+  // Usado para traduzir o texto digitado no filtro → código(s).
+  const rotulosStatus: Record<string, Record<string, string>> = {
+    statusRequisicao: { P: 'Pendente', A: 'Aprovada', R: 'Reprovada', C: 'Cancelada', S: 'Submetida', E: 'Em Análise', F: 'Finalizada' },
+    statusOrdem: { P: 'Pendente', A: 'Aberta', F: 'Finalizada', C: 'Cancelada' },
+  };
 
   // Filtro multi-termo por coluna, estilo Delphi/produtos:
   //   ESPAÇO = E (todas as palavras)   ex.: "robert bosch" -> tem ROBERT E BOSCH
@@ -202,6 +211,45 @@ export default async function handler(
     if (!coluna) {
       console.log(`⚠️ Campo de filtro não encontrado: ${campo}`);
       return;
+    }
+
+    // Colunas de status: traduz o texto digitado (rótulo completo/parcial ou
+    // o próprio código) para o(s) código(s) e filtra por igualdade (IN).
+    // Vale para statusRequisicao e statusOrdem — corrige o filtro rápido.
+    if (rotulosStatus[campo]) {
+      const labels = rotulosStatus[campo];
+      const codigos = new Set<string>();
+      let temValor = false;
+      filtrosDoCampo.forEach((f) => {
+        String(f.valor || '')
+          .split(';')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((termo) => {
+            temValor = true;
+            const up = termo.toUpperCase();
+            if (labels[up]) {
+              codigos.add(up); // digitou o código (ex.: "C")
+            } else {
+              Object.entries(labels).forEach(([code, label]) => {
+                if (label.toUpperCase().includes(up)) codigos.add(code); // rótulo (ex.: "canc")
+              });
+            }
+          });
+      });
+      if (temValor) {
+        if (codigos.size > 0) {
+          const ph = [...codigos].map((code) => {
+            params.push(code);
+            return `$${params.length}`;
+          });
+          whereGroups.push(`(${coluna} IN (${ph.join(', ')}))`);
+        } else {
+          // Texto não corresponde a nenhum status → sem resultados (claro p/ o usuário).
+          whereGroups.push(`(${coluna} = '__SEM_MATCH__')`);
+        }
+      }
+      return; // status tratado; não cai no processamento genérico
     }
 
     const filtrosCampoSQL: string[] = [];
@@ -340,6 +388,8 @@ export default async function handler(
           END, ''
         ) as "compradorCompleto",
         COALESCE(o.orc_id::text, '0') as "ordemCompra",
+        o.orc_status as "statusOrdem",
+        o.orc_data as "dataOrdem",
         cli.nome as "cliente",
         v.nome as "vendedor",
         usr.nomeusr as "usuario",
@@ -359,7 +409,7 @@ export default async function handler(
       LEFT JOIN db_manaus.dbvend v ON vc.vec_codvend = v.codvend
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
-               orc_req_id, orc_req_versao, orc_id
+               orc_req_id, orc_req_versao, orc_id, orc_status, orc_data
         FROM db_manaus.cmp_ordem_compra
         ORDER BY orc_req_id, orc_req_versao, orc_id DESC
       ) o ON (r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao)
@@ -387,7 +437,7 @@ export default async function handler(
       LEFT JOIN db_manaus.dbvend v ON vc.vec_codvend = v.codvend
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
-               orc_req_id, orc_req_versao, orc_id
+               orc_req_id, orc_req_versao, orc_id, orc_status, orc_data
         FROM db_manaus.cmp_ordem_compra
         ORDER BY orc_req_id, orc_req_versao, orc_id DESC
       ) o ON (r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao)
@@ -424,6 +474,8 @@ export default async function handler(
       situacao: row.situacao,
       previsaoChegada: row.previsaoChegada,
       ordemCompra: row.ordemCompra,
+      statusOrdem: row.statusOrdem,
+      dataOrdem: row.dataOrdem,
       valorTotal: row.valorTotal,
       cliente: row.cliente,
       vendedor: row.vendedor,

@@ -222,6 +222,11 @@ export async function buscaRequisicoes({
       compradorNome: item.compradorNome,
       compradorCompleto: item.compradorCompleto, // 🔧 CRITICAL FIX: Missing field!
       ordemCompra: item.ordemCompra,
+      statusOrdem: item.statusOrdem as OrderStatus,
+      dataOrdem: item.dataOrdem,
+      cliente: item.cliente,
+      vendedor: item.vendedor,
+      usuario: item.usuario,
       valorTotal: item.valorTotal,
     }));
 

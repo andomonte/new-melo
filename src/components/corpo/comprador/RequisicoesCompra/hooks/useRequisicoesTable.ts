@@ -45,6 +45,8 @@ export const useRequisicoesTable = (colunas: any[]) => {
       'requisicao',
       'dataRequisicao',
       'statusRequisicao',
+      'ordemCompra',
+      'statusOrdem',
       'fornecedorCompleto',
       'compradorCompleto',
     ];
@@ -100,6 +102,16 @@ export const useRequisicoesTable = (colunas: any[]) => {
       }
     }
     
+    // Garante que "Status Ordem" esteja SEMPRE disponível como candidata
+    // (logo após "Ordem Compra", ou após "Status Requisição"). A visibilidade
+    // em si continua controlada pelo seletor de Colunas (DataTablePadrao).
+    if (!finalHeaders.includes('statusOrdem')) {
+      const posOrdem = finalHeaders.indexOf('ordemCompra');
+      const posStatusReq = finalHeaders.indexOf('statusRequisicao');
+      const idx = posOrdem > -1 ? posOrdem + 1 : posStatusReq > -1 ? posStatusReq + 1 : finalHeaders.length;
+      finalHeaders.splice(idx, 0, 'statusOrdem');
+    }
+
     setHeaders(finalHeaders);
 
     const savedLimit = localStorage.getItem(LOCAL_STORAGE_KEYS.LIMIT);

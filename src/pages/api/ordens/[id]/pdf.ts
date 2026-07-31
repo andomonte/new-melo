@@ -16,6 +16,7 @@ declare module 'jspdf' {
 interface OrdemCompraPDFData {
   numeroOC: string;
   dataEmissao: Date;
+  status: string;
   nomeRequisitante: string;
   centroCusto: string;
   setor: string;
@@ -127,9 +128,18 @@ async function buscarDadosOrdem(orcId: string): Promise<OrdemCompraPDFData | nul
     // Montar objeto final com dados reais completos
     const endereco_completo = `${ordem.fornecedor_endereco || ''}${ordem.fornecedor_cidade ? ', ' + ordem.fornecedor_cidade : ''}${ordem.fornecedor_uf ? ' - ' + ordem.fornecedor_uf : ''}`.trim();
     
+    // Status da ordem (mesmos rótulos da tela de Ordens de Compra).
+    const rotuloStatusOrdem: Record<string, string> = {
+      A: 'ABERTA',
+      F: 'FECHADA',
+      C: 'CANCELADA',
+      P: 'PENDENTE',
+    };
+
     const dadosOrdem: OrdemCompraPDFData = {
       numeroOC: ordem.numero_oc,
       dataEmissao: new Date(ordem.orc_data),
+      status: rotuloStatusOrdem[String(ordem.orc_status || '').toUpperCase()] || String(ordem.orc_status || '').toUpperCase() || 'PENDENTE',
       nomeRequisitante: ordem.comprador_nome || 'Não informado',
       centroCusto: ordem.centro_custo || 'MANAUS',
       setor: ordem.comprador_setor || 'Compras',
@@ -299,7 +309,7 @@ function gerarPDF(dados: OrdemCompraPDFData): Buffer {
   pdf.setFontSize(9);
   pdf.text(dados.nomeRequisitante, margemEsquerda + 2, posicaoY + 8);
   pdf.text(formatarData(dados.dataEmissao), margemEsquerda + larguraPagina * 0.4 + 2, posicaoY + 8);
-  pdf.text('PENDENTE', margemEsquerda + larguraPagina * 0.75 + 2, posicaoY + 8);
+  pdf.text(dados.status, margemEsquerda + larguraPagina * 0.75 + 2, posicaoY + 8);
 
   posicaoY += alturaCelula;
 
