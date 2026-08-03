@@ -18,8 +18,6 @@ import ProductZoomModal from '@/components/common/ProductZoomModal';
 import ModalAdicionarItemRapido from '../bloqueadas/ModalAdicionarItemRapido';
 import ModalEquivalentes from '../bloqueadas/ModalEquivalentes';
 import ModalHistoricoProduto from '../bloqueadas/ModalHistoricoProduto';
-import SelecionarTransporte from '../novaVenda/selectTransporte';
-import SelecionarDocumento from '../novaVenda/selectDocumento';
 import ModalPrazoParcelas from '../novaVenda/prazo';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import api from '@/components/services/api';
@@ -57,9 +55,17 @@ const NovaVendaV2 = () => {
   const { toast } = useToast();
   const { user } = useContext(AuthContext) as AuthContextProps;
 
+  // ---------- Persistência sessionStorage ----------
+  const SS_KEY = 'novaVendaV2_draft';
+  const saveDraftRef = useRef<any>(null);
+  const draft = useRef<any>(null);
+  if (draft.current === null) {
+    try { const raw = sessionStorage.getItem(SS_KEY); draft.current = raw ? JSON.parse(raw) : {}; } catch { draft.current = {}; }
+  }
+
   // ---------- Estados do cliente ----------
-  const [clienteSelecionado, setClienteSelecionado] = useState<any>(null);
-  const [buscaCliente, setBuscaCliente] = useState('');
+  const [clienteSelecionado, setClienteSelecionado] = useState<any>(() => draft.current?.clienteSelecionado || null);
+  const [buscaCliente, setBuscaCliente] = useState(() => draft.current?.buscaCliente || '');
   const [loadingCliente, setLoadingCliente] = useState(false);
   const [resultadosCliente, setResultadosCliente] = useState<any[]>([]);
   const [showResultadosCliente, setShowResultadosCliente] = useState(false);
@@ -68,8 +74,8 @@ const NovaVendaV2 = () => {
   const resultadosRef = useRef<HTMLDivElement>(null);
 
   // ---------- Estados do vendedor ----------
-  const [vendedorSel, setVendedorSel] = useState<{ codigo: string; nome: string }>({ codigo: '', nome: '' });
-  const [buscaVendedor, setBuscaVendedor] = useState('');
+  const [vendedorSel, setVendedorSel] = useState<{ codigo: string; nome: string }>(() => draft.current?.vendedorSel || { codigo: '', nome: '' });
+  const [buscaVendedor, setBuscaVendedor] = useState(() => draft.current?.buscaVendedor || '');
   const [resultadosVendedor, setResultadosVendedor] = useState<any[]>([]);
   const [showResultadosVendedor, setShowResultadosVendedor] = useState(false);
   const [vendedorIdx, setVendedorIdx] = useState(-1);
@@ -78,17 +84,19 @@ const NovaVendaV2 = () => {
   const resultadosVendedorRef = useRef<HTMLDivElement>(null);
 
   // ---------- Estados do operador ----------
-  const [operadorSel, setOperadorSel] = useState<{ codigo: string; nome: string }>({ codigo: '', nome: '' });
-  const [buscaOperador, setBuscaOperador] = useState('');
+  const [operadorSel, setOperadorSel] = useState<{ codigo: string; nome: string }>(() => draft.current?.operadorSel || { codigo: '', nome: '' });
+  const [buscaOperador, setBuscaOperador] = useState(() => draft.current?.buscaOperador || '');
   const [resultadosOperador, setResultadosOperador] = useState<any[]>([]);
   const [showResultadosOperador, setShowResultadosOperador] = useState(false);
   const [operadorIdx, setOperadorIdx] = useState(-1);
   const [loadingOperador, setLoadingOperador] = useState(false);
   const operadorInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const transpInputRef = useRef<HTMLInputElement>(null);
   const resultadosOperadorRef = useRef<HTMLDivElement>(null);
 
   // ---------- Estados do grid ----------
-  const [itensGrid, setItensGrid] = useState<any[]>([]);
+  const [itensGrid, setItensGrid] = useState<any[]>(() => draft.current?.itensGrid || []);
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [zoomProduto, setZoomProduto] = useState<any>(null);
   const [modalEquivalentes, setModalEquivalentes] = useState(false);
@@ -97,25 +105,37 @@ const NovaVendaV2 = () => {
   const [produtoHist, setProdutoHist] = useState<any>(null);
 
   // ---------- Estados da finalização ----------
-  const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>({ COD_OPERACAO: '', DESCR: '' });
+  const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>(() => draft.current?.documento || { COD_OPERACAO: '', DESCR: '' });
   const [dadosDocumento, setDadosDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }[]>([]);
-  const [prazo, setPrazo] = useState('');
+  const [buscaDoc, setBuscaDoc] = useState('');
+  const [showDoc, setShowDoc] = useState(false);
+  const [docIdx, setDocIdx] = useState(0);
+  const [buscaTransp, setBuscaTransp] = useState('');
+  const [showTransp, setShowTransp] = useState(false);
+  const [transpIdx, setTranspIdx] = useState(0);
+  const [prazo, setPrazo] = useState(() => draft.current?.prazo || '');
+  const [prazosArray, setPrazosArray] = useState<{ id: number; dataVencimento: Date; dias: number }[]>(() => {
+    const saved = draft.current?.prazosArray;
+    if (Array.isArray(saved)) return saved.map((p: any) => ({ ...p, dataVencimento: new Date(p.dataVencimento) }));
+    return [];
+  });
   const [openModalPrazo, setOpenModalPrazo] = useState(false);
-  const [fPagamento, setFPagamento] = useState('');
+  const [fPagamento, setFPagamento] = useState(() => draft.current?.fPagamento || '');
   const [opcoesFP, setOpcoesFP] = useState<{ id: string; descricao: string }[]>([]);
-  const [transporteSel, setTransporteSel] = useState<{ CODTPTRANSP: string; DESCR: string }>({ CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' });
+  const [transporteSel, setTransporteSel] = useState<{ CODTPTRANSP: string; DESCR: string }>(() => draft.current?.transporteSel || { CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' });
   const [dadosTransporte, setDadosTransporte] = useState<{ CODTPTRANSP: string; DESCR: string }[]>([]);
-  const [valTransp, setValTransp] = useState('R$ 0,00');
-  const [valTranspDec, setValTranspDec] = useState(0);
-  const [obsFat, setObsFat] = useState('');
-  const [pedido, setPedido] = useState('');
-  const [obs, setObs] = useState('');
-  const [requisicao, setRequisicao] = useState('');
+  const [valTransp, setValTransp] = useState(() => draft.current?.valTransp || 'R$ 0,00');
+  const [valTranspDec, setValTranspDec] = useState(() => draft.current?.valTranspDec || 0);
+  const [obsFat, setObsFat] = useState(() => draft.current?.obsFat || '');
+  const [pedido, setPedido] = useState(() => draft.current?.pedido || '');
+  const [obs, setObs] = useState(() => draft.current?.obs || '');
+  const [requisicao, setRequisicao] = useState(() => draft.current?.requisicao || '');
 
   const gridRef = useRef<any>(null);
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const ultimaCelulaRef = useRef<any>(null);
   const modaisAbertosRef = useRef(false);
+  const navegarFocalvelRef = useRef<((d: 'next' | 'prev') => void) | null>(null);
 
   // ---------- Permissões ----------
   const [userPermissions, setUserPermissions] = useState({ cadastrar: false, editar: false, remover: false });
@@ -193,30 +213,64 @@ const NovaVendaV2 = () => {
 
   // ---------- Carregar dados de finalização ----------
   useEffect(() => {
-    // Transportadoras
+    // Transportadoras (com dedupe)
     api.post('/api/dbOracle/buscarTransporte').then(r => {
-      if (r.data) setDadosTransporte(r.data);
+      const rows = Array.isArray(r.data) ? r.data : [];
+      const seen = new Map<string, any>();
+      for (const row of rows) {
+        const key = String(row.CODTPTRANSP || '').trim();
+        if (key && !seen.has(key)) seen.set(key, row);
+      }
+      setDadosTransporte(Array.from(seen.values()));
     }).catch(() => {});
     // Formas de pagamento
     api.get('/api/vendas/fpagamento').then(r => {
       if (r.data) setOpcoesFP(Array.isArray(r.data) ? r.data : []);
     }).catch(() => {});
-    // Documentos
+    // Documentos (com dedupe)
     api.post('/api/dbOracle/buscarDocumento').then(r => {
-      if (r.data) setDadosDocumento(r.data);
+      const rows = Array.isArray(r.data) ? r.data : [];
+      const seen = new Map<string, any>();
+      for (const row of rows) {
+        const key = String(row.COD_OPERACAO || '').trim();
+        if (key && !seen.has(key)) seen.set(key, row);
+      }
+      setDadosDocumento(Array.from(seen.values()));
     }).catch(() => {});
   }, []);
 
-  // Filtrar formas de pagamento por prazo
-  const opcoesFPFiltradas = useMemo(() => {
-    if (!opcoesFP.length) return [];
-    const prazoStr = String(prazo).trim().toUpperCase();
-    const isAvista = !prazoStr || prazoStr === 'A VISTA' || prazoStr === '0';
-    if (isAvista) {
-      return opcoesFP.filter(fp => ['PIX', 'DINHEIRO', 'CARTAO DEBITO', 'CARTAO CREDITO', 'DEBITO', 'CREDITO'].some(t => fp.descricao?.toUpperCase().includes(t)));
-    }
-    return opcoesFP.filter(fp => !fp.descricao?.toUpperCase().includes('OUTROS'));
-  }, [opcoesFP, prazo]);
+  // Filtro de documentos e transportadoras por busca
+  const docsFiltrados = useMemo(() => {
+    if (!buscaDoc.trim()) return dadosDocumento;
+    const v = buscaDoc.toUpperCase();
+    return dadosDocumento.filter(d => (d.DESCR || '').toUpperCase().includes(v) || String(d.COD_OPERACAO || '').includes(v));
+  }, [dadosDocumento, buscaDoc]);
+
+  const transpFiltrados = useMemo(() => {
+    if (!buscaTransp.trim()) return dadosTransporte;
+    const v = buscaTransp.toUpperCase();
+    return dadosTransporte.filter(t => (t.DESCR || '').toUpperCase().includes(v) || String(t.CODTPTRANSP || '').includes(v));
+  }, [dadosTransporte, buscaTransp]);
+
+  // (isAvista, opcoesFPFiltradas movidos para depois de totalVenda)
+
+  // ---------- Persistir draft no sessionStorage ----------
+  useEffect(() => {
+    if (saveDraftRef.current) clearTimeout(saveDraftRef.current);
+    saveDraftRef.current = setTimeout(() => {
+      try {
+        sessionStorage.setItem(SS_KEY, JSON.stringify({
+          clienteSelecionado, buscaCliente,
+          vendedorSel, buscaVendedor,
+          operadorSel, buscaOperador,
+          itensGrid,
+          documento, prazo, prazosArray, fPagamento,
+          transporteSel, valTransp, valTranspDec,
+          obsFat, pedido, obs, requisicao,
+        }));
+      } catch {}
+    }, 500);
+  }, [clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao]);
 
   // ---------- Foco inicial no input cliente ----------
   useEffect(() => {
@@ -277,21 +331,14 @@ const NovaVendaV2 = () => {
     setVendedorSel(v);
     setBuscaVendedor(`${v.codigo} - ${v.nome}`);
     setShowResultadosVendedor(false);
-    // Foco no X após render
-    setTimeout(() => {
-      const btn = vendedorInputRef.current?.parentElement?.querySelector('button') as HTMLElement;
-      if (btn) btn.focus();
-    }, 50);
+    setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
   }, []);
 
   const selecionarOperador = useCallback((v: { codigo: string; nome: string }) => {
     setOperadorSel(v);
     setBuscaOperador(`${v.codigo} - ${v.nome}`);
     setShowResultadosOperador(false);
-    setTimeout(() => {
-      const btn = operadorInputRef.current?.parentElement?.querySelector('button') as HTMLElement;
-      if (btn) btn.focus();
-    }, 50);
+    setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
   }, []);
 
   // ---------- Sync modais abertos ----------
@@ -299,7 +346,7 @@ const NovaVendaV2 = () => {
 
   // Refs para dropdowns (evitar stale closures no handler global)
   const dropdownAbertoRef = useRef(false);
-  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador;
+  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp;
 
   // ---------- Navegação por teclado (Tab + Setas) ----------
   const cabecalhoRef = useRef<HTMLDivElement>(null);
@@ -307,73 +354,150 @@ const NovaVendaV2 = () => {
   const painelFinRef = useRef<HTMLDivElement>(null);
   const COLUNAS_EDITAVEIS = useMemo(() => ['desconto_percentual', 'qtd', 'prunit'], []);
 
-  // Coleta todos os elementos focáveis fora do grid (cabeçalho + toolbar + painel finalização)
-  const getTodosFocaveis = useCallback((): HTMLElement[] => {
-    const els: HTMLElement[] = [];
-    [cabecalhoRef.current, toolbarRef.current, painelFinRef.current].forEach(container => {
-      if (!container) return;
-      container.querySelectorAll<HTMLElement>('input:not([tabindex="-1"]):not([disabled]), button:not([tabindex="-1"]):not([disabled]), select:not([tabindex="-1"]):not([disabled])').forEach(el => {
-        if (el.offsetParent !== null) els.push(el);
-      });
-    });
-    return els;
+  // Coleta focáveis de um container
+  const getFocaveisEm = useCallback((container: HTMLElement | null): HTMLElement[] => {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll<HTMLElement>(
+      'input:not([tabindex="-1"]):not([disabled]), button:not([tabindex="-1"]):not([disabled]), select:not([tabindex="-1"]):not([disabled])'
+    )).filter(el => el.offsetParent !== null);
   }, []);
 
-  // Navega para próximo/anterior elemento focável (cicla incluindo grid)
+  // Navega: cabeçalho → toolbar → GRID → painel → cabeçalho (ciclo)
   const navegarFocavel = useCallback((direcao: 'next' | 'prev') => {
-    const focaveis = getTodosFocaveis();
-    if (focaveis.length === 0) return;
-
-    const active = document.activeElement as HTMLElement;
-    const estaNoGrid = gridWrapperRef.current?.contains(active);
     const a = gridRef.current?.api;
     const temItensGrid = a && a.getDisplayedRowCount() > 0;
+    const active = document.activeElement as HTMLElement;
 
-    if (estaNoGrid) {
-      // Está no grid — sair para painel (next) ou toolbar (prev)
-      if (direcao === 'next') {
-        const painelEls = painelFinRef.current?.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled]), select:not([disabled])');
-        if (painelEls && painelEls.length > 0) painelEls[0].focus();
-        else focaveis[0].focus();
-      } else {
-        // Voltar pro último do toolbar
-        const tbEls = toolbarRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])');
-        if (tbEls && tbEls.length > 0) tbEls[tbEls.length - 1].focus();
-        else focaveis[focaveis.length - 1].focus();
+    // Descobrir em qual zona estamos
+    const emCabecalho = cabecalhoRef.current?.contains(active);
+    const emToolbar = toolbarRef.current?.contains(active);
+    const emGrid = gridWrapperRef.current?.contains(active);
+    const emPainel = painelFinRef.current?.contains(active);
+
+    // Focáveis de cada zona
+    const focCab = getFocaveisEm(cabecalhoRef.current);
+    const focTb = getFocaveisEm(toolbarRef.current);
+    const focPn = getFocaveisEm(painelFinRef.current);
+
+    const entrarGrid = () => {
+      if (temItensGrid) { a.setFocusedCell(0, 'ref'); return true; }
+      return false;
+    };
+    const entrarGridFim = () => {
+      if (temItensGrid) {
+        const cols = a.getAllDisplayedColumns();
+        const lastCol = cols[cols.length - 1]?.getColId() || 'ref';
+        a.setFocusedCell(a.getDisplayedRowCount() - 1, lastCol);
+        return true;
       }
-      return;
-    }
-
-    const idx = focaveis.indexOf(active);
-    if (idx < 0) { focaveis[0].focus(); return; }
+      return false;
+    };
 
     if (direcao === 'next') {
-      if (idx < focaveis.length - 1) {
-        focaveis[idx + 1].focus();
+      if (emCabecalho) {
+        const idx = focCab.indexOf(active);
+        if (idx < focCab.length - 1) { focCab[idx + 1].focus(); return; }
+        if (focTb.length > 0) { focTb[0].focus(); return; }
+        if (entrarGrid()) return;
+        if (focPn.length > 0) { focPn[0].focus(); return; }
+        focCab[0]?.focus();
+      } else if (emToolbar) {
+        const idx = focTb.indexOf(active);
+        if (idx < focTb.length - 1) { focTb[idx + 1].focus(); return; }
+        if (entrarGrid()) return;
+        if (focPn.length > 0) { focPn[0].focus(); return; }
+        focCab[0]?.focus();
+      } else if (emGrid) {
+        if (focPn.length > 0) { focPn[0].focus(); return; }
+        focCab[0]?.focus();
+      } else if (emPainel) {
+        const idx = focPn.indexOf(active);
+        if (idx < focPn.length - 1) { focPn[idx + 1].focus(); return; }
+        focCab[0]?.focus();
       } else {
-        // Último elemento: ir pro grid se tem itens, senão cicla
-        if (temItensGrid) {
-          const col = a.getColumn(COLUNAS_EDITAVEIS[0]);
-          a.setFocusedCell(0, col || 'ref');
-        } else {
-          focaveis[0].focus();
-        }
+        focCab[0]?.focus();
       }
     } else {
-      if (idx > 0) {
-        focaveis[idx - 1].focus();
-      } else {
-        // Primeiro elemento: ir pro grid (última célula) se tem itens, senão cicla
-        if (temItensGrid) {
-          const lastRow = a.getDisplayedRowCount() - 1;
-          const col = a.getColumn(COLUNAS_EDITAVEIS[COLUNAS_EDITAVEIS.length - 1]);
-          a.setFocusedCell(lastRow, col || 'ref');
-        } else {
-          focaveis[focaveis.length - 1].focus();
-        }
+      if (emCabecalho) {
+        const idx = focCab.indexOf(active);
+        if (idx > 0) { focCab[idx - 1].focus(); return; }
+        if (focPn.length > 0) { focPn[focPn.length - 1].focus(); return; }
+        if (entrarGridFim()) return;
+        if (focTb.length > 0) { focTb[focTb.length - 1].focus(); return; }
+      } else if (emToolbar) {
+        const idx = focTb.indexOf(active);
+        if (idx > 0) { focTb[idx - 1].focus(); return; }
+        focCab[focCab.length - 1]?.focus();
+      } else if (emGrid) {
+        if (focTb.length > 0) { focTb[focTb.length - 1].focus(); return; }
+        focCab[focCab.length - 1]?.focus();
+      } else if (emPainel) {
+        const idx = focPn.indexOf(active);
+        if (idx > 0) { focPn[idx - 1].focus(); return; }
+        if (entrarGridFim()) return;
+        if (focTb.length > 0) { focTb[focTb.length - 1].focus(); return; }
       }
     }
-  }, [getTodosFocaveis, COLUNAS_EDITAVEIS]);
+  }, [getFocaveisEm]);
+  navegarFocalvelRef.current = navegarFocavel;
+
+  // Setas dentro do grid: navega entre células, pula linha, sai do grid nos extremos
+  const navigateToNextCellHandler = useCallback((params: any) => {
+    const { previousCellPosition, nextCellPosition, key } = params;
+    if (!previousCellPosition) return nextCellPosition;
+    const a = gridRef.current?.api;
+    if (!a) return nextCellPosition;
+
+    const totalRows = a.getDisplayedRowCount();
+    const cols = a.getAllDisplayedColumns();
+    const currentColIdx = cols.findIndex((c: any) => c.getColId() === previousCellPosition.column?.getColId());
+
+    if (key === 'ArrowRight') {
+      if (currentColIdx < cols.length - 1) {
+        return { rowIndex: previousCellPosition.rowIndex, column: cols[currentColIdx + 1] };
+      }
+      // Última coluna: próxima linha, primeira coluna
+      if (previousCellPosition.rowIndex + 1 < totalRows) {
+        return { rowIndex: previousCellPosition.rowIndex + 1, column: cols[0] };
+      }
+      // Última célula do grid: sai para painel
+      setTimeout(() => navegarFocavel('next'), 0);
+      return previousCellPosition;
+    }
+
+    if (key === 'ArrowLeft') {
+      if (currentColIdx > 0) {
+        return { rowIndex: previousCellPosition.rowIndex, column: cols[currentColIdx - 1] };
+      }
+      // Primeira coluna: linha anterior, última coluna
+      if (previousCellPosition.rowIndex > 0) {
+        return { rowIndex: previousCellPosition.rowIndex - 1, column: cols[cols.length - 1] };
+      }
+      // Primeira célula do grid: sai para toolbar
+      setTimeout(() => navegarFocavel('prev'), 0);
+      return previousCellPosition;
+    }
+
+    if (key === 'ArrowDown') {
+      if (previousCellPosition.rowIndex + 1 < totalRows) {
+        return { rowIndex: previousCellPosition.rowIndex + 1, column: previousCellPosition.column };
+      }
+      // Última linha: sai para painel
+      setTimeout(() => navegarFocavel('next'), 0);
+      return previousCellPosition;
+    }
+
+    if (key === 'ArrowUp') {
+      if (previousCellPosition.rowIndex > 0) {
+        return { rowIndex: previousCellPosition.rowIndex - 1, column: previousCellPosition.column };
+      }
+      // Primeira linha: sai para toolbar
+      setTimeout(() => navegarFocavel('prev'), 0);
+      return previousCellPosition;
+    }
+
+    return nextCellPosition;
+  }, [navegarFocavel]);
 
   // Tab dentro do grid: pula entre células editáveis
   const tabToNextCellHandler = useCallback((params: any) => {
@@ -395,14 +519,8 @@ const NovaVendaV2 = () => {
       if (row + 1 < totalRows) {
         return { rowIndex: row + 1, column: a.getColumn(COLUNAS_EDITAVEIS[0]) };
       }
-      // Fim do grid: vai para o painel de finalização
-      setTimeout(() => {
-        const focaveis = getTodosFocaveis();
-        // Primeiro input do painel de finalização (após toolbar)
-        const painelEls = painelFinRef.current?.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled]), select:not([disabled])');
-        if (painelEls && painelEls.length > 0) painelEls[0].focus();
-        else if (focaveis.length > 0) focaveis[0].focus();
-      }, 0);
+      // Fim do grid: vai para o painel
+      setTimeout(() => navegarFocavel('next'), 0);
       return previousCellPosition;
     } else {
       if (editIdx > 0) {
@@ -412,13 +530,10 @@ const NovaVendaV2 = () => {
         return { rowIndex: row - 1, column: a.getColumn(COLUNAS_EDITAVEIS[COLUNAS_EDITAVEIS.length - 1]) };
       }
       // Início do grid: volta pro toolbar
-      setTimeout(() => {
-        const tbEls = toolbarRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])');
-        if (tbEls && tbEls.length > 0) tbEls[tbEls.length - 1].focus();
-      }, 0);
+      setTimeout(() => navegarFocavel('prev'), 0);
       return previousCellPosition;
     }
-  }, [COLUNAS_EDITAVEIS, getTodosFocaveis]);
+  }, [COLUNAS_EDITAVEIS, navegarFocavel]);
 
   // ---------- Selecionar cliente — busca crédito e atraso como tela original ----------
   const selecionarCliente = useCallback(async (cli: any) => {
@@ -482,11 +597,7 @@ const NovaVendaV2 = () => {
     }
 
     toast({ title: `Cliente ${nome} selecionado` });
-    // Foco no X após render
-    setTimeout(() => {
-      const btn = clienteInputRef.current?.parentElement?.querySelector('button') as HTMLElement;
-      if (btn) btn.focus();
-    }, 50);
+    setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
   }, [toast]);
 
   // ---------- Buscar cliente ----------
@@ -551,13 +662,15 @@ const NovaVendaV2 = () => {
   const restaurarFocoGrid = useCallback(() => {
     setTimeout(() => {
       const a = gridRef.current?.api;
-      if (!a) return;
+      if (!a || a.getDisplayedRowCount() === 0) return;
       const fc = a.getFocusedCell();
-      if (fc) a.setFocusedCell(fc.rowIndex, fc.column?.getColId?.() || 'ref');
-      else if (ultimaCelulaRef.current) {
+      if (fc) { a.setFocusedCell(fc.rowIndex, fc.column?.getColId?.() || 'ref'); return; }
+      if (ultimaCelulaRef.current) {
         const idx = itensGrid.findIndex((r) => r.codprod === ultimaCelulaRef.current.codprod);
-        if (idx >= 0) a.setFocusedCell(idx, 'ref');
+        if (idx >= 0) { a.setFocusedCell(idx, 'ref'); return; }
       }
+      // Fallback: focar no primeiro item
+      a.setFocusedCell(0, 'ref');
     }, 100);
   }, [itensGrid]);
 
@@ -704,12 +817,8 @@ const NovaVendaV2 = () => {
         );
       },
     },
-    { headerName: 'Desc. à Vista', field: 'desconto_percentual', width: 85, editable: true,
+    { headerName: 'Desc. à Vista', field: 'desconto_percentual', width: 85, editable: true, sortable: false,
       cellStyle: { backgroundColor: '#f5f3ff', fontWeight: 600 },
-      valueParser: (p: any) => {
-        const v = parseFloat(String(p.newValue).replace('%', '').replace(',', '.').trim()) || 0;
-        return Math.min(Math.max(v, 0), 2);
-      },
       valueFormatter: (p: any) => fmtPerc(p.value),
     },
     { headerName: 'Total c/ Imp.', field: 'total_com_impostos', width: 100,
@@ -731,6 +840,26 @@ const NovaVendaV2 = () => {
   const totalVenda = itensGrid.reduce((acc, i) => acc + (Number(i.total_item) || 0), 0);
   const totalItens = itensGrid.length;
 
+  // Desconto à vista ativo em algum item → força "À VISTA"
+  const temDescontoAvista = useMemo(() => itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0), [itensGrid]);
+
+  // Prazo efetivo: se tem desconto à vista ou saldo insuficiente → "À VISTA"
+  const isAvista = useMemo(() => {
+    if (temDescontoAvista) return true;
+    if (clienteSelecionado && totalVenda > 0 && (Number(clienteSelecionado.saldo || 0) - totalVenda <= 0)) return true;
+    const prazoStr = String(prazo).trim().toUpperCase();
+    return prazoStr === 'À VISTA' || prazoStr === 'A VISTA' || prazoStr === '0';
+  }, [temDescontoAvista, clienteSelecionado, totalVenda, prazo]);
+
+  // Filtrar formas de pagamento por prazo
+  const opcoesFPFiltradas = useMemo(() => {
+    if (!opcoesFP.length) return [];
+    if (isAvista) {
+      return opcoesFP.filter(fp => ['PIX', 'DINHEIRO', 'CARTAO DEBITO', 'CARTAO CREDITO', 'DEBITO', 'CREDITO'].some(t => fp.descricao?.toUpperCase().includes(t)));
+    }
+    return opcoesFP.filter(fp => !fp.descricao?.toUpperCase().includes('OUTROS'));
+  }, [opcoesFP, isAvista]);
+
   // ---------- Atalhos de teclado ----------
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -739,7 +868,7 @@ const NovaVendaV2 = () => {
       if (modaisAbertosRef.current) return;
 
       const dropdownAberto = dropdownAbertoRef.current;
-      const estaNoGrid = gridWrapperRef.current?.contains(e.target as Node);
+      const estaNoGrid = gridWrapperRef.current?.contains(e.target as Node) || gridWrapperRef.current?.contains(document.activeElement as Node);
 
       // Tab fora do grid: usa navegarFocavel
       if (e.key === 'Tab' && !dropdownAberto && !estaNoGrid) {
@@ -766,6 +895,20 @@ const NovaVendaV2 = () => {
         const rd = ultimaCelulaRef.current;
         if (rd) setZoomProduto({ codprod: rd.codprod, ref: rd.ref, descr: rd.descr });
         else toast({ title: 'Selecione um item na planilha' });
+        return;
+      }
+
+      // Ctrl+D desconto à vista em todos
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        setItensGrid((prev) => {
+          if (prev.length === 0) return prev;
+          const todosAtivos = prev.every(i => (Number(i.desconto_percentual) || 0) > 0);
+          return prev.map(row => {
+            const novoDesc = todosAtivos ? 0 : 2;
+            return { ...row, desconto_percentual: novoDesc, total_item: row.qtd * row.prunit * (1 - novoDesc / 100) };
+          });
+        });
         return;
       }
 
@@ -1081,6 +1224,21 @@ const NovaVendaV2 = () => {
                   className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md">
                   <Plus size={14} /> Adicionar Item
                 </button>
+                <button onClick={() => {
+                  setItensGrid((prev) => {
+                    if (prev.length === 0) return prev;
+                    const todosAtivos = prev.every(i => (Number(i.desconto_percentual) || 0) > 0);
+                    return prev.map(row => {
+                      const novoDesc = todosAtivos ? 0 : 2;
+                      return { ...row, desconto_percentual: novoDesc, total_item: row.qtd * row.prunit * (1 - novoDesc / 100) };
+                    });
+                  });
+                }}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md ${temDescontoAvista ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:text-gray-300'}`}
+                  title="Ativar/desativar 2% desc. à vista em todos (Ctrl+D)"
+                >
+                  % Desc. à Vista
+                </button>
                 <span className="text-[11px] text-gray-400">
                   {totalItens} itens | Duplo clique edita | Botão direito para mais opções
                 </span>
@@ -1088,7 +1246,7 @@ const NovaVendaV2 = () => {
               <div className="flex items-center gap-3">
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
                   <Keyboard size={11} />
-                  Ctrl+Z Zoom | F3 Vend. | F4 Oper. | F9 Equiv. | F10 Hist. | Ctrl++ Adicionar
+                  Ctrl+Z Zoom | Ctrl+D Desc. | F3 Vend. | F4 Oper. | F9 Equiv. | F10 Hist. | Ctrl++ Adicionar
                 </span>
               </div>
             </div>
@@ -1108,6 +1266,8 @@ const NovaVendaV2 = () => {
               .venda-grid .ag-root-wrapper { border: 1px solid #d1d5db !important; }
               .venda-grid .ag-header { background-color: #f3f4f6 !important; border-bottom: 2px solid #d1d5db !important; }
               .venda-grid .ag-header-cell { border-right: 1px solid #d1d5db !important; }
+              .venda-grid .ag-sort-indicator-icon { display: none !important; }
+              .venda-grid .ag-sort-indicator-container { display: none !important; }
               .venda-grid .ag-header-cell:last-child { border-right: none !important; }
               .venda-grid .ag-row .ag-cell:last-child { border-right: none !important; }
               .venda-grid .ag-header-cell-resize { width: 4px !important; cursor: col-resize !important; }
@@ -1132,11 +1292,26 @@ const NovaVendaV2 = () => {
                 theme={themeQuartz.withParams({ borderColor: '#d1d5db', wrapperBorder: true })}
                 rowData={itensGrid}
                 columnDefs={itensColumnDefs}
-                defaultColDef={{ sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true }}
+                defaultColDef={{ sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true, sortingOrder: ['asc', 'desc'] }}
                 onGridReady={onGridReady}
                 onColumnResized={onColumnResized}
                 onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
+                onCellClicked={(e: any) => {
+                  if (e.column?.getColId() === 'desconto_percentual' && e.data) {
+                    const descAtual = Number(e.data.desconto_percentual) || 0;
+                    const novoDesc = descAtual === 0 ? 2 : 0;
+                    const rowIdx = e.rowIndex;
+                    // Atualizar via API do AG Grid para não perder foco
+                    e.node.setData({ ...e.data, desconto_percentual: novoDesc, total_item: e.data.qtd * e.data.prunit * (1 - novoDesc / 100) });
+                    // Sync state silenciosamente
+                    setItensGrid((prev) => {
+                      const novos = [...prev];
+                      novos[rowIdx] = { ...novos[rowIdx], desconto_percentual: novoDesc, total_item: novos[rowIdx].qtd * novos[rowIdx].prunit * (1 - novoDesc / 100) };
+                      return novos;
+                    });
+                  }
+                }}
                 onCellKeyDown={(e: any) => {
                   if (e.event?.key === 'Enter' && e.column?.getColId() === '_delete' && e.data?.codprod) {
                     e.event.preventDefault();
@@ -1169,6 +1344,7 @@ const NovaVendaV2 = () => {
                 suppressHeaderFocus={true}
                 overlayNoRowsTemplate={'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:#9ca3af"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;opacity:0.4"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg><span style="font-size:14px;font-weight:600">Carrinho vazio</span><span style="font-size:12px;margin-top:4px">Adicione itens com o botão acima ou Ctrl++</span></div>'}
                 tabToNextCell={tabToNextCellHandler as any}
+                navigateToNextCell={navigateToNextCellHandler as any}
                 rowHeight={48}
               />
             </div>
@@ -1179,60 +1355,162 @@ const NovaVendaV2 = () => {
             {/* Linha 1: Documento, Prazo, Forma Pagamento */}
             <div className="grid grid-cols-3 gap-3">
               {/* Documento */}
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Documento</label>
-                <SelecionarDocumento
-                  dadosDocumento={dadosDocumento}
-                  handleDocumento={(doc: any) => setDocumento(doc)}
-                />
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Documento</label>
+                <div className="relative">
+                  {documento.COD_OPERACAO ? (
+                    <button onClick={() => {
+                        setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc('');
+                        setTimeout(() => docInputRef.current?.focus(), 50);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  )}
+                  <input type="text"
+                    ref={docInputRef}
+                    tabIndex={documento.COD_OPERACAO ? -1 : 0}
+                    readOnly={!!documento.COD_OPERACAO}
+                    value={documento.COD_OPERACAO ? `${documento.COD_OPERACAO} - ${documento.DESCR}` : buscaDoc}
+                    onChange={(e) => { setBuscaDoc(e.target.value); setShowDoc(true); setDocIdx(0); }}
+                    onFocus={() => { if (!documento.COD_OPERACAO) setShowDoc(true); }}
+                    onBlur={() => setTimeout(() => setShowDoc(false), 150)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && showDoc && docsFiltrados.length > 0) {
+                        e.preventDefault();
+                        setDocumento(docsFiltrados[docIdx]);
+                        setBuscaDoc('');
+                        setShowDoc(false);
+                        setTimeout(() => navegarFocavel('next'), 50);
+                      } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                      if (e.key === 'ArrowDown' && showDoc) { e.preventDefault(); setDocIdx(p => Math.min(p + 1, docsFiltrados.length - 1)); }
+                      if (e.key === 'ArrowUp' && showDoc) { e.preventDefault(); setDocIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'Escape') setShowDoc(false);
+                    }}
+                    placeholder="Documento"
+                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${documento.COD_OPERACAO ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                  />
+                  {showDoc && !documento.COD_OPERACAO && docsFiltrados.length > 0 ? (
+                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {docsFiltrados.map((d, idx) => (
+                        <div key={String(d.COD_OPERACAO)}
+                          className={`px-3 py-1.5 cursor-pointer text-sm ${idx === docIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onMouseDown={(ev) => { ev.preventDefault(); setDocumento(d); setBuscaDoc(''); setShowDoc(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                        >{String(d.COD_OPERACAO)} - {d.DESCR}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               {/* Prazo */}
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Prazo</label>
-                <input type="text" readOnly value={
-                  clienteSelecionado && (Number(clienteSelecionado.saldo || 0) - totalVenda <= 0) ? 'À VISTA' : prazo || ''
-                }
-                  onFocus={() => {
-                    if (clienteSelecionado && (Number(clienteSelecionado.saldo || 0) - totalVenda > 0)) {
-                      setOpenModalPrazo(true);
-                    }
-                  }}
-                  placeholder="Clique para definir prazo"
-                  className={`w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400 ${!prazo && clienteSelecionado ? 'bg-red-50 dark:bg-red-900/20' : ''}`} />
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Prazo</label>
+                <div className="relative">
+                  {prazo && !isAvista ? (
+                    <button onClick={() => { setPrazo(''); setPrazosArray([]); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      <X size={14} />
+                    </button>
+                  ) : null}
+                  <input type="text" readOnly
+                    tabIndex={prazo ? -1 : 0}
+                    value={isAvista ? 'À VISTA' : prazo || ''}
+                    onFocus={() => { if (!isAvista && !prazo) setOpenModalPrazo(true); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !prazo && !isAvista) { e.preventDefault(); setOpenModalPrazo(true); } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                    placeholder="Definir prazo"
+                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg cursor-pointer ${prazo || isAvista ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} ${isAvista ? 'text-orange-600 font-semibold' : ''} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                  />
+                </div>
               </div>
 
               {/* Forma de Pagamento */}
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Forma Pagamento</label>
-                <Select value={fPagamento} onValueChange={(v) => setFPagamento(v)}>
-                  <SelectTrigger className={`h-8 text-xs ${!fPagamento ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {opcoesFPFiltradas.map((fp) => (
-                      <SelectItem key={fp.id} value={fp.id}>{fp.descricao}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Forma Pagamento</label>
+                <div className="relative">
+                  {fPagamento ? (
+                    <button onClick={() => setFPagamento('')}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  )}
+                  <Select value={fPagamento} onValueChange={(v) => setFPagamento(v)}>
+                    <SelectTrigger tabIndex={fPagamento ? -1 : 0} className={`h-9 text-sm border-gray-200 dark:border-zinc-600 rounded-lg pr-8 ${fPagamento ? 'bg-gray-100 dark:bg-zinc-900' : ''}`}>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent side="top">
+                      {opcoesFPFiltradas.map((fp) => (
+                        <SelectItem key={fp.id} value={fp.id}>{fp.descricao}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
-            {/* Linha 3: Transportadora, Valor Transporte, Obs Fat, Pedido */}
+            {/* Linha 2: Transportadora, Valor Transporte, Obs Fat, Pedido */}
             <div className="grid grid-cols-4 gap-3 mt-2">
-              {/* Transportadora (componente já tem label interno) */}
-              <div>
-                <SelecionarTransporte
-                  dadosTransporte={dadosTransporte}
-                  transporteSel={transporteSel}
-                  obrigTransporte={false}
-                  handleTransporteSel={(t: any) => setTransporteSel(t)}
-                />
+              {/* Transportadora */}
+              <div className="flex-1 relative">
+                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Transportadora</label>
+                <div className="relative">
+                  {transporteSel.CODTPTRANSP ? (
+                    <button onClick={() => {
+                        setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp('');
+                        setTimeout(() => transpInputRef.current?.focus(), 50);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  )}
+                  <input type="text"
+                    ref={transpInputRef}
+                    tabIndex={transporteSel.CODTPTRANSP ? -1 : 0}
+                    readOnly={!!transporteSel.CODTPTRANSP}
+                    value={transporteSel.CODTPTRANSP ? `${transporteSel.CODTPTRANSP} - ${transporteSel.DESCR}` : buscaTransp}
+                    onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
+                    onFocus={() => { if (!transporteSel.CODTPTRANSP) setShowTransp(true); }}
+                    onBlur={() => setTimeout(() => setShowTransp(false), 150)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && showTransp && transpFiltrados.length > 0) {
+                        e.preventDefault();
+                        setTransporteSel(transpFiltrados[transpIdx]);
+                        setBuscaTransp('');
+                        setShowTransp(false);
+                        setTimeout(() => navegarFocavel('next'), 50);
+                      } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                      if (e.key === 'ArrowDown' && showTransp) { e.preventDefault(); setTranspIdx(p => Math.min(p + 1, transpFiltrados.length - 1)); }
+                      if (e.key === 'ArrowUp' && showTransp) { e.preventDefault(); setTranspIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'Escape') setShowTransp(false);
+                    }}
+                    placeholder="Transportadora"
+                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${transporteSel.CODTPTRANSP ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                  />
+                  {showTransp && !transporteSel.CODTPTRANSP && transpFiltrados.length > 0 ? (
+                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {transpFiltrados.map((t, idx) => (
+                        <div key={t.CODTPTRANSP}
+                          className={`px-3 py-1.5 cursor-pointer text-sm ${idx === transpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onMouseDown={(ev) => { ev.preventDefault(); setTransporteSel(t); setBuscaTransp(''); setShowTransp(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                        >{t.CODTPTRANSP} - {t.DESCR}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
-              {/* Valor Transporte — máscara R$ */}
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Valor Transporte</label>
+              {/* Valor Transporte */}
+              <div className="relative h-full min-w-[200px]">
                 <input type="text" value={valTransp}
                   onFocus={(e) => { e.target.select(); }}
                   onChange={(e) => {
@@ -1241,40 +1519,46 @@ const NovaVendaV2 = () => {
                     setValTranspDec(dec);
                     setValTransp(dec.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' }));
                   }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const next = (e.target as HTMLElement).closest('.grid')?.querySelector<HTMLElement>('input:not([readonly]) + div input, input:not([readonly])'); if (next && next !== e.target) next.focus(); else navegarFocavel('next'); } }}
-                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  placeholder=" "
+                  className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
+                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Valor Transporte</label>
               </div>
 
               {/* Obs Fat */}
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Obs. Faturamento</label>
-                <input type="text" value={obsFat} onChange={(e) => setObsFat(e.target.value)} placeholder="Obs. Fat"
+              <div className="relative h-full min-w-[200px]">
+                <input type="text" value={obsFat} onChange={(e) => setObsFat(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
-                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  placeholder=" "
+                  className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
+                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Obs. Faturamento</label>
               </div>
 
               {/* Pedido */}
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Pedido</label>
-                <input type="text" value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Pedido"
+              <div className="relative h-full min-w-[200px]">
+                <input type="text" value={pedido} onChange={(e) => setPedido(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
-                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  placeholder=" "
+                  className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
+                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Pedido</label>
               </div>
             </div>
 
-            {/* Linha 4: Obs + Requisição */}
+            {/* Linha 3: Obs + Requisição */}
             <div className="grid grid-cols-2 gap-3 mt-2">
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Observação</label>
-                <input type="text" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Observação"
+              <div className="relative h-full min-w-[200px]">
+                <input type="text" value={obs} onChange={(e) => setObs(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
-                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  placeholder=" "
+                  className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
+                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Observação</label>
               </div>
-              <div>
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 block mb-0.5">Requisição</label>
-                <input type="text" value={requisicao} onChange={(e) => setRequisicao(e.target.value)} placeholder="Requisição"
+              <div className="relative h-full min-w-[200px]">
+                <input type="text" value={requisicao} onChange={(e) => setRequisicao(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
-                  className="w-full h-8 px-2 text-xs border border-gray-200 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                  placeholder=" "
+                  className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
+                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Requisição</label>
               </div>
             </div>
 
@@ -1282,9 +1566,14 @@ const NovaVendaV2 = () => {
             {openModalPrazo ? (
               <ModalPrazoParcelas
                 onClose={() => setOpenModalPrazo(false)}
-                onConfirm={(prazos: any[]) => {
-                  const prazoStr = prazos.map((p: any) => p.dias).join(' ');
-                  setPrazo(prazoStr);
+                dadosIniciais={prazosArray.length > 0 ? prazosArray : undefined}
+                onConfirm={(novosPrazos: any[]) => {
+                  setPrazosArray(novosPrazos);
+                  if (novosPrazos.length > 0) {
+                    setPrazo(novosPrazos.map((p: any) => p.dias).join(' '));
+                  } else {
+                    setPrazo('');
+                  }
                   setOpenModalPrazo(false);
                 }}
               />

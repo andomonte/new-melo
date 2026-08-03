@@ -145,10 +145,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     if (linhaSelecionada >= 0 && scrollRef.current) {
       const row = scrollRef.current.querySelector(`tr:nth-child(${linhaSelecionada + 1})`) as HTMLElement;
       if (row) row.scrollIntoView({ block: 'nearest' });
-      // Garantir foco no modal para capturar teclas
-      if (document.activeElement?.tagName !== 'INPUT') {
-        modalRef.current?.focus();
-      }
+      // Sempre focar no modal para capturar setas
+      setTimeout(() => modalRef.current?.focus(), 10);
     }
   }, [linhaSelecionada]);
 
@@ -301,8 +299,14 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
 
     onAdicionarItens([item]);
     setAdicionados((prev) => { const m = new Map(prev); m.set(produto.codprod, qtd); return m; });
+    const nextIdx = pedindoQtd + 1;
     setPedindoQtd(-1);
     toast({ title: `${produto.ref || produto.codprod} ${adicionados.has(produto.codprod) ? 'atualizado' : 'adicionado'} (qtd: ${qtd})` });
+    // Mover para próxima linha e focar no modal
+    if (nextIdx < listaProd.length) {
+      setLinhaSelecionada(nextIdx);
+    }
+    setTimeout(() => modalRef.current?.focus(), 100);
   }, [listaProd, pedindoQtd, qtdInput, precoInput, hasMPV, onAdicionarItens, toast]);
 
   // Abrir equivalentes do item selecionado
