@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 // ============================================================================
 // TYPES
@@ -99,8 +100,8 @@ export function useClientVerification(
         return;
       }
 
-      // Remove caracteres especiais para validação de tamanho
-      const cleaned = cpfCnpj.replace(/\D/g, '');
+      // Limpa mantendo letras (CNPJ alfanumérico) para validação de tamanho.
+      const cleaned = limparDocumentoAlfa(cpfCnpj);
 
       // Deve ter 11 (CPF) ou 14 (CNPJ) dígitos
       if (cleaned.length !== 11 && cleaned.length !== 14) {

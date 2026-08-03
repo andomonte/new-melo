@@ -1,3 +1,5 @@
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
+
 export interface BrasilApiCnpjResponse {
   cnpj: string;
   razao_social: string;
@@ -25,10 +27,11 @@ export interface BrasilApiCnpjResponse {
  * Retorna razão social, fantasia, endereço completo, email, telefone.
  */
 export async function buscaCnpj(cnpj: string): Promise<BrasilApiCnpjResponse> {
-  const cnpjLimpo = cnpj.replace(/\D/g, '');
+  // Mantém letras (CNPJ alfanumérico) — 12 alfanuméricos + 2 dígitos (DV).
+  const cnpjLimpo = limparDocumentoAlfa(cnpj);
 
   if (cnpjLimpo.length !== 14) {
-    throw new Error('CNPJ inválido. Deve conter 14 dígitos.');
+    throw new Error('CNPJ inválido. Deve conter 14 caracteres.');
   }
 
   const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjLimpo}`);

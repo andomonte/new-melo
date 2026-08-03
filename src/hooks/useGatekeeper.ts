@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import useDebounce from './useDebounce';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface Match {
   type: 'CLIENTE' | 'FORNECEDOR' | 'TRANSPORTADORA';
@@ -26,8 +27,8 @@ export function useGatekeeper(
   const debouncedDoc = useDebounce(docValue, 700);
 
   useEffect(() => {
-    // Compara sempre por dígitos (o documento na tela vem mascarado com pontos/traços)
-    const docLimpo = (debouncedDoc || '').replace(/\D/g, '');
+    // Limpa mantendo letras (CNPJ alfanumérico); o documento na tela vem mascarado.
+    const docLimpo = limparDocumentoAlfa(debouncedDoc || '');
     // Só verifica quando o CPF (11) ou CNPJ (14) está completo
     if (!isEnabled || (docLimpo.length !== 11 && docLimpo.length !== 14)) {
       setMatches([]);

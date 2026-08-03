@@ -17,6 +17,7 @@ import { campoParaAba } from './_forms/campoParaAba';
 import { z } from 'zod';
 import { cadastroTransportadoraSchema } from './_forms/transportadoraSchema';
 import { buscaCnpj } from '@/data/cnpj';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 import {
   DocumentoDuplicadoModal,
   DocumentoMatch,
@@ -181,7 +182,7 @@ export default function CustomModal({
   // Ao sair do campo CNPJ/CPF: duplicidade (cliente/fornecedor/transportadora) + auto-preenche
   const buscarPorDocumento = useCallback(async () => {
     const tipo = transportadora.tipo || 'J';
-    const digits = String(transportadora.cpfcgc || '').replace(/\D/g, '');
+    const digits = limparDocumentoAlfa(transportadora.cpfcgc || '');
     if (digits.length !== 11 && digits.length !== 14) return;
     try {
       const resp = await fetch(`/api/global/check-document?doc=${digits}`);

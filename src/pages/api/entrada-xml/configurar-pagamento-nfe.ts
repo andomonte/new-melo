@@ -131,7 +131,7 @@ export default async function handler(
         const emitenteResult = await client.query(`
           SELECT c.cod_credor
           FROM dbnfe_ent_emit emit
-          INNER JOIN dbcredor c ON REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = REPLACE(REPLACE(REPLACE(emit.cpf_cnpj, '.', ''), '-', ''), '/', '')
+          INNER JOIN dbcredor c ON upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = upper(REPLACE(REPLACE(REPLACE(emit.cpf_cnpj, '.', ''), '-', ''), '/', ''))
           WHERE emit.codnfe_ent = $1
           LIMIT 1
         `, [nfeId]);

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 /**
  * Casa o CNPJ da NFe (emitente ou transportadora) com o cadastro de credores
@@ -20,7 +21,7 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const cnpj = ((req.query.cnpj as string) ?? '').replace(/\D/g, '');
+  const cnpj = limparDocumentoAlfa((req.query.cnpj as string) ?? '');
   const tipo = (req.query.tipo as string) ?? '';
   // CPF tem 11, CNPJ tem 14 — abaixo disso não é documento válido para casar.
   if (cnpj.length < 11) {
@@ -39,14 +40,14 @@ export default async function handler(
         codtransp AS cod_credor, nome, nomefant AS nome_fant, cpfcgc AS cpf_cgc,
         iest, uf, cidade, ender AS endereco, tipo
       FROM db_manaus.dbtransp
-      WHERE regexp_replace(COALESCE(cpfcgc, ''), '[^0-9]', '', 'g') = $1
+      WHERE regexp_replace(upper(COALESCE(cpfcgc, '')), '[^0-9A-Z]', '', 'g') = $1
       ORDER BY codtransp
       LIMIT 50`
       : `
       SELECT
         cod_credor, nome, nome_fant, cpf_cgc, iest, uf, cidade, endereco, tipo
       FROM db_manaus.dbcredor
-      WHERE regexp_replace(COALESCE(cpf_cgc, ''), '[^0-9]', '', 'g') = $1
+      WHERE regexp_replace(upper(COALESCE(cpf_cgc, '')), '[^0-9A-Z]', '', 'g') = $1
       ORDER BY cod_credor
       LIMIT 50`;
 

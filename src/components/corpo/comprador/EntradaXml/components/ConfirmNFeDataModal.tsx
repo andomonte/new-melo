@@ -12,6 +12,7 @@ import { FornecedorAutocomplete } from '../../RequisicoesCompra/components/Forne
 import { CompradorAutocomplete } from '../../RequisicoesCompra/components/CompradorAutocomplete';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 import CadastroFornecedorModal from '@/components/corpo/admin/cadastro/fornecedores/modalCadastrar';
 import CadastroTransportadoraModal from '@/components/corpo/admin/cadastro/transportadoras/modalCadastrar';
 import { useDebounce } from 'use-debounce';
@@ -786,7 +787,8 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   // (espelha as travas do Delphi). Erros claros bloqueiam; casos "sem vínculo"
   // pedem confirmação para prosseguir.
   const handleConfirm = () => {
-    const soDigitos = (s?: string) => (s || '').replace(/\D/g, '');
+    // Mantém letras (CNPJ alfanumérico) para as comparações de documento.
+    const soDigitos = (s?: string) => limparDocumentoAlfa(s || '');
     const cnpjNota = soDigitos(nfe.cnpjEmitente);
 
     // Comprador é OBRIGATÓRIO — como no Delphi ("INDIQUE UM COMPRADOR VÁLIDO").

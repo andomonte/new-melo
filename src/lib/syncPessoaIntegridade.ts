@@ -1,4 +1,5 @@
 import { getPgPool } from '@/lib/pgClient';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 /**
  * Integridade de pessoa (igual ao Delphi PESSOA_INTEGRIDADE_ATUALIZA).
@@ -33,8 +34,8 @@ export async function syncPessoaIntegridade(
   dados: PessoaComum,
 ): Promise<void> {
   try {
-    const digits = String(dados.doc || '').replace(/\D/g, '');
-    // Só sincroniza CPF (11) ou CNPJ (14) válidos
+    // Mantém letras (CNPJ alfanumérico). Só sincroniza CPF (11) ou CNPJ (14).
+    const digits = limparDocumentoAlfa(dados.doc || '');
     if (digits.length !== 11 && digits.length !== 14) return;
 
     const campos: Array<[string, any]> = [];
@@ -57,7 +58,7 @@ export async function syncPessoaIntegridade(
       const values = campos.map(([, v]) => v);
       values.push(digits);
       const sql = `UPDATE ${tabela} SET ${setClause}
-                   WHERE regexp_replace("${docCol}", '[^0-9]', '', 'g') = $${values.length}`;
+                   WHERE regexp_replace(upper("${docCol}"), '[^0-9A-Z]', '', 'g') = $${values.length}`;
       await pool.query(sql, values);
     }
   } catch (e: any) {

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface ItemNFe {
   codigo_produto: string;
@@ -95,7 +96,7 @@ export default async function handler(
     console.log('📦 Quantidade de itens na NFe:', itens_nfe.length);
 
     // Limpar CNPJ para comparação
-    const cnpjLimpo = fornecedor_cnpj.replace(/[^0-9]/g, '');
+    const cnpjLimpo = limparDocumentoAlfa(fornecedor_cnpj);
 
     // Buscar todas as OCs ativas do fornecedor
     const ocsQuery = `
@@ -115,7 +116,7 @@ export default async function handler(
       LEFT JOIN dbcredor c
         ON r.req_cod_credor = c.cod_credor
       WHERE o.orc_status = 'A'
-        AND REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $1
+        AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $1
       ORDER BY o.orc_data DESC
       LIMIT 100
     `;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCpfCnpj } from '@/utils/validacoes';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 // Schema para validação mais flexível que aceita null e converte para string
 const optionalStringField = (maxLength: number, fieldName: string) =>
@@ -78,7 +79,7 @@ export const cadastroTransportadoraSchema = z.object({
 }).superRefine((data, ctx) => {
   // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
   const tipo = (data as any).tipo || 'J';
-  const doc = String((data as any).cpfcgc || '').replace(/\D/g, '');
+  const doc = limparDocumentoAlfa(String((data as any).cpfcgc || ''));
   if (tipo === 'J' && doc.length !== 14) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

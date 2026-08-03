@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { validarDocumento, limparDocumento } from '@/utils/validarDocumento';
+import { validarDocumento } from '@/utils/validarDocumento';
+import { limparDocumentoAlfa, validarCNPJalfa } from '@/utils/cnpjAlfanumerico';
 
 export const clientSchema = z.object({
   // Identificação
@@ -9,11 +10,13 @@ export const clientSchema = z.object({
     .string()
     .min(1, 'Documento é obrigatório')
     .refine((val) => {
-      const clean = limparDocumento(val);
+      // Mantém letras (CNPJ alfanumérico). 11 = CPF (numérico); 14 = CNPJ
+      // (numérico OU alfanumérico); outros tamanhos = Exterior/documento livre.
+      const clean = limparDocumentoAlfa(val);
       if (clean.length === 0) return false;
-      // Exterior não valida CPF/CNPJ
-      if (clean.length !== 11 && clean.length !== 14) return clean.length > 0;
-      return validarDocumento(val);
+      if (clean.length === 11) return validarDocumento(val); // CPF
+      if (clean.length === 14) return validarCNPJalfa(clean); // CNPJ (com/sem letras)
+      return clean.length > 0; // Exterior
     }, 'CPF ou CNPJ inválido'),
   nome: z
     .string()

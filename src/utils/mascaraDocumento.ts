@@ -5,10 +5,12 @@
  * - tipo 'X' (Exterior) -> sem máscara (texto livre)
  * - sem tipo -> decide pela quantidade de dígitos (fallback)
  */
+import { mascaraCnpjAlfa, limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
+
 export function formatarDocumento(value: string, tipo?: string): string {
   if (tipo === 'X') return String(value ?? '');
 
-  const raw = String(value ?? '').replace(/\D/g, '');
+  const rawNum = String(value ?? '').replace(/\D/g, '');
 
   const mascaraCpf = (v: string) =>
     v
@@ -17,16 +19,12 @@ export function formatarDocumento(value: string, tipo?: string): string {
       .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
       .replace(/\.(\d{3})(\d)/, '.$1-$2');
 
-  const mascaraCnpj = (v: string) =>
-    v
-      .slice(0, 14)
-      .replace(/^(\d{2})(\d)/, '$1.$2')
-      .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-      .replace(/\.(\d{3})(\d)/, '.$1/$2')
-      .replace(/(\d{4})(\d)/, '$1-$2');
+  if (tipo === 'F') return mascaraCpf(rawNum);
+  // CNPJ agora é ALFANUMÉRICO (AA.AAA.AAA/AAAA-DV) — mantém letras.
+  if (tipo === 'J') return mascaraCnpjAlfa(value);
 
-  if (tipo === 'F') return mascaraCpf(raw);
-  if (tipo === 'J') return mascaraCnpj(raw);
-  // fallback por tamanho
-  return raw.length <= 11 ? mascaraCpf(raw) : mascaraCnpj(raw);
+  // Fallback (sem tipo): tem letra ou > 11 caracteres → CNPJ; senão CPF.
+  const rawAlfa = limparDocumentoAlfa(value);
+  if (/[A-Z]/.test(rawAlfa) || rawAlfa.length > 11) return mascaraCnpjAlfa(value);
+  return mascaraCpf(rawNum);
 }

@@ -1,52 +1,34 @@
 // utils/validacoes.ts
+import { limparDocumentoAlfa, validarCNPJalfa } from '@/utils/cnpjAlfanumerico';
 
 /**
- * Valida se um valor é um CPF ou CNPJ válido.
+ * Valida se um valor é um CPF (numérico) ou CNPJ (numérico OU alfanumérico) válido.
  */
 export function isValidCpfCnpj(value: string): boolean {
-  value = value.replace(/[^\d]+/g, '');
+  const numerico = value.replace(/[^\d]+/g, '');
+  const alfa = limparDocumentoAlfa(value);
 
-  if (value.length === 11) {
-    // Validação de CPF
+  // CNPJ (14) — numérico ou alfanumérico (DV por ASCII−48)
+  if (alfa.length === 14) {
+    return validarCNPJalfa(alfa);
+  }
+
+  // CPF (11) — continua numérico
+  if (numerico.length === 11) {
     let sum = 0;
     let rest;
-    if (value === '00000000000') return false;
+    if (numerico === '00000000000') return false;
     for (let i = 1; i <= 9; i++)
-      sum += parseInt(value.substring(i - 1, i)) * (11 - i);
+      sum += parseInt(numerico.substring(i - 1, i)) * (11 - i);
     rest = (sum * 10) % 11;
     if (rest === 10 || rest === 11) rest = 0;
-    if (rest !== parseInt(value.substring(9, 10))) return false;
+    if (rest !== parseInt(numerico.substring(9, 10))) return false;
     sum = 0;
     for (let i = 1; i <= 10; i++)
-      sum += parseInt(value.substring(i - 1, i)) * (12 - i);
+      sum += parseInt(numerico.substring(i - 1, i)) * (12 - i);
     rest = (sum * 10) % 11;
     if (rest === 10 || rest === 11) rest = 0;
-    if (rest !== parseInt(value.substring(10, 11))) return false;
-    return true;
-  } else if (value.length === 14) {
-    // Validação de CNPJ
-    let length = value.length - 2;
-    let numbers = value.substring(0, length);
-    const digits = value.substring(length);
-    let sum = 0;
-    let pos = length - 7;
-    for (let i = length; i >= 1; i--) {
-      sum += parseInt(numbers.charAt(length - i)) * pos--;
-      if (pos < 2) pos = 9;
-    }
-    let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
-    if (result !== parseInt(digits.charAt(0))) return false;
-
-    length += 1;
-    numbers = value.substring(0, length);
-    sum = 0;
-    pos = length - 7;
-    for (let i = length; i >= 1; i--) {
-      sum += parseInt(numbers.charAt(length - i)) * pos--;
-      if (pos < 2) pos = 9;
-    }
-    result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
-    if (result !== parseInt(digits.charAt(1))) return false;
+    if (rest !== parseInt(numerico.substring(10, 11))) return false;
     return true;
   }
 

@@ -1,4 +1,5 @@
 import type { SelectOption, TipoRequisicao, Filial, Comprador, Fornecedor } from '../types';
+import { mascaraCnpjAlfa, limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 // Conversores para options de select
 export const tiposToOptions = (tipos: TipoRequisicao[]): SelectOption[] =>
@@ -28,8 +29,7 @@ export const fornecedoresOptions = (fornecedores: Fornecedor[]): SelectOption[] 
 // Formatação de CNPJ
 export const formatCNPJ = (cnpj: string): string => {
   if (!cnpj) return '';
-  const numbers = cnpj.replace(/\D/g, '');
-  return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  return mascaraCnpjAlfa(cnpj); // CNPJ alfanumérico (mantém letras)
 };
 
 // Formatação de data
@@ -49,7 +49,7 @@ export const searchSuppliers = (suppliers: Fornecedor[], term: string): Forneced
     supplier.cod_credor.toLowerCase().includes(searchTerm) ||
     supplier.nome.toLowerCase().includes(searchTerm) ||
     supplier.nome_fant?.toLowerCase().includes(searchTerm) ||
-    supplier.cpf_cgc?.replace(/\D/g, '').includes(searchTerm.replace(/\D/g, ''))
+    (!!supplier.cpf_cgc && limparDocumentoAlfa(supplier.cpf_cgc).includes(limparDocumentoAlfa(term)))
   );
 };
 

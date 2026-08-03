@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface OrdemCompraDisponivel {
   id: string;
@@ -81,8 +82,8 @@ export default async function handler(
 
     // Filtro por CNPJ do fornecedor (remove caracteres não numéricos para comparar)
     if (fornecedorCnpj && typeof fornecedorCnpj === 'string') {
-      const cnpjLimpo = fornecedorCnpj.replace(/\D/g, '');
-      query += ` AND REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $${paramIndex}`;
+      const cnpjLimpo = limparDocumentoAlfa(fornecedorCnpj);
+      query += ` AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $${paramIndex}`;
       params.push(cnpjLimpo);
       paramIndex++;
     }
@@ -103,7 +104,7 @@ export default async function handler(
     // Fallback: se não encontrou pelo produto, buscar por fornecedor CNPJ
     if (result.rows.length === 0 && fornecedorCnpj && typeof fornecedorCnpj === 'string') {
       console.log('Nenhuma OC pelo produto, tentando fallback por fornecedor CNPJ:', fornecedorCnpj);
-      const cnpjLimpo = fornecedorCnpj.replace(/\D/g, '');
+      const cnpjLimpo = limparDocumentoAlfa(fornecedorCnpj);
 
       let fallbackQuery = `
         SELECT
@@ -130,7 +131,7 @@ export default async function handler(
         LEFT JOIN db_manaus.dbcredor c ON r.req_cod_credor = c.cod_credor
         WHERE o.orc_status = 'A'
           AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
-          AND REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $1
+          AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $1
       `;
       const fallbackParams: (string | number)[] = [cnpjLimpo];
       let fbIdx = 2;

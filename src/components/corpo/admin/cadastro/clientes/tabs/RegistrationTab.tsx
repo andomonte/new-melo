@@ -18,6 +18,7 @@ import SelectPadrao from '@/components/common/SelectPadrao';
 import { CountryCombobox } from '@/components/common/CountryCombobox';
 import { buscaCep } from '@/data/cep';
 import { buscaCnpj } from '@/data/cnpj';
+import { mascaraCnpjAlfa } from '@/utils/cnpjAlfanumerico';
 import { toast } from 'sonner';
 
 interface RegistrationTabProps {
@@ -270,17 +271,14 @@ export function RegistrationTab({
                     ref={ref}
                     value={fieldProps.value || ''}
                     onChange={(e) => {
-                      const raw = e.target.value.replace(/\D/g, '');
-                      let formatted = raw;
+                      let formatted: string;
                       if (tipoPessoa === 'J') {
-                        // CNPJ: 00.000.000/0000-00
-                        formatted = raw.slice(0, 14)
-                          .replace(/^(\d{2})(\d)/, '$1.$2')
-                          .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-                          .replace(/\.(\d{3})(\d)/, '.$1/$2')
-                          .replace(/(\d{4})(\d)/, '$1-$2');
+                        // CNPJ ALFANUMÉRICO: AA.AAA.AAA/AAAA-DV (letras nas 12
+                        // primeiras posições, DV numérico).
+                        formatted = mascaraCnpjAlfa(e.target.value);
                       } else {
-                        // CPF: 000.000.000-00
+                        // CPF: 000.000.000-00 (continua numérico)
+                        const raw = e.target.value.replace(/\D/g, '');
                         formatted = raw.slice(0, 11)
                           .replace(/^(\d{3})(\d)/, '$1.$2')
                           .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')

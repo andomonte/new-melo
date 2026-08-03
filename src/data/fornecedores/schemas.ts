@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCpfCnpj } from '@/utils/validacoes';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 export const cadastroFornecedorSchema = z.object({
   cpf_cgc: z
@@ -95,7 +96,7 @@ export const cadastroFornecedorSchema = z.object({
     });
   }
   // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
-  const doc = String((data as any).cpf_cgc || '').replace(/\D/g, '');
+  const doc = limparDocumentoAlfa(String((data as any).cpf_cgc || ''));
   if (data.tipo === 'J' && doc.length !== 14) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -207,7 +208,7 @@ export const edicaoFornecedorSchema = z.object({
     });
   }
   // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
-  const doc = String((data as any).cpf_cgc || '').replace(/\D/g, '');
+  const doc = limparDocumentoAlfa(String((data as any).cpf_cgc || ''));
   if (data.tipo === 'J' && doc.length !== 14) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

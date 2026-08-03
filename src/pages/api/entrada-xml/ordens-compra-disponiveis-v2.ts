@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface OrdemCompraDisponivel {
   id: string;
@@ -56,9 +57,9 @@ export default async function handler(
     // Se tiver CNPJ do fornecedor, filtrar por ele
     if (fornecedorCnpj && fornecedorCnpj !== 'undefined' && fornecedorCnpj !== 'null') {
       // Remover pontuação do CNPJ para comparação
-      const cnpjLimpo = fornecedorCnpj.replace(/[^0-9]/g, '');
+      const cnpjLimpo = limparDocumentoAlfa(String(fornecedorCnpj));
       if (cnpjLimpo.length > 0) {
-        whereClause += ` AND REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $${params.length + 1}`;
+        whereClause += ` AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $${params.length + 1}`;
         params.push(cnpjLimpo);
       }
     }

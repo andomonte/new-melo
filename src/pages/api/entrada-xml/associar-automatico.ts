@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface ItemNFeInput {
   nItem: string;
@@ -115,7 +116,7 @@ export default async function handler(
     client = await pool.connect();
     await client.query('SET search_path TO db_manaus');
 
-    const cnpjLimpo = cnpjEmitente.replace(/[^0-9]/g, '');
+    const cnpjLimpo = limparDocumentoAlfa(cnpjEmitente);
     console.log('🤖 [Auto] Iniciando associação automática para NFe:', nfeId);
     console.log('🤖 [Auto] CNPJ fornecedor:', cnpjLimpo);
     console.log('🤖 [Auto] Total de itens NFe:', itens.length);
@@ -124,7 +125,7 @@ export default async function handler(
     const credorResult = await client.query(`
       SELECT cod_credor
       FROM dbcredor
-      WHERE cpf_cgc = $1
+      WHERE regexp_replace(upper(COALESCE(cpf_cgc, '')), '[^0-9A-Z]', '', 'g') = $1
       LIMIT 1
     `, [cnpjLimpo]);
 
@@ -146,7 +147,7 @@ export default async function handler(
       LEFT JOIN dbcredor c
         ON r.req_cod_credor = c.cod_credor
       WHERE o.orc_status = 'A'
-        AND REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $1
+        AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $1
       ORDER BY o.orc_data ASC, o.orc_id ASC
     `, [cnpjLimpo]);
 

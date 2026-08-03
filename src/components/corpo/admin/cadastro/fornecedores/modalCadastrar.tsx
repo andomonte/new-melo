@@ -20,6 +20,7 @@ import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { campoParaAba } from './_forms/campoParaAba';
 import { cadastroFornecedorSchema } from '@/data/fornecedores/schemas'; // Importa o novo schema
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 import {
   ClassesFornecedor,
   Fornecedor,
@@ -222,7 +223,7 @@ export default function CustomModal({
   // Ao sair do campo CNPJ/CPF: verifica duplicidade (fornecedor/cliente/transportadora) e auto-preenche
   const buscarPorDocumento = useCallback(async () => {
     const tipo = fornecedor.tipo;
-    const digits = String(fornecedor.cpf_cgc || '').replace(/\D/g, '');
+    const digits = limparDocumentoAlfa(fornecedor.cpf_cgc || '');
     if (digits.length !== 11 && digits.length !== 14) return;
 
     try {

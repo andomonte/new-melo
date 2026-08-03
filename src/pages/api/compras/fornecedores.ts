@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface Fornecedor {
   cod_credor: string;
@@ -60,9 +61,9 @@ export default async function handler(
            OR nome ILIKE $1
            OR ${colFant} ILIKE $1
            OR ${colDoc} ILIKE $1
-           OR ($2 <> '' AND regexp_replace(COALESCE(${colDoc}, ''), '[^0-9]', '', 'g') LIKE '%' || $2 || '%')
+           OR ($2 <> '' AND regexp_replace(upper(COALESCE(${colDoc}, '')), '[^0-9A-Z]', '', 'g') LIKE '%' || $2 || '%')
       `;
-      params.push(`%${search}%`, search.replace(/\D/g, ''));
+      params.push(`%${search}%`, limparDocumentoAlfa(search));
     }
 
     // Query principal (aliases normalizam a saída para o mesmo formato)

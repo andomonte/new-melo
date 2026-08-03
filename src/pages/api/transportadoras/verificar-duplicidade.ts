@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import { PoolClient } from 'pg';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 export default async function handle(
   req: NextApiRequest,
@@ -35,15 +36,15 @@ export default async function handle(
     let params: string[];
 
     // Limpa formatação para comparar apenas dígitos
-    const cpfcgcDigits = cpfcgc.trim().replace(/\D/g, '');
+    const cpfcgcDigits = limparDocumentoAlfa(cpfcgc);
 
     if (codtransp && typeof codtransp === 'string' && codtransp.trim()) {
       // Edição: excluir o registro atual da verificação
-      query = `SELECT codtransp, nome FROM dbtransp WHERE REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') = $1 AND TRIM(codtransp) != TRIM($2) LIMIT 1`;
+      query = `SELECT codtransp, nome FROM dbtransp WHERE upper(REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '')) = $1 AND TRIM(codtransp) != TRIM($2) LIMIT 1`;
       params = [cpfcgcDigits, codtransp.trim()];
     } else {
       // Cadastro: verificar qualquer registro com o mesmo CPF/CNPJ
-      query = `SELECT codtransp, nome FROM dbtransp WHERE REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '') = $1 LIMIT 1`;
+      query = `SELECT codtransp, nome FROM dbtransp WHERE upper(REPLACE(REPLACE(REPLACE(REPLACE(cpfcgc, '.', ''), '-', ''), '/', ''), ' ', '')) = $1 LIMIT 1`;
       params = [cpfcgcDigits];
     }
 

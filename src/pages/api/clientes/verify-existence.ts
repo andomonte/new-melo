@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface ClientExistsResult {
   exists: boolean;
@@ -32,7 +33,7 @@ export default async function handler(
 
     try {
       // Remove formatação do CPF/CNPJ para comparação
-      const cleanedDocument = cpfCnpj.replace(/\D/g, '');
+      const cleanedDocument = limparDocumentoAlfa(cpfCnpj);
 
       const result = await client.query(
         `SELECT 
@@ -43,7 +44,7 @@ export default async function handler(
           cidade,
           uf
         FROM dbclien
-        WHERE regexp_replace(cpfcgc, '[^0-9]', '', 'g') = $1
+        WHERE regexp_replace(upper(cpfcgc), '[^0-9A-Z]', '', 'g') = $1
         LIMIT 1`,
         [cleanedDocument],
       );

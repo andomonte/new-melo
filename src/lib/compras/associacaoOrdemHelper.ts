@@ -11,6 +11,7 @@
  */
 
 import { PoolClient } from 'pg';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 // ============================================================================
 // TIPOS E INTERFACES
@@ -537,8 +538,8 @@ export async function buscarPorInfCpl(
 
     // Se tiver CNPJ do fornecedor, priorizar ordens do mesmo fornecedor
     if (cnpjFornecedor) {
-      query += ` ORDER BY CASE WHEN REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $2 THEN 0 ELSE 1 END`;
-      params.push(cnpjFornecedor.replace(/[^0-9]/g, ''));
+      query += ` ORDER BY CASE WHEN upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $2 THEN 0 ELSE 1 END`;
+      params.push(limparDocumentoAlfa(cnpjFornecedor));
     }
 
     query += ' LIMIT 5';
@@ -619,7 +620,7 @@ export async function buscarSugestoesFornecedor(
     };
   }
 
-  const cnpjLimpo = cnpjFornecedor.replace(/[^0-9]/g, '');
+  const cnpjLimpo = limparDocumentoAlfa(cnpjFornecedor);
   console.log('🔍 [Sugestão] Buscando ordens abertas do fornecedor:', cnpjLimpo);
 
   // Buscar ordens ativas do fornecedor
@@ -642,7 +643,7 @@ export async function buscarSugestoesFornecedor(
     LEFT JOIN db_manaus.dbcredor c
       ON r.req_cod_credor = c.cod_credor
     WHERE o.orc_status = 'A'
-      AND REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '') = $1
+      AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $1
     ORDER BY o.orc_data ASC, o.orc_id ASC
     LIMIT 50
   `;

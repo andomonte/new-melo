@@ -4,6 +4,7 @@ import { useDebounce } from 'use-debounce';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import api from '@/components/services/api';
+import { mascaraCnpjAlfa, limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface Fornecedor {
   cod_credor: string;
@@ -138,10 +139,8 @@ export const FornecedorAutocomplete: React.FC<FornecedorAutocompleteProps> = ({
 
   const formatCNPJ = (cnpj: string) => {
     if (!cnpj) return '';
-    const cleanCNPJ = cnpj.replace(/\D/g, '');
-    if (cleanCNPJ.length === 14) {
-      return cleanCNPJ.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-    }
+    const clean = limparDocumentoAlfa(cnpj);
+    if (clean.length === 14) return mascaraCnpjAlfa(cnpj); // CNPJ alfanumérico
     return cnpj;
   };
 

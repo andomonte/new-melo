@@ -11,6 +11,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 const bodySchema = z.object({
   nfeId: z.string().min(1, "NFE ID é obrigatório"),
@@ -95,7 +96,7 @@ export default async function handler(
     }
 
     const nfeInfo = nfeResult.rows[0];
-    const cnpjFornecedor = nfeInfo.fornecedor_cnpj?.replace(/\D/g, '');
+    const cnpjFornecedor = limparDocumentoAlfa(nfeInfo.fornecedor_cnpj || '');
 
     if (!cnpjFornecedor) {
       return res.status(400).json({
@@ -111,7 +112,7 @@ export default async function handler(
     const credorResult = await client.query(`
       SELECT cod_credor, nome
       FROM dbcredor
-      WHERE REPLACE(REPLACE(REPLACE(cpf_cgc, '.', ''), '-', ''), '/', '') = $1
+      WHERE upper(REPLACE(REPLACE(REPLACE(cpf_cgc, '.', ''), '-', ''), '/', '')) = $1
       LIMIT 1
     `, [cnpjFornecedor]);
 

@@ -9,6 +9,7 @@ import { FinancialTab } from './tabs/FinancialTab';
 import { CommercialTab } from './tabs/CommercialTab';
 import { DeliveryTab } from './tabs/DeliveryTab';
 import { clientSchema, ClientFormValues } from './schema';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 import {
   Cliente,
   insertCliente,
@@ -135,7 +136,7 @@ export default function ClientFormModal({
   // Mostra modal de duplicidade APENAS quando matches mudam de 0 para >0
   // e o documento tem tamanho válido (CPF=14 com máscara, CNPJ=18 com máscara)
   useEffect(() => {
-    const docLimpo = (documento || '').replace(/\D/g, '');
+    const docLimpo = limparDocumentoAlfa(documento || '');
     const docCompleto = docLimpo.length === 11 || docLimpo.length === 14;
 
     if (matches.length > 0 && prevMatchesRef.current === 0 && !isEditing && docCompleto) {
@@ -508,7 +509,7 @@ export default function ClientFormModal({
         const codcliEdicao = clientToEdit?.codcli ?? gatekeeperEditInfo!.id;
         const clienteToUpdate: Cliente = {
           codcli: codcliEdicao,
-          cpfcgc: String(data.documento || '').replace(/\D/g, ''),
+          cpfcgc: limparDocumentoAlfa(data.documento || ''),
           nome: toUpper(data.nome),
           nomefant: toUpper(data.nomeFantasia),
           tipo: data.tipoPessoa,
@@ -610,7 +611,7 @@ export default function ClientFormModal({
         // insertCliente também precisa de campos obrigatórios
         const clienteToInsert: Cliente = {
           codcli: '',
-          cpfcgc: String(data.documento || '').replace(/\D/g, ''),
+          cpfcgc: limparDocumentoAlfa(data.documento || ''),
           nome: toUpper(data.nome),
           nomefant: toUpper(data.nomeFantasia),
           tipo: data.tipoPessoa,

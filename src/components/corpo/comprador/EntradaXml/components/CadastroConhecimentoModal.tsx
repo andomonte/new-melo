@@ -6,6 +6,7 @@ import {
 import { toast } from 'sonner';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import CadastroTransportadoraModal from '@/components/corpo/admin/cadastro/transportadoras/modalCadastrar';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface Transportadora {
   codtransp: string;
@@ -301,7 +302,7 @@ const CadastroConhecimentoModal: React.FC<CadastroConhecimentoModalProps> = ({
    * era esse o motivo do auto-match falhar sempre). Retorna true se selecionou.
    */
   const buscarESelecionarTranspPorCnpj = async (cnpj?: string): Promise<boolean> => {
-    const digitos = (cnpj || '').replace(/\D/g, '');
+    const digitos = limparDocumentoAlfa(cnpj || '');
     if (!digitos) return false;
     setLoading(true);
     try {

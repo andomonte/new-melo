@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 export default async function handler(
   req: NextApiRequest,
@@ -15,8 +16,8 @@ export default async function handler(
     return res.status(200).json({ found: false, matches: [] });
   }
 
-  // Clean document (remove non-numeric characters)
-  const cleanDoc = doc.replace(/\D/g, '');
+  // Limpa o documento mantendo letras (CNPJ alfanumérico) — [0-9A-Z] em maiúsculas.
+  const cleanDoc = limparDocumentoAlfa(doc);
 
   if (!cleanDoc && !doc.trim()) {
     return res.status(200).json({ found: false, matches: [] });
@@ -40,7 +41,7 @@ export default async function handler(
           .query(
             `SELECT codcli, nome, cpfcgc, tipo 
          FROM dbclien 
-         WHERE regexp_replace(cpfcgc, '[^0-9]', '', 'g') = $1 
+         WHERE regexp_replace(upper(cpfcgc), '[^0-9A-Z]', '', 'g') = $1 
          LIMIT 1`,
             [searchDoc],
           )
@@ -53,7 +54,7 @@ export default async function handler(
           .query(
             `SELECT cod_credor, nome, cpf_cgc, tipo 
          FROM dbcredor 
-         WHERE regexp_replace(cpf_cgc, '[^0-9]', '', 'g') = $1 
+         WHERE regexp_replace(upper(cpf_cgc), '[^0-9A-Z]', '', 'g') = $1 
          LIMIT 1`,
             [searchDoc],
           )
@@ -66,7 +67,7 @@ export default async function handler(
           .query(
             `SELECT codtransp, nome, cpfcgc, tipo 
          FROM dbtransp 
-         WHERE regexp_replace(cpfcgc, '[^0-9]', '', 'g') = $1 
+         WHERE regexp_replace(upper(cpfcgc), '[^0-9A-Z]', '', 'g') = $1 
          LIMIT 1`,
             [searchDoc],
           )
