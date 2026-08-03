@@ -33,7 +33,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const ent = (
       await client.query(
-        `SELECT e.codent, e.chave, e.natop, rec.status AS rec_status,
+        `SELECT e.codent, e.chave, rec.status AS rec_status,
+                (SELECT natop FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) AS natop,
                 (SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) AS nfe_id
            FROM db_manaus.dbent e
            LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent

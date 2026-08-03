@@ -43,6 +43,8 @@ export default async function handler(
   const marca = (req.query.marca as string) ?? '';
   const grupoproduto = (req.query.grupoproduto as string) ?? '';
   const codCredor = (req.query.codCredor as string) ?? '';
+  // Quando true, a busca `search` casa SOMENTE pela referência (p.ref).
+  const somenteRef = String(req.query.somenteRef ?? '') === 'true';
   const offset = (page - 1) * perPage;
 
   let client;
@@ -61,13 +63,17 @@ export default async function handler(
       paramCounter++;
     }
     
-    // Busca geral
+    // Busca: geral (código/descrição/ref) ou SOMENTE pela referência.
     if (search && !codprod) {
-      whereConditions.push(`(
-        p.codprod ILIKE $${paramCounter} OR 
-        p.descr ILIKE $${paramCounter} OR 
-        p.ref ILIKE $${paramCounter}
-      )`);
+      if (somenteRef) {
+        whereConditions.push(`p.ref ILIKE $${paramCounter}`);
+      } else {
+        whereConditions.push(`(
+          p.codprod ILIKE $${paramCounter} OR
+          p.descr ILIKE $${paramCounter} OR
+          p.ref ILIKE $${paramCounter}
+        )`);
+      }
       params.push(`%${search}%`);
       paramCounter++;
     }

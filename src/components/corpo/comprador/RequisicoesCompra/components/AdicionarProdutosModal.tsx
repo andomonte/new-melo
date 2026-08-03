@@ -106,6 +106,8 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
   };
   const [busca, setBusca] = useState('');
   const [debouncedBusca] = useDebounce(busca, 500);
+  // Filtro: quando ligado, a busca casa SOMENTE pela referência do produto.
+  const [somenteRef, setSomenteRef] = useState(false);
   // Importação de planilha (CSV) REF;QUANTIDADE
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importando, setImportando] = useState(false);
@@ -181,6 +183,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
           search: termoBusca,
           page: paginaAtual,
           perPage: 10,
+          ...(somenteRef ? { somenteRef: true } : {}),
           ...(codCredor ? { codCredor } : {}),
         },
       });
@@ -248,7 +251,8 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
       buscarProdutos(debouncedBusca, 1);
       setPagina(1);
     }
-  }, [debouncedBusca, isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedBusca, isOpen, somenteRef]);
 
   const handleBuscaChange = (value: string) => {
     setBusca(value);
@@ -599,7 +603,9 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   ref={searchInputRef}
-                  placeholder="Buscar produtos por código, descrição ou marca... (Enter seleciona)"
+                  placeholder={somenteRef
+                    ? 'Buscar SOMENTE pela referência... (Enter seleciona)'
+                    : 'Buscar produtos por código, descrição ou marca... (Enter seleciona)'}
                   value={busca}
                   onChange={(e) => handleBuscaChange(e.target.value)}
                   onKeyDown={(e) => {
@@ -612,6 +618,18 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                   autoFocus
                 />
               </div>
+              <label
+                className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 whitespace-nowrap cursor-pointer select-none"
+                title="Filtrar a busca somente pela referência do produto"
+              >
+                <input
+                  type="checkbox"
+                  checked={somenteRef}
+                  onChange={(e) => setSomenteRef(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Somente referência
+              </label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -790,7 +808,17 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                                 {produto.descr}
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
-                                COD: {produto.codprod} | {produto.ref ? `Ref: ${produto.ref} | ` : ''}Disp: {Number(produto.estoque || 0)} | Marca: {produto.marca} | R$ {Number(produto.prcompra || 0).toFixed(2)}
+                                COD: {produto.codprod} |{' '}
+                                {produto.ref ? (
+                                  <>
+                                    Ref:{' '}
+                                    <span className="font-bold text-red-600 dark:text-red-400">
+                                      {produto.ref}
+                                    </span>
+                                    {' | '}
+                                  </>
+                                ) : null}
+                                Disp: {Number(produto.estoque || 0)} | Marca: {produto.marca} | R$ {Number(produto.prcompra || 0).toFixed(2)}
                               </div>
                               {Number(produto.prcompra) === 0 && (
                                 <div className="mt-1">
