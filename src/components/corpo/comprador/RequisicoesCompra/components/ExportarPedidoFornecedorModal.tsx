@@ -35,11 +35,20 @@ export const ExportarPedidoFornecedorModal: React.FC<Props> = ({ isOpen, onClose
   const [busca, setBusca] = useState('');
   const [ordens, setOrdens] = useState<OrdemLista[]>([]);
   const [loading, setLoading] = useState(false);
+  // Só carrega a lista APÓS o usuário pesquisar (evita trazer tudo ao abrir).
+  const [jaBuscou, setJaBuscou] = useState(false);
   // Layout escolhido por ordem (default Bosch).
   const [layoutPorOrdem, setLayoutPorOrdem] = useState<Record<string, Layout>>({});
 
   const carregar = useCallback(async (termo: string) => {
+    // Busca só com filtro: campo vazio volta ao estado inicial (lista vazia).
+    if (!termo) {
+      setOrdens([]);
+      setJaBuscou(false);
+      return;
+    }
     setLoading(true);
+    setJaBuscou(true);
     try {
       // status=A → somente ordens ABERTAS
       const url = `/api/ordens/list?perPage=50&page=1&status=A${termo ? `&search=${encodeURIComponent(termo)}` : ''}`;
@@ -54,12 +63,14 @@ export const ExportarPedidoFornecedorModal: React.FC<Props> = ({ isOpen, onClose
     }
   }, []);
 
+  // Ao abrir, começa com a lista vazia — a busca só acontece após o filtro.
   useEffect(() => {
     if (isOpen) {
       setBusca('');
-      carregar('');
+      setOrdens([]);
+      setJaBuscou(false);
     }
-  }, [isOpen, carregar]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -113,6 +124,10 @@ export const ExportarPedidoFornecedorModal: React.FC<Props> = ({ isOpen, onClose
           {loading ? (
             <div className="flex items-center justify-center py-10 text-gray-500">
               <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando...
+            </div>
+          ) : !jaBuscou ? (
+            <div className="text-center py-10 text-gray-500 dark:text-gray-400">
+              Digite um filtro (ordem, fornecedor ou data) e clique em Pesquisar.
             </div>
           ) : ordens.length === 0 ? (
             <div className="text-center py-10 text-gray-500 dark:text-gray-400">Nenhuma ordem encontrada.</div>

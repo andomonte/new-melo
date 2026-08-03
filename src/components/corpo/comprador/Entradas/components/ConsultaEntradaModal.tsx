@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Truck, ShoppingCart, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useScrollTecladoModal } from '@/hooks/useScrollTecladoModal';
 
 export type ConsultaTipo = 'conhecimento' | 'pedidos' | 'notas';
 
@@ -78,6 +79,8 @@ export const ConsultaEntradaModal: React.FC<ConsultaEntradaModalProps> = ({
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const cfg = CONFIG[tipo];
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollTecladoModal(scrollRef, isOpen);
 
   useEffect(() => {
     if (isOpen && entradaId && tipo) carregar();
@@ -118,7 +121,7 @@ export const ConsultaEntradaModal: React.FC<ConsultaEntradaModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-auto p-5">
+        <div ref={scrollRef} className="flex-1 overflow-auto p-5">
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />

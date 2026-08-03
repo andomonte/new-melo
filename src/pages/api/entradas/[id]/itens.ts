@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
+import { previewCustosEntrada } from '@/lib/compras/gerarEntradaDbent';
 
 interface EntradaItem {
   id: string;
@@ -11,8 +12,13 @@ interface EntradaItem {
   estoque_anterior: number;
   quantidade: number;
   valor_unitario: number;
+  preco_nf: number;
   valor_total: number;
   custo: number;
+  custo_fe: number;
+  custo_zf: number;
+  valor_ipi: number;
+  valor_st: number;
   armazens: string;
   unimed: string;
 }
@@ -61,7 +67,12 @@ export default async function handler(
         COALESCE(ie.quantant, 0) as estoque_anterior,
         ie.quant,
         ie.prunit,
+        COALESCE(ie.prunitnf, ie.prunit) as prunitnf,
         COALESCE(ie.prcusto, 0) as custo,
+        COALESCE(ie.prcusto_fe, 0) as custo_fe,
+        COALESCE(ie.prcusto_zf, 0) as custo_zf,
+        COALESCE(ie.valor_ipi, 0) as valor_ipi,
+        COALESCE(ie.valor_icms_subst, 0) as valor_st,
         ROUND(COALESCE(ie.quant,0) * COALESCE(ie.prunit,0), 2) as valor_total,
         COALESCE(p.unimed, 'UN') as unimed,
         (
@@ -81,6 +92,22 @@ export default async function handler(
     const result = await client.query(itensQuery, [id]);
     const items = result.rows;
 
+    // Custo calculado AO VIVO (mesmo motor do confirmar-preço, sem gravar). Na
+    // entrada ainda não confirmada, o dbitent.prcusto está zerado — este preview
+    // mostra o custo que SERÁ aplicado, para conferência (paridade com o Delphi).
+    let custosPreview: Map<string, { prcusto: number; prcusto_zf: number; prcusto_fe: number }>;
+    try {
+      custosPreview = await previewCustosEntrada(client, id);
+    } catch (e) {
+      console.error('Falha ao calcular preview de custo (segue com valores gravados):', e);
+      custosPreview = new Map();
+    }
+    const custoDe = (codprod: string, codreq: any, campo: 'prcusto' | 'prcusto_zf' | 'prcusto_fe', gravado: number) => {
+      const c = custosPreview.get(`${codprod}|${codreq ?? ''}`);
+      const v = c ? Number(c[campo]) : 0;
+      return v > 0 ? v : gravado; // usa o preview; cai no gravado se preview=0
+    };
+
     res.status(200).json({
       success: true,
       data: items.map(item => ({
@@ -92,8 +119,13 @@ export default async function handler(
         estoque_anterior: Number(item.estoque_anterior),
         quantidade: Number(item.quant),
         valor_unitario: Number(item.prunit),
+        preco_nf: Number(item.prunitnf),
         valor_total: Number(item.valor_total),
-        custo: Number(item.custo),
+        custo: custoDe(item.codprod, item.codreq, 'prcusto', Number(item.custo)),
+        custo_fe: custoDe(item.codprod, item.codreq, 'prcusto_fe', Number(item.custo_fe)),
+        custo_zf: custoDe(item.codprod, item.codreq, 'prcusto_zf', Number(item.custo_zf)),
+        valor_ipi: Number(item.valor_ipi),
+        valor_st: Number(item.valor_st),
         armazens: item.armazens || '',
         unimed: item.unimed || 'UN'
       })),

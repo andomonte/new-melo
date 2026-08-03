@@ -149,11 +149,51 @@ export function useNavegacaoTecladoTabela<T>({
   }, []);
 
   // Rola a linha selecionada para dentro da área visível ao navegar pelas setas.
+  // Desconta a altura do cabeçalho sticky (thead) — senão, ao subir, a linha
+  // fica escondida ATRÁS do cabeçalho fixo (título + linha de filtros).
   useEffect(() => {
     if (linhaSelecionada < 0) return;
-    const el = document.querySelector(`.${CLASSE_LINHA_ATIVA}`);
-    el?.scrollIntoView({ block: 'nearest' });
+    const row = document.querySelector<HTMLElement>(`.${CLASSE_LINHA_ATIVA}`);
+    if (!row) return;
+
+    const scroll = acharContainerRolavel(row);
+    if (!scroll) {
+      row.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
+    // Altura do cabeçalho fixo que cobre o topo do container (0 se não houver).
+    const thead = scroll.querySelector('thead');
+    const headH = thead ? thead.getBoundingClientRect().height : 0;
+
+    const rowRect = row.getBoundingClientRect();
+    const scRect = scroll.getBoundingClientRect();
+    const margem = 4;
+
+    if (rowRect.top < scRect.top + headH) {
+      // Linha acima da área visível (ou atrás do header) → sobe o scroll.
+      scroll.scrollTop -= scRect.top + headH - rowRect.top + margem;
+    } else if (rowRect.bottom > scRect.bottom) {
+      // Linha abaixo da área visível → desce o scroll.
+      scroll.scrollTop += rowRect.bottom - scRect.bottom + margem;
+    }
   }, [linhaSelecionada]);
 
   return { linhaSelecionada, setLinhaSelecionada };
+}
+
+/**
+ * Sobe na árvore a partir do elemento até achar o ancestral que realmente
+ * rola na vertical (overflow auto/scroll com conteúdo maior que a área).
+ */
+function acharContainerRolavel(el: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = el.parentElement;
+  while (node) {
+    const oy = getComputedStyle(node).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
 }

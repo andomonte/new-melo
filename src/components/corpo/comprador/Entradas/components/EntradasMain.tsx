@@ -92,7 +92,9 @@ export const EntradasMain: React.FC = () => {
   const handleEditSuccess = async () => { setEditItem(null); await refetch(); };
 
   // ⌨️ Navegação por teclado (estilo Delphi): ↑/↓ move a linha; Enter e V abrem
-  // Visualizar; I abre Ver Itens. (As demais operações ficam no menu "Ações".)
+  // Visualizar; I abre Ver Itens. As demais ações do menu "Ações" também têm
+  // atalho, mas são registradas dentro do próprio EntradaOperacoesMenu (onde os
+  // handlers vivem), ativas só na linha selecionada (prop `selecionada`).
   const algumModalAberto =
     isNewOpen || isGerarOpen || !!editItem || !!viewItem || !!itensItem || menusComModal.size > 0;
 
@@ -130,7 +132,7 @@ export const EntradasMain: React.FC = () => {
     [],
   );
 
-  const renderCell = (entrada: EntradaDTO, campo: string): React.ReactNode => {
+  const renderCell = (entrada: EntradaDTO, campo: string, index: number): React.ReactNode => {
     switch (campo) {
       case 'acoes':
         return (
@@ -143,6 +145,9 @@ export const EntradasMain: React.FC = () => {
               temRomaneio: entrada.temRomaneio,
               precoConfirmado: entrada.precoConfirmado,
             }}
+            // Atalhos de teclado do menu só valem para a linha selecionada e
+            // enquanto não houver outro modal aberto na página.
+            selecionada={index === linhaSelecionada && !algumModalAberto}
             onView={() => handleView(entrada)}
             onViewItems={() => handleViewItems(entrada)}
             onRefresh={refetch}
@@ -179,11 +184,11 @@ export const EntradasMain: React.FC = () => {
   const rows = React.useMemo(
     () => data.map((entrada, index) => {
       const row: Record<string, any> = { __index: index };
-      headers.forEach((h) => { row[h] = renderCell(entrada, h); });
+      headers.forEach((h) => { row[h] = renderCell(entrada, h, index); });
       return row;
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, headers],
+    [data, headers, linhaSelecionada, algumModalAberto],
   );
 
   return (

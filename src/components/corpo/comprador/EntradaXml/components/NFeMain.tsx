@@ -214,8 +214,34 @@ export const NFeMain: React.FC = () => {
     }
   };
 
-  const handleView = (item: NFeDTO) => {
+  const handleView = async (item: NFeDTO) => {
+    // Abre já com o cabeçalho; carrega os itens do XML (endpoint SÓ-LEITURA,
+    // não assume/trava a NFe) para exibir a lista com valores no "Ver".
     setViewItem(item);
+    try {
+      const response = await fetch('/api/entrada-xml/extrair-dados-xml', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nfe_id: item.id }),
+      });
+      const data = await response.json();
+      if (data.success && data.data?.itens) {
+        const itens = data.data.itens.map((itemData: any) => ({
+          codigo: itemData.codigo_produto,
+          descricao: itemData.descricao,
+          quantidade: itemData.quantidade,
+          valorUnitario: itemData.valor_unitario,
+          valorTotal: itemData.valor_total,
+          ncm: itemData.ncm,
+          cfop: itemData.cfop,
+          unidade: itemData.unidade,
+        }));
+        // Atualiza só se o mesmo item ainda estiver aberto.
+        setViewItem((prev) => (prev && prev.id === item.id ? { ...prev, itens } : prev));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar itens da NFe para visualização:', error);
+    }
   };
 
   const handleProcess = async (item: NFeDTO) => {

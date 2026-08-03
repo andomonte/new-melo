@@ -46,12 +46,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const fmt = String(formato).toLowerCase() === 'pdf' ? 'pdf' : 'excel';
 
-  // Colunas selecionadas (preserva a ordem de TODAS_COLUNAS). Sem seleção = todas.
+  // Colunas selecionadas — preserva a ORDEM enviada pelo usuário (o modal
+  // permite reordenar com setas). Sem seleção = todas na ordem canônica.
   let colunas = TODAS_COLUNAS;
   if (colunasParam) {
-    const set = new Set(String(colunasParam).split(',').map((s) => s.trim()).filter(Boolean));
-    const filtradas = TODAS_COLUNAS.filter((c) => set.has(c.key));
-    if (filtradas.length > 0) colunas = filtradas;
+    const mapa = new Map(TODAS_COLUNAS.map((c) => [c.key, c]));
+    const ordenadas = String(colunasParam)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((key) => mapa.get(key))
+      .filter((c): c is (typeof TODAS_COLUNAS)[number] => Boolean(c));
+    if (ordenadas.length > 0) colunas = ordenadas;
   }
 
   const cookies = parseCookies({ req });

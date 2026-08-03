@@ -9,6 +9,7 @@ const filtroParaColunaSQL: Record<string, string> = {
   dataOrdem: 'o.orc_data',
   statusOrdem: 'o.orc_status',
   statusRequisicao: 'r.req_status',
+  orc_pagamento_configurado: 'o.orc_pagamento_configurado',
   fornecedorNome: 'f.nome',
   fornecedor_completo: "(CAST(f.cod_credor AS TEXT) || ' - ' || f.nome)", // Campo concatenado
   compradorNome: 'c.nome',
@@ -151,6 +152,30 @@ export default async function handler(
         }
       }
       return; // status tratado; não cai no processamento genérico
+    }
+
+    // Coluna booleana exibida como SIM/NÃO: traduz o texto do filtro para
+    // true/false. "NÃO" inclui NULL (a tela mostra NÃO quando o valor é falsy).
+    if (campo === 'orc_pagamento_configurado') {
+      const valores = new Set<boolean>();
+      filtrosDoCampo.forEach((f) => {
+        String(f.valor || '')
+          .split(';')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .forEach((termo) => {
+            const t = termo.toLowerCase();
+            if (t.startsWith('s') || t === 'true' || t === '1') valores.add(true);
+            else if (t.startsWith('n') || t === 'false' || t === '0') valores.add(false);
+          });
+      });
+      // Só filtra quando um único valor foi escolhido (2 valores = mostra tudo).
+      if (valores.size === 1) {
+        const alvo = [...valores][0];
+        params.push(alvo);
+        whereGroups.push(`(COALESCE(${coluna}, false) = $${params.length})`);
+      }
+      return;
     }
 
     // Identificar tipos de campo

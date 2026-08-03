@@ -57,6 +57,11 @@ export default async function handle(
       'codprod',
       'referenciasFabrica',
       'marca_nome',
+      // Campos derivados (joins/subqueries) retornados pelo GET — não são
+      // colunas de dbprod, então não podem entrar no UPDATE.
+      'grupo_funcao_nome',
+      'grupo_produto_nome',
+      'estoque_disponivel',
     ]);
 
     const colunas = Object.keys(produto).filter(

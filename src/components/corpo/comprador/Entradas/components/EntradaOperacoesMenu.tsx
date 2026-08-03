@@ -16,6 +16,13 @@ import { ConsultaEntradaModal, ConsultaTipo } from './ConsultaEntradaModal';
 import ExportarItensEntradaModal from './ExportarItensEntradaModal';
 import { Truck, ShoppingCart, FileText, FileSpreadsheet, FileDown } from 'lucide-react';
 
+/** Badge de atalho de teclado exibido à direita do item do menu. */
+const Kbd: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+    {children}
+  </kbd>
+);
+
 interface EntradaOperacoesMenuProps {
   entrada: {
     id: string;
@@ -31,6 +38,9 @@ interface EntradaOperacoesMenuProps {
   /** Notifica a página quando algum modal/confirmação deste menu abre/fecha
    *  (para a navegação por teclado da lista pausar enquanto houver modal). */
   onOperacaoAtiva?: (ativa: boolean) => void;
+  /** True quando esta é a linha selecionada na tabela: habilita os atalhos de
+   *  teclado das ações (mesmas regras/condições do menu). */
+  selecionada?: boolean;
 }
 
 export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
@@ -38,7 +48,8 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   onView,
   onRefresh,
   onViewItems,
-  onOperacaoAtiva
+  onOperacaoAtiva,
+  selecionada = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showConfirmReabrir, setShowConfirmReabrir] = useState(false);
@@ -324,6 +335,77 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
     }
   };
 
+  // Regras de disponibilidade das ações que dependem de status (espelham a
+  // renderização condicional do menu abaixo) — reaproveitadas pelos atalhos.
+  const canReabrir = entrada.status !== 'PENDENTE' && entrada.status !== 'PROCESSANDO';
+  const canCancelar = entrada.status !== 'CANCELADA';
+
+  // ⌨️ Atalhos de teclado das ações — ativos só quando esta é a linha
+  // selecionada e não há modal deste menu aberto. Cada tecla respeita a mesma
+  // condição do item correspondente no menu (igual às telas de Ordem/Requisição).
+  useEffect(() => {
+    if (!selecionada || algumModalOperacaoAberto) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      // Não interfere na digitação (busca/filtros) nem em combinações com Ctrl.
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const disparar = (fn: () => void) => {
+        e.preventDefault();
+        setIsOpen(false);
+        fn();
+      };
+
+      switch (e.key.toLowerCase()) {
+        case 'c':
+          return disparar(() => setConsultaTipo('conhecimento'));
+        case 'd':
+          return disparar(() => setConsultaTipo('pedidos'));
+        case 'n':
+          return disparar(() => setConsultaTipo('notas'));
+        case 'x':
+          return disparar(() => handleExportarItens('excel'));
+        case 'p':
+          return disparar(() => handleExportarItens('pdf'));
+        case 'r':
+          if (canFazerRomaneio) return disparar(() => setShowRomaneio(true));
+          return;
+        case 'f':
+          if (canConfirmarPreco) return disparar(() => handleAbrirConfirmarPreco());
+          return;
+        case 'u':
+          if (canConfirmarPreco) return disparar(() => handleAbrirConfirmarSemCusto());
+          return;
+        case 'e':
+          if (canConfirmarEstoque) return disparar(() => setShowConfirmarEstoque(true));
+          return;
+        case 'a':
+          if (canReabrir) return disparar(() => handleReabrirEntrada());
+          return;
+        default:
+          // Delete tem key === 'Delete' (não vira minúscula útil aqui)
+          if (e.key === 'Delete' && canCancelar) {
+            return disparar(() => setShowConfirmCancelar(true));
+          }
+          return;
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selecionada,
+    algumModalOperacaoAberto,
+    canFazerRomaneio,
+    canConfirmarPreco,
+    canConfirmarEstoque,
+    canReabrir,
+    canCancelar,
+  ]);
+
   return (
     <>
       <div className="flex items-center justify-center">
@@ -344,12 +426,14 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
             <DropdownMenuItem onClick={onView}>
               <Eye className="mr-2 h-4 w-4" />
               Visualizar
+              <Kbd>V</Kbd>
             </DropdownMenuItem>
 
             {/* Ver Itens */}
             <DropdownMenuItem onClick={onViewItems}>
               <List className="mr-2 h-4 w-4" />
               Ver Itens
+              <Kbd>I</Kbd>
             </DropdownMenuItem>
 
             {/* Consultas (read-only) */}
@@ -357,14 +441,17 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
             <DropdownMenuItem onClick={() => setConsultaTipo('conhecimento')}>
               <Truck className="mr-2 h-4 w-4 text-blue-600" />
               Consultar Conhecimento
+              <Kbd>C</Kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setConsultaTipo('pedidos')}>
               <ShoppingCart className="mr-2 h-4 w-4 text-orange-600" />
               Consultar Pedidos
+              <Kbd>D</Kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setConsultaTipo('notas')}>
               <FileText className="mr-2 h-4 w-4 text-green-600" />
               Consultar Notas Fiscais
+              <Kbd>N</Kbd>
             </DropdownMenuItem>
 
             {/* Exportar itens (Excel/PDF) — "Copiar para o Excel" do Delphi */}
@@ -372,10 +459,12 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
             <DropdownMenuItem onClick={() => handleExportarItens('excel')}>
               <FileSpreadsheet className="mr-2 h-4 w-4 text-green-700" />
               Exportar Itens (Excel)
+              <Kbd>X</Kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handleExportarItens('pdf')}>
               <FileDown className="mr-2 h-4 w-4 text-red-600" />
               Exportar Itens (PDF)
+              <Kbd>P</Kbd>
             </DropdownMenuItem>
 
             {/* Fazer Romaneio */}
@@ -385,6 +474,7 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
                 <DropdownMenuItem onClick={() => setShowRomaneio(true)}>
                   <Warehouse className="mr-2 h-4 w-4 text-purple-600" />
                   Fazer Romaneio
+                  <Kbd>R</Kbd>
                 </DropdownMenuItem>
               </>
             )}
@@ -394,6 +484,7 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               <DropdownMenuItem onClick={handleAbrirConfirmarPreco}>
                 <DollarSign className="mr-2 h-4 w-4 text-green-600" />
                 Confirmar Preco
+                <Kbd>F</Kbd>
               </DropdownMenuItem>
             )}
 
@@ -402,6 +493,7 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               <DropdownMenuItem onClick={handleAbrirConfirmarSemCusto}>
                 <DollarSign className="mr-2 h-4 w-4 text-amber-600" />
                 Confirmar sem Custo
+                <Kbd>U</Kbd>
               </DropdownMenuItem>
             )}
 
@@ -410,11 +502,12 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               <DropdownMenuItem onClick={() => setShowConfirmarEstoque(true)}>
                 <PackageCheck className="mr-2 h-4 w-4 text-emerald-600" />
                 Confirmar Estoque
+                <Kbd>E</Kbd>
               </DropdownMenuItem>
             )}
 
             {/* Reabrir (se necessário) */}
-            {entrada.status !== 'PENDENTE' && entrada.status !== 'PROCESSANDO' && (
+            {canReabrir && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -423,12 +516,13 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
                 >
                   <RotateCcw className="mr-2 h-4 w-4" />
                   Reabrir Entrada
+                  <Kbd>A</Kbd>
                 </DropdownMenuItem>
               </>
             )}
 
             {/* Cancelar Entrada (destrutivo) */}
-            {entrada.status !== 'CANCELADA' && (
+            {canCancelar && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -437,6 +531,7 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
                 >
                   <Ban className="mr-2 h-4 w-4" />
                   Cancelar Entrada
+                  <Kbd>Del</Kbd>
                 </DropdownMenuItem>
               </>
             )}

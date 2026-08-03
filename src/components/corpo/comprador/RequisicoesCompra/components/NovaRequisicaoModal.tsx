@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useRef } from 'react';
 import { X, Building2, User, Calendar, Package, MapPin, Plus, Pencil } from 'lucide-react';
 import { AuthContext } from '@/contexts/authContexts';
 import { Input } from '@/components/ui/input';
@@ -47,7 +47,7 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
   initialData
 }) => {
   const { toast } = useToast();
-  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar({
+  const { pedirConfirmacao, ConfirmacaoSalvarModal, aberto: confirmAberto } = useConfirmarSalvar({
     title: 'Confirmar',
     message: '',
   });
@@ -361,6 +361,27 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
       onClose();
     }
   };
+
+  // Mantém a referência atual do handleClose (com o formData mais recente) para
+  // o listener de Esc não usar um closure desatualizado.
+  const handleCloseRef = useRef(handleClose);
+  handleCloseRef.current = handleClose;
+
+  // Esc no formulário abre a MESMA confirmação do X (não fecha direto). Os
+  // modais internos tratam o próprio Esc: produtos (o seu listener) e a
+  // confirmação (ConfirmationModal). Por isso ignoramos Esc quando um deles
+  // está aberto.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showProdutosModal || confirmAberto) return;
+      e.preventDefault();
+      handleCloseRef.current();
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [isOpen, showProdutosModal, confirmAberto]);
 
   const criarRequisicao = async () => {
             setSubmitting(true);

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { X, Package, FileText, Calendar, DollarSign, Building2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useScrollTecladoModal } from '@/hooks/useScrollTecladoModal';
 
 interface EntradaDTO {
   id: string;
@@ -32,6 +33,9 @@ export const ViewEntradaModal: React.FC<ViewEntradaModalProps> = ({
   entrada,
   onClose,
 }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollTecladoModal(scrollRef, isOpen);
+
   if (!isOpen) return null;
 
   const statusConfig: Record<string, { label: string; color: string }> = {
@@ -68,7 +72,7 @@ export const ViewEntradaModal: React.FC<ViewEntradaModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-slate-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div ref={scrollRef} className="bg-white dark:bg-slate-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">

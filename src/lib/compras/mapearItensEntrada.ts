@@ -64,6 +64,7 @@ export interface AssocItem {
 }
 export interface DetImposto {
   qcom?: number | null;
+  vprod?: number | null; // valor total do item na NF (XML) — unit NF = vprod/qcom
   vicms?: number | null;
   vicmsst?: number | null;
   vipi?: number | null;
@@ -114,11 +115,17 @@ export function montarLinhasDbitent(
   return destino.map((ped) => {
     const quant = N(ped.quantidade);
     const fator = qcom > 0 ? quant / qcom : 0;
+    // MEIA NOTA: `preco_unitario_nf` (nome enganoso) guarda o preço REAL/cheio
+    // declarado na associação (>= preço da NF), usado como Pç.Unit (custo real).
     const meia = assoc.meia_nota === true;
     const prunit = meia
       ? N(assoc.preco_unitario_nf)
       : N(assoc.preco_real) || N(assoc.valor_unitario) || N(ped.valor_unitario);
-    const prunitnf = N(assoc.preco_unitario_nf) || prunit;
+    // Pç.Unit.NF = preço unitário FISCAL da nota, SEMPRE do XML (vprod/qcom).
+    // Nunca usa preco_unitario_nf (= preço real da meia nota) nem cai no prunit
+    // (preço da OC) — senão a coluna "Pç. NF" e o Custo Contábil saem errados.
+    const xmlNfUnit = qcom > 0 ? N(det?.vprod) / qcom : 0;
+    const prunitnf = xmlNfUnit || prunit;
 
     const vIcmsRateado = N(det?.vicms) * fator;
     const totalicmsdesconto = descontoIcmsSuframa(regra, prod, vIcmsRateado);

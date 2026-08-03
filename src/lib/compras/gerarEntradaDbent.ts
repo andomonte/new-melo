@@ -122,7 +122,7 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
   const assocs = (await client.query(
     `select a.id, a.nfe_item_id, a.produto_cod, a.quantidade_associada, a.quantidade_nf,
             a.valor_unitario, a.preco_real, a.preco_unitario_nf, a.meia_nota,
-            d.qcom, d.vicms, d.vicmsst, d.vipi, d.vpis, d.vcofins, d.vicmsdeson,
+            d.qcom, d.vprod, d.vicms, d.vicmsst, d.vipi, d.vpis, d.vcofins, d.vicmsdeson,
             p.strib, p.percsubst, p.isentoipi, p.ipi, p.dolar
        from db_manaus.nfe_item_associacao a
        left join db_manaus.dbnfe_ent_det d on d.codnfe_ent=a.nfe_id and d.nitem::text=a.nfe_item_id::text
@@ -292,4 +292,71 @@ export async function confirmarPrecoEntrada(
   }
 
   return { produtosAtualizados, itens: itensOut };
+}
+
+/**
+ * PREVIEW do custo por item (somente leitura) — usa o MESMO motor do
+ * confirmarPrecoEntrada (calcularCustoItem), mas NÃO grava nada e NÃO mexe na
+ * média. Serve para a tela "Confirmar Preço" exibir o Custo/Custo ZF/Custo FE
+ * ANTES de confirmar (paridade com o grid do Delphi, que já mostra o custo).
+ *
+ * Retorna um mapa por chave `codprod|codreq` com os custos calculados.
+ */
+export async function previewCustosEntrada(
+  client: any,
+  codent: string,
+): Promise<Map<string, CustosItemOut>> {
+  await client.query('SET LOCAL search_path TO db_manaus, public');
+
+  // Empresa / zona fiscal (igual ao endpoint confirmar-preco)
+  const empRow = (await client.query(`select uf from db_manaus.dadosempresa limit 1`)).rows[0];
+  const uf = empRow?.uf || 'AM';
+  const zonaRow = (await client.query(
+    `select "ZONA_ISENTIVADA" as zona from db_manaus.dbuf_n where "UF" = $1`, [uf])).rows[0];
+  const empresa: EmpresaZona = { uf, zona_isentivada: zonaRow?.zona || 'S' };
+
+  const ent = (await client.query(
+    `select custofin, desconto, verba_tmk, acrescimo, temcon, codtransp, nrocon
+       from db_manaus.dbent where codent=$1`, [codent])).rows[0];
+  if (!ent) return new Map();
+
+  const header = {
+    custofin: Number(ent.custofin || 0), desconto: Number(ent.desconto || 0),
+    verba_tmk: Number(ent.verba_tmk || 0), acrescimo: Number(ent.acrescimo || 0),
+  };
+
+  // Frete do conhecimento (mesma regra do confirmarPrecoEntrada)
+  let freteFinal = 0;
+  if ((ent.temcon ?? 'N') === 'S' && ent.codtransp && ent.nrocon) {
+    const con = (await client.query(
+      `select cif, totaltransp, totalcon, stcon from db_manaus.dbconhecimentoent
+        where codtransp=$1 and nrocon=$2 and coalesce(cancel,'N')<>'S'`,
+      [ent.codtransp, ent.nrocon])).rows[0];
+    if (con) {
+      freteFinal = freteConhecimento({
+        cif: con.cif,
+        totaltransp: Number(con.totaltransp || 0),
+        totalcon: Number(con.totalcon || 0),
+        stcon: Number(con.stcon || 0),
+      });
+    }
+  }
+
+  const itens = (await client.query(
+    `select ie.codprod, ie.codreq, ie.quant, ie.quantnf, ie.prunit, ie.prunitnf,
+            ie.valor_ipi, ie.valor_icms_subst, ie.pis, ie.cofins, ie.totalicmsdesconto,
+            ie.fis_icmsdeson, ie.prtransf,
+            p.isentoipi, p.ipi, p.dolar
+       from db_manaus.dbitent ie
+       left join db_manaus.dbprod p on p.codprod=ie.codprod
+      where ie.codent=$1 order by ie.codprod`, [codent])).rows;
+
+  const mapa = new Map<string, CustosItemOut>();
+  for (const ie of itens) {
+    const prod = { isentoipi: ie.isentoipi, ipi: ie.ipi, dolar: ie.dolar };
+    const custos = calcularCustoItem(ie, header, prod, empresa, freteFinal);
+    const chave = `${ie.codprod}|${ie.codreq ?? ''}`;
+    mapa.set(chave, { codprod: ie.codprod, codreq: ie.codreq, quant: Number(ie.quant), ...custos });
+  }
+  return mapa;
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, FileSpreadsheet, FileDown } from 'lucide-react';
+import { X, FileSpreadsheet, FileDown, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface ExportarItensEntradaModalProps {
   isOpen: boolean;
@@ -22,40 +22,55 @@ const COLUNAS_DISPONIVEIS: { key: string; label: string }[] = [
   { key: 'armazens', label: 'Armazéns' },
 ];
 
+interface ColunaEstado {
+  key: string;
+  label: string;
+  selecionada: boolean;
+}
+
+const estadoInicial = (): ColunaEstado[] =>
+  COLUNAS_DISPONIVEIS.map((c) => ({ ...c, selecionada: true }));
+
 export default function ExportarItensEntradaModal({
   isOpen,
   onClose,
   entradaId,
   formato,
 }: ExportarItensEntradaModalProps) {
-  const [selecionadas, setSelecionadas] = useState<Set<string>>(
-    () => new Set(COLUNAS_DISPONIVEIS.map((c) => c.key)),
-  );
+  // Uma única lista ORDENADA guarda tanto a ordem quanto a seleção.
+  const [colunas, setColunas] = useState<ColunaEstado[]>(estadoInicial);
 
-  // Reseta para todas selecionadas sempre que abrir
+  // Reseta ordem e seleção sempre que abrir
   useEffect(() => {
-    if (isOpen) setSelecionadas(new Set(COLUNAS_DISPONIVEIS.map((c) => c.key)));
+    if (isOpen) setColunas(estadoInicial());
   }, [isOpen]);
 
-  const todasMarcadas = selecionadas.size === COLUNAS_DISPONIVEIS.length;
-  const nenhumaMarcada = selecionadas.size === 0;
+  const selecionadasCount = colunas.filter((c) => c.selecionada).length;
+  const nenhumaMarcada = selecionadasCount === 0;
 
-  const toggle = (key: string) => {
-    setSelecionadas((prev) => {
-      const nova = new Set(prev);
-      if (nova.has(key)) nova.delete(key);
-      else nova.add(key);
+  const toggle = (key: string) =>
+    setColunas((prev) =>
+      prev.map((c) => (c.key === key ? { ...c, selecionada: !c.selecionada } : c)),
+    );
+
+  const marcarTodas = () =>
+    setColunas((prev) => prev.map((c) => ({ ...c, selecionada: true })));
+  const desmarcarTodas = () =>
+    setColunas((prev) => prev.map((c) => ({ ...c, selecionada: false })));
+
+  const mover = (index: number, delta: number) =>
+    setColunas((prev) => {
+      const destino = index + delta;
+      if (destino < 0 || destino >= prev.length) return prev;
+      const nova = [...prev];
+      [nova[index], nova[destino]] = [nova[destino], nova[index]];
       return nova;
     });
-  };
 
-  const marcarTodas = () => setSelecionadas(new Set(COLUNAS_DISPONIVEIS.map((c) => c.key)));
-  const desmarcarTodas = () => setSelecionadas(new Set());
-
-  // Mantém a ordem canônica das colunas na URL
+  // Chaves selecionadas na ordem atual da lista
   const colunasOrdenadas = useMemo(
-    () => COLUNAS_DISPONIVEIS.filter((c) => selecionadas.has(c.key)).map((c) => c.key),
-    [selecionadas],
+    () => colunas.filter((c) => c.selecionada).map((c) => c.key),
+    [colunas],
   );
 
   const gerar = () => {
@@ -112,7 +127,7 @@ export default function ExportarItensEntradaModal({
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-              Selecione as colunas do relatório
+              Colunas do relatório
             </span>
             <div className="flex gap-2 text-xs">
               <button onClick={marcarTodas} className="text-[#347AB6] hover:underline">
@@ -125,20 +140,49 @@ export default function ExportarItensEntradaModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 max-h-72 overflow-y-auto">
-            {COLUNAS_DISPONIVEIS.map((c) => (
-              <label
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Marque as colunas e use as setas para definir a ordem no relatório.
+          </p>
+
+          <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+            {colunas.map((c, index) => (
+              <div
                 key={c.key}
-                className="flex items-center gap-2 py-1 text-sm text-gray-700 dark:text-gray-200 cursor-pointer"
+                className="flex items-center gap-2 py-1.5 pr-1 text-sm text-gray-700 dark:text-gray-200"
               >
-                <input
-                  type="checkbox"
-                  checked={selecionadas.has(c.key)}
-                  onChange={() => toggle(c.key)}
-                  className="rounded border-gray-300"
-                />
-                {c.label}
-              </label>
+                <span className="w-5 text-right text-xs text-gray-400 tabular-nums">
+                  {index + 1}
+                </span>
+                <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={c.selecionada}
+                    onChange={() => toggle(c.key)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="truncate">{c.label}</span>
+                </label>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => mover(index, -1)}
+                    disabled={index === 0}
+                    title="Subir"
+                    className="p-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => mover(index, 1)}
+                    disabled={index === colunas.length - 1}
+                    title="Descer"
+                    className="p-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>

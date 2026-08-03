@@ -7,7 +7,11 @@ interface ItemPreco {
   produto_cod: string;
   produto_nome: string;
   quantidade: number;
-  preco_unitario: number;
+  preco_unitario: number; // Pç. Unit (dbitent.prunit)
+  preco_nf: number;       // Pç. Unit NF (dbitent.prunitnf)
+  custo: number;          // Custo dentro do estado (dbitent.prcusto)
+  custo_zf: number;       // Custo Zona Franca (dbitent.prcusto_zf)
+  custo_fe: number;       // Custo fora do estado (dbitent.prcusto_fe)
   preco_total: number;
   unidade_venda: string;
 }
@@ -67,6 +71,10 @@ export const ConfirmarPrecoModal: React.FC<ConfirmarPrecoModalProps> = ({
             produto_nome: item.produto_descricao || item.produtoNome || item.produto_nome || 'Produto',
             quantidade: qtd,
             preco_unitario: precoUnit,
+            preco_nf: parseFloat(item.preco_nf ?? precoUnit),
+            custo: parseFloat(item.custo ?? 0),
+            custo_zf: parseFloat(item.custo_zf ?? 0),
+            custo_fe: parseFloat(item.custo_fe ?? 0),
             preco_total: precoUnit * qtd,
             unidade_venda: unidade,
           };
@@ -97,7 +105,7 @@ export const ConfirmarPrecoModal: React.FC<ConfirmarPrecoModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-700">
           <div className="flex items-center gap-3">
@@ -133,9 +141,12 @@ export const ConfirmarPrecoModal: React.FC<ConfirmarPrecoModalProps> = ({
                   O que significa "Confirmar Preços"?
                 </p>
                 <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                  Confira os itens e valores da nota. Ao confirmar, os preços de custo da nota
-                  serão usados para atualizar o custo médio dos produtos (afeta margem e lucro).
-                  Os valores são somente leitura — vêm da nota fiscal.
+                  Confira os itens e valores da nota. Ao confirmar, o <strong>Custo</strong> de cada
+                  item entra na média ponderada do produto (afeta margem e lucro). Colunas (como no
+                  Delphi): <strong>Pç. Unit</strong> = preço usado · <strong>Pç. NF</strong> = preço
+                  da nota fiscal · <strong>Custo</strong> = custo já com IPI/ST/frete/desconto ·
+                  <strong>Custo ZF</strong> (Zona Franca) e <strong>Custo FE</strong> (fora do estado).
+                  Somente leitura.
                 </p>
               </div>
             </div>
@@ -162,14 +173,18 @@ export const ConfirmarPrecoModal: React.FC<ConfirmarPrecoModalProps> = ({
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
             ) : (
-              <div className="max-h-64 overflow-auto">
+              <div className="max-h-[45vh] overflow-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100 dark:bg-zinc-800 sticky top-0">
                     <tr>
                       <th className="text-left p-2 text-gray-600 dark:text-gray-400 font-medium">Produto</th>
                       <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Qtd</th>
-                      <th className="text-center p-2 text-gray-600 dark:text-gray-400 font-medium">Unidade</th>
-                      <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Preço Unit.</th>
+                      <th className="text-center p-2 text-gray-600 dark:text-gray-400 font-medium">Un.</th>
+                      <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Pç. Unit</th>
+                      <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Pç. NF</th>
+                      <th className="text-right p-2 text-emerald-700 dark:text-emerald-400 font-semibold">Custo</th>
+                      <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Custo ZF</th>
+                      <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Custo FE</th>
                       <th className="text-right p-2 text-gray-600 dark:text-gray-400 font-medium">Total</th>
                     </tr>
                   </thead>
@@ -186,16 +201,28 @@ export const ConfirmarPrecoModal: React.FC<ConfirmarPrecoModalProps> = ({
                             </p>
                           </div>
                         </td>
-                        <td className="p-2 text-right text-gray-700 dark:text-gray-300">
+                        <td className="p-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">
                           {item.quantidade}
                         </td>
                         <td className="p-2 text-center text-gray-700 dark:text-gray-300">
                           {item.unidade_venda}
                         </td>
-                        <td className="p-2 text-right text-gray-900 dark:text-white">
+                        <td className="p-2 text-right text-gray-900 dark:text-white whitespace-nowrap">
                           {formatCurrency(item.preco_unitario)}
                         </td>
-                        <td className="p-2 text-right font-medium text-gray-900 dark:text-white">
+                        <td className="p-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {formatCurrency(item.preco_nf)}
+                        </td>
+                        <td className="p-2 text-right font-semibold text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                          {formatCurrency(item.custo)}
+                        </td>
+                        <td className="p-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {formatCurrency(item.custo_zf)}
+                        </td>
+                        <td className="p-2 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {formatCurrency(item.custo_fe)}
+                        </td>
+                        <td className="p-2 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
                           {formatCurrency(item.preco_total)}
                         </td>
                       </tr>

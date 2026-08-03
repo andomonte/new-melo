@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Package, DollarSign, Hash, Ruler, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useScrollTecladoModal } from '@/hooks/useScrollTecladoModal';
 
 interface EntradaItem {
   id: string;
@@ -33,6 +34,8 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
   const [items, setItems] = useState<EntradaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useScrollTecladoModal(scrollRef, isOpen);
 
   useEffect(() => {
     if (isOpen && entradaId) {
@@ -96,7 +99,7 @@ export const EntradaItensModal: React.FC<EntradaItensModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden p-6">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">

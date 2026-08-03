@@ -1105,6 +1105,9 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
     });
 
   // Esc fecha o modal aberto no topo (os confirmes tratam o próprio Esc/Enter).
+  // OBS: o modal "Nova Requisição" (isNewOpen) trata o PRÓPRIO Esc internamente
+  // para exibir a confirmação "Descartar alterações?" — por isso NÃO é fechado
+  // direto aqui.
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -1112,13 +1115,12 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
       else if (editItem) setEditItem(null);
       else if (viewItem) setViewItem(null);
       else if (historicoModalOpen) { setHistoricoModalOpen(false); setHistoricoItem(null); }
-      else if (isNewOpen) setIsNewOpen(false);
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
-  }, [itemsManagerRequisition, editItem, viewItem, historicoModalOpen, isNewOpen]);
+  }, [itemsManagerRequisition, editItem, viewItem, historicoModalOpen]);
 
   // Exportação da lista para Excel (mesmo endpoint que o grid antigo usava).
   const handleExportarLista = useCallback(async () => {
