@@ -70,7 +70,7 @@ export const ProcessNFeModal: React.FC<ProcessNFeModalProps> = ({
           <div className="flex items-center space-x-3">
             <Play className="h-6 w-6 text-green-500" />
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Processar NFe {nfe.numeroNF}/{nfe.serie}
+              Associar NFe {nfe.numeroNF}/{nfe.serie}
             </h2>
           </div>
           <button
@@ -225,7 +225,7 @@ export const ProcessNFeModal: React.FC<ProcessNFeModalProps> = ({
             disabled={loading}
             className="bg-green-600 hover:bg-green-700"
           >
-            {loading ? 'Processando...' : 'Processar'}
+            {loading ? 'Associando...' : 'Associar'}
           </Button>
         </div>
       </div>

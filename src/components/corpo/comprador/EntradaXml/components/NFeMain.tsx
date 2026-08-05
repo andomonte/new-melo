@@ -960,7 +960,7 @@ export const NFeMain: React.FC = () => {
                     role="menuitem"
                   >
                     <Settings className="mr-2 text-green-500 dark:text-green-400" size={16} />
-                    Processar
+                    Associar
                     <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">P</kbd>
                   </button>
                   <button
@@ -1062,10 +1062,11 @@ export const NFeMain: React.FC = () => {
                 </>
               )}
 
-              {/* NFes PROCESSADAS: Já está processada, apenas visualização */}
+              {/* NFes com entrada gerada: apenas visualização (a confirmação de
+                  preço/estoque é feita na tela de Entradas de Mercadorias). */}
               {nfe.status === 'PROCESSADA' && (
                 <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 italic">
-                  NFe já processada
+                  Entrada já gerada — confirme preço/estoque em Entradas de Mercadorias
                 </div>
               )}
 
@@ -1129,7 +1130,7 @@ export const NFeMain: React.FC = () => {
               ? 'text-red-600 bg-red-50'
               : 'text-gray-600 bg-gray-50'
           }`}>
-            {nfe.status === 'PROCESSADA' ? 'Processada' :
+            {nfe.status === 'PROCESSADA' ? 'Entrada Gerada' :
              nfe.status === 'EM_ANDAMENTO' ? 'Em Andamento' :
              nfe.status === 'ASSOCIACAO_CONCLUIDA' ? 'Associada' :
              nfe.status === 'RECEBIDA' ? 'Recebida' :
@@ -1265,7 +1266,9 @@ export const NFeMain: React.FC = () => {
           onPageChange={handlePageChange}
           onPerPageChange={handlePerPageChange}
           onFiltroChange={handleFiltroChange}
-          colunasFiltro={colunasDbNFe.map(col => col.campo)}
+          colunasFiltro={colunasDbNFe.map((col) => col.campo)}
+          // Status sem filtro de coluna: o filtro é o dropdown "Todos os status".
+          colunasSemFiltro={['status']}
           ordenacaoServidor
           onSort={(campo, direcao) => {
             setOrdenacao({ campo, direcao });
@@ -1299,10 +1302,11 @@ export const NFeMain: React.FC = () => {
                 }}
                 options={[
                   { value: 'todos', label: 'Todos os status' },
-                  { value: 'N', label: 'Recebida' },
-                  { value: 'S', label: 'Processada' },
-                  { value: 'A', label: 'Em Andamento' },
-                  { value: 'C', label: 'Associada' },
+                  { value: 'recebida', label: 'Recebida' },
+                  { value: 'em_andamento', label: 'Em Andamento' },
+                  { value: 'associada', label: 'Associada' },
+                  { value: 'entrada_gerada', label: 'Entrada Gerada' },
+                  { value: 'erro', label: 'Erro' },
                 ]}
               />
             </div>

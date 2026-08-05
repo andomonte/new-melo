@@ -122,7 +122,7 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
   const assocs = (await client.query(
     `select a.id, a.nfe_item_id, a.produto_cod, a.quantidade_associada, a.quantidade_nf,
             a.valor_unitario, a.preco_real, a.preco_unitario_nf, a.meia_nota,
-            d.qcom, d.vprod, d.vicms, d.vicmsst, d.vipi, d.vpis, d.vcofins, d.vicmsdeson,
+            d.qcom, d.vuncom, d.vprod, d.vicms, d.vicmsst, d.vipi, d.vpis, d.vcofins, d.vicmsdeson,
             p.strib, p.percsubst, p.isentoipi, p.ipi, p.dolar
        from db_manaus.nfe_item_associacao a
        left join db_manaus.dbnfe_ent_det d on d.codnfe_ent=a.nfe_id and d.nitem::text=a.nfe_item_id::text

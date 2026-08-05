@@ -63,6 +63,9 @@ interface DataTablePadraoProps {
   noDataMessage?: string | React.ReactNode;
   onFiltroChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
   colunasFiltro?: string[];
+  /** Colunas (pelo header/campo) que NÃO devem ter o input de filtro na linha
+   *  de filtros — ex.: status filtrado por um dropdown à parte. */
+  colunasSemFiltro?: string[];
   onExportarExcel?: () => void;
   onDashboardGeral?: () => void;
   columnWidths?: string[];
@@ -134,6 +137,7 @@ export default function DataTablePadrao({
   noDataMessage = 'Nenhum dado encontrado.',
   onFiltroChange,
   colunasFiltro = [],
+  colunasSemFiltro = [],
   onExportarExcel,
   onDashboardGeral,
   columnWidths,
@@ -908,9 +912,10 @@ export default function DataTablePadrao({
                             <RadixSelectItem value="false">Não</RadixSelectItem>
                           </RadixSelectContent>
                         </RadixSelect>
-                      ) : !['selecionar', 'ações', 'acoes'].includes(header.toLowerCase()) ? (
-                        // Colunas utilitárias (Selecionar/Ações) não têm o que
-                        // filtrar — sem campo, para não alargar a coluna à toa.
+                      ) : !['selecionar', 'ações', 'acoes'].includes(header.toLowerCase()) &&
+                          !colunasSemFiltro.includes(header) ? (
+                        // Colunas utilitárias (Selecionar/Ações) e as marcadas em
+                        // colunasSemFiltro não têm input — sem campo aqui.
                         (() => {
                           const chave = header.toLowerCase();
                           const atual = filtrosColuna[chave];

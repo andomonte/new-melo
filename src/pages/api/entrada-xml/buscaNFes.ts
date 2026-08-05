@@ -42,6 +42,31 @@ const statusParaCodigo: Record<string, string> = {
   'associacao_concluida': 'C',
 };
 
+/**
+ * Status DERIVADO (o que a listagem mostra) → condição SQL real, espelhando a
+ * derivação em nfesFormatted (exec + codent + nprot). Chave normalizada:
+ * minúscula, espaços viram '_'. Sem parâmetros (condições estáticas).
+ *   Recebida       = exec N/R
+ *   Em Andamento   = exec A
+ *   Associada      = exec C, OU exec S sem entrada gerada (codent nulo)
+ *   Entrada Gerada = exec S COM entrada gerada (codent não nulo)
+ *   Erro           = sem protocolo e exec fora dos conhecidos
+ */
+const STATUS_DERIVADO: Record<string, string> = {
+  recebida: `(n.exec IN ('N','R'))`,
+  n: `(n.exec IN ('N','R'))`,
+  r: `(n.exec IN ('N','R'))`,
+  em_andamento: `(n.exec = 'A')`,
+  a: `(n.exec = 'A')`,
+  associada: `(n.exec = 'C' OR (n.exec = 'S' AND ent.codent IS NULL))`,
+  associacao_concluida: `(n.exec = 'C' OR (n.exec = 'S' AND ent.codent IS NULL))`,
+  c: `(n.exec = 'C' OR (n.exec = 'S' AND ent.codent IS NULL))`,
+  entrada_gerada: `(n.exec = 'S' AND ent.codent IS NOT NULL)`,
+  processada: `(n.exec = 'S' AND ent.codent IS NOT NULL)`,
+  s: `(n.exec = 'S' AND ent.codent IS NOT NULL)`,
+  erro: `(COALESCE(n.exec,'') NOT IN ('N','R','A','C','S') AND n.nprot IS NULL)`,
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -138,13 +163,20 @@ export default async function handler(
       let operador = 'ILIKE';
       let valor: any = filtro.valor;
 
-      // Tratamento especial para status
+      // Status: traduz o STATUS DERIVADO (Recebida/Em Andamento/Associada/
+      // Entrada Gerada/Erro) para a condição real (exec + codent + nprot),
+      // igual à derivação da listagem — evita descasar filtro x rótulo.
       if (isCampoStatus) {
-        const valorLower = String(valor).toLowerCase().trim();
-        const codigoStatus = statusParaCodigo[valorLower];
-        if (codigoStatus) {
-          valor = codigoStatus;
+        const chave = String(valor).toLowerCase().trim().replace(/\s+/g, '_');
+        const cond = STATUS_DERIVADO[chave];
+        if (cond) {
+          filtrosCampoSQL.push(cond);
+        } else {
+          const cod = statusParaCodigo[String(valor).toLowerCase().trim()] || String(valor);
+          params.push(cod);
+          filtrosCampoSQL.push(`n.exec = $${params.length}`);
         }
+        return;
       }
 
       // Converter DD/MM/YYYY para YYYY-MM-DD para campos de data (apenas operadores nao-textuais)
@@ -291,6 +323,11 @@ export default async function handler(
       SELECT COUNT(*) as total
       FROM dbnfe_ent n
       LEFT JOIN dbnfe_ent_emit e ON n.codnfe_ent = e.codnfe_ent
+      LEFT JOIN dbnfe_ent_tran t ON n.codnfe_ent = t.codnfe_ent
+      LEFT JOIN LATERAL (
+        SELECT STRING_AGG(d.codent::text, ', ' ORDER BY d.codent) AS codent
+        FROM dbent d WHERE d.chave = n.chave
+      ) ent ON true
       ${whereString}
     `;
 

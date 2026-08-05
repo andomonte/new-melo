@@ -16,7 +16,11 @@ export const formatDateTime = (dateString: string): string => {
 export const getNFeStatusLabel = (status: string): string => {
   const statusMap: Record<string, string> = {
     'RECEBIDA': 'Recebida',
-    'PROCESSADA': 'Processada',
+    'EM_ANDAMENTO': 'Em Andamento',
+    'ASSOCIACAO_CONCLUIDA': 'Associada',
+    // "Entrada Gerada": a entrada (dbent) foi criada. A confirmação de
+    // preço/estoque acontece na tela de Entradas — não é validada aqui.
+    'PROCESSADA': 'Entrada Gerada',
     'ERRO': 'Erro'
   };
   return statusMap[status] || status;
@@ -25,7 +29,9 @@ export const getNFeStatusLabel = (status: string): string => {
 export const getNFeStatusColor = (status: string): string => {
   const colorMap: Record<string, string> = {
     'RECEBIDA': 'text-blue-600 bg-blue-50',
-    'PROCESSADA': 'text-green-600 bg-green-50',
+    'EM_ANDAMENTO': 'text-yellow-700 bg-yellow-100',
+    'ASSOCIACAO_CONCLUIDA': 'text-purple-600 bg-purple-50',
+    'PROCESSADA': 'text-green-700 bg-green-100',
     'ERRO': 'text-red-600 bg-red-50'
   };
   return colorMap[status] || 'text-gray-600 bg-gray-50';

@@ -64,7 +64,8 @@ export interface AssocItem {
 }
 export interface DetImposto {
   qcom?: number | null;
-  vprod?: number | null; // valor total do item na NF (XML) — unit NF = vprod/qcom
+  vuncom?: number | null; // preço unitário da NF (XML VUNCOM) — Pç.Unit.NF
+  vprod?: number | null; // valor total do item na NF (XML) — fallback: vprod/qcom
   vicms?: number | null;
   vicmsst?: number | null;
   vipi?: number | null;
@@ -115,16 +116,19 @@ export function montarLinhasDbitent(
   return destino.map((ped) => {
     const quant = N(ped.quantidade);
     const fator = qcom > 0 ? quant / qcom : 0;
-    // MEIA NOTA: `preco_unitario_nf` (nome enganoso) guarda o preço REAL/cheio
-    // declarado na associação (>= preço da NF), usado como Pç.Unit (custo real).
+    // Preço unitário da NFe (VUNCOM do XML; fallback vprod/qcom). Validado no
+    // Delphi (UniExecEntrada.pas 3203-3223): no caso NORMAL é ele que vira
+    // PRUNIT, e é SEMPRE o PRUNITNF. O preço da OC NUNCA vira custo do item.
+    const xmlNfUnit = N(det?.vuncom) || (qcom > 0 ? N(det?.vprod) / qcom : 0);
+    // MEIA NOTA: `preco_unitario_nf` guarda o preço REAL declarado (>= NFe).
     const meia = assoc.meia_nota === true;
+    // PRUNIT (custo): normal = preço da NFe; meia nota = preço real declarado.
+    // NUNCA o preço da OC (valor_unitario) — só como último fallback se, por
+    // algum motivo, não houver preço da NFe no XML.
     const prunit = meia
       ? N(assoc.preco_unitario_nf)
-      : N(assoc.preco_real) || N(assoc.valor_unitario) || N(ped.valor_unitario);
-    // Pç.Unit.NF = preço unitário FISCAL da nota, SEMPRE do XML (vprod/qcom).
-    // Nunca usa preco_unitario_nf (= preço real da meia nota) nem cai no prunit
-    // (preço da OC) — senão a coluna "Pç. NF" e o Custo Contábil saem errados.
-    const xmlNfUnit = qcom > 0 ? N(det?.vprod) / qcom : 0;
+      : xmlNfUnit || N(assoc.preco_real) || N(assoc.valor_unitario) || N(ped.valor_unitario);
+    // PRUNITNF: sempre o preço FISCAL da nota (VUNCOM), independente de meia nota.
     const prunitnf = xmlNfUnit || prunit;
 
     const vIcmsRateado = N(det?.vicms) * fator;
