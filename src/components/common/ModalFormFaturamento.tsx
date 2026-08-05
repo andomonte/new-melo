@@ -64,7 +64,7 @@ export default function ModalFormularioFaturamento({
               <Carregamento />
             </div>
           ) : (
-            <form className="max-w-6xl mx-auto">{renderTabContent()}</form>
+            <form className="w-full max-w-[1600px] mx-auto">{renderTabContent()}</form>
           )}
         </div>
 

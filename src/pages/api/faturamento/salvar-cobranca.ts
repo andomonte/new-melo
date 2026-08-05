@@ -54,8 +54,19 @@ export default async function handler(
 
   // --- FIM DA CORREÇÃO ---
 
+  let client;
   try {
-    const client = await getPgPool().connect();
+    client = await getPgPool().connect();
+
+    // Auto-corrige a sequence de cod_receb quando ela está ATRÁS do maior
+    // cod_receb da tabela (artefato de migração Oracle→Postgres): senão o
+    // nextval devolve um valor já existente e o INSERT viola a PK (pkdbreceb).
+    await client.query(
+      `SELECT setval('seq_cod_receb', GREATEST(
+         (SELECT last_value FROM seq_cod_receb),
+         (SELECT COALESCE(MAX(cod_receb::bigint), 0) FROM dbreceb WHERE cod_receb ~ '^[0-9]+$')
+       ), true)`,
+    );
 
     // ATUALIZA A FATURA
     await client.query(
@@ -111,10 +122,13 @@ export default async function handler(
       await salvarParcelasPagamento(codvenda, parcelasComDias);
     }
 
-    client.release();
     return res.status(200).json({ message: 'Cobrança salva com sucesso.' });
   } catch (error) {
     console.error('Erro ao salvar cobrança:', error);
-    return res.status(500).json({ error: 'Erro interno ao salvar cobrança.' });
+    return res.status(500).json({
+      error: `Erro ao salvar cobrança: ${(error as Error)?.message || 'erro desconhecido'}`,
+    });
+  } finally {
+    if (client) client.release();
   }
 }

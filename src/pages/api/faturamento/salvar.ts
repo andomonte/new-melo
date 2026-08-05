@@ -180,6 +180,15 @@ export default async function handler(
     }
 
     // CORREÇÃO: Comentários removidos de dentro da string SQL
+    // Colunas com FK (codtransp -> dbtransp, codvend -> dbvend): string vazia
+    // viola a FK (não existe registro de código ''). Normaliza vazio -> NULL.
+    const nzFk = (v: any) => {
+      const s = String(v ?? '').trim();
+      return s === '' ? null : s;
+    };
+    const codtranspFinal = nzFk(transportadora);
+    const codvendFinal = nzFk(vendedor);
+
     // 🔧 CORREÇÃO CRÍTICA: Adicionar série='2' ao criar fatura
     const insertQuery = `
       INSERT INTO dbfatura (
@@ -215,8 +224,8 @@ export default async function handler(
       cliente.codcli,
       novoNroForm, // Agora usa o nroform incremental
       data,
-      vendedor,
-      transportadora,
+      codvendFinal,
+      codtranspFinal,
       totalprod,
       totalfat,
       totalnf || totalfat,    // ✅ Total da NF (fallback para totalfat)
@@ -315,9 +324,9 @@ export default async function handler(
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao salvar fatura:', error);
-    return res
-      .status(500)
-      .json({ error: 'Erro interno no servidor ao salvar a fatura.' });
+    return res.status(500).json({
+      error: `Erro ao salvar a fatura: ${(error as Error)?.message || 'erro desconhecido'}`,
+    });
   } finally {
     client.release();
   }

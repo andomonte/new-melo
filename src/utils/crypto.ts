@@ -4,11 +4,21 @@ import crypto from 'crypto';
 // A chave mestra deve ser carregada de uma variável de ambiente.
 const CRYPTO_MASTER_KEY = process.env.CRYPTO_MASTER_KEY || '';
 
-if (!CRYPTO_MASTER_KEY || CRYPTO_MASTER_KEY.length < 32) {
-  console.error(
-    'ERRO CRÍTICO: CRYPTO_MASTER_KEY não definida ou muito curta. Por favor, defina uma chave forte (min 32 caracteres) nas variáveis de ambiente. A aplicação não pode funcionar com segurança sem ela.',
-  );
-  process.exit(1); // Em produção, é essencial parar se a chave mestra não for segura
+/**
+ * Valida a chave mestra NO MOMENTO DO USO (não no import). Antes, um
+ * `process.exit(1)` no carregamento do módulo derrubava o SERVIDOR inteiro
+ * quando qualquer rota que importa este arquivo era chamada (ex.: emitir NFe),
+ * aparecendo como "Network Error" no front. Agora a ausência da chave falha
+ * apenas a operação de cripto, com mensagem tratável pelo endpoint.
+ */
+function getMasterKey(): string {
+  if (!CRYPTO_MASTER_KEY || CRYPTO_MASTER_KEY.length < 32) {
+    throw new Error(
+      'CRYPTO_MASTER_KEY não definida ou muito curta (mínimo 32 caracteres). ' +
+        'Defina-a nas variáveis de ambiente (.env) para criptografar/descriptografar o certificado digital.',
+    );
+  }
+  return CRYPTO_MASTER_KEY;
 }
 
 const ALGORITHM = 'aes-256-cbc';
@@ -26,7 +36,7 @@ const PBKDF2_DIGEST = 'sha512';
 function deriveKeyFromMaster(salt: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     crypto.pbkdf2(
-      CRYPTO_MASTER_KEY,
+      getMasterKey(),
       salt,
       PBKDF2_ITERATIONS,
       KEY_LENGTH,

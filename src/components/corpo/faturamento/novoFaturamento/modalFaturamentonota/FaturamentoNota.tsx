@@ -3071,124 +3071,62 @@ O problema está na Inscrição Estadual (IE), não na série!
     return aliquotaIPI;
   })();
 
+  // Linha compacta "rótulo: valor" do resumo financeiro.
+  const MetricaResumo = ({ label, value, cor }: { label: string; value: string; cor?: string }) => (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{label}</span>
+      <span className={`text-[11px] font-bold tabular-nums whitespace-nowrap ${cor || 'text-zinc-700 dark:text-zinc-200'}`}>
+        {value}
+      </span>
+    </div>
+  );
+
+  // Rodapé compacto: barra horizontal única (grupos lado a lado), ocupando ~metade
+  // da altura anterior — mantém TODOS os dados, só reorganiza para ganhar espaço.
   const resumoFinanceiro = (
-    <div className="bg-white dark:bg-zinc-800/50 px-4 py-3">
-      <h3 className="text-lg font-semibold text-center text-zinc-800 dark:text-white mb-2">
-        Resumo Financeiro - Nova Lei Tributária
-      </h3>
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-center">
-        {/* IBS (Total + Municipal + Estadual) */}
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded border border-gray-200 dark:border-zinc-700 flex flex-col justify-center">
-          <div className="flex flex-col gap-2">
-            <div>
-              <p className="text-xs text-gray-500">ALÍQUOTA IBS (%)</p>
-              <p className="text-md font-bold text-blue-700 dark:text-blue-300">
-                {aliquotaIBS}%
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">VALOR IBS</p>
-              <p className="text-md font-bold text-blue-600">
-                R$ {valorIBS}
-              </p>
-            </div>
-            <div className="border-t border-gray-200 dark:border-zinc-600 pt-2 mt-1">
-              <p className="text-xs text-gray-500">IBS MUNICIPAL</p>
-              <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                R$ {Number(dadosResumoFinanceiro?.totalIBSMunicipal || 0.50).toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">IBS ESTADUAL</p>
-              <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">
-                R$ {Number(dadosResumoFinanceiro?.totalIBSEstadual || 0.50).toFixed(2)}
-              </p>
-            </div>
-          </div>
+    <div className="bg-white dark:bg-zinc-800/50 px-3 pt-1.5 pb-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">
+        Resumo Financeiro · Nova Lei Tributária
+      </p>
+      <div className="flex items-stretch divide-x divide-gray-200 dark:divide-zinc-700 overflow-x-auto">
+        {/* IBS */}
+        <div className="flex-1 min-w-[150px] px-3 space-y-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">IBS</p>
+          <MetricaResumo label="Alíquota" value={`${aliquotaIBS}%`} cor="text-blue-700 dark:text-blue-300" />
+          <MetricaResumo label="Valor" value={`R$ ${valorIBS}`} cor="text-blue-600" />
+          <MetricaResumo label="Municipal" value={`R$ ${Number(dadosResumoFinanceiro?.totalIBSMunicipal || 0.50).toFixed(2)}`} cor="text-indigo-600 dark:text-indigo-400" />
+          <MetricaResumo label="Estadual" value={`R$ ${Number(dadosResumoFinanceiro?.totalIBSEstadual || 0.50).toFixed(2)}`} cor="text-cyan-600 dark:text-cyan-400" />
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded border border-gray-200 dark:border-zinc-700 flex flex-col justify-center">
-          <div className="flex flex-col gap-2">
-            <div>
-              <p className="text-xs text-gray-500">ALÍQUOTA CBS (%)</p>
-              <p className="text-md font-bold text-purple-700 dark:text-purple-300">
-                {aliquotaCBS}%
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">VALOR CBS</p>
-              <p className="text-md font-bold text-purple-600">
-                R$ {valorCBS}
-              </p>
-            </div>
-          </div>
+        {/* CBS */}
+        <div className="flex-1 min-w-[130px] px-3 space-y-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-purple-600 dark:text-purple-300">CBS</p>
+          <MetricaResumo label="Alíquota" value={`${aliquotaCBS}%`} cor="text-purple-700 dark:text-purple-300" />
+          <MetricaResumo label="Valor" value={`R$ ${valorCBS}`} cor="text-purple-600" />
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded border border-gray-200 dark:border-zinc-700 flex flex-col justify-center">
-          <div className="flex flex-col gap-2">
-            <div>
-              <p className="text-xs text-gray-500">ALÍQUOTA ICMS (%)</p>
-              <p className="text-md font-bold text-orange-700 dark:text-orange-300">
-                {aliqICMSPorItem}%
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">BASE ICMS</p>
-              <p className="text-md font-bold text-orange-600 dark:text-orange-400">
-                R$ {Number(dadosResumoFinanceiro?.totalBaseICMS ?? 0).toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">VALOR ICMS</p>
-              <p className="text-md font-bold text-orange-500">
-                R$ {Number(dadosResumoFinanceiro?.totalICMS ?? 0).toFixed(2)}
-              </p>
-            </div>
-          </div>
+        {/* ICMS */}
+        <div className="flex-1 min-w-[140px] px-3 space-y-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-orange-600 dark:text-orange-300">ICMS</p>
+          <MetricaResumo label="Alíquota" value={`${aliqICMSPorItem}%`} cor="text-orange-700 dark:text-orange-300" />
+          <MetricaResumo label="Base" value={`R$ ${Number(dadosResumoFinanceiro?.totalBaseICMS ?? 0).toFixed(2)}`} cor="text-orange-600 dark:text-orange-400" />
+          <MetricaResumo label="Valor" value={`R$ ${Number(dadosResumoFinanceiro?.totalICMS ?? 0).toFixed(2)}`} cor="text-orange-500" />
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded border border-gray-200 dark:border-zinc-700 flex flex-col justify-center">
-          <div className="flex flex-col gap-2">
-            <div>
-              <p className="text-xs text-gray-500">ALÍQUOTA IPI (%)</p>
-              <p className="text-md font-bold text-red-700 dark:text-red-300">
-                {aliqIPIPorItem}%
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">BASE IPI</p>
-              <p className="text-md font-bold text-red-600 dark:text-red-400">
-                R$ {Number(dadosResumoFinanceiro?.totalBaseIPI ?? 0).toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">VALOR IPI</p>
-              <p className="text-md font-bold text-red-500">
-                R$ {Number(dadosResumoFinanceiro?.totalIPI ?? 0).toFixed(2)}
-              </p>
-            </div>
-          </div>
+        {/* IPI */}
+        <div className="flex-1 min-w-[140px] px-3 space-y-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-red-600 dark:text-red-300">IPI</p>
+          <MetricaResumo label="Alíquota" value={`${aliqIPIPorItem}%`} cor="text-red-700 dark:text-red-300" />
+          <MetricaResumo label="Base" value={`R$ ${Number(dadosResumoFinanceiro?.totalBaseIPI ?? 0).toFixed(2)}`} cor="text-red-600 dark:text-red-400" />
+          <MetricaResumo label="Valor" value={`R$ ${Number(dadosResumoFinanceiro?.totalIPI ?? 0).toFixed(2)}`} cor="text-red-500" />
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded border border-gray-200 dark:border-zinc-700 flex flex-col justify-center">
-          <div className="flex flex-col gap-2">
-            <div>
-              <p className="text-xs text-gray-500">VALOR DO FRETE</p>
-              <p className="text-md font-bold text-green-700">
-                R$ {valorFrete}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">VALOR TOTAL DOS PRODUTOS</p>
-              <p className="text-md font-bold text-blue-700">
-                R$ {valorTotalProdutos}
-              </p>
-            </div>
-          </div>
+        {/* Frete / Produtos */}
+        <div className="flex-1 min-w-[160px] px-3 space-y-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">Frete / Produtos</p>
+          <MetricaResumo label="Frete" value={`R$ ${valorFrete}`} cor="text-green-700 dark:text-green-400" />
+          <MetricaResumo label="Produtos" value={`R$ ${valorTotalProdutos}`} cor="text-blue-700 dark:text-blue-400" />
         </div>
-        <div className="bg-white dark:bg-zinc-900 p-3 rounded border-2 border-zinc-700 dark:border-zinc-500 flex flex-col justify-center">
-          <p className="text-sm font-medium text-zinc-700 dark:text-white">
-            VALOR TOTAL DA NF
-          </p>
-          <p className="text-xl font-bold text-zinc-800 dark:text-white">
-            R$ {valorTotalNF}
-          </p>
+        {/* Total NF — destaque */}
+        <div className="pl-4 flex flex-col justify-center items-end min-w-[150px]">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Valor Total da NF</p>
+          <p className="text-2xl font-extrabold text-zinc-800 dark:text-white tabular-nums leading-tight">R$ {valorTotalNF}</p>
         </div>
       </div>
     </div>
@@ -3411,7 +3349,7 @@ O problema está na Inscrição Estadual (IE), não na série!
                 icone={<FileText />}
                 padraoAberto={!agrupandoFaturas}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6 p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-6 p-4">
                   <div>
                     <SelectInput
                       label="Modalidade de Transporte"
@@ -3488,7 +3426,7 @@ O problema está na Inscrição Estadual (IE), não na série!
                       name={'observacoes'}
                     />
                   </div>
-                  <div className="relative">
+                  <div className="relative lg:col-span-2 xl:col-span-3">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Mensagens NF
                     </label>
@@ -3545,7 +3483,7 @@ O problema está na Inscrição Estadual (IE), não na série!
                           ))}
                       </ul>
                     )}
-                    <ul className="mt-2 space-y-1">
+                    <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-2">
                       {mensagensNF.map((msg) => (
                         <li
                           key={msg.codigo}
