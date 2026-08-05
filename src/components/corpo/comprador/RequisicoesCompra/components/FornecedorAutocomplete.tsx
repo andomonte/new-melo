@@ -48,16 +48,19 @@ export const FornecedorAutocomplete: React.FC<FornecedorAutocompleteProps> = ({
     }
   }, [debouncedSearch]);
 
-  const fetchFornecedores = async (searchTerm: string) => {
+  const fetchFornecedores = async (searchTerm: string): Promise<Fornecedor[]> => {
     setLoading(true);
     try {
       const response = await api.get('/api/compras/fornecedores', {
         params: { search: searchTerm, perPage: 10 }
       });
-      setFornecedores(response.data.fornecedores || []);
+      const lista: Fornecedor[] = response.data.fornecedores || [];
+      setFornecedores(lista);
+      return lista;
     } catch (error) {
       console.error('Erro ao buscar fornecedores:', error);
       setFornecedores([]);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -85,30 +88,43 @@ export const FornecedorAutocomplete: React.FC<FornecedorAutocompleteProps> = ({
     setSelectedIndex(-1);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!isOpen) return;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setSelectedIndex(prev => 
-          prev < fornecedores.length - 1 ? prev + 1 : prev
-        );
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (selectedIndex >= 0 && fornecedores[selectedIndex]) {
-          handleFornecedorSelect(fornecedores[selectedIndex]);
-        }
-        break;
-      case 'Escape':
-        setIsOpen(false);
-        setSelectedIndex(-1);
-        break;
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setIsOpen(false);
+      setSelectedIndex(-1);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      if (!isOpen) return;
+      e.preventDefault();
+      setSelectedIndex(prev => (prev < fornecedores.length - 1 ? prev + 1 : prev));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      if (!isOpen) return;
+      e.preventDefault();
+      setSelectedIndex(prev => (prev > 0 ? prev - 1 : -1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Enter seleciona: a linha destacada (setas) OU, se houver só 1 resultado,
+      // seleciona automaticamente (igual ao combobox do produto).
+      if (selectedIndex >= 0 && fornecedores[selectedIndex]) {
+        handleFornecedorSelect(fornecedores[selectedIndex]);
+        return;
+      }
+      if (fornecedores.length === 1) {
+        handleFornecedorSelect(fornecedores[0]);
+        return;
+      }
+      // Resultado ainda não carregou (debounce da 1ª digitação): busca na hora
+      // e auto-seleciona se vier exatamente 1 — evita ter que apertar 2x.
+      const termo = search.trim();
+      if (termo.length >= 2) {
+        const lista = await fetchFornecedores(termo);
+        if (lista.length === 1) handleFornecedorSelect(lista[0]);
+      }
     }
   };
 

@@ -19,6 +19,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { ToastAction } from '@/components/ui/toast';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import FormFooter2 from '@/components/common/FormFooter2';
+import ComboboxInput from '@/components/common/ComboboxInput';
 import { AdicionarProdutosModal } from './AdicionarProdutosModal';
 import { TiShoppingCart } from 'react-icons/ti';
 import { useRouter } from 'next/router';
@@ -550,19 +551,14 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
                       <Package className="h-4 w-4" />
                       Tipo da Requisição *
                     </Label>
-                    <select
+                    <ComboboxInput
+                      className="mt-1"
+                      options={tipos.map((tipo) => ({ value: String(tipo.id), label: tipo.nome }))}
                       value={formData.tipo}
-                      onChange={(e) => handleFieldChange('tipo', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-zinc-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      onValueChange={(v) => handleFieldChange('tipo', v)}
                       required
-                    >
-                      <option value="" disabled>Selecione o tipo</option>
-                      {tipos.map((tipo) => (
-                        <option key={tipo.id} value={tipo.id}>
-                          {tipo.nome}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Selecione o tipo"
+                    />
                   </div>
 
                   <div className="w-full">
@@ -582,19 +578,14 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
                       <MapPin className="h-4 w-4" />
                       Entrega em *
                     </Label>
-                    <select
+                    <ComboboxInput
+                      className="mt-1"
+                      options={filiais.map((filial) => ({ value: String(filial.unm_id), label: filial.unm_nome }))}
                       value={formData.entrega_em}
-                      onChange={(e) => handleFieldChange('entrega_em', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-zinc-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      onValueChange={(v) => handleFieldChange('entrega_em', v)}
                       required
-                    >
-                      <option value="">Selecione a filial de entrega...</option>
-                      {filiais.map((filial) => (
-                        <option key={filial.unm_id} value={filial.unm_id}>
-                          {filial.unm_nome}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Selecione a filial de entrega..."
+                    />
                   </div>
 
                   <div className="w-full">
@@ -602,19 +593,14 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
                       <Building2 className="h-4 w-4" />
                       Destinado para *
                     </Label>
-                    <select
+                    <ComboboxInput
+                      className="mt-1"
+                      options={filiais.map((filial) => ({ value: String(filial.unm_id), label: filial.unm_nome }))}
                       value={formData.destinado_para}
-                      onChange={(e) => handleFieldChange('destinado_para', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-zinc-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
+                      onValueChange={(v) => handleFieldChange('destinado_para', v)}
                       required
-                    >
-                      <option value="">Selecione o destino...</option>
-                      {filiais.map((filial) => (
-                        <option key={filial.unm_id} value={filial.unm_id}>
-                          {filial.unm_nome}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Selecione o destino..."
+                    />
                   </div>
                 </div>
 

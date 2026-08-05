@@ -41,21 +41,20 @@ export const CompradorAutocomplete: React.FC<CompradorAutocompleteProps> = ({
     }
   }, [debouncedSearch]);
 
-  const fetchCompradores = async (searchTerm: string) => {
+  const fetchCompradores = async (searchTerm: string): Promise<Comprador[]> => {
     setLoading(true);
     try {
       const response = await api.get('/api/compradores/get', {
         params: { search: searchTerm }
       });
-      
-      if (response.data?.data) {
-        setCompradores(response.data.data);
-      } else {
-        setCompradores([]);
-      }
+
+      const lista: Comprador[] = response.data?.data || [];
+      setCompradores(lista);
+      return lista;
     } catch (error) {
       console.error('Erro ao buscar compradores:', error);
       setCompradores([]);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -84,7 +83,7 @@ export const CompradorAutocomplete: React.FC<CompradorAutocompleteProps> = ({
   }, []);
 
   // Navegação por teclado
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
         setIsOpen(true);
@@ -96,22 +95,36 @@ export const CompradorAutocomplete: React.FC<CompradorAutocompleteProps> = ({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => 
+        setSelectedIndex(prev =>
           prev < compradores.length - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex(prev => 
+        setSelectedIndex(prev =>
           prev > 0 ? prev - 1 : compradores.length - 1
         );
         break;
-      case 'Enter':
+      case 'Enter': {
         e.preventDefault();
+        // Enter seleciona a linha destacada OU o único resultado (auto-seleção).
         if (selectedIndex >= 0 && selectedIndex < compradores.length) {
           selectComprador(compradores[selectedIndex]);
+          break;
+        }
+        if (compradores.length === 1) {
+          selectComprador(compradores[0]);
+          break;
+        }
+        // Resultado ainda não carregou (debounce da 1ª digitação): busca na hora
+        // e auto-seleciona se vier exatamente 1 — evita ter que apertar 2x.
+        const termo = search.trim();
+        if (termo.length >= 2) {
+          const lista = await fetchCompradores(termo);
+          if (lista.length === 1) selectComprador(lista[0]);
         }
         break;
+      }
       case 'Escape':
         setIsOpen(false);
         setSelectedIndex(-1);

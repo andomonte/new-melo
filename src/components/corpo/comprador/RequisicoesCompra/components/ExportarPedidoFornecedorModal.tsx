@@ -17,12 +17,13 @@ interface Props {
   onClose: () => void;
 }
 
-type Layout = 'bosch' | 'sabo' | 'randon' | 'mahle';
+type Layout = 'bosch' | 'sabo' | 'randon' | 'marelli' | 'mahle';
 
 const LAYOUTS: { value: Layout; label: string }[] = [
   { value: 'bosch', label: 'Bosch (TXT)' },
   { value: 'sabo', label: 'Sabo (TXT)' },
   { value: 'randon', label: 'Randon (CSV)' },
+  { value: 'marelli', label: 'Marelli (CSV)' },
   { value: 'mahle', label: 'Mahle (Excel)' },
 ];
 

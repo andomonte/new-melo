@@ -63,19 +63,40 @@ export default async function handler(
       paramCounter++;
     }
     
-    // Busca: geral (código/descrição/ref) ou SOMENTE pela referência.
+    // Busca multi-termo (mesma regra do produto): ESPAÇO = E (todas as
+    // palavras), ';' = OU (qualquer grupo). Ex.: "pneu 15;correia" =>
+    // (contém "pneu" E "15") OU (contém "correia"). Cada termo casa em
+    // qualquer um dos campos (código/descrição/ref/MARCA) — ou só na ref
+    // quando "Somente referência" está ligado. Incluir a marca (m.descr)
+    // permite "pneu original" = pneu E marca original.
     if (search && !codprod) {
-      if (somenteRef) {
-        whereConditions.push(`p.ref ILIKE $${paramCounter}`);
-      } else {
-        whereConditions.push(`(
-          p.codprod ILIKE $${paramCounter} OR
-          p.descr ILIKE $${paramCounter} OR
-          p.ref ILIKE $${paramCounter}
-        )`);
+      const campos = somenteRef
+        ? ['p.ref']
+        : ['p.codprod', 'p.descr', 'p.ref', 'm.descr'];
+      const grupos = String(search)
+        .split(';')
+        .map((g) =>
+          g
+            .trim()
+            .split(/\s+/)
+            .map((t) => t.replace(/^%+|%+$/g, '').trim())
+            .filter(Boolean),
+        )
+        .filter((g) => g.length > 0);
+
+      if (grupos.length > 0) {
+        const orConds = grupos.map((termos) => {
+          const andConds = termos.map((t) => {
+            const idx = paramCounter;
+            params.push(`%${t}%`);
+            paramCounter++;
+            const campoConds = campos.map((c) => `${c} ILIKE $${idx}`);
+            return campoConds.length > 1 ? `(${campoConds.join(' OR ')})` : campoConds[0];
+          });
+          return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
+        });
+        whereConditions.push(orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0]);
       }
-      params.push(`%${search}%`);
-      paramCounter++;
     }
 
     // Filtro por marca
@@ -149,10 +170,12 @@ export default async function handler(
       LIMIT $${paramCounter} OFFSET $${paramCounter + 1}
     `;
 
-    // Query para contar total
+    // Query para contar total (mesmo JOIN da principal — a busca pode filtrar
+    // por m.descr, o nome da marca).
     const countQuery = `
-      SELECT COUNT(*) as total 
+      SELECT COUNT(*) as total
       FROM db_manaus.dbprod p
+      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
       ${whereSQL}
       ${whereConditions.length > 0 ? 'AND' : 'WHERE'} LENGTH(p.codprod) = 6
     `;

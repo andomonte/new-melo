@@ -23,6 +23,7 @@ import { AlteracaoMassaModal } from './AlteracaoMassaModal';
 import { AlterarCamposListaModal } from './AlterarCamposListaModal';
 import { SubstituirProdutoModal } from './SubstituirProdutoModal';
 import { AtualizarCustoModal } from './AtualizarCustoModal';
+import AnaliseMargemModal from './AnaliseMargemModal';
 import { DemandaModal } from './DemandaModal';
 import { ExtratoItemModal } from './ExtratoItemModal';
 import { ProdutosEquivalentesModal } from './ProdutosEquivalentesModal';
@@ -46,6 +47,7 @@ import {
   Replace,
   Ban,
   RotateCcw,
+  Percent,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
@@ -191,6 +193,7 @@ const ProdutosPage = () => {
   const [isCopiarOpen, setIsCopiarOpen] = useState(false);
   const [produtoToCopiar, setProdutoToCopiar] = useState<any>(null);
   const [isAlteracaoMassaOpen, setIsAlteracaoMassaOpen] = useState(false);
+  const [isAnaliseMargemOpen, setIsAnaliseMargemOpen] = useState(false);
   const [isCamposListaOpen, setIsCamposListaOpen] = useState(false);
   const [isSubstituirOpen, setIsSubstituirOpen] = useState(false);
   const [produtoToSubstituir, setProdutoToSubstituir] = useState<any>(null);
@@ -1177,6 +1180,7 @@ const ProdutosPage = () => {
     isCamposListaOpen ||
     isSubstituirOpen ||
     isAtualizarCustoOpen ||
+    isAnaliseMargemOpen ||
     isDemandaOpen ||
     isExtratoOpen ||
     isEquivalentesOpen ||
@@ -1753,6 +1757,13 @@ const ProdutosPage = () => {
               )}
 
               {userPermissions.editar && (
+                <DropdownMenuItem onClick={() => setIsAnaliseMargemOpen(true)}>
+                  <Percent className="mr-2 size-4 text-[#347AB6]" />
+                  Análise de Margem de Preço
+                </DropdownMenuItem>
+              )}
+
+              {userPermissions.editar && (
                 <DropdownMenuItem onClick={handleTransferenciaMassa}>
                   <ArrowRightLeft className="mr-2 size-4 text-green-500 dark:text-green-300" />
                   Transferência de Armazém
@@ -1867,6 +1878,13 @@ const ProdutosPage = () => {
         }}
         produtoOriginal={produtoToCopiar}
         onSuccess={handleCopiarSuccess}
+      />
+
+      {/* Modal Análise de Margem de Preço (Delphi Ctrl+M) — abre com a lista do filtro atual */}
+      <AnaliseMargemModal
+        isOpen={isAnaliseMargemOpen}
+        buscaInicial={search}
+        onClose={() => setIsAnaliseMargemOpen(false)}
       />
 
       {/* Modal Alteração em Massa */}

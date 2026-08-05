@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, FileSpreadsheet, FileDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, FileSpreadsheet, FileDown, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 
 interface ExportarItensEntradaModalProps {
   isOpen: boolean;
@@ -39,10 +39,15 @@ export default function ExportarItensEntradaModal({
 }: ExportarItensEntradaModalProps) {
   // Uma única lista ORDENADA guarda tanto a ordem quanto a seleção.
   const [colunas, setColunas] = useState<ColunaEstado[]>(estadoInicial);
+  // Índice da linha sendo arrastada (drag-and-drop pelo mouse).
+  const [arrastando, setArrastando] = useState<number | null>(null);
 
   // Reseta ordem e seleção sempre que abrir
   useEffect(() => {
-    if (isOpen) setColunas(estadoInicial());
+    if (isOpen) {
+      setColunas(estadoInicial());
+      setArrastando(null);
+    }
   }, [isOpen]);
 
   const selecionadasCount = colunas.filter((c) => c.selecionada).length;
@@ -66,6 +71,21 @@ export default function ExportarItensEntradaModal({
       [nova[index], nova[destino]] = [nova[destino], nova[index]];
       return nova;
     });
+
+  // Drag-and-drop pelo mouse (mesmo padrão do "Gerenciar Colunas").
+  const handleDragStart = (index: number) => setArrastando(index);
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (arrastando === null || arrastando === index) return;
+    setColunas((prev) => {
+      const nova = [...prev];
+      const [item] = nova.splice(arrastando, 1);
+      nova.splice(index, 0, item);
+      return nova;
+    });
+    setArrastando(index);
+  };
+  const handleDragEnd = () => setArrastando(null);
 
   // Chaves selecionadas na ordem atual da lista
   const colunasOrdenadas = useMemo(
@@ -141,15 +161,26 @@ export default function ExportarItensEntradaModal({
           </div>
 
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            Marque as colunas e use as setas para definir a ordem no relatório.
+            Marque as colunas e defina a ordem no relatório — arraste pela alça
+            <GripVertical size={12} className="inline mx-0.5 align-text-bottom" /> ou use as setas.
           </p>
 
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
             {colunas.map((c, index) => (
               <div
                 key={c.key}
-                className="flex items-center gap-2 py-1.5 pr-1 text-sm text-gray-700 dark:text-gray-200"
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                className={`flex items-center gap-2 py-1.5 pr-1 text-sm text-gray-700 dark:text-gray-200 rounded ${
+                  arrastando === index ? 'opacity-50 bg-blue-50 dark:bg-blue-900/20' : ''
+                }`}
               >
+                <GripVertical
+                  size={16}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-move flex-shrink-0"
+                />
                 <span className="w-5 text-right text-xs text-gray-400 tabular-nums">
                   {index + 1}
                 </span>

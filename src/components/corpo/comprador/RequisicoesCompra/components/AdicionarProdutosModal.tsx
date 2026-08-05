@@ -773,7 +773,11 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                     {produtos.length === 0 && !loading && !busca && (
                       <tr>
                         <td colSpan={6} className="text-center py-8 text-gray-500 dark:text-gray-400">
-                          Digite algo para buscar produtos ou aplique filtros.
+                          <div>Digite algo para buscar produtos ou aplique filtros.</div>
+                          <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                            Dica: espaço = E · ; = OU · a marca também entra na busca.
+                            Ex.: <span className="font-mono">pneu original</span> (pneu da marca Original) · <span className="font-mono">pneu;correia</span>
+                          </div>
                         </td>
                       </tr>
                     )}

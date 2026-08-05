@@ -9,6 +9,7 @@ import ExcelJS from 'exceljs';
  *  - bosch  → TXT posicional (porte fiel do Delphi uniPedido.pas — linhas de 128 bytes)
  *  - sabo   → TXT delimitado por ';' (CNPJ;Numero do Pedido;Data;Item;Quantidade)
  *  - randon → CSV delimitado por ';' (Codigo;Quantidade;CNPJ;Numero do pedido) — sem cabeçalho
+ *  - marelli→ CSV delimitado por ';' (Referencia;Quantidade) — sem cabeçalho, sem CNPJ
  *  - mahle  → XLSX com o cabeçalho oficial (a Mahle importa .xls no site deles)
  *
  * Referência exportada: referência de fábrica do fornecedor (dbref_fabrica) com
@@ -61,8 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'ID (orc_id) da ordem é obrigatório' });
   }
   const lay = String(layout).toLowerCase();
-  if (!['bosch', 'sabo', 'randon', 'mahle'].includes(lay)) {
-    return res.status(400).json({ error: 'Layout inválido. Use bosch|sabo|randon|mahle.' });
+  if (!['bosch', 'sabo', 'randon', 'marelli', 'mahle'].includes(lay)) {
+    return res.status(400).json({ error: 'Layout inválido. Use bosch|sabo|randon|marelli|mahle.' });
   }
 
   let client;
@@ -196,6 +197,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const it of dados.itens) {
         // Codigo do material;Quantidade;CNPJ;Numero do pedido
         linhas.push([it.ref, it.qtd, dados.cnpjMelo, dados.orcId].join(';'));
+      }
+      const conteudo = linhas.join('\r\n') + '\r\n';
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=${nomeBase}.csv`);
+      return res.status(200).send('﻿' + conteudo);
+    }
+
+    // ===================== MARELLI (CSV ; ) — Referencia;Quantidade =====================
+    if (lay === 'marelli') {
+      const linhas: string[] = [];
+      for (const it of dados.itens) {
+        // Referência (de fábrica do fornecedor, fallback a nossa);Quantidade
+        linhas.push([it.ref, it.qtd].join(';'));
       }
       const conteudo = linhas.join('\r\n') + '\r\n';
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
