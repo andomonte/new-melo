@@ -454,3 +454,58 @@ input[type="number"] {
 .dark .react-datepicker__month-option:hover {
   background-color: #374151 !important;
 }
+
+/* ============================================================
+   Faturamento COMPACTO — densifica os controles apenas dentro
+   do modal de faturamento (escopo .fatura-compact), sem afetar
+   o restante do app. Objetivo: caber sem scroll, estilo Delphi.
+   ============================================================ */
+.fatura-compact label {
+  font-size: 0.72rem !important;
+  margin-bottom: 1px !important;
+  line-height: 1.1 !important;
+}
+.fatura-compact input:not([type='checkbox']):not([type='radio']),
+.fatura-compact button[role='combobox'],
+.fatura-compact [data-radix-select-trigger] {
+  height: 2rem !important;
+  min-height: 2rem !important;
+  padding-top: 0.2rem !important;
+  padding-bottom: 0.2rem !important;
+  font-size: 0.8rem !important;
+}
+.fatura-compact textarea {
+  height: 3.25rem !important;
+  min-height: 3.25rem !important;
+  font-size: 0.8rem !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+/* aperta o gap label→campo (space-y-1 dos FormInput/SelectInput) */
+.fatura-compact .space-y-1 > * + * {
+  margin-top: 1px !important;
+}
+/* Molduras das seções (SecaoCollapse) — o que mais consome altura:
+   cabeçalho py-3 + título text-lg + mb-6 entre seções + corpo p-4. */
+.fatura-compact .rounded-lg.mb-6 {
+  margin-bottom: 0.5rem !important;
+}
+.fatura-compact .cursor-pointer.px-4.py-3 {
+  padding-top: 0.3rem !important;
+  padding-bottom: 0.3rem !important;
+}
+.fatura-compact .cursor-pointer.px-4.py-3 h3 {
+  font-size: 0.9rem !important;
+  line-height: 1.15 !important;
+}
+.fatura-compact .p-4.border-t {
+  padding: 0.6rem !important;
+}
+/* fieldsets (Configurações da Cobrança / Prazo e Parcelas / Frete) */
+.fatura-compact fieldset {
+  padding: 0.6rem !important;
+}
+/* reduz o vão entre a barra de etapas e as seções */
+.fatura-compact.space-y-4 > * + * {
+  margin-top: 0.5rem !important;
+}

@@ -95,6 +95,28 @@ export default function FaturamentoNota({
 
   // Estados necessários para ambos os fluxos
   const [modalidadeTransporte, setModalidadeTransporte] = useState('');
+  // Wizard: 1 = Faturamento & Cobrança · 2 = Dados Básicos · 3 = Valores/Frete/Comissão.
+  const [etapa, setEtapa] = useState(1);
+
+  // --- CAMPOS FISCAIS / NF-e (novos, portados do faturamento Delphi) ---
+  // Operação fiscal (mapeiam p/ dbfatura: descrcfop/cfop1, tipodoc/tipofat, origem).
+  const [naturezaOperacao, setNaturezaOperacao] = useState('');
+  const [cfop, setCfop] = useState('');
+  const [tipoMovimentacao, setTipoMovimentacao] = useState('');
+  const [origem, setOrigem] = useState('');
+  // Config NF-e (domínios oficiais SEFAZ). Ambiente 2=Homologação por padrão (seguro).
+  const [nfeAmbiente, setNfeAmbiente] = useState('2');
+  const [nfeFinalidade, setNfeFinalidade] = useState('1');
+  const [nfeFormaEmissao, setNfeFormaEmissao] = useState('1');
+  // Textos da NF: info complementares (dbfatura.info_compl) + flag "imprimir no corpo".
+  const [infoComplementares, setInfoComplementares] = useState('');
+  const [informarNoCorpoNF, setInformarNoCorpoNF] = useState(false);
+  // (Cobrança: imposto/frete na 1ª parcela já vivem em formCobranca — ver abaixo.)
+  // Avançado (uso eventual): DI de importação, bases de desc/acréscimo, terceiro.
+  const [diImportacao, setDiImportacao] = useState('');
+  const [baseCalcDesconto, setBaseCalcDesconto] = useState('');
+  const [baseCalcAcrescimo, setBaseCalcAcrescimo] = useState('');
+  const [terceiro, setTerceiro] = useState('');
   const [percDesconto, setPercDesconto] = useState('');
   const [percAcrescimo, setPercAcrescimo] = useState('');
 
@@ -120,8 +142,9 @@ export default function FaturamentoNota({
   const [observacoes, setObservacoes] = useState('');
   const [incluirDescontoNF, setIncluirDescontoNF] = useState(true);
   const [incluirAcrescimoNF, setIncluirAcrescimoNF] = useState(true);
-  const [informarDescontoCorpo, setInformarDescontoCorpo] = useState(true);
-  const [informarAcrescimoCorpo, setInformarAcrescimoCorpo] = useState(true);
+  // Padrão NÃO: só há desconto/acréscimo se o usuário marcar SIM (regra Delphi).
+  const [informarDescontoCorpo, setInformarDescontoCorpo] = useState(false);
+  const [informarAcrescimoCorpo, setInformarAcrescimoCorpo] = useState(false);
   const [vendedorExterno, setVendedorExterno] = useState('0.00');
   const [vendedorInterno, setVendedorInterno] = useState('0.00');
   const [diferenciada, setDiferenciada] = useState(false);
@@ -606,6 +629,16 @@ export default function FaturamentoNota({
         cobranca: statusVenda?.cobranca ?? 'S',
         insc07: statusVenda?.insc07 ?? 'N',
         observacoes,
+        // Campos fiscais/NF-e novos (persistência em dbfatura é follow-up do salvar.ts)
+        natureza_operacao: naturezaOperacao || null,
+        cfop: cfop || null,
+        tipo_movimentacao: tipoMovimentacao || null,
+        origem: origem || null,
+        nfe_ambiente: nfeAmbiente,
+        nfe_finalidade: nfeFinalidade,
+        nfe_forma_emissao: nfeFormaEmissao,
+        info_compl: infoComplementares || null,
+        informar_no_corpo_nf: informarNoCorpoNF ? 'S' : 'N',
         vendas: vendasSelecionadas.map((v) => v.codvenda),
         usuario_associacao: cliente?.codcli || '',
       };
@@ -3216,10 +3249,78 @@ O problema está na Inscrição Estadual (IE), não na série!
                   )
                   .filter(Boolean)
                   .join(', ')}`
-              : `DADOS DA FATURA - VENDA Nº ${nroformulario}`
+              : `DADOS DA FATURA · VENDA Nº ${nroformulario}${
+                  cliente?.nome
+                    ? ` · ${cliente.nome}${cliente?.codcli ? ` (${cliente.codcli})` : ''}`
+                    : ''
+                }`
           }
           handleSubmit={() => handleProcessoCompleto(faturasAgrupadas)}
           summary={resumoFinanceiro}
+          navBar={
+            !agrupandoFaturas ? (
+              <div className="flex items-center justify-between gap-3 w-full normal-case">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-semibold text-gray-700 dark:text-gray-200">
+                    Etapa {etapa}/3
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400 hidden lg:inline">
+                    ·{' '}
+                    {
+                      ['Faturamento & Cobrança', 'Dados Básicos', 'Valores, Frete & Comissão'][
+                        etapa - 1
+                      ]
+                    }
+                  </span>
+                  <div className="flex gap-1 ml-1">
+                    {[1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setEtapa(n)}
+                        aria-label={`Ir para etapa ${n}`}
+                        className={`h-2 w-2 rounded-full transition-colors ${
+                          n === etapa
+                            ? 'bg-blue-600'
+                            : n < etapa
+                              ? 'bg-blue-300'
+                              : 'bg-gray-300 dark:bg-zinc-600'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {etapa > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setEtapa((e) => Math.max(1, e - 1))}
+                      className="px-3 py-1 text-xs rounded-md border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                    >
+                      ← Voltar
+                    </button>
+                  )}
+                  {etapa < 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => setEtapa((e) => Math.min(3, e + 1))}
+                      className="px-3 py-1 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                    >
+                      Avançar →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleProcessoCompleto(faturasAgrupadas)}
+                      className="px-3 py-1 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold"
+                    >
+                      Emitir e salvar
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : undefined
+          }
           handleClear={onClose}
           footer={
             <div className="flex justify-end items-center w-full">
@@ -3294,9 +3395,63 @@ O problema está na Inscrição Estadual (IE), não na série!
           activeTab="dados"
           setActiveTab={() => {}}
           renderTabContent={() => (
-            <div className="flex-grow p-4 space-y-4">
+            <div className="flex-grow p-4 space-y-4 fatura-compact">
+              {/* Wizard: a barra de etapa+navegação agora vive no cabeçalho
+                  único do modal (prop navBar). Este bloco fica oculto. */}
+              <div className="hidden">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-gray-700 dark:text-gray-200">Etapa {etapa} de 3</span>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {['Faturamento & Cobrança', 'Dados Básicos', 'Valores, Frete & Comissão'][etapa - 1]}
+                  </span>
+                  <div className="flex gap-1 ml-2">
+                    {[1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setEtapa(n)}
+                        aria-label={`Ir para etapa ${n}`}
+                        className={`h-2.5 w-2.5 rounded-full transition-colors ${
+                          n === etapa ? 'bg-blue-600' : n < etapa ? 'bg-blue-300' : 'bg-gray-300 dark:bg-zinc-600'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {etapa > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setEtapa((e) => Math.max(1, e - 1))}
+                      className="px-4 py-1.5 text-sm rounded-md border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                    >
+                      ← Voltar
+                    </button>
+                  )}
+                  {etapa < 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => setEtapa((e) => Math.min(3, e + 1))}
+                      className="px-4 py-1.5 text-sm rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                    >
+                      Avançar →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleProcessoCompleto(faturasAgrupadas)}
+                      className="px-4 py-1.5 text-sm rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold"
+                    >
+                      Emitir e salvar
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Quando for agrupamento, mostrar dados da cobrança primeiro */}
 
+              {etapa === 1 && (
               <SecaoCollapse
                 titulo="OPÇÕES DE FATURAMENTO/STATUS DE VENDA"
                 icone={<Settings />}
@@ -3343,16 +3498,99 @@ O problema está na Inscrição Estadual (IE), não na série!
                   </div>
                 </div>
               </SecaoCollapse>
+              )}
 
+              {etapa === 2 && (
               <SecaoCollapse
                 titulo="DADOS BÁSICOS"
                 icone={<FileText />}
                 padraoAberto={!agrupandoFaturas}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-6 p-4">
+                <div className="p-3 space-y-4">
+                  {/* GRUPO: Operação Fiscal */}
                   <div>
-                    <SelectInput
-                      label="Modalidade de Transporte"
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                      Operação Fiscal
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-3">
+                      <FormInput
+                        label="Natureza da Operação"
+                        value={naturezaOperacao}
+                        onChange={(e) => setNaturezaOperacao(e.target.value)}
+                        name="naturezaOperacao"
+                        type="text"
+                      />
+                      <FormInput
+                        label="CFOP"
+                        value={cfop}
+                        onChange={(e) => setCfop(e.target.value)}
+                        name="cfop"
+                        type="text"
+                      />
+                      <SelectInput
+                        label="Tipo de Movimentação"
+                        name="tipoMovimentacao"
+                        value={tipoMovimentacao}
+                        onValueChange={setTipoMovimentacao}
+                        options={[
+                          { value: 'VENDA', label: 'Venda' },
+                          { value: 'DEVOLUCAO', label: 'Devolução' },
+                          { value: 'TRANSFERENCIA', label: 'Transferência' },
+                          { value: 'REMESSA', label: 'Remessa' },
+                          { value: 'BONIFICACAO', label: 'Bonificação' },
+                        ]}
+                      />
+                      <FormInput
+                        label="Origem"
+                        value={origem}
+                        onChange={(e) => setOrigem(e.target.value)}
+                        name="origem"
+                        type="text"
+                      />
+                      <SelectInput
+                        label="NF-e · Ambiente"
+                        name="nfeAmbiente"
+                        value={nfeAmbiente}
+                        onValueChange={setNfeAmbiente}
+                        options={[
+                          { value: '1', label: '1 - Produção' },
+                          { value: '2', label: '2 - Homologação' },
+                        ]}
+                      />
+                      <SelectInput
+                        label="NF-e · Finalidade"
+                        name="nfeFinalidade"
+                        value={nfeFinalidade}
+                        onValueChange={setNfeFinalidade}
+                        options={[
+                          { value: '1', label: '1 - Normal' },
+                          { value: '2', label: '2 - Complementar' },
+                          { value: '3', label: '3 - Ajuste' },
+                          { value: '4', label: '4 - Devolução' },
+                        ]}
+                      />
+                      <SelectInput
+                        label="NF-e · Forma de Emissão"
+                        name="nfeFormaEmissao"
+                        value={nfeFormaEmissao}
+                        onValueChange={setNfeFormaEmissao}
+                        options={[
+                          { value: '1', label: '1 - Normal' },
+                          { value: '2', label: '2 - Contingência FS-IA' },
+                          { value: '9', label: '9 - Contingência off-line (NFC-e)' },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  {/* GRUPO: Transporte & Identificação */}
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                      Transporte &amp; Identificação
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-3">
+                      <div>
+                        <SelectInput
+                          label="Modalidade de Transporte"
                       name="modalidadeTransporte"
                       options={[
                         {
@@ -3414,6 +3652,14 @@ O problema está na Inscrição Estadual (IE), não na série!
                     onChange={setVendedor}
                     tipo="vendedor"
                   />
+                    </div>
+                  </div>
+                  {/* GRUPO: Textos da NF */}
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                      Textos da NF
+                    </h4>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-3 gap-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Observações
@@ -3425,6 +3671,27 @@ O problema está na Inscrição Estadual (IE), não na série!
                       className="h-24"
                       name={'observacoes'}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Informações Complementares
+                    </label>
+                    <Textarea
+                      value={infoComplementares}
+                      onChange={(e) => setInfoComplementares(e.target.value)}
+                      placeholder="Informações complementares da NF..."
+                      className="h-24"
+                      name={'infoComplementares'}
+                    />
+                    <label className="mt-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={informarNoCorpoNF}
+                        onChange={(e) => setInformarNoCorpoNF(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      Informar no corpo da NF
+                    </label>
                   </div>
                   <div className="relative lg:col-span-2 xl:col-span-3">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -3502,10 +3769,49 @@ O problema está na Inscrição Estadual (IE), não na série!
                       ))}
                     </ul>
                   </div>
+                    </div>
+                  </div>
+                  {/* GRUPO: Avançado (uso eventual) */}
+                  <details className="rounded-md border border-gray-200 dark:border-zinc-700">
+                    <summary className="cursor-pointer select-none px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Avançado (uso eventual)
+                    </summary>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-4 p-4 pt-2">
+                      <FormInput
+                        label="DI de Importação"
+                        value={diImportacao}
+                        onChange={(e) => setDiImportacao(e.target.value)}
+                        name="diImportacao"
+                        type="text"
+                      />
+                      <FormInput
+                        label="Base Cálc. Desconto"
+                        value={baseCalcDesconto}
+                        onChange={(e) => setBaseCalcDesconto(e.target.value)}
+                        name="baseCalcDesconto"
+                        type="text"
+                      />
+                      <FormInput
+                        label="Base Cálc. Acréscimo"
+                        value={baseCalcAcrescimo}
+                        onChange={(e) => setBaseCalcAcrescimo(e.target.value)}
+                        name="baseCalcAcrescimo"
+                        type="text"
+                      />
+                      <FormInput
+                        label="Terceiro"
+                        value={terceiro}
+                        onChange={(e) => setTerceiro(e.target.value)}
+                        name="terceiro"
+                        type="text"
+                      />
+                    </div>
+                  </details>
                 </div>
               </SecaoCollapse>
+              )}
 
-              {!agrupandoFaturas && statusVenda.cobranca === 'S' && (
+              {etapa === 1 && !agrupandoFaturas && statusVenda.cobranca === 'S' && (
                 <SecaoCollapse
                   titulo="DADOS DE COBRANÇA"
                   icone={<FaMoneyBill />}
@@ -3571,6 +3877,32 @@ O problema está na Inscrição Estadual (IE), não na série!
                             }
                           />
                         )}
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={formCobranca.impostoNa1Parcela}
+                            onChange={(e) =>
+                              handleCobrancaChange(
+                                'impostoNa1Parcela',
+                                e.target.checked,
+                              )
+                            }
+                          />{' '}
+                          Cobrar impostos na 1ª parcela
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={formCobranca.freteNa1Parcela}
+                            onChange={(e) =>
+                              handleCobrancaChange(
+                                'freteNa1Parcela',
+                                e.target.checked,
+                              )
+                            }
+                          />{' '}
+                          Cobrar frete na 1ª parcela
+                        </label>
                       </div>
                     </fieldset>
 
@@ -3702,7 +4034,7 @@ O problema está na Inscrição Estadual (IE), não na série!
                                 new Date(b.vencimento).getTime(),
                             );
                           return (
-                            <ul className="mt-3 text-sm space-y-2 h-40 overflow-y-auto p-1 rounded bg-gray-100 dark:bg-zinc-800">
+                            <ul className="mt-2 text-sm space-y-1 h-24 overflow-y-auto p-1 rounded bg-gray-100 dark:bg-zinc-800">
                               {combinedParcelas.map((item, index) => (
                                 <li
                                   key={
@@ -3918,144 +4250,117 @@ O problema está na Inscrição Estadual (IE), não na série!
                 </SecaoCollapse>
               )}
 
+              {etapa === 3 && (
+              <>
               <SecaoCollapse
                 titulo="VALORES E AJUSTES"
                 icone={<Calculator />}
                 padraoAberto={!agrupandoFaturas}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
-                  <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border">
-                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3 text-center bg-red-100 dark:bg-red-900 py-2 rounded">
-                      DESCONTO
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          id="desconto-sim"
-                          name="informar-desconto"
-                          checked={informarDescontoCorpo}
-                          onChange={() => setInformarDescontoCorpo(true)}
-                        />
-                        <label htmlFor="desconto-sim" className="text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3">
+                  {/* DESCONTO */}
+                  <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-sm text-red-700 dark:text-red-400">
+                        DESCONTO
+                      </span>
+                      <div className="flex items-center gap-3 text-xs">
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="informar-desconto"
+                            checked={informarDescontoCorpo}
+                            onChange={() => setInformarDescontoCorpo(true)}
+                          />
                           SIM
                         </label>
-                        <input
-                          type="radio"
-                          id="desconto-nao"
-                          name="informar-desconto"
-                          checked={!informarDescontoCorpo}
-                          onChange={() => setInformarDescontoCorpo(false)}
-                          className="ml-4"
-                        />
-                        <label htmlFor="desconto-nao" className="text-sm">
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="informar-desconto"
+                            checked={!informarDescontoCorpo}
+                            onChange={() => setInformarDescontoCorpo(false)}
+                          />
                           NÃO
                         </label>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <FormInput
-                          label="Percentual"
-                          value={percDesconto}
-                          onChange={(e) => setPercDesconto(e.target.value)}
-                          name="perc-desconto"
-                          type="number"
-                          step="0.01"
-                          readOnly={!informarDescontoCorpo}
-                        />
-                        <FormInput
-                          label="Valor"
-                          value={desconto.toFixed(2)}
-                          name="desconto"
-                          type="number"
-                          step="0.01"
-                          readOnly={true}
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={incluirDescontoNF}
-                          onChange={(e) =>
-                            setIncluirDescontoNF(e.target.checked)
-                          }
-                        />{' '}
-                        Incluir Desconto na NF
-                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <FormInput
+                        label="Percentual"
+                        value={percDesconto}
+                        onChange={(e) => setPercDesconto(e.target.value)}
+                        name="perc-desconto"
+                        type="number"
+                        step="0.01"
+                        readOnly={!informarDescontoCorpo}
+                      />
+                      <FormInput
+                        label="Valor"
+                        value={desconto.toFixed(2)}
+                        name="desconto"
+                        type="number"
+                        step="0.01"
+                        readOnly={true}
+                      />
                     </div>
                   </div>
-                  <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border">
-                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3 text-center bg-green-100 dark:bg-green-900 py-2 rounded">
-                      ACRÉSCIMO
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          id="acrescimo-sim"
-                          name="informar-acrescimo"
-                          checked={informarAcrescimoCorpo}
-                          onChange={() => setInformarAcrescimoCorpo(true)}
-                        />
-                        <label htmlFor="acrescimo-sim" className="text-sm">
+                  {/* ACRÉSCIMO */}
+                  <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded border">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-sm text-green-700 dark:text-green-400">
+                        ACRÉSCIMO
+                      </span>
+                      <div className="flex items-center gap-3 text-xs">
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="informar-acrescimo"
+                            checked={informarAcrescimoCorpo}
+                            onChange={() => setInformarAcrescimoCorpo(true)}
+                          />
                           SIM
                         </label>
-                        <input
-                          type="radio"
-                          id="acrescimo-nao"
-                          name="informar-acrescimo"
-                          checked={!informarAcrescimoCorpo}
-                          onChange={() => setInformarAcrescimoCorpo(false)}
-                          className="ml-4"
-                        />
-                        <label htmlFor="acrescimo-nao" className="text-sm">
+                        <label className="flex items-center gap-1">
+                          <input
+                            type="radio"
+                            name="informar-acrescimo"
+                            checked={!informarAcrescimoCorpo}
+                            onChange={() => setInformarAcrescimoCorpo(false)}
+                          />
                           NÃO
                         </label>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <FormInput
-                          label="Percentual"
-                          value={percAcrescimo}
-                          onChange={(e) => setPercAcrescimo(e.target.value)}
-                          name="perc-acrescimo"
-                          type="number"
-                          step="0.01"
-                          readOnly={!informarAcrescimoCorpo}
-                        />
-                        <FormInput
-                          label="Valor"
-                          value={acrescimo.toFixed(2)}
-                          name="acrescimo"
-                          type="number"
-                          step="0.01"
-                          readOnly={true}
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={incluirAcrescimoNF}
-                          onChange={(e) =>
-                            setIncluirAcrescimoNF(e.target.checked)
-                          }
-                        />{' '}
-                        Incluir Acréscimo na NF
-                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <FormInput
+                        label="Percentual"
+                        value={percAcrescimo}
+                        onChange={(e) => setPercAcrescimo(e.target.value)}
+                        name="perc-acrescimo"
+                        type="number"
+                        step="0.01"
+                        readOnly={!informarAcrescimoCorpo}
+                      />
+                      <FormInput
+                        label="Valor"
+                        value={acrescimo.toFixed(2)}
+                        name="acrescimo"
+                        type="number"
+                        step="0.01"
+                        readOnly={true}
+                      />
                     </div>
                   </div>
-                </div>
-              </SecaoCollapse>
-              <SecaoCollapse
-                titulo="FRETE E TRANSPORTE"
-                icone={<Truck />}
-                padraoAberto={!agrupandoFaturas}
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                  <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded">
-                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">
-                      FRETE
-                    </h4>
+                  {/* FRETE */}
+                  <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded border">
+                    <div className="mb-2">
+                      <span className="font-semibold text-sm text-gray-700 dark:text-gray-300">
+                        FRETE
+                      </span>
+                    </div>
                     <FormInput
-                      label="Valor"
+                      label="Valor do Frete"
                       value={frete}
                       onChange={(e) => setFrete(e.target.value)}
                       name="frete"
@@ -4063,11 +4368,19 @@ O problema está na Inscrição Estadual (IE), não na série!
                       step="0.01"
                     />
                   </div>
-                  <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded">
-                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">
-                      DADOS DO TRANSPORTE
+                </div>
+              </SecaoCollapse>
+              <SecaoCollapse
+                titulo="VOLUMES / TRANSPORTE"
+                icone={<Truck />}
+                padraoAberto={!agrupandoFaturas}
+              >
+                <div className="p-3">
+                  <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded">
+                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      DADOS DO TRANSPORTE (VOLUMES)
                     </h4>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                       <FormInput
                         label="Quantidade"
                         value={quantidade}
@@ -4160,6 +4473,8 @@ O problema está na Inscrição Estadual (IE), não na série!
                   )}
                 </div>
               </SecaoCollapse>
+              </>
+              )}
             </div>
           )}
         />

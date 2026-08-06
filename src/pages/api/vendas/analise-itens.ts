@@ -43,6 +43,12 @@ async function getOrCreateAnalise(client: any, codvenda: string, usuario: string
   return idAnalise;
 }
 
+// Retorna o status atual da venda (dbvenda.status). 'F' = FATURADA.
+async function getStatusVenda(client: any, codvenda: string): Promise<string | null> {
+  const r = await client.query('SELECT status FROM dbvenda WHERE codvenda = $1', [codvenda]);
+  return r.rows[0]?.status ?? null;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const pool = getPgPool();
   const client = await pool.connect();
@@ -52,6 +58,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { codvenda, codprod, qtd, prunit, prcompra, ref, descr, usuario } = req.body;
       if (!codvenda || !codprod) {
         return res.status(400).json({ error: 'codvenda e codprod são obrigatórios' });
+      }
+
+      // GUARD: venda faturada não pode ter itens recalculados/editados — isso
+      // desincronizaria o snapshot fiscal já copiado para dbprodfat.
+      const statusPost = await getStatusVenda(client, codvenda);
+      if (statusPost === 'F') {
+        return res.status(409).json({
+          error: 'Venda já faturada (status F) — itens não podem ser recalculados/editados.',
+        });
       }
 
       const quantidade = Number(qtd) || 1;
@@ -223,6 +238,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { codvenda, codprod, usuario } = req.body;
       if (!codvenda || !codprod) {
         return res.status(400).json({ error: 'codvenda e codprod são obrigatórios' });
+      }
+
+      // GUARD: venda faturada não pode ter itens removidos (ver POST acima).
+      const statusDel = await getStatusVenda(client, codvenda);
+      if (statusDel === 'F') {
+        return res.status(409).json({
+          error: 'Venda já faturada (status F) — itens não podem ser removidos.',
+        });
       }
 
       const user = usuario || 'SISTEMA';

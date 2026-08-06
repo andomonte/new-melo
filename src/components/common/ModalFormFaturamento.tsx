@@ -16,6 +16,7 @@ interface ModalFormularioProps {
   loading?: boolean;
   footer?: React.ReactNode;
   summary?: React.ReactNode; // Prop para o resumo
+  navBar?: React.ReactNode; // Barra de etapa/navegação (fica no cabeçalho único)
 }
 
 export default function ModalFormularioFaturamento({
@@ -30,24 +31,23 @@ export default function ModalFormularioFaturamento({
   loading = false,
   footer,
   summary,
+  navBar,
 }: ModalFormularioProps) {
   return (
     // Camada de fundo
-    <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
-      {/* Contêiner principal do Modal: define a altura e a direção da flexbox */}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg w-full max-w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
-        
-        {/* CABEÇALHO: Não estica */}
-        <div className="flex-shrink-0 flex justify-center items-center px-4 py-3 border-b border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800">
-          <header className="mb-0 w-[60%]">
-            <h4 className="text-xl font-bold text-blue-600 dark:text-blue-300">
-              {titulo}
-            </h4>
-          </header>
-          <div className="w-[35%] h-full flex justify-end">
+    <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center">
+      {/* Contêiner principal do Modal: ocupa a tela inteira */}
+      <div className="bg-white dark:bg-zinc-900 shadow-lg w-full h-full flex flex-col overflow-hidden">
+
+        {/* CABEÇALHO ÚNICO: título + cliente + etapa/navegação + Opções + fechar */}
+        <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800">
+          <h4 className="text-base font-bold text-blue-600 dark:text-blue-300 whitespace-nowrap flex-shrink-0">
+            {titulo}
+          </h4>
+          {navBar && <div className="flex-1 min-w-0">{navBar}</div>}
+          {!navBar && <div className="flex-1" />}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {footer ?? <FormFooter onSubmit={handleSubmit} onClear={handleClear} />}
-          </div>
-          <div className="w-[5%] flex justify-end h-full">
             <button
               onClick={onClose}
               className="text-gray-500 dark:text-gray-300 hover:text-red-500"
@@ -58,7 +58,7 @@ export default function ModalFormularioFaturamento({
         </div>
 
         {/* ÁREA DE CONTEÚDO: Estica para preencher o espaço e tem rolagem interna */}
-        <div className="flex-grow overflow-y-auto p-6 bg-gray-50 dark:bg-zinc-900">
+        <div className="flex-grow overflow-y-auto p-3 bg-gray-50 dark:bg-zinc-900">
           {loading ? (
             <div className="w-full h-full flex items-center justify-center">
               <Carregamento />

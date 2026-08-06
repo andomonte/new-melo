@@ -247,7 +247,6 @@ export default async function handler(
           tipoMovimentacao: body.tipoMovimentacao || '',
           tipoOperacao: body.tipoOperacao || '',
           tipoFatura: body.tipoFatura || '',
-          zerarSubstituicao: body.zerarSubstituicao || 'N',
           codProd: body.codProd,
           codCli: body.codCli,
           qtd,

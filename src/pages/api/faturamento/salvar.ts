@@ -259,6 +259,34 @@ export default async function handler(
         `✅ Status da venda ${codvenda} atualizado para 'F' (faturado) - Fatura: ${novoCodfat}`,
       );
 
+      // ===== ITENS DA FATURA (DBPRODFAT) =====
+      // Espelha o modelo Oracle: o Delphi (FATURAMENTOS.GERAR_FATURA) grava o
+      // snapshot dos itens da fatura em DBPRODFAT. Copiamos os itens da venda de
+      // DBITVENDA -> DBPRODFAT preservando os impostos já calculados (as 48
+      // colunas abaixo existem em ambas as tabelas com o mesmo nome; só mudam
+      // codfat (novo) e qtde (que em dbitvenda se chama qtd).
+      const colsProdFat = [
+        'codprod', 'prunit', 'descr', 'codvenda', 'icms', 'ipi', 'codint',
+        'cfop', 'tipocfop', 'totalipi', 'baseicms', 'totalicms', 'mva',
+        'basesubst_trib', 'totalsubst_trib', 'ref', 'ncm', 'baseipi',
+        'icmsinterno_dest', 'icmsexterno_orig', 'totalproduto',
+        'totalicmsdesconto', 'cstipi', 'cstpis', 'pis', 'cstcofins', 'cofins',
+        'basepis', 'valorpis', 'basecofins', 'valorcofins', 'csticms',
+        'fretebase', 'acrescimo', 'freteicms', 'desconto', 'nrequis', 'nritem',
+        'fcp', 'base_fcp', 'valor_fcp', 'fcp_subst', 'basefcp_subst',
+        'valorfcp_subst', 'ftp_st', 'fcp_substret', 'basefcp_substret',
+        'valorfcp_substret',
+      ];
+      const insProdFat = await client.query(
+        `INSERT INTO dbprodfat (codfat, qtde, ${colsProdFat.join(', ')})
+         SELECT $1, qtd, ${colsProdFat.join(', ')}
+         FROM dbitvenda WHERE codvenda = $2`,
+        [novoCodfat, codvenda],
+      );
+      console.log(
+        `🧾 DBPRODFAT: ${insProdFat.rowCount} item(ns) da venda ${codvenda} gravados na fatura ${novoCodfat}`,
+      );
+
       // ===== BAIXA DE ESTOQUE =====
       // Buscar itens da venda para fazer a baixa de estoque
       const itensVenda = await client.query(

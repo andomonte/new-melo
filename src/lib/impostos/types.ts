@@ -300,7 +300,8 @@ export interface ImpostoRequest {
   tipoMovimentacao?: string;
   tipoOperacao?: string;
   tipoFatura?: string;
-  zerarSubstituicao?: 'S' | 'N';
+  // (zerarSubstituicao removido: era parâmetro morto — nunca era passado ao
+  //  cálculo, só ecoava no debug. Será reintroduzido com wiring real.)
 
   // Modo de cálculo
   usarRegrasOracleProcedimento?: boolean; // true = usa regras do procedimento Oracle, false = usa valores do produto

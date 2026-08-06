@@ -82,6 +82,16 @@ export default async function handler(
       ],
     );
 
+    // Herda a conta financeira da fatura para os títulos (mesmo elo que o
+    // Delphi/TCOBRANCA usa: o título de dbreceb carrega o cod_conta do documento).
+    const contaFatura = await client.query(
+      `SELECT cod_conta FROM dbfatura WHERE codfat = $1`,
+      [codfat],
+    );
+    const codContaFatura = contaFatura.rows[0]?.cod_conta ?? null;
+    // Data de emissão do título = hoje (equivale a trunc(sysdate) no Delphi).
+    const dtEmissao = new Date().toISOString().split('T')[0];
+
     // INSERE AS PARCELAS
     for (const parcela of req.body.parcelas) {
       // ...código para gerar 'novoCod'...
@@ -91,15 +101,26 @@ export default async function handler(
       const nextId = rows[0].next_id;
       const novoCod = nextId.toString().padStart(9, '0');
 
+      // Colunas estruturais alinhadas ao Delphi (TCOBRANCA.COBRANCA_INCLUIR) e à
+      // convenção do próprio web (contas-receber/criar.ts): sem elas o título
+      // "some" das listagens de recebíveis, que filtram cancel='N' / valor_rec.
+      //   tipo='F' (fatura), valor_rec=0 (nada recebido), rec/cancel/bradesco='N',
+      //   dt_emissao=hoje, venc_ant/dtvenc_previsao=dt_venc, cod_conta herdado da fatura.
       await client.query(
         `INSERT INTO dbreceb
-         (cod_receb, codcli, cod_fat, dt_venc, valor_pgto, nro_doc, forma_fat,banco)
-         VALUES ($1, $2, $3, $4, $5, $6, $7,$8)`,
+         (cod_receb, codcli, cod_fat, cod_conta, dt_venc, dt_emissao, valor_pgto,
+          valor_rec, nro_doc, forma_fat, banco, tipo, rec, cancel, bradesco,
+          venc_ant, dtvenc_previsao)
+         VALUES ($1, $2, $3, $4, $5, $6, $7,
+          0, $8, $9, $10, 'F', 'N', 'N', 'N',
+          $5, $5)`,
         [
           novoCod,
           codcli,
           codfat,
+          codContaFatura,
           parcela.vencimento,
+          dtEmissao,
           parcela.valor,
           parcela.documento,
           codigoFormaFatura,
