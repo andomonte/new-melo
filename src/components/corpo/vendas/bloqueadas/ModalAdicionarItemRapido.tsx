@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import api from '@/components/services/api';
 import ModalEquivalentes from './ModalEquivalentes';
 import ModalHistoricoProduto from './ModalHistoricoProduto';
+import Carregamento from '@/utils/carregamento';
 
 interface ItemAdicionado {
   codprod: string;
@@ -76,6 +77,9 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const [produtoEquiv, setProdutoEquiv] = useState<any>(null);
   const [modalHist, setModalHist] = useState(false);
   const [produtoHist, setProdutoHist] = useState<any>(null);
+  const [equivalentes, setEquivalentes] = useState<any[]>([]);
+  const [loadingEquiv, setLoadingEquiv] = useState(false);
+  const ultimoCodgpeRef = useRef('');
   const [pageLoaded, setPageLoaded] = useState(0);
 
   const modalRef = useRef<HTMLDivElement>(null);
@@ -86,6 +90,10 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const listaProdRef = useRef<any[]>([]);
   listaProdRef.current = listaProd;
   const buscandoRef = useRef(false);
+  const confirmarAdicaoRef = useRef<() => void>(() => {});
+  const abrirQtdRef = useRef<(idx: number) => void>(() => {});
+  const abrirEquivalentesRef = useRef<() => void>(() => {});
+  const abrirHistoricoRef = useRef<() => void>(() => {});
   const SCREEN_KEY = 'analise-adicionar-itens';
   const prefsCarregadasRef = useRef(false);
 
@@ -150,6 +158,51 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     }
   }, [linhaSelecionada]);
 
+  // Buscar equivalentes automaticamente ao navegar nas linhas (com debounce)
+  const equivTimeoutRef = useRef<any>(null);
+  useEffect(() => {
+    if (equivTimeoutRef.current) clearTimeout(equivTimeoutRef.current);
+
+    if (linhaSelecionada < 0 || !listaProd[linhaSelecionada]) {
+      setEquivalentes([]);
+      return;
+    }
+
+    equivTimeoutRef.current = setTimeout(() => {
+      const produto = listaProd[linhaSelecionada];
+      const codgpe = (produto.codgpe || '').trim();
+
+      const buscarEquiv = (gpe: string) => {
+        if (gpe === ultimoCodgpeRef.current) return;
+        ultimoCodgpeRef.current = gpe;
+        setLoadingEquiv(true);
+        api.post('/api/vendas/postgresql/produtoEquival', { CODGPE: gpe, PRVENDA: '0' })
+          .then(res => {
+            const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+            setEquivalentes(data.filter((e: any) => (e.CODPROD || e.codprod) !== produto.codprod));
+          })
+          .catch(() => setEquivalentes([]))
+          .finally(() => setLoadingEquiv(false));
+      };
+
+      if (!codgpe) {
+        fetch(`/api/produtos/get/${produto.codprod}`)
+          .then(r => r.json())
+          .then(data => {
+            const gpe = (data.codgpe || '').trim();
+            if (gpe) buscarEquiv(gpe);
+            else { setEquivalentes([]); ultimoCodgpeRef.current = ''; }
+          })
+          .catch(() => { setEquivalentes([]); ultimoCodgpeRef.current = ''; });
+        return;
+      }
+
+      buscarEquiv(codgpe);
+    }, 400);
+
+    return () => { if (equivTimeoutRef.current) clearTimeout(equivTimeoutRef.current); };
+  }, [linhaSelecionada, listaProd]);
+
   // Buscar produtos (primeira página ou próxima)
   const fetchProdutos = useCallback(async (search: string, page: number, append: boolean) => {
     if (buscandoRef.current) return;
@@ -164,8 +217,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         setPageLoaded(page);
         if (!append) {
           setLinhaSelecionada(0);
-          setTimeout(() => { (document.activeElement as HTMLElement)?.blur(); }, 100);
           if (scrollRef.current) scrollRef.current.scrollTop = 0;
+          setTimeout(() => modalRef.current?.focus(), 50);
         }
       } else if (!append) {
         setListaProd([]);
@@ -346,17 +399,37 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     setModalHist(true);
   }, [toast]);
 
+  // Sync refs das funções
+  confirmarAdicaoRef.current = confirmarAdicao;
+  abrirQtdRef.current = abrirQtd;
+  abrirEquivalentesRef.current = abrirEquivalentes;
+  abrirHistoricoRef.current = abrirHistorico;
+
   // Atalhos de teclado
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-      // Quando pedindoQtd ativo: inputs de qtd/preço gerenciam Enter via onKeyDown próprio
+      // Quando pedindoQtd ativo
       if (pedindoQtd >= 0) {
         if (e.key === 'Escape') {
           e.preventDefault(); e.stopImmediatePropagation();
           setPedindoQtd(-1);
+          modalRef.current?.focus();
+          return;
+        }
+        // Setas ↑↓: fechar input e mover linha
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault(); e.stopImmediatePropagation();
+          setPedindoQtd(-1);
+          const prods = listaProdRef.current;
+          const cur = linhaSelecionadaRef.current;
+          const next = e.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0);
+          linhaSelecionadaRef.current = next;
+          setLinhaSelecionada(next);
+          modalRef.current?.focus();
+          return;
         }
         return;
       }
@@ -384,37 +457,32 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
 
       // Setas
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        if (listaProd.length > 0) {
-          // No input: só seta baixo sai do input, seta cima não faz nada
+        const prods = listaProdRef.current;
+        if (prods.length > 0) {
           if (emInput) {
             if (e.key === 'ArrowDown') {
               e.preventDefault(); e.stopImmediatePropagation();
-              (document.activeElement as HTMLElement)?.blur();
+              modalRef.current?.focus();
               setLinhaSelecionada(0);
+              linhaSelecionadaRef.current = 0;
             }
             return;
           }
           e.preventDefault(); e.stopImmediatePropagation();
-          {
-            if (e.key === 'ArrowDown') {
-              setLinhaSelecionada((prev) => {
-                const next = Math.min(prev + 1, listaProd.length - 1);
-                // Se chegou perto do final, carregar mais
-                if (next >= listaProd.length - 5 && listaProd.length < totalProd && !buscandoRef.current) {
-                  fetchProdutos(currentSearch, pageLoaded + 1, true);
-                }
-                return next;
-              });
+          const cur = linhaSelecionadaRef.current;
+          if (e.key === 'ArrowDown') {
+            const next = Math.min(cur + 1, prods.length - 1);
+            linhaSelecionadaRef.current = next;
+            setLinhaSelecionada(next);
+          } else {
+            if (cur <= 0) {
+              const input = modalRef.current?.querySelector('input[type="text"]') as HTMLInputElement;
+              if (input) input.focus();
+              linhaSelecionadaRef.current = -1;
+              setLinhaSelecionada(-1);
             } else {
-              setLinhaSelecionada((prev) => {
-                if (prev < 0) return -1;
-                if (prev === 0) {
-                  const input = modalRef.current?.querySelector('input[type="text"]') as HTMLInputElement;
-                  if (input) input.focus();
-                  return -1;
-                }
-                return prev - 1;
-              });
+              linhaSelecionadaRef.current = cur - 1;
+              setLinhaSelecionada(cur - 1);
             }
           }
         }
@@ -424,27 +492,28 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       // F10: histórico do item selecionado
       if (e.key === 'F10' && !emInput) {
         e.preventDefault(); e.stopImmediatePropagation();
-        abrirHistorico();
+        abrirHistoricoRef.current();
         return;
       }
 
       // F9: equivalentes do item selecionado
       if (e.key === 'F9' && !emInput) {
         e.preventDefault(); e.stopImmediatePropagation();
-        abrirEquivalentes();
+        abrirEquivalentesRef.current();
         return;
       }
 
       // Enter fora do input: abrir qtd
       if (e.key === 'Enter' && !emInput && linhaSelecionadaRef.current >= 0) {
         e.preventDefault(); e.stopImmediatePropagation();
-        abrirQtd(linhaSelecionadaRef.current);
+        abrirQtdRef.current(linhaSelecionadaRef.current);
         return;
       }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [isOpen, listaProd, totalProd, currentSearch, pageLoaded, pedindoQtd, confirmarAdicao, abrirQtd, abrirEquivalentes, abrirHistorico, fetchProdutos, onClose]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, pedindoQtd]);
 
   // Ordenação
   const handleSort = useCallback((col: string) => {
@@ -509,13 +578,13 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               </span>
             ) : null}
             {totalProd > 0 ? (
-              <span className="text-[10px] text-gray-400">
+              <span className="text-[10px] text-gray-700 dark:text-gray-200">
                 {listaProd.length} de {totalProd} carregados
               </span>
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-400">
+            <span className="text-[10px] text-gray-700 dark:text-gray-200">
               Enter buscar | ↑↓ navegar | Enter selecionar | F9 Equiv. | F10 Hist. | Esc voltar/fechar
             </span>
             <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-500">
@@ -534,21 +603,22 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') executarBusca(searchInput); }}
               placeholder="Digite e pressione Enter para buscar..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
-            {loading ? <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-500" /> : null}
           </div>
         </div>
 
         {/* Tabela com scroll */}
-        <div ref={scrollRef} className="flex-1 overflow-auto" onScroll={handleScroll}>
+        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Lista de produtos */}
+        <div ref={scrollRef} className="h-[60%] overflow-auto" onScroll={handleScroll}>
           <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-gray-50 dark:bg-zinc-800 z-10">
               <tr>
                 {columns.map((col) => (
                   <th
                     key={col.key}
-                    className={`${col.w} px-3 py-2 text-left text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase border-b border-gray-200 dark:border-zinc-700 ${col.sortable ? 'cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 select-none' : ''}`}
+                    className={`${col.w} px-3 py-2 text-left text-[11px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700 ${col.sortable ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 select-none' : ''}`}
                     onClick={col.sortable ? () => handleSort(col.key) : undefined}
                   >
                     {col.label}{sortIcon(col.key)}
@@ -557,9 +627,15 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               </tr>
             </thead>
             <tbody>
-              {listaProd.length === 0 && !loading ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={columns.length} className="text-center py-16 text-gray-400 text-sm">
+                  <td colSpan={columns.length} className="py-8">
+                    <Carregamento texto="Buscando produtos..." />
+                  </td>
+                </tr>
+              ) : listaProd.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="text-center py-16 text-gray-700 dark:text-gray-200 text-sm font-medium">
                     {currentSearch.length >= 2 ? 'Nenhum produto encontrado.' : 'Digite pelo menos 2 caracteres e pressione Enter para buscar...'}
                   </td>
                 </tr>
@@ -574,16 +650,17 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
 
                 return (
                   <tr
-                    key={produto.codprod}
+                    key={`${produto.codprod}-${idx}`}
                     className={`border-b border-gray-100 dark:border-zinc-800 transition-colors cursor-pointer
                       ${jaExistente ? 'opacity-40' : ''}
                       ${semEstoque && !jaExistente ? 'opacity-50' : ''}
                       ${isSelecionado ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-800/50'}
                     `}
-                    onClick={() => abrirQtd(idx)}
+                    onClick={() => { setLinhaSelecionada(idx); linhaSelecionadaRef.current = idx; if (pedindoQtd >= 0 && pedindoQtd !== idx) setPedindoQtd(-1); }}
+                    onDoubleClick={() => abrirQtd(idx)}
                   >
                     {/* Referência */}
-                    <td className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 w-[90px]">
+                    <td className="px-3 py-2 text-xs font-bold text-gray-900 dark:text-white w-[90px]">
                       {produto.ref || produto.codprod}
                     </td>
                     {/* Produto */}
@@ -664,7 +741,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                       </div>
                     </td>
                     {/* Marca */}
-                    <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 w-[100px]">
+                    <td className="px-3 py-2 text-xs text-gray-900 dark:text-white w-[100px]">
                       <div title={produto.codmarca || ''} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }}>
                         {produto.codmarca || ''}
                       </div>
@@ -691,6 +768,78 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Equivalentes inline */}
+          <div className="h-[40%] border-t-[3px] border-blue-400 dark:border-blue-600 flex flex-col">
+            <div className="px-4 py-1.5 bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700 flex items-center gap-2">
+              <ArrowLeftRight size={14} className="text-blue-600" />
+              <span className="text-xs font-bold text-gray-900 dark:text-white">
+                Equivalentes {linhaSelecionada >= 0 && listaProd[linhaSelecionada] ? `— ${listaProd[linhaSelecionada].ref || listaProd[linhaSelecionada].codprod}` : ''}
+              </span>
+              <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-200">{equivalentes.length} encontrado(s)</span>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {loadingEquiv ? (
+                <div className="flex items-center justify-center py-8 text-gray-700 dark:text-gray-200">
+                  <Loader2 size={18} className="animate-spin mr-2" /> Buscando equivalentes...
+                </div>
+              ) : equivalentes.length === 0 ? (
+                <div className="flex items-center justify-center py-8 text-gray-700 dark:text-gray-200 text-sm font-medium">
+                  {linhaSelecionada >= 0 ? 'Nenhum equivalente encontrado' : 'Selecione um item para ver equivalentes'}
+                </div>
+              ) : (
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 bg-gray-50 dark:bg-zinc-800 z-10">
+                    <tr>
+                      <th className="w-[90px] px-3 py-1.5 text-left text-[10px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700">Ref</th>
+                      <th className="px-3 py-1.5 text-left text-[10px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700">Produto</th>
+                      <th className="w-[100px] px-3 py-1.5 text-left text-[10px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700">Marca</th>
+                      <th className="w-[70px] px-3 py-1.5 text-center text-[10px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700">Estoque</th>
+                      <th className="w-[80px] px-3 py-1.5 text-right text-[10px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700">Preço</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {equivalentes.map((eq: any, eqIdx: number) => {
+                      const codprod = eq.CODPROD || eq.codprod;
+                      const ref = eq.REF || eq.ref || codprod;
+                      const descr = eq.DESCR || eq.descr || '';
+                      const marca = eq.MARCA || eq.marca_nome || '';
+                      const estq = Number(eq.QTDDISPONIVEL || eq.qtddisponivel || eq.QTEST || eq.qtest || 0);
+                      const preco = Number(eq.PRECOVENDA || eq.prvenda || 0);
+                      return (
+                        <tr key={`${codprod}-${eqIdx}`}
+                          tabIndex={0}
+                          className="border-b border-gray-100 dark:border-zinc-800 hover:bg-blue-50 dark:hover:bg-blue-950 cursor-pointer focus:bg-blue-100 dark:focus:bg-blue-900 outline-none"
+                          onClick={() => {
+                            if (estq <= 0) { toast({ title: 'Produto sem estoque' }); return; }
+                            const item: any = {
+                              codprod, ref, descr, qtd: 1, prunit: preco, prvenda_original: preco,
+                              desconto_valor: 0, desconto_percentual: 0, total_item: preco,
+                              prcompra: 0, prcustoatual: 0, margem: 0, codmarca: '', marca_nome: marca,
+                              origem: 'N', estoque: estq, _novo: true,
+                            };
+                            onAdicionarItens([item]);
+                            setAdicionados((prev) => { const m = new Map(prev); m.set(codprod, 1); return m; });
+                            toast({ title: `${ref} adicionado (equivalente)` });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); }
+                          }}
+                        >
+                          <td className="px-3 py-1.5 text-xs font-bold text-gray-900 dark:text-white">{ref}</td>
+                          <td className="px-3 py-1.5 text-xs text-gray-900 dark:text-white">{descr.substring(0, 60)}</td>
+                          <td className="px-3 py-1.5 text-xs text-gray-900 dark:text-white">{marca.substring(0, 20)}</td>
+                          <td className={`px-3 py-1.5 text-xs text-center font-bold ${estq > 0 ? 'text-blue-600' : 'text-red-600'}`}>{estq}</td>
+                          <td className="px-3 py-1.5 text-xs text-right font-bold text-gray-900 dark:text-white">R$ {preco.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
@@ -702,20 +851,20 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => { if (linhaSelecionadaRef.current >= 0) abrirQtd(linhaSelecionadaRef.current); }}>
             Adicionar Item
-            <span className="ml-auto text-[10px] text-gray-400">Enter</span>
+            <span className="ml-auto text-[10px] text-gray-700 dark:text-gray-200">Enter</span>
           </ContextMenuItem>
           <ContextMenuItem onClick={abrirEquivalentes}>
             <ArrowLeftRight size={14} className="mr-2" /> Equivalentes
-            <span className="ml-auto text-[10px] text-gray-400">F9</span>
+            <span className="ml-auto text-[10px] text-gray-700 dark:text-gray-200">F9</span>
           </ContextMenuItem>
           <ContextMenuItem onClick={abrirHistorico}>
             <History size={14} className="mr-2" /> Histórico Produto
-            <span className="ml-auto text-[10px] text-gray-400">F10</span>
+            <span className="ml-auto text-[10px] text-gray-700 dark:text-gray-200">F10</span>
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={onClose}>
             Fechar
-            <span className="ml-auto text-[10px] text-gray-400">Esc</span>
+            <span className="ml-auto text-[10px] text-gray-700 dark:text-gray-200">Esc</span>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

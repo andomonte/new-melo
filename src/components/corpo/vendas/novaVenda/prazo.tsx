@@ -16,18 +16,32 @@ interface ModalPrazoParcelasProps {
   dadosIniciais?: { id: number; dataVencimento: Date; dias: number }[];
 }
 
-// Lista de feriados nacionais (exemplo - pode ser expandida)
-const feriadosNacionais = [
-  '2025-09-07',
-  '2025-10-12',
-  '2025-11-02',
-  '2025-11-15',
-  '2025-12-25',
-];
+// Feriados carregados dinamicamente via API + fallback local
+let feriadosCache: Set<string> = new Set();
+let feriadosCacheAno = 0;
+
+async function carregarFeriados(ano: number) {
+  if (ano === feriadosCacheAno && feriadosCache.size > 0) return;
+  try {
+    const res = await fetch(`/api/vendas/feriados?ano=${ano}`);
+    if (res.ok) {
+      const data = await res.json();
+      feriadosCache = new Set((data.feriados || []).map((f: any) => f.data?.substring(0, 10)));
+      feriadosCacheAno = ano;
+    }
+  } catch {
+    // Fallback: feriados fixos nacionais
+    feriadosCache = new Set([
+      `${ano}-01-01`, `${ano}-04-21`, `${ano}-05-01`, `${ano}-09-07`,
+      `${ano}-10-12`, `${ano}-11-02`, `${ano}-11-15`, `${ano}-12-25`,
+    ]);
+    feriadosCacheAno = ano;
+  }
+}
 
 const isFeriado = (data: Date) => {
   const dataString = format(data, 'yyyy-MM-dd');
-  return feriadosNacionais.includes(dataString);
+  return feriadosCache.has(dataString);
 };
 
 const getProximoDiaUtil = (data: Date) => {
@@ -53,6 +67,14 @@ const ModalPrazoParcelas: React.FC<ModalPrazoParcelasProps> = ({
   );
   const [parcelas, setParcelas] = useState(dadosIniciais || []);
   const [isAddButtonDisabled, setIsAddButtonDisabled] = useState(true);
+
+  // Carregar feriados ao abrir
+  useEffect(() => {
+    const ano = new Date().getFullYear();
+    carregarFeriados(ano);
+    // Também carregar próximo ano se estiver perto do final
+    if (new Date().getMonth() >= 10) carregarFeriados(ano + 1);
+  }, []);
 
   useEffect(() => {
     setIsAddButtonDisabled(

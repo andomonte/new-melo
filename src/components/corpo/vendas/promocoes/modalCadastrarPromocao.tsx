@@ -1204,14 +1204,14 @@ const CadastrarPromocaoModal: React.FC<CadastrarPromocaoModalProps> = ({
         isOpen={isAddProductsModalOpen}
         onClose={() => { setIsAddProductsModalOpen(false); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItemRapido}
-        itensExistentes={rowData.map((r) => r.codprod)}
+        itensExistentes={rowData.map((r) => r.codprod).filter(Boolean) as string[]}
       />
 
       <ModalEquivalentes
         isOpen={modalEquivalentes}
         onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItemRapido}
-        itensExistentes={rowData.map((r) => r.codprod)}
+        itensExistentes={rowData.map((r) => r.codprod).filter(Boolean) as string[]}
         produto={produtoEquivalente}
       />
 
