@@ -122,7 +122,7 @@ export default async function handle(
         COALESCE((SELECT m.descr FROM dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), '') as marca_nome,
         COALESCE((SELECT gf.descr FROM dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), '') as grupo_funcao_nome,
         COALESCE((SELECT gp.descr FROM dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), '') as grupo_produto_nome,
-        COALESCE((SELECT seg.margem_min_venda FROM dbsegmento seg JOIN dbgpprod gp ON gp.codseg::text = seg.codseg::text WHERE gp.codgpp = p.codgpp LIMIT 1), 0) as margem_min_venda,
+        COALESCE((SELECT seg.margem_min_venda FROM db_manaus.dbsegmento seg JOIN db_manaus.dbgpprod gp ON gp.codseg::text = seg.codseg::text WHERE gp.codgpp = p.codgpp LIMIT 1), 0) as margem_min_venda,
         COALESCE((
           SELECT COUNT(DISTINCT cap.arp_arm_id)
           FROM cad_armazem_produto cap

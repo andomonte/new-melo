@@ -9,6 +9,10 @@ import {
   ContextMenu, ContextMenuTrigger, ContextMenuContent,
   ContextMenuItem, ContextMenuSeparator, ContextMenuLabel,
 } from '@/components/ui/context-menu';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { AuthContext } from '@/contexts/authContexts';
 import { AgGridReact } from 'ag-grid-react';
@@ -98,6 +102,7 @@ const NovaVendaV2 = () => {
   // ---------- Estados do grid ----------
   const [itensGrid, setItensGrid] = useState<any[]>(() => draft.current?.itensGrid || []);
   const [addItemOpen, setAddItemOpen] = useState(false);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [zoomProduto, setZoomProduto] = useState<any>(null);
   const [modalEquivalentes, setModalEquivalentes] = useState(false);
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
@@ -120,6 +125,9 @@ const NovaVendaV2 = () => {
     return [];
   });
   const [openModalPrazo, setOpenModalPrazo] = useState(false);
+  const [opcoesPrazo, setOpcoesPrazo] = useState<{ prazo: string; dias: number[]; qtdParcelas: number }[]>([]);
+  const [showPrazoDropdown, setShowPrazoDropdown] = useState(false);
+  const [prazoIdx, setPrazoIdx] = useState(0);
   const [fPagamento, setFPagamento] = useState(() => draft.current?.fPagamento || '');
   const [opcoesFP, setOpcoesFP] = useState<{ id: string; descricao: string }[]>([]);
   const [transporteSel, setTransporteSel] = useState<{ CODTPTRANSP: string; DESCR: string }>(() => draft.current?.transporteSel || { CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' });
@@ -225,7 +233,8 @@ const NovaVendaV2 = () => {
     }).catch(() => {});
     // Formas de pagamento
     api.get('/api/vendas/fpagamento').then(r => {
-      if (r.data) setOpcoesFP(Array.isArray(r.data) ? r.data : []);
+      const fp = r.data?.data || r.data;
+      if (Array.isArray(fp)) setOpcoesFP(fp);
     }).catch(() => {});
     // Documentos (com dedupe)
     api.post('/api/dbOracle/buscarDocumento').then(r => {
@@ -305,8 +314,13 @@ const NovaVendaV2 = () => {
     }
   }, [user]);
 
-  // ---------- Buscar vendedor/operador (mesma API) ----------
-  const buscarVendedorOperador = useCallback(async (termo: string, tipo: 'vendedor' | 'operador') => {
+  // ---------- Buscar vendedor/operador (mesma API, com debounce) ----------
+  const buscaVendOpRef = useRef<any>(null);
+  const buscarVendedorOperador = useCallback((termo: string, tipo: 'vendedor' | 'operador') => {
+    if (buscaVendOpRef.current) clearTimeout(buscaVendOpRef.current);
+    buscaVendOpRef.current = setTimeout(() => buscarVendedorOperadorExec(termo, tipo), 300);
+  }, []);
+  const buscarVendedorOperadorExec = useCallback(async (termo: string, tipo: 'vendedor' | 'operador') => {
     if (termo.trim().length < 3) return;
     const setLoading = tipo === 'vendedor' ? setLoadingVendedor : setLoadingOperador;
     const setResultados = tipo === 'vendedor' ? setResultadosVendedor : setResultadosOperador;
@@ -342,11 +356,11 @@ const NovaVendaV2 = () => {
   }, []);
 
   // ---------- Sync modais abertos ----------
-  modaisAbertosRef.current = addItemOpen || !!zoomProduto || modalEquivalentes || modalHistProduto;
+  modaisAbertosRef.current = addItemOpen || !!zoomProduto || modalEquivalentes || modalHistProduto || confirmDeleteAll;
 
   // Refs para dropdowns (evitar stale closures no handler global)
   const dropdownAbertoRef = useRef(false);
-  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp;
+  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown;
 
   // ---------- Navegação por teclado (Tab + Setas) ----------
   const cabecalhoRef = useRef<HTMLDivElement>(null);
@@ -779,6 +793,12 @@ const NovaVendaV2 = () => {
     { headerName: '', field: '_delete', width: 40, maxWidth: 40, sortable: false,
       cellStyle: { display: 'flex', alignItems: 'center', justifyContent: 'center' },
       cellRendererSelector: () => ({ component: DeleteItemRenderer }),
+      headerComponent: () => (
+        <button onClick={() => { if (itensGrid.length > 0) setConfirmDeleteAll(true); }}
+          className="p-0.5 text-red-400 hover:text-red-600" title="Remover todos os itens">
+          <Trash2 size={14} />
+        </button>
+      ),
     },
     { headerName: 'Ref', field: 'ref', width: 100, cellStyle: { fontWeight: 500 } },
     { headerName: 'Produto', field: 'descr', flex: 2, minWidth: 150, autoHeight: true,
@@ -843,10 +863,23 @@ const NovaVendaV2 = () => {
   // Desconto à vista ativo em algum item → força "À VISTA"
   const temDescontoAvista = useMemo(() => itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0), [itensGrid]);
 
+  // Buscar opções de prazo quando totalVenda muda
+  const prazoFetchRef = useRef<any>(null);
+  useEffect(() => {
+    if (prazoFetchRef.current) clearTimeout(prazoFetchRef.current);
+    if (totalVenda <= 0) { setOpcoesPrazo([]); return; }
+    prazoFetchRef.current = setTimeout(() => {
+      api.post('/api/vendas/tabelaPrazos', { valor: totalVenda })
+        .then(r => { if (r.data?.opcoes) setOpcoesPrazo(r.data.opcoes); })
+        .catch(() => {});
+    }, 500);
+  }, [totalVenda]);
+
   // Prazo efetivo: se tem desconto à vista ou saldo insuficiente → "À VISTA"
   const isAvista = useMemo(() => {
+    if (!clienteSelecionado) return true;
     if (temDescontoAvista) return true;
-    if (clienteSelecionado && totalVenda > 0 && (Number(clienteSelecionado.saldo || 0) - totalVenda <= 0)) return true;
+    if (totalVenda > 0 && (Number(clienteSelecionado.saldo || 0) - totalVenda <= 0)) return true;
     const prazoStr = String(prazo).trim().toUpperCase();
     return prazoStr === 'À VISTA' || prazoStr === 'A VISTA' || prazoStr === '0';
   }, [temDescontoAvista, clienteSelecionado, totalVenda, prazo]);
@@ -988,14 +1021,14 @@ const NovaVendaV2 = () => {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
+        <div className="nova-venda-v2 h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
           {/* Cabeçalho */}
           <div className="px-5 py-3 border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-slate-900">
             {/* Linha do cliente + vendedor + operador — 3 colunas iguais */}
             <div ref={cabecalhoRef} className="flex items-start gap-3 mt-2">
               {/* Busca cliente */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Cliente</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Cliente</label>
                 <div className="relative">
                   {clienteSelecionado ? (
                     <button onClick={() => {
@@ -1005,11 +1038,11 @@ const NovaVendaV2 = () => {
                       setBuscaVendedor('');
                       clienteInputRef.current?.focus();
                     }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar cliente (Enter)">
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10" title="Limpar cliente (Enter)">
                       <X size={14} />
                     </button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   )}
                   <input
                     ref={clienteInputRef}
@@ -1018,6 +1051,7 @@ const NovaVendaV2 = () => {
                     value={buscaCliente}
                     readOnly={!!clienteSelecionado}
                     onChange={(e) => { if (!clienteSelecionado) setBuscaCliente(e.target.value); }}
+                    onDoubleClick={() => { if (clienteSelecionado) { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) {
@@ -1060,7 +1094,7 @@ const NovaVendaV2 = () => {
                               <span className="mx-1 text-gray-300">—</span>
                               <span className={campo === 'nome' ? 'text-blue-600' : ''}>{nome}</span>
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                            <div className="flex items-center gap-3 text-xs text-gray-800 dark:text-gray-200">
                               {razao ? <span className={campo === 'nome' ? 'text-blue-500' : ''}>{razao}</span> : null}
                               {cli.CPFCGC ? <span className={campo === 'cpfcgc' ? 'text-blue-600 font-semibold' : ''}>{cli.CPFCGC}</span> : null}
                               {cli.UF ? <span className={campo === 'uf' ? 'text-blue-600 font-semibold' : ''}>{cli.CIDADE ? `${cli.CIDADE}/${cli.UF}` : cli.UF}</span> : null}
@@ -1075,7 +1109,7 @@ const NovaVendaV2 = () => {
 
               {/* Busca vendedor */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 mb-0.5 block">Vendedor</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Vendedor</label>
                 <div className="relative">
                   {vendedorSel.codigo && temEV ? (
                     <button onClick={() => {
@@ -1083,19 +1117,20 @@ const NovaVendaV2 = () => {
                       setBuscaVendedor('');
                       vendedorInputRef.current?.focus();
                     }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar vendedor (Enter)">
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10" title="Limpar vendedor (Enter)">
                       <X size={14} />
                     </button>
                   ) : !vendedorSel.codigo ? (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   ) : null}
                   <input
                     ref={vendedorInputRef}
                     tabIndex={vendedorSel.codigo ? -1 : 0}
                     type="text"
                     value={buscaVendedor}
-                    onChange={(e) => { if (temEV && !vendedorSel.codigo) setBuscaVendedor(e.target.value); }}
+                    onChange={(e) => { if (temEV && !vendedorSel.codigo) { setBuscaVendedor(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'vendedor'); else { setResultadosVendedor([]); setShowResultadosVendedor(false); } } }}
                     readOnly={!temEV || !!vendedorSel.codigo}
+                    onDoubleClick={() => { if (temEV && vendedorSel.codigo) { setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
                     onKeyDown={(e) => {
                       if (!temEV || vendedorSel.codigo) return;
                       if (e.key === 'Enter') {
@@ -1140,7 +1175,7 @@ const NovaVendaV2 = () => {
 
               {/* Busca operador */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-lime-600 dark:text-lime-400 mb-0.5 block">Operador</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Operador</label>
                 <div className="relative">
                   {operadorSel.codigo ? (
                     <button onClick={() => {
@@ -1148,11 +1183,11 @@ const NovaVendaV2 = () => {
                       setBuscaOperador('');
                       operadorInputRef.current?.focus();
                     }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10" title="Limpar operador (Enter)">
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10" title="Limpar operador (Enter)">
                       <X size={14} />
                     </button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   )}
                   <input
                     ref={operadorInputRef}
@@ -1160,7 +1195,8 @@ const NovaVendaV2 = () => {
                     type="text"
                     value={buscaOperador}
                     readOnly={!!operadorSel.codigo}
-                    onChange={(e) => { if (!operadorSel.codigo) setBuscaOperador(e.target.value); }}
+                    onDoubleClick={() => { if (operadorSel.codigo) { setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } }}
+                    onChange={(e) => { if (!operadorSel.codigo) { setBuscaOperador(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'operador'); else { setResultadosOperador([]); setShowResultadosOperador(false); } } }}
                     onKeyDown={(e) => {
                       if (operadorSel.codigo) return;
                       if (e.key === 'Enter') {
@@ -1206,7 +1242,7 @@ const NovaVendaV2 = () => {
 
             {/* Info do cliente selecionado */}
             {clienteSelecionado ? (
-              <div className="flex items-center gap-4 mt-2 text-xs text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-4 mt-2 text-xs text-gray-600 dark:text-gray-200">
                 <span><b>Saldo:</b> <span className={Number(clienteSelecionado.saldo || clienteSelecionado.limite || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{formatCurrency(Number(clienteSelecionado.saldo || clienteSelecionado.limite || 0))}</span></span>
                 <span><b>Limite:</b> {formatCurrency(Number(clienteSelecionado.limite || 0))}</span>
                 <span><b>CNPJ/CPF:</b> {clienteSelecionado.cpfcgc || '-'}</span>
@@ -1239,17 +1275,23 @@ const NovaVendaV2 = () => {
                 >
                   % Desc. à Vista
                 </button>
-                <span className="text-[11px] text-gray-400">
+                <span className="text-[11px] text-gray-700">
                   {totalItens} itens | Duplo clique edita | Botão direito para mais opções
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                <span className="text-[10px] text-gray-700 dark:text-gray-800 flex items-center gap-1">
                   <Keyboard size={11} />
                   Ctrl+Z Zoom | Ctrl+D Desc. | F3 Vend. | F4 Oper. | F9 Equiv. | F10 Hist. | Ctrl++ Adicionar
                 </span>
               </div>
             </div>
+
+            {/* Placeholder forte */}
+            <style>{`
+              .nova-venda-v2 input::placeholder, .nova-venda-v2 select::placeholder { color: #4b5563 !important; opacity: 1 !important; }
+              .dark .nova-venda-v2 input::placeholder, .dark .nova-venda-v2 select::placeholder { color: #d1d5db !important; opacity: 1 !important; }
+            `}</style>
 
             {/* AG Grid */}
             <style>{`
@@ -1356,7 +1398,7 @@ const NovaVendaV2 = () => {
             <div className="grid grid-cols-3 gap-3">
               {/* Documento */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Documento</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Documento</label>
                 <div className="relative">
                   {documento.COD_OPERACAO ? (
                     <button onClick={() => {
@@ -1364,16 +1406,17 @@ const NovaVendaV2 = () => {
                         setTimeout(() => docInputRef.current?.focus(), 50);
                       }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
                       <X size={14} />
                     </button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   )}
                   <input type="text"
                     ref={docInputRef}
                     tabIndex={documento.COD_OPERACAO ? -1 : 0}
                     readOnly={!!documento.COD_OPERACAO}
+                    onDoubleClick={() => { if (documento.COD_OPERACAO) { setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc(''); setShowDoc(true); setTimeout(() => docInputRef.current?.focus(), 50); } }}
                     value={documento.COD_OPERACAO ? `${documento.COD_OPERACAO} - ${documento.DESCR}` : buscaDoc}
                     onChange={(e) => { setBuscaDoc(e.target.value); setShowDoc(true); setDocIdx(0); }}
                     onFocus={() => { if (!documento.COD_OPERACAO) setShowDoc(true); }}
@@ -1408,38 +1451,102 @@ const NovaVendaV2 = () => {
 
               {/* Prazo */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Prazo</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Prazo</label>
                 <div className="relative">
                   {prazo && !isAvista ? (
-                    <button onClick={() => { setPrazo(''); setPrazosArray([]); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
-                      <X size={14} />
-                    </button>
+                    <>
+                      <button onClick={() => { setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(false); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
+                        <X size={14} />
+                      </button>
+                      <button onClick={() => { setOpenModalPrazo(true); }}
+                        className="absolute right-8 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-blue-600 z-10" title="Editar prazo">
+                        <Keyboard size={12} />
+                      </button>
+                    </>
+                  ) : !isAvista ? (
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   ) : null}
                   <input type="text" readOnly
                     tabIndex={prazo ? -1 : 0}
                     value={isAvista ? 'À VISTA' : prazo || ''}
-                    onFocus={() => { if (!isAvista && !prazo) setOpenModalPrazo(true); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !prazo && !isAvista) { e.preventDefault(); setOpenModalPrazo(true); } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                    onFocus={() => { if (!isAvista && !prazo) { if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
+                    onDoubleClick={() => { if (prazo && !isAvista) { setPrazo(''); setPrazosArray([]); if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
+                    onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
+                    onKeyDown={(e) => {
+                      if (isAvista || prazo) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (e.key === 'Enter' && showPrazoDropdown && opcoesPrazo[prazoIdx]) {
+                        e.preventDefault();
+                        const op = opcoesPrazo[prazoIdx];
+                        setPrazo(op.prazo.replace(/\//g, ' '));
+                        const hoje = new Date();
+                        setPrazosArray(op.dias.map((d, i) => {
+                          const dt = new Date(hoje); dt.setDate(dt.getDate() + d);
+                          return { id: i + 1, dataVencimento: dt, dias: d };
+                        }));
+                        setShowPrazoDropdown(false);
+                        setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                      } else if (e.key === 'Enter' && !showPrazoDropdown) {
+                        e.preventDefault();
+                        if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); }
+                        else setOpenModalPrazo(true);
+                      }
+                      if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, opcoesPrazo.length)); }
+                      if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'Escape') setShowPrazoDropdown(false);
+                    }}
                     placeholder="Definir prazo"
                     className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg cursor-pointer ${prazo || isAvista ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} ${isAvista ? 'text-orange-600 font-semibold' : ''} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
                   />
+                  {/* Dropdown de opções de prazo */}
+                  {showPrazoDropdown && !isAvista && opcoesPrazo.length > 0 ? (
+                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {opcoesPrazo.map((op, idx) => (
+                        <div key={op.prazo}
+                          className={`px-3 py-2 cursor-pointer text-sm ${idx === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onMouseDown={(ev) => {
+                            ev.preventDefault();
+                            setPrazo(op.prazo.replace(/\//g, ' '));
+                            const hoje = new Date();
+                            setPrazosArray(op.dias.map((d, i) => {
+                              const dt = new Date(hoje); dt.setDate(dt.getDate() + d);
+                              return { id: i + 1, dataVencimento: dt, dias: d };
+                            }));
+                            setShowPrazoDropdown(false);
+                            setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-gray-900 dark:text-white">{op.prazo.replace(/\//g, ' / ')}</span>
+                            <span className="text-xs text-gray-700 dark:text-gray-200">{op.qtdParcelas}x</span>
+                          </div>
+                        </div>
+                      ))}
+                      {/* Opção personalizar */}
+                      <div
+                        className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}
+                      >
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
               {/* Forma de Pagamento */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Forma Pagamento</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Forma Pagamento</label>
                 <div className="relative">
                   {fPagamento ? (
                     <button onClick={() => setFPagamento('')}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
                       <X size={14} />
                     </button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   )}
                   <Select value={fPagamento} onValueChange={(v) => setFPagamento(v)}>
                     <SelectTrigger tabIndex={fPagamento ? -1 : 0} className={`h-9 text-sm border-gray-200 dark:border-zinc-600 rounded-lg pr-8 ${fPagamento ? 'bg-gray-100 dark:bg-zinc-900' : ''}`}>
@@ -1459,7 +1566,7 @@ const NovaVendaV2 = () => {
             <div className="grid grid-cols-4 gap-3 mt-2">
               {/* Transportadora */}
               <div className="flex-1 relative">
-                <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 block">Transportadora</label>
+                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Transportadora</label>
                 <div className="relative">
                   {transporteSel.CODTPTRANSP ? (
                     <button onClick={() => {
@@ -1467,16 +1574,17 @@ const NovaVendaV2 = () => {
                         setTimeout(() => transpInputRef.current?.focus(), 50);
                       }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-400 hover:text-gray-600 z-10">
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
                       <X size={14} />
                     </button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
                   )}
                   <input type="text"
                     ref={transpInputRef}
                     tabIndex={transporteSel.CODTPTRANSP ? -1 : 0}
                     readOnly={!!transporteSel.CODTPTRANSP}
+                    onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTimeout(() => transpInputRef.current?.focus(), 50); } }}
                     value={transporteSel.CODTPTRANSP ? `${transporteSel.CODTPTRANSP} - ${transporteSel.DESCR}` : buscaTransp}
                     onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
                     onFocus={() => { if (!transporteSel.CODTPTRANSP) setShowTransp(true); }}
@@ -1522,7 +1630,7 @@ const NovaVendaV2 = () => {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
-                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Valor Transporte</label>
+                <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Valor Transporte</label>
               </div>
 
               {/* Obs Fat */}
@@ -1531,7 +1639,7 @@ const NovaVendaV2 = () => {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
-                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Obs. Faturamento</label>
+                <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Obs. Faturamento</label>
               </div>
 
               {/* Pedido */}
@@ -1540,7 +1648,7 @@ const NovaVendaV2 = () => {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
-                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Pedido</label>
+                <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Pedido</label>
               </div>
             </div>
 
@@ -1551,14 +1659,14 @@ const NovaVendaV2 = () => {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
-                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Observação</label>
+                <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Observação</label>
               </div>
               <div className="relative h-full min-w-[200px]">
                 <input type="text" value={requisicao} onChange={(e) => setRequisicao(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
-                <label className="text-gray-400 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-400 dark:peer-placeholder-shown:text-gray-500 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Requisição</label>
+                <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Requisição</label>
               </div>
             </div>
 
@@ -1582,12 +1690,12 @@ const NovaVendaV2 = () => {
             {/* Linha final: Totais + Saldo + Botões */}
             <div className="flex items-center justify-between mt-3">
               <div className="flex items-center gap-4">
-                <span className="text-sm font-semibold text-gray-500">{totalItens} itens</span>
+                <span className="text-sm font-semibold text-gray-800">{totalItens} itens</span>
                 <span className="font-bold text-xl text-blue-600">Total: {formatCurrency(totalVenda)}</span>
                 {clienteSelecionado ? (
                   <>
-                    <span className="text-xs text-gray-500">Saldo: <span className={Number(clienteSelecionado.saldo || 0) > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0))}</span></span>
-                    <span className="text-xs text-gray-500">Pós venda: <span className={Number(clienteSelecionado.saldo || 0) - totalVenda > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0) - totalVenda)}</span></span>
+                    <span className="text-xs text-gray-800">Saldo: <span className={Number(clienteSelecionado.saldo || 0) > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0))}</span></span>
+                    <span className="text-xs text-gray-800">Pós venda: <span className={Number(clienteSelecionado.saldo || 0) - totalVenda > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0) - totalVenda)}</span></span>
                   </>
                 ) : null}
               </div>
@@ -1612,20 +1720,20 @@ const NovaVendaV2 = () => {
 
       {/* Context Menu */}
       <ContextMenuContent className="w-56">
-        <ContextMenuLabel className="text-xs text-gray-500">
+        <ContextMenuLabel className="text-xs text-gray-800">
           {ultimaCelulaRef.current ? `${ultimaCelulaRef.current.ref || ultimaCelulaRef.current.codprod}` : 'Nenhum item selecionado'}
         </ContextMenuLabel>
         <ContextMenuSeparator />
         <ContextMenuItem onClick={() => setAddItemOpen(true)}>
           <Plus size={14} className="mr-2" /> Adicionar Item
-          <span className="ml-auto text-[10px] text-gray-400">Ctrl++</span>
+          <span className="ml-auto text-[10px] text-gray-700">Ctrl++</span>
         </ContextMenuItem>
         <ContextMenuItem onClick={() => {
           const item = ultimaCelulaRef.current;
           if (item) setZoomProduto({ codprod: item.codprod, ref: item.ref, descr: item.descr });
         }}>
           <ShoppingCart size={14} className="mr-2" /> Zoom Produto
-          <span className="ml-auto text-[10px] text-gray-400">Ctrl+Z</span>
+          <span className="ml-auto text-[10px] text-gray-700">Ctrl+Z</span>
         </ContextMenuItem>
         <ContextMenuItem onClick={() => {
           const item = ultimaCelulaRef.current;
@@ -1638,16 +1746,34 @@ const NovaVendaV2 = () => {
           }
         }}>
           Equivalentes
-          <span className="ml-auto text-[10px] text-gray-400">F9</span>
+          <span className="ml-auto text-[10px] text-gray-700">F9</span>
         </ContextMenuItem>
         <ContextMenuItem onClick={() => {
           const item = ultimaCelulaRef.current;
           if (item) { setProdutoHist(item); setModalHistProduto(true); }
         }}>
           Histórico Produto
-          <span className="ml-auto text-[10px] text-gray-400">F10</span>
+          <span className="ml-auto text-[10px] text-gray-700">F10</span>
         </ContextMenuItem>
       </ContextMenuContent>
+
+      {/* Confirmação deletar todos */}
+      <AlertDialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover todos os itens</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover todos os {totalItens} itens do carrinho? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => { setItensGrid([]); toast({ title: 'Todos os itens foram removidos' }); }}>
+              Remover Todos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modais */}
       <ModalAdicionarItemRapido

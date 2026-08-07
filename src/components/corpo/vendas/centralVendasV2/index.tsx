@@ -323,7 +323,7 @@ const VendasPage = () => {
   // Atalhos de teclado
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (verItensOpen || compartilharPdfOpen || delOpen) return;
+      if (verItensOpen || compartilharPdfOpen || delOpen || modalNovaVenda) return;
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
@@ -360,7 +360,7 @@ const VendasPage = () => {
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  }, [vendas.data, verItensOpen, compartilharPdfOpen, delOpen, userPermissions]);
+  }, [vendas.data, verItensOpen, compartilharPdfOpen, delOpen, modalNovaVenda, userPermissions]);
 
   const handleStatusChange = (newStatus: string) => {
     setStatusFilter(newStatus as VendaStatus);
@@ -1580,9 +1580,13 @@ const VendasPage = () => {
             const keyMap: Record<string, string> = { id: 'codvenda', codcliente: 'codcli', data_venda: 'data', valor_total: 'total', status: 'status' };
             handleSortChange(keyMap[column] || column, direction);
           }}
-          rowClassName={(_row, idx) => idx === linhaSelecionada ? 'bg-blue-50 dark:bg-blue-950' : ''}
-          onRowClick={(_row, idx) => {
-            if (typeof idx === 'number') setLinhaSelecionada(idx);
+          rowClassName={(_row: any, idx: any) => idx === linhaSelecionada ? 'bg-blue-50 dark:bg-blue-950' : ''}
+          onRowClick={(row: any) => {
+            const data = vendas.data;
+            if (data) {
+              const idx = data.findIndex((v: any) => v.id === row.id);
+              if (idx >= 0) setLinhaSelecionada(idx);
+            }
           }}
         />
         </div>
