@@ -1,29 +1,17 @@
 // src/pages/api/impostos/index.ts
-
-/**
- * API de Cálculo de Impostos - REESCRITA COMPLETA
- *
- * Usa infraestrutura SQL (functions + views) do PostgreSQL
- * para cálculos precisos e completos de impostos.
- *
- * Performance: < 500ms por item
- * Cobertura: ICMS, ST, IPI, PIS, COFINS, FCP, IBS/CBS
- */
+//
+// API de Cálculo de Impostos — FASE 3 (port PL/pgSQL).
+// Este endpoint NÃO calcula nada em JS: valida a entrada, chama a função
+// db_manaus.calcular_imposto_item (tradução fiel de CALCULO_IMPOSTO do Oracle)
+// e mapeia o retorno. Toda a aritmética fiscal vive no banco.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import type { PoolClient } from 'pg';
 import { getPgPool } from '@/lib/pgClient';
-import { CalculadoraImpostos } from '@/lib/impostos/calculadoraImpostos';
-import type {
-  ImpostoRequest,
-  ImpostoResponse,
-  DadosCalculoImposto,
-} from '@/lib/impostos/types';
+import type { ImpostoRequest, ImpostoResponse } from '@/lib/impostos/types';
 
-/**
- * Util leve para conversão de número
- */
+/** Conversão leve de número (aceita "1.234,56"). */
 const toN = (v: any): number => {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
   if (v == null) return 0;
@@ -45,21 +33,23 @@ const toN = (v: any): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/**
- * Logger simples
- */
 function log(tag: string, ...args: any[]) {
   console.log(`[api/impostos] [${tag}]`, ...args);
 }
-
 function err(tag: string, error: any) {
   console.error(`[api/impostos] [${tag}] ERROR:`, error?.message || error);
-  if (error?.stack) console.error(error.stack);
 }
 
-/**
- * Handler principal
- */
+/** Mapeia tipo de operação do frontend para o vocabulário da procedure. */
+function mapTipoOperacao(tipo: string): string {
+  const t = String(tipo).toUpperCase();
+  if (t.includes('VENDA')) return 'VENDA';
+  if (t.includes('TRANSFERENCIA')) return 'TRANSFERENCIA';
+  if (t.includes('DEVOLUCAO')) return 'DEVOLUCAO_COMPRA';
+  if (t.includes('BONIFICACAO')) return 'REMESSA_BONIFICACAO';
+  return 'VENDA';
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ImpostoResponse | { error: string }>,
@@ -72,224 +62,130 @@ export default async function handler(
 
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo;
-
   if (!filial) {
     return res.status(400).json({ error: 'Filial não informada no cookie' });
   }
 
   const body = req.body as ImpostoRequest;
-
-  log('request', {
-    filial,
-    codProd: body.codProd,
-    codCli: body.codCli,
-    tipoOperacao: body.tipoOperacao,
-  });
-
-  // Validações mínimas
   if (!body.codProd || !body.codCli) {
-    return res.status(400).json({
-      error: 'codProd e codCli são obrigatórios.',
-    });
+    return res.status(400).json({ error: 'codProd e codCli são obrigatórios.' });
   }
-
   if (!body.quantidade || !body.valorUnitario) {
-    return res.status(400).json({
-      error: 'quantidade e valorUnitario são obrigatórios.',
-    });
+    return res.status(400).json({ error: 'quantidade e valorUnitario são obrigatórios.' });
   }
 
+  const num = (v: any) => Number(v ?? 0);
   let client: PoolClient | null = null;
-
   try {
-    const pool = getPgPool(filial);
-    client = await pool.connect();
+    client = await getPgPool(filial).connect();
 
-    // Preparar dados para a calculadora
     const qtd = toN(body.quantidade ?? 1);
     const vu = toN(body.valorUnitario ?? 0);
-    const subtotalItem = body.usarAuto
-      ? +(qtd * vu).toFixed(2)
-      : +toN(body.totalItem ?? qtd * vu).toFixed(2);
+    const tipoOp = mapTipoOperacao(body.tipoOperacao || 'VENDA');
 
-    // 1. Buscar NCM do produto
-    const prodResult = await client.query(
-      `SELECT codprod, clasfiscal as ncm
-       FROM dbprod
-       WHERE codprod = $1
-       LIMIT 1`,
-      [String(body.codProd).trim().padStart(6, '0')]
+    // Cálculo 100% no banco — sem aritmética fiscal em JS.
+    const { rows } = await client.query(
+      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        String(body.codProd).trim().padStart(6, '0'),
+        String(body.codCli).trim(),
+        qtd,
+        vu,
+        'SAIDA',
+        tipoOp,
+        'NOTA_FISCAL',
+        '04',
+        'N',
+        0,
+      ],
     );
-
-    if (prodResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Produto não encontrado' });
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Produto ou cliente não encontrado' });
     }
+    const r = rows[0];
 
-    const ncm = (prodResult.rows[0].ncm || '').replace(/\D/g, '').substring(0, 8);
-
-    // 2. Buscar cliente_id
-    const cliResult = await client.query(
-      `SELECT codcli FROM dbclien WHERE codcli = $1 LIMIT 1`,
-      [String(body.codCli).trim()]
-    );
-
-    if (cliResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Cliente não encontrado' });
-    }
-
-    const clienteId = parseInt(body.codCli);
-    const produtoId = parseInt(prodResult.rows[0].codprod);
-
-    // 3. Preparar dados para cálculo
-    const dados: DadosCalculoImposto = {
-      produto_id: produtoId,
-      ncm: ncm,
-      valor_produto: vu,
-      quantidade: qtd,
-      desconto: 0,
-      cliente_id: clienteId,
-      tipo_operacao: mapTipoOperacao(body.tipoOperacao || 'VENDA'),
-      uf_empresa: body.uf_empresa,
-      usar_regras_oracle_procedimento: body.usarRegrasOracleProcedimento,
-    };
-
-    // 4. Executar cálculo completo
-    const calculadora = new CalculadoraImpostos(client);
-    const resultado = await calculadora.calcular(dados);
-
-    // 5. Montar resposta no formato esperado pelo frontend
-    // (mantém compatibilidade com sistema anterior + adiciona campos completos)
     const response: ImpostoResponse = {
       cards: {
-        valorIPI: resultado.ipi, // percentual
-        valorICMS: resultado.icms, // percentual
-        valorICMS_Subst: resultado.tem_st ? resultado.totalsubst_trib : 0, // valor em R$
-        valorPIS: resultado.pis, // percentual
-        valorCOFINS: resultado.cofins, // percentual
-        totalImpostos:
-          resultado.icms +
-          resultado.ipi +
-          resultado.pis +
-          resultado.cofins, // soma dos percentuais
-        valorIBS: resultado.ibs_aliquota, // Informativo 2026
-        valorCBS: resultado.cbs_aliquota, // Informativo 2026
+        valorIPI: num(r.ipi),
+        valorICMS: num(r.icms),
+        valorICMS_Subst: num(r.totalsubst_trib),
+        valorPIS: num(r.pis),
+        valorCOFINS: num(r.cofins),
+        totalImpostos: num(r.icms) + num(r.ipi) + num(r.pis) + num(r.cofins),
+        valorIBS: num(r.ibs_e) + num(r.ibs_m),
+        valorCBS: num(r.cbs_aliquota),
       },
       aliquotas: {
-        icms: resultado.icms,
-        ipi: resultado.ipi,
-        pis: resultado.pis,
-        cofins: resultado.cofins,
-        agregado: resultado.mva,
-        ibs: resultado.ibs_aliquota, // Informativo 2026 - Total IBS
-        ibs_e: resultado.ibs_e, // IBS Estadual (substitui ICMS)
-        ibs_m: resultado.ibs_m, // IBS Municipal (substitui ISS)
-        cbs: resultado.cbs_aliquota, // Informativo 2026
+        icms: num(r.icms),
+        ipi: num(r.ipi),
+        pis: num(r.pis),
+        cofins: num(r.cofins),
+        agregado: num(r.mva),
+        ibs: num(r.ibs_e) + num(r.ibs_m),
+        cbs: num(r.cbs_aliquota),
       },
-      // Valores em R$ para salvar no banco
       valores: {
-        totalicms: resultado.totalicms,
-        totalsubst_trib: resultado.totalsubst_trib,
-        totalipi: resultado.totalipi,
-        valorpis: resultado.valorpis,
-        valorcofins: resultado.valorcofins,
-        valor_fcp: resultado.valor_fcp,
-        valorfcp_subst: resultado.valorfcp_subst,
-        ibs_valor: resultado.ibs_valor, // Informativo 2026
-        cbs_valor: resultado.cbs_valor, // Informativo 2026
+        totalicms: num(r.totalicms),
+        totalsubst_trib: num(r.totalsubst_trib),
+        totalipi: num(r.totalipi),
+        valorpis: num(r.valorpis),
+        valorcofins: num(r.valorcofins),
+        valor_fcp: 0,
+        valorfcp_subst: 0,
+        ibs_valor: num(r.valor_ibs),
+        cbs_valor: num(r.valor_cbs),
       },
-      // Campos completos para salvar na dbitvenda
       campos: {
-        icms: resultado.icms,
-        baseicms: resultado.baseicms,
-        totalicms: resultado.totalicms,
-        icmsinterno_dest: resultado.icmsinterno_dest,
-        icmsexterno_orig: resultado.icmsexterno_orig,
-        csticms: resultado.csticms,
-
-        mva: resultado.mva,
-        basesubst_trib: resultado.basesubst_trib,
-        totalsubst_trib: resultado.totalsubst_trib,
-
-        ipi: resultado.ipi,
-        baseipi: resultado.baseipi,
-        totalipi: resultado.totalipi,
-        cstipi: resultado.cstipi,
-
-        pis: resultado.pis,
-        basepis: resultado.basepis,
-        valorpis: resultado.valorpis,
-        cstpis: resultado.cstpis,
-
-        cofins: resultado.cofins,
-        basecofins: resultado.basecofins,
-        valorcofins: resultado.valorcofins,
-        cstcofins: resultado.cstcofins,
-
-        fcp: resultado.fcp,
-        base_fcp: resultado.base_fcp,
-        valor_fcp: resultado.valor_fcp,
-        fcp_subst: resultado.fcp_subst,
-        basefcp_subst: resultado.basefcp_subst,
-        valorfcp_subst: resultado.valorfcp_subst,
-
-        cfop: resultado.cfop,
-        tipocfop: resultado.tipocfop,
-        ncm: resultado.ncm,
-
-        totalproduto: resultado.valor_total_item,
-
-        // IBS/CBS (Reforma Tributária 2026)
-        ibs_e: resultado.ibs_e, // IBS Estadual (substitui ICMS)
-        ibs_m: resultado.ibs_m, // IBS Municipal (substitui ISS)
-      },
+        icms: num(r.icms),
+        baseicms: num(r.baseicms),
+        totalicms: num(r.totalicms),
+        icmsinterno_dest: num(r.icmsinterno_dest),
+        icmsexterno_orig: num(r.icmsexterno_orig),
+        csticms: '', // CALCULO_IMPOSTO não computa CST ICMS (derivação = FASE 4)
+        mva: num(r.mva),
+        basesubst_trib: num(r.basesubst_trib),
+        totalsubst_trib: num(r.totalsubst_trib),
+        ipi: num(r.ipi),
+        baseipi: num(r.baseipi),
+        totalipi: num(r.totalipi),
+        cstipi: r.cstipi ?? '',
+        pis: num(r.pis),
+        basepis: num(r.basepis),
+        valorpis: num(r.valorpis),
+        cstpis: r.cstpis ?? '',
+        cofins: num(r.cofins),
+        basecofins: num(r.basecofins),
+        valorcofins: num(r.valorcofins),
+        cstcofins: r.cstcofins ?? '',
+        fcp: 0,
+        base_fcp: 0,
+        valor_fcp: 0,
+        fcp_subst: 0,
+        basefcp_subst: 0,
+        valorfcp_subst: 0,
+        cfop: r.cfop ?? '',
+        tipocfop: '',
+        ncm: r.ncm ?? '',
+        totalproduto: num(r.totalproduto),
+      } as any,
       debug: {
         input: {
-          tipoMovimentacao: body.tipoMovimentacao || '',
           tipoOperacao: body.tipoOperacao || '',
-          tipoFatura: body.tipoFatura || '',
           codProd: body.codProd,
           codCli: body.codCli,
           qtd,
           valorUnitario: vu,
-          total: subtotalItem,
-          usarAuto: !!body.usarAuto,
         },
-        uf: {
-          ufEmpresa: resultado.operacao_interna
-            ? resultado.ncm // hack: precisamos melhorar isso
-            : '',
-          ufCliente: '',
-          icmsIntra: resultado.icmsinterno_dest,
-          icmsInter: resultado.icmsexterno_orig,
-          flagST: resultado.tem_st ? 'S' : 'N',
-        },
-        produto: {
-          ncm8: resultado.ncm,
-          ipiProd: resultado.ipi,
-          pisProd: resultado.pis,
-          cofinsProd: resultado.cofins,
-        },
-        mva: {
-          mvaOriginal: resultado.mva,
-          origem: resultado.origem_mva,
-        },
-        st: resultado.tem_st
-          ? {
-              baseSubstTrib: resultado.basesubst_trib,
-              totalSubstTrib: resultado.totalsubst_trib,
-              mvaAjustado: resultado.mva,
-              protocolo: resultado.protocolo_icms,
-            }
-          : undefined,
-        cfop: resultado.cfop,
-        observacao: resultado.observacoes.join(' | '),
-        ibs_cbs_informativo: resultado.ibs_cbs_informativo,
+        uf: {},
+        produto: { ncm8: r.ncm },
+        mva: { mvaOriginal: num(r.mva) },
+        cfop: r.cfop ?? '',
+        observacao: 'port PL/pgSQL: db_manaus.calcular_imposto_item',
+        ibs_cbs_informativo: true,
       },
     };
 
-    const duracao = Date.now() - inicio;
-    log('sucesso', { duracao: `${duracao}ms`, cfop: resultado.cfop });
-
+    log('sucesso', { duracao: `${Date.now() - inicio}ms`, cfop: r.cfop });
     return res.status(200).json(response);
   } catch (e: any) {
     err('handler', e);
@@ -299,17 +195,4 @@ export default async function handler(
   } finally {
     if (client) client.release();
   }
-}
-
-/**
- * Mapeia tipo de operação do frontend para enum interno
- */
-function mapTipoOperacao(tipo: string): any {
-  const t = String(tipo).toUpperCase();
-  if (t.includes('VENDA')) return 'VENDA';
-  if (t.includes('TRANSFERENCIA')) return 'TRANSFERENCIA';
-  if (t.includes('BONIFICACAO')) return 'BONIFICACAO';
-  if (t.includes('DEVOLUCAO')) return 'DEVOLUCAO';
-  if (t.includes('EXPORTACAO')) return 'EXPORTACAO';
-  return 'VENDA'; // default
 }

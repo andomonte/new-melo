@@ -2,8 +2,6 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
 import { getPgPool } from '@/lib/pgClient';
-import { CalculadoraImpostos } from '@/lib/impostos/calculadoraImpostos';
-import type { DadosCalculoImposto } from '@/lib/impostos/types';
 
 /* ------------------------------------------------
  * Logger
@@ -408,8 +406,25 @@ async function insertPgVenda(
   }
 }
 
+/**
+ * Vocabulário de tipo de operação da procedure fiscal (CALCULO_IMPOSTO / db_manaus.calcular_imposto_item).
+ * Mantém o MESMO mapeamento do endpoint /api/impostos para que display (venda) = persistência (finalizar).
+ */
+function mapTipoOperacaoPG(tipo: string): string {
+  const t = String(tipo).toUpperCase();
+  if (t === '1' || t === '2' || t === 'P' || t.includes('VENDA')) return 'VENDA';
+  if (t === 'T' || t.includes('TRANSFERENCIA')) return 'TRANSFERENCIA';
+  if (t === 'D' || t.includes('DEVOLUCAO')) return 'DEVOLUCAO_COMPRA';
+  if (t === 'B' || t.includes('BONIFICACAO')) return 'REMESSA_BONIFICACAO';
+  return 'VENDA';
+}
+
 /* ------------------------------------------------
- * Calcula impostos para itens usando CalculadoraImpostos
+ * Calcula impostos por item via função PostgreSQL db_manaus.calcular_imposto_item
+ * (tradução fiel da procedure Oracle CALCULO_IMPOSTO). O SERVIDOR é a fonte única:
+ * ignora valores fiscais vindos do front e recalcula no banco, com os MESMOS parâmetros
+ * do endpoint /api/impostos → o que a tela mostra é o que é persistido. Sem aritmética em JS.
+ * Falha explícita (throw) em vez de fallback silencioso com valores errados.
  * -----------------------------------------------*/
 async function calcularImpostosItens(
   client: PoolClient,
@@ -418,134 +433,93 @@ async function calcularImpostosItens(
   tipoOperacao: string,
   log: (...args: any[]) => void,
 ): Promise<ItemPayload[]> {
-  const calculadora = new CalculadoraImpostos(client);
+  const tipoOp = mapTipoOperacaoPG(tipoOperacao);
+  const num = (v: any) => Number(v ?? 0);
   const itensComImpostos: ItemPayload[] = [];
-  const clienteId = parseInt(codcli);
 
-  log('calculando impostos para', itens.length, 'itens');
+  log('calculando impostos (PG: calcular_imposto_item) para', itens.length, 'itens | operacao', tipoOp);
 
   for (let i = 0; i < itens.length; i++) {
     const item = itens[i];
 
-    try {
-      // Se o item já vem com impostos do frontend, pular cálculo
-      const temImpostos =
-        item.icms !== undefined &&
-        item.icms !== null &&
-        item.baseicms !== undefined &&
-        item.baseicms !== null;
-
-      if (temImpostos) {
-        log(`item ${i + 1}: usando impostos do frontend`);
-        itensComImpostos.push(item);
-        continue;
-      }
-
-      // Buscar NCM do produto
-      const prodResult = await client.query(
-        `SELECT clasfiscal as ncm FROM dbprod WHERE codprod = $1 LIMIT 1`,
-        [item.codprod]
+    const { rows } = await client.query(
+      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [
+        String(item.codprod).trim().padStart(6, '0'),
+        String(codcli).trim(),
+        num(item.qtd),
+        num(item.prunit),
+        'SAIDA',
+        tipoOp,
+        'NOTA_FISCAL',
+        '04',
+        'N',
+        0,
+      ],
+    );
+    if (!rows.length) {
+      throw new Error(
+        `Cálculo fiscal: produto ${item.codprod} / cliente ${codcli} não encontrado.`,
       );
-
-      if (prodResult.rows.length === 0) {
-        throw new Error(`Produto ${item.codprod} não encontrado`);
-      }
-
-      const ncm = (prodResult.rows[0].ncm || '').replace(/\D/g, '').substring(0, 8);
-
-      // Preparar dados para cálculo
-      const dados: DadosCalculoImposto = {
-        ncm: ncm,
-        valor_produto: item.prunit,
-        quantidade: item.qtd,
-        desconto: item.desconto || 0,
-        cliente_id: clienteId,
-        tipo_operacao: mapTipoOperacaoParaCalculo(tipoOperacao),
-      };
-
-      // Calcular impostos
-      const resultado = await calculadora.calcular(dados);
-
-      // Preencher item com impostos calculados
-      const itemComImpostos: ItemPayload = {
-        ...item,
-        // ICMS
-        icms: resultado.icms,
-        baseicms: resultado.baseicms,
-        totalicms: resultado.totalicms,
-        icmsinterno_dest: resultado.icmsinterno_dest,
-        icmsexterno_orig: resultado.icmsexterno_orig,
-        csticms: resultado.csticms,
-        // ST
-        mva: resultado.mva,
-        basesubst_trib: resultado.basesubst_trib,
-        totalsubst_trib: resultado.totalsubst_trib,
-        // IPI
-        ipi: resultado.ipi,
-        baseipi: resultado.baseipi,
-        totalipi: resultado.totalipi,
-        cstipi: resultado.cstipi,
-        // PIS
-        pis: resultado.pis,
-        basepis: resultado.basepis,
-        valorpis: resultado.valorpis,
-        cstpis: resultado.cstpis,
-        // COFINS
-        cofins: resultado.cofins,
-        basecofins: resultado.basecofins,
-        valorcofins: resultado.valorcofins,
-        cstcofins: resultado.cstcofins,
-        // FCP
-        fcp: resultado.fcp,
-        base_fcp: resultado.base_fcp,
-        valor_fcp: resultado.valor_fcp,
-        fcp_subst: resultado.fcp_subst,
-        basefcp_subst: resultado.basefcp_subst,
-        valorfcp_subst: resultado.valorfcp_subst,
-        // CFOP e NCM
-        cfop: resultado.cfop,
-        tipocfop: resultado.tipocfop,
-        ncm: resultado.ncm,
-        // Total produto
-        totalproduto: resultado.valor_total_item,
-        // IBS/CBS (Reforma Tributária)
-        aliquota_ibs: resultado.ibs_aliquota,
-        aliquota_cbs: resultado.cbs_aliquota,
-        valor_ibs: resultado.ibs_valor,
-        valor_cbs: resultado.cbs_valor,
-        ibs_e: resultado.ibs_e, // IBS Estadual (substitui ICMS)
-        ibs_m: resultado.ibs_m, // IBS Municipal (substitui ISS)
-      };
-
-      log(`item ${i + 1}: impostos calculados`, {
-        codprod: item.codprod,
-        icms: resultado.icms,
-        st: resultado.tem_st,
-        cfop: resultado.cfop,
-      });
-
-      itensComImpostos.push(itemComImpostos);
-    } catch (error: any) {
-      log(`ERRO ao calcular impostos para item ${i + 1}:`, error?.message);
-      // Em caso de erro, usar item original (fallback)
-      itensComImpostos.push(item);
     }
+    const r = rows[0];
+
+    itensComImpostos.push({
+      ...item,
+      // ICMS
+      icms: num(r.icms), // alíquota %
+      baseicms: num(r.baseicms),
+      totalicms: num(r.totalicms),
+      icmsinterno_dest: num(r.icmsinterno_dest),
+      icmsexterno_orig: num(r.icmsexterno_orig),
+      csticms: '', // CALCULO_IMPOSTO não computa CST ICMS (derivação = FASE 4)
+      // ST
+      mva: num(r.mva),
+      basesubst_trib: num(r.basesubst_trib),
+      totalsubst_trib: num(r.totalsubst_trib),
+      // IPI
+      ipi: num(r.ipi), // alíquota %
+      baseipi: num(r.baseipi),
+      totalipi: num(r.totalipi),
+      cstipi: r.cstipi ?? '',
+      // PIS
+      pis: num(r.pis), // alíquota %
+      basepis: num(r.basepis),
+      valorpis: num(r.valorpis),
+      cstpis: r.cstpis ?? '',
+      // COFINS
+      cofins: num(r.cofins), // alíquota %
+      basecofins: num(r.basecofins),
+      valorcofins: num(r.valorcofins),
+      cstcofins: r.cstcofins ?? '',
+      // FCP — não computado pela procedure (FASE 4)
+      fcp: 0,
+      base_fcp: 0,
+      valor_fcp: 0,
+      fcp_subst: 0,
+      basefcp_subst: 0,
+      valorfcp_subst: 0,
+      // CFOP e NCM
+      cfop: r.cfop ?? null,
+      tipocfop: '', // procedure não computa
+      ncm: r.ncm ?? null,
+      // Total produto
+      totalproduto: num(r.totalproduto),
+      // IBS/CBS (Reforma Tributária — informativo)
+      aliquota_ibs: num(r.ibs_e) + num(r.ibs_m),
+      aliquota_cbs: num(r.cbs_aliquota),
+      valor_ibs: num(r.valor_ibs),
+      valor_cbs: num(r.valor_cbs),
+      ibs_e: num(r.ibs_e), // IBS Estadual (substitui ICMS)
+      ibs_m: num(r.ibs_m), // IBS Municipal (substitui ISS)
+    });
+
+    log(
+      `item ${i + 1}: PG cfop=${r.cfop} icms=${r.totalicms} st=${r.totalsubst_trib} ipi=${r.totalipi}`,
+    );
   }
 
   return itensComImpostos;
-}
-
-/**
- * Mapeia tipo de operação da venda para tipo do cálculo
- */
-function mapTipoOperacaoParaCalculo(tipo: string): any {
-  const t = String(tipo).toUpperCase();
-  if (t === '1' || t === '2' || t === 'P' || t.includes('VENDA')) return 'VENDA';
-  if (t.includes('TRANSFERENCIA') || t === 'T') return 'TRANSFERENCIA';
-  if (t.includes('BONIFICACAO') || t === 'B') return 'BONIFICACAO';
-  if (t.includes('DEVOLUCAO') || t === 'D') return 'DEVOLUCAO';
-  if (t.includes('EXPORTACAO') || t === 'E') return 'EXPORTACAO';
-  return 'VENDA';
 }
 
 /* ------------------------------------------------

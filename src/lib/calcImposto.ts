@@ -134,49 +134,6 @@ function getSubtotalFromParams(p: CalcImpostoParams): number {
   return ti > 0 ? +ti.toFixed(2) : +(q * vu).toFixed(2);
 }
 
-/** Deriva percentuais efetivos a partir dos cards (base do motor) e baseCalculo */
-function derivePercents(cards: Cards, baseCalculo: number): CardsPercent {
-  const base = toN(baseCalculo);
-  const pct = (v: number) => (base > 0 ? (toN(v) / base) * 100 : 0);
-  const percIPI = pct(cards.valorIPI);
-  const percICMS = pct(cards.valorICMS);
-  const percICMS_Subst = pct(cards.valorICMS_Subst);
-  const percPIS = pct(cards.valorPIS);
-  const percCOFINS = pct(cards.valorCOFINS);
-  const percTotal = percIPI + percICMS + percICMS_Subst + percPIS + percCOFINS;
-  return { percIPI, percICMS, percICMS_Subst, percPIS, percCOFINS, percTotal };
-}
-
-/** Monetiza os percentuais para o SUBTOTAL do item */
-function monetizeForItem(
-  pct: CardsPercent,
-  subtotalItem: number,
-): ImpostosItemRS {
-  const m = (p: number) => +(subtotalItem * (p / 100)).toFixed(2);
-  const valorIPI = m(pct.percIPI);
-  const valorICMS = m(pct.percICMS);
-  const valorICMS_Subst = m(pct.percICMS_Subst);
-  const valorPIS = m(pct.percPIS);
-  const valorCOFINS = m(pct.percCOFINS);
-  const valorImpostos = +(
-    valorIPI +
-    valorICMS +
-    valorICMS_Subst +
-    valorPIS +
-    valorCOFINS
-  ).toFixed(2);
-  const totalComImpostos = +(subtotalItem + valorImpostos).toFixed(2);
-  return {
-    valorIPI,
-    valorICMS,
-    valorICMS_Subst,
-    valorPIS,
-    valorCOFINS,
-    valorImpostos,
-    totalComImpostos,
-  };
-}
-
 /**
  * Função pura para cálculo de impostos.
  * Recebe todos os dados via params e devolve JSON normalizado + percentuais e valores em R$ do item.
@@ -212,28 +169,60 @@ export async function calcImposto(
     throw new Error(msg);
   }
 
-  // Normaliza resposta do motor
+  // Normaliza resposta do motor (cards/aliquotas em shape estável)
   const norm = normalizeApiResponse(data);
 
-  // Subtotal do item (R$) para monetização
+  // Subtotal do item (R$)
   const subtotalItem = getSubtotalFromParams(params);
 
-  // Base do motor para tirar percentuais (ex.: 23789 centavos → qualquer escala funciona)
-  const baseCalculo =
-    toN(norm?.debug?.input?.baseCalculo) ?? toN(norm?.debug?.baseCalculo) ?? 0;
+  // Valores em R$ do item vêm DIRETO da API (função PG db_manaus.calcular_imposto_item),
+  // que já calcula para quantidade × valorUnitário. Sem monetização/derivação em JS.
+  const valorIPI = toN(data?.valores?.totalipi ?? data?.campos?.totalipi ?? 0);
+  const valorICMS = toN(data?.valores?.totalicms ?? data?.campos?.totalicms ?? 0);
+  const valorICMS_Subst = toN(
+    data?.valores?.totalsubst_trib ?? data?.campos?.totalsubst_trib ?? 0,
+  );
+  const valorPIS = toN(data?.valores?.valorpis ?? data?.campos?.valorpis ?? 0);
+  const valorCOFINS = toN(data?.valores?.valorcofins ?? data?.campos?.valorcofins ?? 0);
+  const valorImpostos = +(
+    valorIPI +
+    valorICMS +
+    valorICMS_Subst +
+    valorPIS +
+    valorCOFINS
+  ).toFixed(2);
 
-  const cardsPercent = derivePercents(norm.cards, baseCalculo);
-  const impostosRs = monetizeForItem(cardsPercent, subtotalItem);
+  const impostosRs: ImpostosItemRS = {
+    valorIPI,
+    valorICMS,
+    valorICMS_Subst,
+    valorPIS,
+    valorCOFINS,
+    valorImpostos,
+    totalComImpostos: +(subtotalItem + valorImpostos).toFixed(2),
+  };
+
+  // Percentuais efetivos = alíquotas retornadas pela API (não recalcular a partir da base).
+  const cardsPercent: CardsPercent = {
+    percIPI: norm.aliquotas.ipi,
+    percICMS: norm.aliquotas.icms,
+    percICMS_Subst: norm.aliquotas.agregado,
+    percPIS: norm.aliquotas.pis,
+    percCOFINS: norm.aliquotas.cofins,
+    percTotal:
+      norm.aliquotas.ipi +
+      norm.aliquotas.icms +
+      norm.aliquotas.pis +
+      norm.aliquotas.cofins,
+  };
 
   return {
-    cards: norm.cards, // bruto do motor (escala da base)
+    cards: norm.cards,
     aliquotas: norm.aliquotas,
     debug: norm.debug,
     raw: data,
-
-    // novos campos “prontos” para o carrinho/telas:
     subtotalItem,
-    cardsPercent, // percentuais efetivos
-    impostosRs, // valores em R$
+    cardsPercent,
+    impostosRs,
   };
 }

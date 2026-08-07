@@ -1,7 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
-import { CalculadoraImpostos } from '@/lib/impostos/calculadoraImpostos';
-import type { DadosCalculoImposto } from '@/lib/impostos/types';
 
 /**
  * API para gerenciar itens de uma venda na análise de liberação.
@@ -87,58 +85,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const codgpe = prodResult.rows[0]?.codgpe || '';
       const origem = prodResult.rows[0]?.origem || 'N';
 
-      // Calcular impostos
+      // Calcular impostos via função PostgreSQL db_manaus.calcular_imposto_item
+      // (tradução fiel de CALCULO_IMPOSTO do Oracle). Sem aritmética fiscal em JS;
+      // mesmos parâmetros do /api/impostos e do finalizarVenda → display = persistência.
       let campos: Record<string, any> = {};
       try {
-        const dados: DadosCalculoImposto = {
-          produto_id: parseInt(codprod),
-          ncm,
-          valor_produto: valorUnitario,
-          quantidade,
-          desconto: 0,
-          cliente_id: codcli ? parseInt(codcli) : 0,
-          tipo_operacao: 'VENDA',
-        };
-        const calculadora = new CalculadoraImpostos(client);
-        const resultado = await calculadora.calcular(dados);
+        const { rows } = await client.query(
+          `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [
+            String(codprod).trim().padStart(6, '0'),
+            String(codcli ?? '').trim(),
+            quantidade,
+            valorUnitario,
+            'SAIDA',
+            'VENDA',
+            'NOTA_FISCAL',
+            '04',
+            'N',
+            0,
+          ],
+        );
+        const r = rows[0];
+        if (!r) throw new Error(`produto ${codprod} / cliente ${codcli} não encontrado`);
+        const num = (v: any) => Number(v ?? 0);
 
         campos = {
-          aliquota_icms: resultado.icms,
-          baseicms: resultado.baseicms,
-          totalicms: resultado.totalicms,
-          icmsinterno_dest: resultado.icmsinterno_dest,
-          icmsexterno_orig: resultado.icmsexterno_orig,
-          mva: resultado.mva,
-          basesubst_trib: resultado.basesubst_trib,
-          totalsubst_trib: resultado.totalsubst_trib,
-          aliquota_ipi: resultado.ipi,
-          baseipi: resultado.baseipi,
-          totalipi: resultado.totalipi,
-          ipi: resultado.totalipi,
-          pis: resultado.pis,
-          basepis: resultado.basepis,
-          valorpis: resultado.valorpis,
-          cofins: resultado.cofins,
-          basecofins: resultado.basecofins,
-          valorcofins: resultado.valorcofins,
-          fcp: resultado.fcp,
-          base_fcp: resultado.base_fcp,
-          valor_fcp: resultado.valor_fcp,
-          fcp_subst: resultado.fcp_subst,
-          basefcp_subst: resultado.basefcp_subst,
-          valorfcp_subst: resultado.valorfcp_subst,
-          totalproduto: resultado.valor_total_item,
-          icms: resultado.totalicms,
+          aliquota_icms: num(r.icms),
+          baseicms: num(r.baseicms),
+          totalicms: num(r.totalicms),
+          icmsinterno_dest: num(r.icmsinterno_dest),
+          icmsexterno_orig: num(r.icmsexterno_orig),
+          mva: num(r.mva),
+          basesubst_trib: num(r.basesubst_trib),
+          totalsubst_trib: num(r.totalsubst_trib),
+          aliquota_ipi: num(r.ipi),
+          baseipi: num(r.baseipi),
+          totalipi: num(r.totalipi),
+          ipi: num(r.totalipi),
+          pis: num(r.pis),
+          basepis: num(r.basepis),
+          valorpis: num(r.valorpis),
+          cofins: num(r.cofins),
+          basecofins: num(r.basecofins),
+          valorcofins: num(r.valorcofins),
+          fcp: 0,
+          base_fcp: 0,
+          valor_fcp: 0,
+          fcp_subst: 0,
+          basefcp_subst: 0,
+          valorfcp_subst: 0,
+          totalproduto: num(r.totalproduto),
+          icms: num(r.totalicms),
+          aliquota_ibs: num(r.ibs_e) + num(r.ibs_m),
+          aliquota_cbs: num(r.cbs_aliquota),
+          valor_ibs: num(r.valor_ibs),
+          valor_cbs: num(r.valor_cbs),
+          ibs_e: num(r.ibs_e),
+          ibs_m: num(r.ibs_m),
         };
-        if (resultado.csticms) campos.csticms = String(resultado.csticms).substring(0, 5);
-        if (resultado.cstipi) campos.cstipi = String(resultado.cstipi).substring(0, 5);
-        if (resultado.cstpis) campos.cstpis = String(resultado.cstpis).substring(0, 5);
-        if (resultado.cstcofins) campos.cstcofins = String(resultado.cstcofins).substring(0, 5);
-        if (resultado.cfop) campos.cfop = String(resultado.cfop).substring(0, 4);
-        if (resultado.ncm) campos.ncm = String(resultado.ncm).substring(0, 10);
-        if (resultado.tipocfop) campos.tipocfop = String(resultado.tipocfop).substring(0, 1);
+        if (r.cstipi) campos.cstipi = String(r.cstipi).substring(0, 5);
+        if (r.cstpis) campos.cstpis = String(r.cstpis).substring(0, 5);
+        if (r.cstcofins) campos.cstcofins = String(r.cstcofins).substring(0, 5);
+        if (r.cfop) campos.cfop = String(r.cfop).substring(0, 4);
+        if (r.ncm) campos.ncm = String(r.ncm).substring(0, 10);
       } catch (taxError: any) {
-        console.error('Erro ao calcular impostos:', taxError.message);
+        console.error('Erro ao calcular impostos (PG):', taxError.message);
+        return res.status(500).json({ error: `Falha no cálculo fiscal: ${taxError.message}` });
       }
 
       // Verificar se já existe na venda
