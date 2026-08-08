@@ -37,7 +37,7 @@ export default function ModalFormularioFaturamento({
     // Camada de fundo
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center">
       {/* Contêiner principal do Modal: ocupa a tela inteira */}
-      <div className="bg-white dark:bg-zinc-900 shadow-lg w-full h-full flex flex-col overflow-hidden">
+      <div className="densidade-compacta bg-white dark:bg-zinc-900 shadow-lg w-full h-full flex flex-col overflow-hidden">
 
         {/* CABEÇALHO ÚNICO: título + cliente + etapa/navegação + Opções + fechar */}
         <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800">
@@ -64,7 +64,7 @@ export default function ModalFormularioFaturamento({
               <Carregamento />
             </div>
           ) : (
-            <form className="w-full max-w-[1600px] mx-auto">{renderTabContent()}</form>
+            <form className="w-full">{renderTabContent()}</form>
           )}
         </div>
 

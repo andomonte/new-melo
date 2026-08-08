@@ -20,7 +20,7 @@ interface ModalPrazoParcelasProps {
 let feriadosCache: Set<string> = new Set();
 let feriadosCacheAno = 0;
 
-async function carregarFeriados(ano: number) {
+export async function carregarFeriados(ano: number) {
   if (ano === feriadosCacheAno && feriadosCache.size > 0) return;
   try {
     const res = await fetch(`/api/vendas/feriados?ano=${ano}`);
@@ -44,7 +44,7 @@ const isFeriado = (data: Date) => {
   return feriadosCache.has(dataString);
 };
 
-const getProximoDiaUtil = (data: Date) => {
+export const getProximoDiaUtil = (data: Date) => {
   const novaData = new Date(data.getTime());
   while (
     novaData.getDay() === 0 ||

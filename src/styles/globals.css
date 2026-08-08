@@ -509,3 +509,180 @@ input[type="number"] {
 .fatura-compact.space-y-4 > * + * {
   margin-top: 0.5rem !important;
 }
+
+
+/* ============================================================
+   FATURAMENTO - DENSIDADE COMPACTA (fase de layout)
+   CSS proprio escopado em .densidade-compacta (na RAIZ do modal),
+   seguindo a referencia faturamento-compacto.html. Os campos sao
+   dimensionados por SELETOR DE ELEMENTO -> vencem as utilitarias
+   Tailwind (v3, sem @layer nativo) por especificidade. Nao altera calculo/API.
+   ============================================================ */
+.densidade-compacta {
+  --fat-input-h: 26px;
+  --fat-input-pad-x: 6px;
+  --fat-input-pad-y: 4px;
+  --fat-font: 12px;
+  --fat-label-size: 10px;
+  --fat-label-gap: 2px;
+  --fat-gap-x: 8px;
+  --fat-gap-y: 6px;
+  --fat-section-pad: 8px;
+  --fat-section-gap: 10px;
+  --fat-section-head-h: 18px;
+  --fat-row-h: 20px;
+  --fat-textarea-h: 48px;
+  --fat-border: rgba(0, 0, 0, 0.14);
+  --fat-border-soft: rgba(0, 0, 0, 0.08);
+  --fat-muted: #6b7280;
+  --fat-hover: rgba(0, 0, 0, 0.04);
+  --fat-field: #ffffff;
+  font-size: var(--fat-font);
+}
+.dark .densidade-compacta {
+  --fat-border: rgba(255, 255, 255, 0.14);
+  --fat-border-soft: rgba(255, 255, 255, 0.08);
+  --fat-muted: #9aa3ab;
+  --fat-hover: rgba(255, 255, 255, 0.05);
+  --fat-field: #1c2024;
+}
+/* célula de campo (label empilhado sobre o input) — só os <div> do grid; checkbox é <label> */
+.densidade-compacta .fat-g > div { display: flex; flex-direction: column; min-width: 0; }
+
+/* --- CAMPOS: dimensionados por seletor de elemento (contrato do :root da referencia) --- */
+.densidade-compacta input:not([type="checkbox"]):not([type="radio"]),
+.densidade-compacta select,
+.densidade-compacta button[role="combobox"],
+.densidade-compacta [data-radix-select-trigger] {
+  height: var(--fat-input-h);
+  min-height: var(--fat-input-h);
+  padding: var(--fat-input-pad-y) var(--fat-input-pad-x);
+  font-size: var(--fat-font);
+  line-height: 1.2;
+  border: 1px solid var(--fat-border);
+  background: var(--fat-field);
+  border-radius: 3px;
+  color: inherit;
+  width: 100%;
+}
+.densidade-compacta select { appearance: auto; }
+.densidade-compacta input:focus, .densidade-compacta select:focus, .densidade-compacta textarea:focus { outline: none; border-color: #3b82f6; }
+.densidade-compacta textarea {
+  height: var(--fat-textarea-h);
+  min-height: var(--fat-textarea-h);
+  padding: var(--fat-input-pad-y) var(--fat-input-pad-x);
+  border: 1px solid var(--fat-border);
+  background: var(--fat-field);
+  border-radius: 3px;
+  color: inherit;
+  width: 100%;
+  font-size: var(--fat-font);
+  line-height: 1.3;
+  resize: vertical;
+}
+.densidade-compacta label {
+  font-size: var(--fat-label-size);
+  margin-bottom: var(--fat-label-gap);
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.densidade-compacta .space-y-1 > * + * { margin-top: var(--fat-label-gap); }
+
+/* --- ABAS (no cabecalho) --- */
+.densidade-compacta .fat-tabs { display: flex; gap: 1px; }
+.densidade-compacta .fat-tab {
+  padding: 0 10px; height: 34px; line-height: 34px; font-size: 11px; font-weight: 600;
+  border: none; background: transparent; cursor: pointer; color: var(--fat-muted);
+  border-bottom: 2px solid transparent; text-transform: none; letter-spacing: 0;
+}
+.densidade-compacta .fat-tab:hover { color: inherit; }
+.densidade-compacta .fat-tab[aria-selected="true"] { color: #3b82f6; border-bottom-color: #3b82f6; }
+.dark .densidade-compacta .fat-tab[aria-selected="true"] { color: #93c5fd; border-bottom-color: #93c5fd; }
+
+/* --- SECOES (sem chevron, sempre expandidas; cabecalho 18px) --- */
+.densidade-compacta .fat-secs { display: flex; flex-direction: column; gap: var(--fat-section-gap); }
+.densidade-compacta .fat-sec { margin-bottom: var(--fat-section-gap); padding: 0; }
+.densidade-compacta .fat-sec-header {
+  display: flex; align-items: center; gap: 8px; height: var(--fat-section-head-h); margin-bottom: 6px;
+  font-size: var(--fat-label-size); font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--fat-muted); white-space: nowrap;
+}
+.densidade-compacta .fat-sec-header::after { content: ""; flex: 1; height: 1px; background: var(--fat-border-soft); }
+.densidade-compacta .fat-sub {
+  font-size: var(--fat-label-size); font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--fat-muted); margin: 8px 0 4px;
+}
+
+/* --- GRID 12 COLUNAS --- */
+.densidade-compacta .fat-g {
+  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--fat-gap-y) var(--fat-gap-x); align-items: end;
+}
+.densidade-compacta .fat-c1 { grid-column: span 1; }
+.densidade-compacta .fat-c2 { grid-column: span 2; }
+.densidade-compacta .fat-c3 { grid-column: span 3; }
+.densidade-compacta .fat-c4 { grid-column: span 4; }
+.densidade-compacta .fat-c5 { grid-column: span 5; }
+.densidade-compacta .fat-c6 { grid-column: span 6; }
+.densidade-compacta .fat-c8 { grid-column: span 8; }
+.densidade-compacta .fat-c10 { grid-column: span 10; }
+.densidade-compacta .fat-c12 { grid-column: span 12; }
+/* grid EMPACOTADA: campos densos com largura mínima, sem precisar de span por campo */
+.densidade-compacta .fat-gp {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--fat-gap-y) var(--fat-gap-x);
+  align-items: end;
+}
+.densidade-compacta .fat-gp > .wide { grid-column: span 2; }
+.densidade-compacta .fat-gp > .wide3 { grid-column: span 3; }
+@media (max-width: 1100px) {
+  .densidade-compacta .fat-c2, .densidade-compacta .fat-c3 { grid-column: span 4; }
+  .densidade-compacta .fat-c1 { grid-column: span 2; }
+}
+
+/* --- CHECKBOX (4/linha, altura 20px) + RADIO --- */
+.densidade-compacta .fat-ck {
+  display: flex; align-items: center; gap: 5px; height: var(--fat-row-h);
+  font-size: 11px; white-space: nowrap; text-transform: none; letter-spacing: 0;
+}
+.densidade-compacta .fat-ck input { width: 12px; height: 12px; min-height: 0; flex: 0 0 auto; margin: 0; }
+.densidade-compacta .fat-ck.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.densidade-compacta .fat-rd { display: flex; align-items: center; gap: 10px; height: var(--fat-input-h); }
+.densidade-compacta .fat-rd label { display: flex; align-items: center; gap: 4px; font-size: 11px; text-transform: none; letter-spacing: 0; margin: 0; }
+.densidade-compacta .fat-rd input { width: 12px; height: 12px; min-height: 0; margin: 0; }
+
+.densidade-compacta .fat-dica { font-size: 10px; color: var(--fat-muted); margin-top: 4px; }
+
+/* --- TABELAS (parcelas / produtos) --- */
+.densidade-compacta .fat-tbl-wrap { overflow-x: auto; }
+.densidade-compacta table.fat-tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+.densidade-compacta .fat-tbl th {
+  font-size: var(--fat-label-size); text-transform: uppercase; letter-spacing: 0.04em; color: var(--fat-muted);
+  text-align: right; padding: 0 6px 4px; border-bottom: 1px solid var(--fat-border); font-weight: 600; white-space: nowrap;
+}
+.densidade-compacta .fat-tbl th.l, .densidade-compacta .fat-tbl td.l { text-align: left; }
+.densidade-compacta .fat-tbl td {
+  height: 22px; padding: 0 6px; border-bottom: 1px solid var(--fat-border-soft); text-align: right; white-space: nowrap;
+}
+.densidade-compacta .fat-tbl td.n { font-variant-numeric: tabular-nums; }
+.densidade-compacta .fat-tbl tfoot td { font-weight: 600; border-top: 1px solid var(--fat-border); border-bottom: none; }
+.densidade-compacta .fat-tbl thead th { position: sticky; top: 0; background: inherit; z-index: 1; }
+
+/* --- RODAPE / RESUMO FINANCEIRO (fixo) --- */
+.densidade-compacta .fat-rodape { padding: 5px 12px; }
+.densidade-compacta .fat-rodape-t { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fat-muted); margin-bottom: 3px; }
+.densidade-compacta .fat-rz { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) 160px; gap: 0; }
+.densidade-compacta .fat-rb { padding: 0 10px; border-left: 1px solid var(--fat-border-soft); }
+.densidade-compacta .fat-rb:first-child { border-left: none; padding-left: 0; }
+.densidade-compacta .fat-rb h4 { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
+.densidade-compacta .fat-rl { display: flex; justify-content: space-between; font-size: 10px; line-height: 1.45; color: var(--fat-muted); }
+.densidade-compacta .fat-rl b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.densidade-compacta .fat-total { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; border-left: 1px solid var(--fat-border); }
+.densidade-compacta .fat-total span { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fat-muted); }
+.densidade-compacta .fat-total strong { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.densidade-compacta .fat-prov { font-size: 9px; color: #f59e0b; border: 1px solid #6b4e12; border-radius: 2px; padding: 0 3px; margin-left: 4px; text-transform: none; letter-spacing: 0; }
+
+/* Produtos (AbaProdutos): reaproveita .fat-tbl */
+.densidade-compacta .fat-prodgrid-wrap { overflow-x: auto; }

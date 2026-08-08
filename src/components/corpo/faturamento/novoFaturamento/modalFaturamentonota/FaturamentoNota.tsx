@@ -11,6 +11,9 @@ import FormInput from '@/components/common/FormInput';
 import SelectInput from '@/components/common/SelectInput2';
 import AutocompletePessoa from '@/components/common/AutoCompletePessoa';
 import SecaoCollapse from '@/components/common/SecaoCollapse';
+import AbaProdutos from './AbaProdutos';
+import FaturamentoNotaV2 from '../v2/FaturamentoNotaV2';
+import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
 import { Textarea } from '@/components/ui/textarea';
 import DetalhesClienteModal from '../modalDetlahesCliente';
 import { useNavigate } from 'react-router-dom';
@@ -97,13 +100,63 @@ export default function FaturamentoNota({
   const [modalidadeTransporte, setModalidadeTransporte] = useState('');
   // Wizard: 1 = Faturamento & Cobrança · 2 = Dados Básicos · 3 = Valores/Frete/Comissão.
   const [etapa, setEtapa] = useState(1);
+  // Parcelas V2 (inline): intervalo de dias + quantidade → gera parcelas (dia útil via feriados/fim de semana)
+  const [intervaloDias, setIntervaloDias] = useState<string>('30');
+  const [qtdParcelas, setQtdParcelas] = useState<string>('');
 
   // --- CAMPOS FISCAIS / NF-e (novos, portados do faturamento Delphi) ---
   // Operação fiscal (mapeiam p/ dbfatura: descrcfop/cfop1, tipodoc/tipofat, origem).
   const [naturezaOperacao, setNaturezaOperacao] = useState('');
   const [cfop, setCfop] = useState('');
-  const [tipoMovimentacao, setTipoMovimentacao] = useState('');
+  // Movimentação (SAIDA/ENTRADA) + Operação dependente — fiel ao Delphi (dois níveis).
+  // Default vem da venda: faturar uma venda é SAÍDA/VENDA.
+  const [tipoMovimentacao, setTipoMovimentacao] = useState('SAIDA');
+  const [operacaoFiscal, setOperacaoFiscal] = useState('VENDA');
   const [origem, setOrigem] = useState('');
+  // FASE 4 (A) — flags de ajuste fiscal do faturamento (recálculo por item no salvar.ts).
+  const [zerarIpi, setZerarIpi] = useState(false);
+  const [zerarIcms, setZerarIcms] = useState(false);
+  const [zerarSubstituicao, setZerarSubstituicao] = useState(false);
+  const [descontoSuframa, setDescontoSuframa] = useState(false);
+  const [impostoAntecipado, setImpostoAntecipado] = useState(false);
+  const [mvaAntecipado, setMvaAntecipado] = useState('');
+  // Inscrição Estadual usada no recálculo (04/07). Pré-selecionada pela IE da empresa,
+  // mas selecionável na tela (como no Delphi). A venda continua fixa em '04'.
+  const [inscFat, setInscFat] = useState<'04' | '07'>('04');
+  // Operações por movimentação (literais EXATOS do fonte Delphi — preservar grafia).
+  const OPERACOES_SAIDA = [
+    { value: 'VENDA', label: 'Venda' },
+    { value: 'TRANSFERENCIA', label: 'Transferência' },
+    { value: 'DEVOLUCAO_COMPRA', label: 'Dev. de Compras' },
+    { value: 'DEVOLUCAO_TRANSFERENCIA', label: 'Dev. de Transferência' },
+    { value: 'REMESSA_BONIFICACAO', label: 'Rem. Bonific./Doação/Brinde' },
+    { value: 'REMESSA_EXPOSICAO', label: 'Rem. p/ Exposição' },
+    { value: 'REMESSA_DEMOSTRACAO', label: 'Rem. p/ Demonstração' },
+    { value: 'REMESSA_ARMAZEM', label: 'Rem. p/ Armazém Geral' },
+    { value: 'REMESSA_GARANTIA_FABRICA', label: 'Rem. em Garantia Fábrica' },
+    { value: 'REMESSA_CONSERTO', label: 'Rem. p/ Conserto' },
+    { value: 'SIMPLES_REMESSA', label: 'Simples Remessa' },
+    { value: 'REMESSA_GARANTIA_CLIENTE', label: 'Rem. em Garantia Cliente' },
+    { value: 'EXTRAVIO_AVARIA_FABRICA', label: 'Extravio e Avaria Fábrica' },
+    { value: 'EXTRAVIO_AVARIA_CLIENTE', label: 'Extravio e Avaria Cliente' },
+    { value: 'RETORNO_REMESSA_GARANTIA', label: 'Retorno Remessa em Garantia' },
+    { value: 'RETORNO_REMESSA_CONSERTO', label: 'Retorno Remessa em Conserto' },
+    { value: 'OUTROS', label: 'Escolher Outros' },
+  ];
+  const OPERACOES_ENTRADA = [
+    { value: 'COMPRA', label: 'Compra' },
+    { value: 'TRANSFERENCIA', label: 'Transferência' },
+    { value: 'DEVOLUCAO_VENDA', label: 'Dev. de Venda' },
+    { value: 'DEVOLUCAO_TRANSFERENCIA', label: 'Dev. de Transferência' },
+    { value: 'ENTRADA_BONIFICACAO', label: 'Entrada de Bonificação' },
+    { value: 'RETORNO_EXPOSICAO', label: 'Retorno de Exposição' },
+    { value: 'ENTRADA_DEMOSTRACAO', label: 'Entrada de Demonstração' },
+    { value: 'ENTRADA_ARMAZEM', label: 'Entrada para Armazém' },
+    { value: 'RETORNO_GARANTIA_CLIENTE', label: 'Retorno de Garantia Cliente' },
+    { value: 'RETORNO_GARANTIA_FABRICA', label: 'Retorno de Garantia Fábrica' },
+    { value: 'RETORNO_CONSERTO', label: 'Retorno de Conserto' },
+    { value: 'OUTROS', label: 'Outros' },
+  ];
   // Config NF-e (domínios oficiais SEFAZ). Ambiente 2=Homologação por padrão (seguro).
   const [nfeAmbiente, setNfeAmbiente] = useState('2');
   const [nfeFinalidade, setNfeFinalidade] = useState('1');
@@ -627,13 +680,21 @@ export default function FaturamentoNota({
         cod_conta: formCobranca?.banco || null, // ✅ cod_conta vindo do formulário de cobrança (renomeado)
         tipodoc: statusVenda?.tipodoc ?? 'N',
         cobranca: statusVenda?.cobranca ?? 'S',
-        insc07: statusVenda?.insc07 ?? 'N',
+        insc07: inscFat === '07' ? 'S' : 'N', // FASE 4 (A): Insc. Estadual selecionável no faturamento
         observacoes,
         // Campos fiscais/NF-e novos (persistência em dbfatura é follow-up do salvar.ts)
         natureza_operacao: naturezaOperacao || null,
         cfop: cfop || null,
-        tipo_movimentacao: tipoMovimentacao || null,
+        tipo_movimentacao: tipoMovimentacao || 'SAIDA', // SAIDA | ENTRADA
+        tipo_operacao: operacaoFiscal || 'VENDA',       // operação do CFOP (VENDA, TRANSFERENCIA, ...)
         origem: origem || null,
+        // FASE 4 (A) — flags de ajuste fiscal (recálculo por item no salvar.ts)
+        zerar_ipi: zerarIpi ? 'S' : 'N',
+        zerar_icms: zerarIcms ? 'S' : 'N',
+        zerar_substituicao: zerarSubstituicao ? 'S' : 'N',
+        desconto_suframa: descontoSuframa ? 'S' : 'N',
+        imposto_antecipado: impostoAntecipado ? 'S' : 'N',
+        mva_antecipado: impostoAntecipado ? Number(mvaAntecipado) || 0 : 0,
         nfe_ambiente: nfeAmbiente,
         nfe_finalidade: nfeFinalidade,
         nfe_forma_emissao: nfeFormaEmissao,
@@ -2672,6 +2733,7 @@ O problema está na Inscrição Estadual (IE), não na série!
                 // Se começa com "07", seleciona 'S' (IE 07), senão mantém 'N' (IE 04)
                 const insc07Value = ieEmpresa.toString().trim().startsWith('07') ? 'S' : 'N';
                 setStatusVenda(prev => ({ ...prev, insc07: insc07Value }));
+                setInscFat(insc07Value === 'S' ? '07' : '04');
                 console.log('🏛️ Inscrição estadual pré-selecionada (agrupamento):', { ieEmpresa, insc07Value });
               }
             }
@@ -2829,6 +2891,7 @@ O problema está na Inscrição Estadual (IE), não na série!
               // Se começa com "07", seleciona 'S' (IE 07), senão mantém 'N' (IE 04)
               const insc07Value = ieEmpresa.toString().trim().startsWith('07') ? 'S' : 'N';
               setStatusVenda(prev => ({ ...prev, insc07: insc07Value }));
+              setInscFat(insc07Value === 'S' ? '07' : '04');
               console.log('🏛️ Inscrição estadual pré-selecionada:', { ieEmpresa, insc07Value });
             }
           }
@@ -3034,6 +3097,14 @@ O problema está na Inscrição Estadual (IE), não na série!
     modalidadeTransporte === '2' ||
     modalidadeTransporte === '4';
 
+  // Carrega feriados ao abrir (para o gerador de parcelas inline da V2)
+  useEffect(() => {
+    if (!isOpen) return;
+    const ano = new Date().getFullYear();
+    carregarFeriados(ano);
+    if (new Date().getMonth() >= 10) carregarFeriados(ano + 1);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   console.log('📊 Usando dados do resumo financeiro:', {
@@ -3191,6 +3262,130 @@ O problema está na Inscrição Estadual (IE), não na série!
       });
   };
 
+  // Gerador de parcelas inline (V2): usa intervalo + quantidade, ajustando p/ dia útil (feriados/fim de semana)
+  const gerarParcelasV2 = () => {
+    const prazo = parseInt(intervaloDias) || 0;
+    const qtd = parseInt(qtdParcelas) || 0;
+    if (prazo <= 0 || qtd <= 0) return;
+    const novas: { dias: number; vencimento: string }[] = [];
+    const base = new Date();
+    let acum = 0;
+    for (let i = 0; i < qtd; i++) {
+      acum += prazo;
+      const venc = new Date(base.getTime());
+      venc.setDate(venc.getDate() + acum);
+      novas.push({ dias: acum, vencimento: getProximoDiaUtil(venc).toISOString() });
+    }
+    setParcelas(novas);
+  };
+  const atualizarVencimentoV2 = (idx: number, isoDate: string) => {
+    if (!isoDate) return;
+    const d = new Date(isoDate + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    const util = getProximoDiaUtil(d);
+    const novosDias = Math.ceil((util.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    setParcelas((prev: any[]) => prev.map((p, i) => (i === idx ? { ...p, vencimento: util.toISOString(), dias: novosDias } : p)));
+  };
+  const removerParcelaV2 = (idx: number) => {
+    setParcelas((prev: any[]) => prev.filter((_: any, i: number) => i !== idx));
+  };
+
+  // ===== PONTE PARA O LAYOUT V2 (apresentacional) =====
+  // Reaproveita TODO o estado/handlers deste componente; a V2 só apresenta.
+  // Flag: liga o novo layout (o antigo continua como fallback quando desligado).
+  const USAR_LAYOUT_V2 = true;
+  const settersV2: Record<string, (v: any) => void> = {
+    naturezaOperacao: setNaturezaOperacao,
+    cfop: setCfop,
+    tipoMovimentacao: (v) => { setTipoMovimentacao(v); setOperacaoFiscal(v === 'ENTRADA' ? 'COMPRA' : 'VENDA'); },
+    operacaoFiscal: setOperacaoFiscal,
+    origem: setOrigem,
+    zerarIpi: setZerarIpi, zerarIcms: setZerarIcms, zerarSubstituicao: setZerarSubstituicao,
+    descontoSuframa: setDescontoSuframa, impostoAntecipado: setImpostoAntecipado, mvaAntecipado: setMvaAntecipado,
+    inscFat: (v) => setInscFat(v === '07' ? '07' : '04'),
+    nfeAmbiente: setNfeAmbiente, nfeFinalidade: setNfeFinalidade, nfeFormaEmissao: setNfeFormaEmissao,
+    infoComplementares: setInfoComplementares, informarNoCorpoNF: setInformarNoCorpoNF,
+    vendedor: setVendedor, transportadora: setTransportadora, pedido: setPedido, observacoes: setObservacoes,
+    modalidadeTransporte: setModalidadeTransporte, frete: setFrete,
+    especie: setEspecie, marca: setMarca, numero: setNumero, pesoBruto: setPesoBruto, pesoLiquido: setPesoLiquido, quantidade: setQuantidade,
+    tipodoc: (v) => setStatusVenda((p: any) => ({ ...p, tipodoc: v })),
+    cobranca: (v) => setStatusVenda((p: any) => ({ ...p, cobranca: v })),
+    banco: (v) => handleCobrancaChange('banco', v),
+    tipoFatura: (v) => handleCobrancaChange('tipoFatura', v),
+    prazoSelecionado: (v) => handleCobrancaChange('prazoSelecionado', v),
+    habilitarValor: (v) => handleCobrancaChange('habilitarValor', v),
+    impostoNa1Parcela: (v) => handleCobrancaChange('impostoNa1Parcela', v),
+    freteNa1Parcela: (v) => handleCobrancaChange('freteNa1Parcela', v),
+    diferenciada: setDiferenciada,
+    percDesconto: setPercDesconto, percAcrescimo: setPercAcrescimo,
+    descRadio: (v) => setInformarDescontoCorpo(v === 'S'),
+    acresRadio: (v) => setInformarAcrescimoCorpo(v === 'S'),
+    textoBuscaMensagem: (v) => setTextoBuscaMensagem(v),
+    intervaloDias: (v) => setIntervaloDias(String(v)),
+    qtdParcelas: (v) => setQtdParcelas(String(v)),
+  };
+  const ctxV2 = {
+    f: {
+      naturezaOperacao, cfop, tipoMovimentacao, operacaoFiscal, origem,
+      zerarIpi, zerarIcms, zerarSubstituicao, descontoSuframa, impostoAntecipado, mvaAntecipado,
+      inscFat, nfeAmbiente, nfeFinalidade, nfeFormaEmissao, infoComplementares, informarNoCorpoNF,
+      vendedor, transportadora, pedido, observacoes, modalidadeTransporte, frete,
+      especie, marca, numero, pesoBruto, pesoLiquido, quantidade,
+      tipodoc: statusVenda.tipodoc, cobranca: statusVenda.cobranca,
+      banco: formCobranca.banco, tipoFatura: formCobranca.tipoFatura, prazoSelecionado: formCobranca.prazoSelecionado,
+      habilitarValor: formCobranca.habilitarValor, impostoNa1Parcela: formCobranca.impostoNa1Parcela, freteNa1Parcela: formCobranca.freteNa1Parcela,
+      diferenciada, percDesconto, percAcrescimo, desconto, acrescimo,
+      descRadio: informarDescontoCorpo ? 'S' : 'N', acresRadio: informarAcrescimoCorpo ? 'S' : 'N',
+      textoBuscaMensagem, intervaloDias, qtdParcelas,
+    },
+    set: (k: string, v: any) => settersV2[k]?.(v),
+    data: {
+      titulo: `FATURA · VENDA Nº ${nroformulario || ''} · ${cliente?.nome || ''}${cliente?.codcli ? ` (${cliente.codcli})` : ''}`,
+      itens: itensVenda,
+      cliente,
+      resumo: {
+        produtos: totalProdutos, totalNf: totalNF, icms_valor: totalICMS, ipi_valor: totalIPI,
+        icms_base: totalBaseICMS, frete: Number(frete) || 0,
+        ibs_valor: (itensVenda || []).reduce((s: number, it: any) => s + Number(it.valor_ibs || 0), 0),
+        cbs_valor: (itensVenda || []).reduce((s: number, it: any) => s + Number(it.valor_cbs || 0), 0),
+      },
+      operacoes: tipoMovimentacao === 'ENTRADA' ? OPERACOES_ENTRADA : OPERACOES_SAIDA,
+      bancos: (bancos || []).map((b: any) => ({ value: b.banco, label: b.nome })),
+      tiposFatura: opcoesTipoFatura,
+      modalidades: [
+        { value: '', label: 'Selecione…' },
+        { value: '0', label: '0 - Contratação do Frete por conta do Remetente (CIF)' },
+        { value: '1', label: '1 - Contratação do Frete por conta do Destinatário (FOB)' },
+        { value: '2', label: '2 - Contratação do Frete por conta de Terceiros' },
+        { value: '3', label: '3 - Transporte Próprio por conta do Remetente' },
+        { value: '4', label: '4 - Transporte Próprio por conta do Destinatário' },
+        { value: '9', label: '9 - Sem Ocorrência de Transporte' },
+      ],
+      parcelas: (parcelas || []).map((p: any, i: number) => ({
+        idx: i,
+        parcela: i + 1,
+        dias: p.dias ?? '',
+        vencimento: p.vencimento ? new Date(p.vencimento).toISOString().slice(0, 10) : '',
+        valor: (parcelas.length ? Number(totalNF) / parcelas.length : 0).toFixed(2),
+        editavel: true,
+      })),
+      totalParcelas: Number(totalNF).toFixed(2),
+      mensagens: (mensagensNF || []).map((m: any) => ({ codigo: m.codigo, descricao: m.descricao || m.texto || m.mensagem || '' })),
+    },
+    actions: {
+      onClose,
+      emitir: () => handleProcessoCompleto(faturasAgrupadas),
+      gerarParcelas: gerarParcelasV2,
+      atualizarVencimento: atualizarVencimentoV2,
+      removerParcela: removerParcelaV2,
+      buscaMensagem: (t: string) => handleBuscaMensagemChange({ target: { value: t } } as any),
+      removerMensagem: (cod: any) => removerMensagem(cod),
+    },
+  };
+  if (USAR_LAYOUT_V2 && !agrupandoFaturas) {
+    return <FaturamentoNotaV2 ctx={ctxV2} />;
+  }
+
   return (
     <>
       <ModalNovaMensagem
@@ -3260,64 +3455,32 @@ O problema está na Inscrição Estadual (IE), não na série!
           navBar={
             !agrupandoFaturas ? (
               <div className="flex items-center justify-between gap-3 w-full normal-case">
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="font-semibold text-gray-700 dark:text-gray-200">
-                    Etapa {etapa}/3
-                  </span>
-                  <span className="text-gray-500 dark:text-gray-400 hidden lg:inline">
-                    ·{' '}
-                    {
-                      ['Faturamento & Cobrança', 'Dados Básicos', 'Valores, Frete & Comissão'][
-                        etapa - 1
-                      ]
-                    }
-                  </span>
-                  <div className="flex gap-1 ml-1">
-                    {[1, 2, 3].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setEtapa(n)}
-                        aria-label={`Ir para etapa ${n}`}
-                        className={`h-2 w-2 rounded-full transition-colors ${
-                          n === etapa
-                            ? 'bg-blue-600'
-                            : n < etapa
-                              ? 'bg-blue-300'
-                              : 'bg-gray-300 dark:bg-zinc-600'
-                        }`}
-                      />
-                    ))}
-                  </div>
+                {/* Abas persistentes (navegação livre) — nomes espelhando o Delphi */}
+                <div className="fat-tabs" role="tablist">
+                  {[
+                    { n: 1, label: 'Dados da fatura' },
+                    { n: 2, label: 'Cobrança e valores' },
+                    { n: 3, label: 'Produtos' },
+                  ].map((t) => (
+                    <button
+                      key={t.n}
+                      type="button"
+                      role="tab"
+                      aria-selected={etapa === t.n}
+                      onClick={() => setEtapa(t.n)}
+                      className="fat-tab"
+                    >
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2">
-                  {etapa > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setEtapa((e) => Math.max(1, e - 1))}
-                      className="px-3 py-1 text-xs rounded-md border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800"
-                    >
-                      ← Voltar
-                    </button>
-                  )}
-                  {etapa < 3 ? (
-                    <button
-                      type="button"
-                      onClick={() => setEtapa((e) => Math.min(3, e + 1))}
-                      className="px-3 py-1 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                    >
-                      Avançar →
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleProcessoCompleto(faturasAgrupadas)}
-                      className="px-3 py-1 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold"
-                    >
-                      Emitir e salvar
-                    </button>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleProcessoCompleto(faturasAgrupadas)}
+                  className="px-3 py-1 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white font-semibold"
+                >
+                  Emitir e salvar
+                </button>
               </div>
             ) : undefined
           }
@@ -3395,7 +3558,7 @@ O problema está na Inscrição Estadual (IE), não na série!
           activeTab="dados"
           setActiveTab={() => {}}
           renderTabContent={() => (
-            <div className="flex-grow p-4 space-y-4 fatura-compact">
+            <div className="flex-grow overflow-y-auto py-2 densidade-compacta">
               {/* Wizard: a barra de etapa+navegação agora vive no cabeçalho
                   único do modal (prop navBar). Este bloco fica oculto. */}
               <div className="hidden">
@@ -3452,12 +3615,10 @@ O problema está na Inscrição Estadual (IE), não na série!
               {/* Quando for agrupamento, mostrar dados da cobrança primeiro */}
 
               {etapa === 1 && (
-              <SecaoCollapse
-                titulo="OPÇÕES DE FATURAMENTO/STATUS DE VENDA"
-                icone={<Settings />}
-                padraoAberto={!agrupandoFaturas}
-              >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+              <div className="fat-sec">
+                <div className="fat-sec-header"><span>Faturamento e status</span></div>
+                <div className="fat-g">
+                  <div className="fat-c3">
                   <SelectInput
                     label="Tipo Documentação"
                     name="tipodoc"
@@ -3471,6 +3632,8 @@ O problema está na Inscrição Estadual (IE), não na série!
                       { value: 'N', label: 'NOTA FISCAL' },
                     ]}
                   />
+                  </div>
+                  <div className="fat-c2">
                   <SelectInput
                     label="Gerar Cobrança"
                     name="cobranca"
@@ -3483,7 +3646,8 @@ O problema está na Inscrição Estadual (IE), não na série!
                       { value: 'N', label: 'NÃO' },
                     ]}
                   />
-                  <div className="space-y-1 text-gray-700 dark:text-gray-200">
+                  </div>
+                  <div className="fat-c3 space-y-1 text-gray-700 dark:text-gray-200">
                     <label className="text-sm font-medium">
                       Inscrição Estadual
                     </label>
@@ -3497,22 +3661,16 @@ O problema está na Inscrição Estadual (IE), não na série!
                     />
                   </div>
                 </div>
-              </SecaoCollapse>
+              </div>
               )}
 
-              {etapa === 2 && (
-              <SecaoCollapse
-                titulo="DADOS BÁSICOS"
-                icone={<FileText />}
-                padraoAberto={!agrupandoFaturas}
-              >
-                <div className="p-3 space-y-4">
+              {/* Aba "Dados da fatura" = status + dados básicos (operação/ajustes/transporte) */}
+              {etapa === 1 && (
+              <div className="fat-secs">
                   {/* GRUPO: Operação Fiscal */}
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
-                      Operação Fiscal
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-3">
+                  <div className="fat-sec">
+                    <div className="fat-sec-header"><span>Operação Fiscal</span></div>
+                    <div className="fat-gp">
                       <FormInput
                         label="Natureza da Operação"
                         value={naturezaOperacao}
@@ -3531,14 +3689,26 @@ O problema está na Inscrição Estadual (IE), não na série!
                         label="Tipo de Movimentação"
                         name="tipoMovimentacao"
                         value={tipoMovimentacao}
-                        onValueChange={setTipoMovimentacao}
+                        onValueChange={(v) => {
+                          setTipoMovimentacao(v);
+                          // ao trocar a movimentação, reseta a operação para o default do lado
+                          setOperacaoFiscal(v === 'ENTRADA' ? 'COMPRA' : 'VENDA');
+                        }}
                         options={[
-                          { value: 'VENDA', label: 'Venda' },
-                          { value: 'DEVOLUCAO', label: 'Devolução' },
-                          { value: 'TRANSFERENCIA', label: 'Transferência' },
-                          { value: 'REMESSA', label: 'Remessa' },
-                          { value: 'BONIFICACAO', label: 'Bonificação' },
+                          { value: 'SAIDA', label: 'Saída' },
+                          { value: 'ENTRADA', label: 'Entrada' },
                         ]}
+                      />
+                      <SelectInput
+                        label={`Operação (${tipoMovimentacao === 'ENTRADA' ? 'Entrada' : 'Saída'})`}
+                        name="operacaoFiscal"
+                        value={operacaoFiscal}
+                        onValueChange={setOperacaoFiscal}
+                        options={
+                          tipoMovimentacao === 'ENTRADA'
+                            ? OPERACOES_ENTRADA
+                            : OPERACOES_SAIDA
+                        }
                       />
                       <FormInput
                         label="Origem"
@@ -3582,12 +3752,83 @@ O problema está na Inscrição Estadual (IE), não na série!
                       />
                     </div>
                   </div>
+                  {/* GRUPO: Ajustes de Imposto (FASE 4) */}
+                  <div>
+                    <div className="fat-sec-header"><span>Ajustes de Imposto</span></div>
+                    <div className="fat-gp">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={zerarIpi}
+                          onChange={(e) => setZerarIpi(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Zerar IPI
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={zerarIcms}
+                          onChange={(e) => setZerarIcms(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Zerar ICMS
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={zerarSubstituicao}
+                          onChange={(e) => setZerarSubstituicao(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Zerar Substituição
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={descontoSuframa}
+                          onChange={(e) => setDescontoSuframa(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Desconto ICMS Suframa
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={impostoAntecipado}
+                          onChange={(e) => setImpostoAntecipado(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Imposto Antecipado
+                      </label>
+                      <FormInput
+                        label="MVA Antecipado (%)"
+                        value={mvaAntecipado}
+                        onChange={(e) => setMvaAntecipado(e.target.value)}
+                        name="mvaAntecipado"
+                        type="text"
+                      />
+                      <SelectInput
+                        label="Insc. Estadual (AM)"
+                        name="inscFat"
+                        value={inscFat}
+                        onValueChange={(v) => setInscFat(v === '07' ? '07' : '04')}
+                        options={[
+                          { value: '04', label: 'Inscrição Estadual 04' },
+                          { value: '07', label: 'Inscrição Estadual 07' },
+                        ]}
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                      Recalcula o imposto por item no faturamento. Aplica-se à operação
+                      Venda; demais operações mantêm o cálculo feito na venda. A Inscrição
+                      vem pré-selecionada pela IE da empresa e pode ser trocada.
+                    </p>
+                  </div>
                   {/* GRUPO: Transporte & Identificação */}
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
-                      Transporte &amp; Identificação
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-3">
+                    <div className="fat-sec-header"><span>Transporte &amp; Identificação</span></div>
+                    <div className="fat-gp">
                       <div>
                         <SelectInput
                           label="Modalidade de Transporte"
@@ -3656,9 +3897,7 @@ O problema está na Inscrição Estadual (IE), não na série!
                   </div>
                   {/* GRUPO: Textos da NF */}
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
-                      Textos da NF
-                    </h4>
+                    <div className="fat-sec-header"><span>Textos da NF</span></div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-3 gap-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -3807,11 +4046,11 @@ O problema está na Inscrição Estadual (IE), não na série!
                       />
                     </div>
                   </details>
-                </div>
-              </SecaoCollapse>
+              </div>
               )}
 
-              {etapa === 1 && !agrupandoFaturas && statusVenda.cobranca === 'S' && (
+              {/* Aba "Cobrança" */}
+              {etapa === 2 && !agrupandoFaturas && statusVenda.cobranca === 'S' && (
                 <SecaoCollapse
                   titulo="DADOS DE COBRANÇA"
                   icone={<FaMoneyBill />}
@@ -4250,7 +4489,8 @@ O problema está na Inscrição Estadual (IE), não na série!
                 </SecaoCollapse>
               )}
 
-              {etapa === 3 && (
+              {/* Aba "Cobrança e valores": valores/frete/volumes (junto com a cobrança acima) */}
+              {etapa === 2 && (
               <>
               <SecaoCollapse
                 titulo="VALORES E AJUSTES"
@@ -4475,6 +4715,8 @@ O problema está na Inscrição Estadual (IE), não na série!
               </SecaoCollapse>
               </>
               )}
+              {/* Aba "Produtos" — grid read-only + totalizador por CFOP */}
+              {etapa === 3 && <AbaProdutos itens={itensVenda} />}
             </div>
           )}
         />
