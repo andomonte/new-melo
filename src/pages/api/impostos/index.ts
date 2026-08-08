@@ -141,7 +141,7 @@ export default async function handler(
         totalicms: num(r.totalicms),
         icmsinterno_dest: num(r.icmsinterno_dest),
         icmsexterno_orig: num(r.icmsexterno_orig),
-        csticms: '', // CALCULO_IMPOSTO não computa CST ICMS (derivação = FASE 4)
+        csticms: r.csticms ?? '', // CST ICMS via ICMS_CST (FASE 4 P1)
         mva: num(r.mva),
         basesubst_trib: num(r.basesubst_trib),
         totalsubst_trib: num(r.totalsubst_trib),

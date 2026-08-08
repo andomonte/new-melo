@@ -3,6 +3,161 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 
+/**
+ * Resolve a operação fiscal do faturamento a partir de Movimentação (SAIDA/ENTRADA)
+ * + Operação (VENDA, TRANSFERENCIA, ...), fiel ao Delphi (dois níveis).
+ * FASE 4 P1: só SAÍDA/VENDA está portado; demais operações e ENTRADA retornam null
+ * e o faturamento cai no snapshot (comportamento atual) até FASE 4 P2/P3.
+ */
+function resolverTipoOperacaoFat(tipoMov?: string, tipoOp?: string): string | null {
+  const mov = String(tipoMov ?? 'SAIDA').toUpperCase();
+  const op = String(tipoOp ?? 'VENDA').toUpperCase();
+  if (mov === 'SAIDA' && op === 'VENDA') return 'VENDA';
+  return null; // SAÍDA especial / ENTRADA -> snapshot (P2/P3)
+}
+
+type FlagsFat = {
+  tipofat: string;
+  insc: string;
+  zerarIpi: string;
+  zerarIcms: string;
+  zerarSubst: string;
+  suframa: string;
+  mvaAnt: number;
+  cfopManual: string | null;
+};
+
+/**
+ * Grava os itens da fatura RECALCULANDO o imposto por item via
+ * db_manaus.calcular_imposto_item (motor PG = tradução fiel do Oracle CALCULO_IMPOSTO),
+ * aplicando os flags de ajuste do faturamento. Substitui o snapshot cego de dbitvenda.
+ */
+async function gravarItensFatRecalculado(
+  client: any,
+  codfat: number | string,
+  codvenda: string,
+  codcli: string,
+  tipoOp: string,
+  f: FlagsFat,
+): Promise<number> {
+  const itens = (
+    await client.query(
+      `SELECT codprod, qtd, prunit, descr, ref, codint, nrequis, nritem,
+              totalicmsdesconto, fretebase, acrescimo, freteicms, desconto,
+              fcp, base_fcp, valor_fcp, fcp_subst, basefcp_subst, valorfcp_subst,
+              ftp_st, fcp_substret, basefcp_substret, valorfcp_substret
+         FROM dbitvenda WHERE codvenda = $1`,
+      [codvenda],
+    )
+  ).rows;
+
+  const num = (v: any) => Number(v ?? 0);
+  let n = 0;
+  for (const it of itens) {
+    const { rows } = await client.query(
+      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,'SAIDA',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        String(it.codprod).trim().padStart(6, '0'),
+        String(codcli).trim(),
+        num(it.qtd),
+        num(it.prunit),
+        tipoOp,
+        f.tipofat,
+        f.insc,
+        f.zerarSubst,
+        f.mvaAnt,
+        f.zerarIpi,
+        f.zerarIcms,
+        f.suframa,
+        f.cfopManual,
+      ],
+    );
+    const r = rows[0];
+    if (!r) {
+      throw new Error(
+        `Recálculo fiscal: produto ${it.codprod} / cliente ${codcli} não encontrado.`,
+      );
+    }
+
+    // Mesma convenção de dbitvenda: coluna `icms` = VALOR; `aliquota_icms` = alíquota.
+    const cols: Record<string, any> = {
+      codfat,
+      qtde: num(it.qtd),
+      codprod: it.codprod,
+      prunit: num(it.prunit),
+      descr: it.descr,
+      codvenda,
+      codint: it.codint,
+      ref: it.ref,
+      nrequis: it.nrequis,
+      nritem: it.nritem,
+      // ICMS
+      icms: num(r.totalicms),
+      aliquota_icms: num(r.icms),
+      baseicms: num(r.baseicms),
+      totalicms: num(r.totalicms),
+      icmsinterno_dest: num(r.icmsinterno_dest),
+      icmsexterno_orig: num(r.icmsexterno_orig),
+      csticms: r.csticms ?? '',
+      // ST
+      mva: num(r.mva),
+      basesubst_trib: num(r.basesubst_trib),
+      totalsubst_trib: num(r.totalsubst_trib),
+      // IPI
+      ipi: num(r.totalipi),
+      aliquota_ipi: num(r.ipi),
+      baseipi: num(r.baseipi),
+      totalipi: num(r.totalipi),
+      cstipi: r.cstipi ?? '',
+      // PIS/COFINS
+      pis: num(r.pis),
+      basepis: num(r.basepis),
+      valorpis: num(r.valorpis),
+      cstpis: r.cstpis ?? '',
+      cofins: num(r.cofins),
+      basecofins: num(r.basecofins),
+      valorcofins: num(r.valorcofins),
+      cstcofins: r.cstcofins ?? '',
+      // CFOP/NCM/total
+      cfop: r.cfop,
+      tipocfop: '',
+      ncm: r.ncm,
+      totalproduto: num(r.totalproduto),
+      totalicmsdesconto: num(it.totalicmsdesconto),
+      // IBS/CBS (migration 007 — hoje ficavam NULL no snapshot)
+      aliquota_ibs: num(r.ibs_e) + num(r.ibs_m),
+      aliquota_cbs: num(r.cbs_aliquota),
+      ibs_e: num(r.ibs_e),
+      ibs_m: num(r.ibs_m),
+      valor_ibs: num(r.valor_ibs),
+      valor_cbs: num(r.valor_cbs),
+      // pass-through não-fiscal (a procedure não computa; herdado da venda)
+      fretebase: num(it.fretebase),
+      acrescimo: num(it.acrescimo),
+      freteicms: num(it.freteicms),
+      desconto: num(it.desconto),
+      fcp: num(it.fcp),
+      base_fcp: num(it.base_fcp),
+      valor_fcp: num(it.valor_fcp),
+      fcp_subst: num(it.fcp_subst),
+      basefcp_subst: num(it.basefcp_subst),
+      valorfcp_subst: num(it.valorfcp_subst),
+      ftp_st: num(it.ftp_st),
+      fcp_substret: num(it.fcp_substret),
+      basefcp_substret: num(it.basefcp_substret),
+      valorfcp_substret: num(it.valorfcp_substret),
+    };
+    const keys = Object.keys(cols);
+    const ph = keys.map((_, i) => `$${i + 1}`);
+    await client.query(
+      `INSERT INTO dbprodfat (${keys.join(', ')}) VALUES (${ph.join(', ')})`,
+      keys.map((k) => cols[k]),
+    );
+    n++;
+  }
+  return n;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -28,6 +183,16 @@ export default async function handler(
     observacoes: _observacoes,
     vendas = [], // Array de codvenda
     usuario_associacao = '',
+    // FASE 4 (A) — ajustes fiscais do faturamento (default = comportamento de venda "limpo")
+    tipo_movimentacao,      // SAIDA | ENTRADA
+    tipo_operacao,          // operação do CFOP (VENDA, TRANSFERENCIA, REMESSA_*, ...)
+    cfop: cfopManual,       // CFOP manual (override)
+    zerar_ipi = 'N',
+    zerar_icms = 'N',
+    zerar_substituicao = 'N',
+    desconto_suframa = 'N',
+    imposto_antecipado = 'N',
+    mva_antecipado = 0,
   } = req.body;
 
   // DEBUG: Log do payload recebido
@@ -260,32 +425,59 @@ export default async function handler(
       );
 
       // ===== ITENS DA FATURA (DBPRODFAT) =====
-      // Espelha o modelo Oracle: o Delphi (FATURAMENTOS.GERAR_FATURA) grava o
-      // snapshot dos itens da fatura em DBPRODFAT. Copiamos os itens da venda de
-      // DBITVENDA -> DBPRODFAT preservando os impostos já calculados (as 48
-      // colunas abaixo existem em ambas as tabelas com o mesmo nome; só mudam
-      // codfat (novo) e qtde (que em dbitvenda se chama qtd).
-      const colsProdFat = [
-        'codprod', 'prunit', 'descr', 'codvenda', 'icms', 'ipi', 'codint',
-        'cfop', 'tipocfop', 'totalipi', 'baseicms', 'totalicms', 'mva',
-        'basesubst_trib', 'totalsubst_trib', 'ref', 'ncm', 'baseipi',
-        'icmsinterno_dest', 'icmsexterno_orig', 'totalproduto',
-        'totalicmsdesconto', 'cstipi', 'cstpis', 'pis', 'cstcofins', 'cofins',
-        'basepis', 'valorpis', 'basecofins', 'valorcofins', 'csticms',
-        'fretebase', 'acrescimo', 'freteicms', 'desconto', 'nrequis', 'nritem',
-        'fcp', 'base_fcp', 'valor_fcp', 'fcp_subst', 'basefcp_subst',
-        'valorfcp_subst', 'ftp_st', 'fcp_substret', 'basefcp_substret',
-        'valorfcp_substret',
-      ];
-      const insProdFat = await client.query(
-        `INSERT INTO dbprodfat (codfat, qtde, ${colsProdFat.join(', ')})
-         SELECT $1, qtd, ${colsProdFat.join(', ')}
-         FROM dbitvenda WHERE codvenda = $2`,
-        [novoCodfat, codvenda],
-      );
-      console.log(
-        `🧾 DBPRODFAT: ${insProdFat.rowCount} item(ns) da venda ${codvenda} gravados na fatura ${novoCodfat}`,
-      );
+      // FASE 4 (A): quando a operação é VENDA (portada), RECALCULA o imposto por item
+      // via db_manaus.calcular_imposto_item aplicando os flags de ajuste do faturamento
+      // (zerar IPI/ICMS/subst, desconto Suframa, MVA antecipado, Insc 04/07).
+      // Para VENDA sem flags, o resultado é idêntico ao snapshot (idempotente) e ainda
+      // preenche IBS/CBS. Operações não portadas (P2) mantêm o snapshot de dbitvenda.
+      const opFat = resolverTipoOperacaoFat(tipo_movimentacao, tipo_operacao);
+
+      if (opFat === 'VENDA') {
+        const cliRes = await client.query(
+          `SELECT codcli FROM dbvenda WHERE codvenda = $1`,
+          [codvenda],
+        );
+        const codcliVenda = cliRes.rows[0]?.codcli;
+        const flagsFat: FlagsFat = {
+          tipofat: String(tipodoc ?? '').toUpperCase().includes('FAG') ? 'FAG' : 'NOTA_FISCAL',
+          insc: insc07 === 'S' ? '07' : '04',
+          zerarIpi: zerar_ipi === 'S' ? 'S' : 'N',
+          zerarIcms: zerar_icms === 'S' ? 'S' : 'N',
+          zerarSubst: zerar_substituicao === 'S' ? 'S' : 'N',
+          suframa: desconto_suframa === 'S' ? 'S' : 'N',
+          mvaAnt: imposto_antecipado === 'S' ? Number(mva_antecipado) || 0 : 0,
+          cfopManual: cfopManual ? String(cfopManual).trim() : null,
+        };
+        const qtdItens = await gravarItensFatRecalculado(
+          client, novoCodfat, codvenda, codcliVenda, opFat, flagsFat,
+        );
+        console.log(
+          `🧾 DBPRODFAT (recalc PG): ${qtdItens} item(ns) da venda ${codvenda} na fatura ${novoCodfat}`,
+        );
+      } else {
+        // Operação não portada (FASE 4 P2) -> snapshot de dbitvenda (sem regressão).
+        const colsProdFat = [
+          'codprod', 'prunit', 'descr', 'codvenda', 'icms', 'ipi', 'codint',
+          'cfop', 'tipocfop', 'totalipi', 'baseicms', 'totalicms', 'mva',
+          'basesubst_trib', 'totalsubst_trib', 'ref', 'ncm', 'baseipi',
+          'icmsinterno_dest', 'icmsexterno_orig', 'totalproduto',
+          'totalicmsdesconto', 'cstipi', 'cstpis', 'pis', 'cstcofins', 'cofins',
+          'basepis', 'valorpis', 'basecofins', 'valorcofins', 'csticms',
+          'fretebase', 'acrescimo', 'freteicms', 'desconto', 'nrequis', 'nritem',
+          'fcp', 'base_fcp', 'valor_fcp', 'fcp_subst', 'basefcp_subst',
+          'valorfcp_subst', 'ftp_st', 'fcp_substret', 'basefcp_substret',
+          'valorfcp_substret',
+        ];
+        const insProdFat = await client.query(
+          `INSERT INTO dbprodfat (codfat, qtde, ${colsProdFat.join(', ')})
+           SELECT $1, qtd, ${colsProdFat.join(', ')}
+           FROM dbitvenda WHERE codvenda = $2`,
+          [novoCodfat, codvenda],
+        );
+        console.log(
+          `🧾 DBPRODFAT (snapshot, ${tipo_movimentacao}/${tipo_operacao ?? 'VENDA'} não portada): ${insProdFat.rowCount} item(ns) da venda ${codvenda}`,
+        );
+      }
 
       // ===== BAIXA DE ESTOQUE =====
       // Buscar itens da venda para fazer a baixa de estoque

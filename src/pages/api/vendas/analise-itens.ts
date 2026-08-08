@@ -143,6 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ibs_e: num(r.ibs_e),
           ibs_m: num(r.ibs_m),
         };
+        if (r.csticms) campos.csticms = String(r.csticms).substring(0, 3);
         if (r.cstipi) campos.cstipi = String(r.cstipi).substring(0, 5);
         if (r.cstpis) campos.cstpis = String(r.cstpis).substring(0, 5);
         if (r.cstcofins) campos.cstcofins = String(r.cstcofins).substring(0, 5);
