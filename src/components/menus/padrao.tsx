@@ -73,6 +73,7 @@ import KickbackBosch from '@/components/corpo/gerenciamento/produtos/kickback';
 import DadosEmpresa from '@/components/corpo/admin/cadastro/dadosEmpresa';
 import TransportadorasPage from '../corpo/admin/cadastro/transportadoras';
 import CfopPage from '../corpo/admin/cadastro/cfop';
+import TipoOperacaoFiscalPage from '../corpo/admin/cadastro/tipoOperacaoFiscal';
 import FormacaoPrecoVendaPage from '../corpo/admin/cadastro/formacao-preco';
 import LocaisPage from '../corpo/admin/cadastro/locais';
 //import CalculadoraTributariaManual from '@/components/corpo/admin/calculadora/CalculadoraTributariaManual';
@@ -234,6 +235,12 @@ export const menus = [
             href: '/admin/cadastros/cfop',
             icon: ListCheckIcon,
             corpo: CfopPage,
+          },
+          {
+            name: 'Tipos de Operação Fiscal',
+            href: '/admin/cadastros/tiposOperacaoFiscal',
+            icon: Calculator,
+            corpo: TipoOperacaoFiscalPage,
           },
           {
             name: 'Preços',

@@ -2810,12 +2810,11 @@ O problema está na Inscrição Estadual (IE), não na série!
                 ),
               ).join(', '),
             );
-            // Transportadora: pega da primeira fatura ou da venda
-            const transportadoraCod =
-              vendasArray[0].faturas?.[0]?.codtransp ||
-              vendasArray[0].dbvenda?.transp?.trim() ||
-              '';
-            setTransportadora(transportadoraCod);
+            // Transportadora = CÓDIGO da transportadora real (DBTRANSP) da fatura; sem ela,
+            // default 00051 (Cliente Retira - Melo). O dbvenda.transp é o veículo (DBTPTRANSP),
+            // não uma transportadora — por isso NÃO é usado aqui.
+            const ct = String(vendasArray[0].faturas?.[0]?.codtransp ?? '').trim();
+            setTransportadora(ct || '00051');
             // Fatura: pega da primeira
             if (vendasArray[0].dbfatura) setFatura(vendasArray[0].dbfatura);
             // Dados para emissão da NF-e: pode ser array ou consolidado
@@ -2880,7 +2879,7 @@ O problema está na Inscrição Estadual (IE), não na série!
             console.log('✅ Campos múltiplas vendas preenchidos:', {
               pedidos: vendasArray.map((v) => v.dbvenda?.nrovenda),
               vendedor: vendasArray.map((v) => v.dbvenda?.codvend),
-              transportadora: transportadoraCod,
+              transportadora: ct || '00051',
               observacoes: vendasArray.map((v) => v.dbvenda?.obs),
               qtd_itens_total: todosItens.length,
             });
@@ -3105,6 +3104,20 @@ O problema está na Inscrição Estadual (IE), não na série!
     if (new Date().getMonth() >= 10) carregarFeriados(ano + 1);
   }, [isOpen]);
 
+  // Padrões quando o dado vem vazio da venda:
+  // - Modalidade de transporte: 9 (Sem ocorrência de transporte)
+  useEffect(() => {
+    if (isOpen && !modalidadeTransporte) setModalidadeTransporte('9');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+  // - Transportadora: código 00051 (Cliente Retira - Melo) quando não há transportadora real
+  useEffect(() => {
+    if (isOpen && cliente && !String(transportadora || '').trim()) {
+      setTransportadora('00051');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, cliente]);
+
   if (!isOpen) return null;
 
   console.log('📊 Usando dados do resumo financeiro:', {
@@ -3282,8 +3295,11 @@ O problema está na Inscrição Estadual (IE), não na série!
     if (!isoDate) return;
     const d = new Date(isoDate + 'T00:00:00');
     if (isNaN(d.getTime())) return;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    if (d <= hoje) return; // não permite vencimento igual/inferior ao dia atual
     const util = getProximoDiaUtil(d);
-    const novosDias = Math.ceil((util.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    const novosDias = Math.ceil((util.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
     setParcelas((prev: any[]) => prev.map((p, i) => (i === idx ? { ...p, vencimento: util.toISOString(), dias: novosDias } : p)));
   };
   const removerParcelaV2 = (idx: number) => {
@@ -3371,6 +3387,7 @@ O problema está na Inscrição Estadual (IE), não na série!
       })),
       totalParcelas: Number(totalNF).toFixed(2),
       mensagens: (mensagensNF || []).map((m: any) => ({ codigo: m.codigo, descricao: m.descricao || m.texto || m.mensagem || '' })),
+      sugestoes: (sugestoes || []).map((m: any) => ({ codigo: m.codigo, descricao: m.mensagem })),
     },
     actions: {
       onClose,
@@ -3380,10 +3397,26 @@ O problema está na Inscrição Estadual (IE), não na série!
       removerParcela: removerParcelaV2,
       buscaMensagem: (t: string) => handleBuscaMensagemChange({ target: { value: t } } as any),
       removerMensagem: (cod: any) => removerMensagem(cod),
+      selecionarMensagem: (cod: any) => {
+        const m =
+          (sugestoes || []).find((x: any) => x.codigo === cod) ||
+          (todasMensagens || []).find((x: any) => x.codigo === cod);
+        if (m) handleSelecionarSugestao(m);
+      },
+      addMensagem: () => setIsMensagemModalOpen(true),
     },
   };
   if (USAR_LAYOUT_V2 && !agrupandoFaturas) {
-    return <FaturamentoNotaV2 ctx={ctxV2} />;
+    return (
+      <>
+        <FaturamentoNotaV2 ctx={ctxV2} />
+        <ModalNovaMensagem
+          isOpen={isMensagemModalOpen}
+          onClose={() => setIsMensagemModalOpen(false)}
+          onSave={handleSalvarNovaMensagem}
+        />
+      </>
+    );
   }
 
   return (

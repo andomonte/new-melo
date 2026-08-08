@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AutocompletePessoa from '@/components/common/AutoCompletePessoa';
 
 /**
  * FaturamentoNotaV2 — LAYOUT (apresentacional) reconstruído de faturamento-compacto.html.
@@ -26,6 +27,7 @@ export type FatV2Ctx = {
     parcelas?: { parcela: any; dias: any; vencimento: string; valor: string }[];
     totalParcelas?: string;
     mensagens?: { codigo: any; descricao: string }[];
+    sugestoes?: { codigo: any; descricao: string }[];
   };
   actions?: {
     onClose?: () => void;
@@ -37,6 +39,7 @@ export type FatV2Ctx = {
     addMensagem?: () => void;
     removerMensagem?: (codigo: any) => void;
     buscaMensagem?: (texto: string) => void;
+    selecionarMensagem?: (codigo: any) => void;
   };
 };
 
@@ -65,6 +68,8 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const itens = data.itens ?? [];
   const resumo = data.resumo ?? {};
   const titulo = data.titulo ?? 'FATURA · VENDA · CLIENTE';
+  // vencimento mínimo = amanhã (não permite data <= hoje)
+  const minVenc = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
   const OPER = data.operacoes ?? [
     { value: 'VENDA', label: 'Venda' }, { value: 'TRANSFERENCIA', label: 'Transferência' },
@@ -75,6 +80,7 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const MODAIS = data.modalidades ?? [{ value: '', label: 'Selecione…' }];
   const PARCELAS = data.parcelas ?? [];
   const MENSAGENS = data.mensagens ?? [];
+  const SUGESTOES = data.sugestoes ?? [];
 
   // Totalizador por CFOP
   const porCfop = new Map<string, any>();
@@ -175,7 +181,7 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                     <select value={f.modalidadeTransporte} onChange={(e) => set('modalidadeTransporte', e.target.value)}>
                       {MODAIS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
                   <div className="fat-c2"><label>Pedido</label><input type="text" value={f.pedido ?? ''} onChange={(e) => set('pedido', e.target.value)} /></div>
-                  <div className="fat-c3"><label>Transportadora</label><input type="text" value={f.transportadora ?? ''} onChange={(e) => set('transportadora', e.target.value)} /></div>
+                  <div className="fat-c3"><AutocompletePessoa label="Transportadora" tipo="transportadora" value={f.transportadora ?? ''} onChange={(cod) => set('transportadora', cod)} /></div>
                   <div className="fat-c4"><label>Vendedor</label><input type="text" value={f.vendedor ?? ''} onChange={(e) => set('vendedor', e.target.value)} /></div>
                 </div>
               </div>
@@ -198,6 +204,20 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                   <div className="fat-c2" style={{ display: 'flex', alignItems: 'flex-end' }}>
                     <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.addMensagem}>+ Adicionar</button></div>
                 </div>
+                {SUGESTOES.length > 0 && (
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 2, maxHeight: 180, overflowY: 'auto', background: 'var(--fat-field)', border: '1px solid var(--fat-border-soft)', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,.18)' }}>
+                      {SUGESTOES.map((m) => (
+                        <div key={String(m.codigo)} onMouseDown={(e) => { e.preventDefault(); act.selecionarMensagem?.(m.codigo); }}
+                          style={{ padding: '4px 8px', fontSize: 11, cursor: 'pointer', borderBottom: '1px solid var(--fat-border-soft)' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(52,122,182,.12)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                          <b>{m.codigo}</b> {m.descricao}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {MENSAGENS.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
                     {MENSAGENS.map((m) => (
@@ -242,7 +262,7 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                         <td className="l">{p.parcela}</td>
                         <td className="n">{p.dias}</td>
                         <td className="l">
-                          <input type="date" value={p.vencimento} style={{ height: 20, width: 130 }}
+                          <input type="date" value={p.vencimento} min={minVenc} style={{ height: 20, width: 130 }}
                             onChange={(e) => act.atualizarVencimento?.(p.idx ?? i, e.target.value)} />
                         </td>
                         <td className="n">{p.valor}</td>
