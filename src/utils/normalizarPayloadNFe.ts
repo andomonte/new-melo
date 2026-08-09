@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ALIQUOTA_IBS_2026, ALIQUOTA_CBS_2026 } from '@/constants/tributacao2026';
 
 export async function normalizarPayloadNFe(payload: any) {
   // A 'payload' já contém 'emitente', então não precisamos buscar de novo.
@@ -76,6 +77,17 @@ export async function normalizarPayloadNFe(payload: any) {
     const pPIS = vProd > 0 ? Math.round((vPIS / vProd) * 10000) / 100 : 0;
     const pCOFINS = vProd > 0 ? Math.round((vCOFINS / vProd) * 10000) / 100 : 0;
 
+    // IBS/CBS (Reforma Tributária 2026 — LC 214/2025). Usa alíquotas do item quando
+    // vierem (ibs_e = estadual/substitui ICMS, ibs_m = municipal/substitui ISS,
+    // aliquota_cbs = CBS); senão aplica a transição 2026 (fase informativa).
+    const pIBSUF = Number(item.ibs_e ?? ALIQUOTA_IBS_2026);
+    const pIBSMun = Number(item.ibs_m ?? 0);
+    const pCBS = Number(item.aliquota_cbs ?? ALIQUOTA_CBS_2026);
+    const vIBSUF = Math.round(vProd * pIBSUF) / 100; // vProd * (pIBSUF/100) em centavos
+    const vIBSMun = Math.round(vProd * pIBSMun) / 100;
+    const vIBSItem = Math.round((vIBSUF + vIBSMun) * 100) / 100;
+    const vCBSItem = Math.round(vProd * pCBS) / 100;
+
     return {
       codprod: item.codprod ?? `P${index + 1}`,
       nome: prod.descr?.trim() || `Produto ${index + 1}`,
@@ -109,6 +121,18 @@ export async function normalizarPayloadNFe(payload: any) {
         vFCP,
       },
       cfop: item.cfop ?? '5102',
+      ibscbs: {
+        cst: (item.cstibscbs ?? '000').toString().padStart(3, '0'),
+        cClassTrib: (item.cclasstrib ?? '000001').toString().padStart(6, '0'),
+        vBC: vProd,
+        pIBSUF,
+        vIBSUF,
+        pIBSMun,
+        vIBSMun,
+        vIBS: vIBSItem,
+        pCBS,
+        vCBS: vCBSItem,
+      },
     };
   });
 
@@ -137,6 +161,13 @@ export async function normalizarPayloadNFe(payload: any) {
   const totalCOFINS = produtos.reduce((acc: number, p: any) => {
     return Math.round((acc + p.cofins.vCOFINS) * 100) / 100;
   }, 0);
+
+  // Totais IBS/CBS (Reforma Tributária 2026)
+  const totalBaseIBSCBS = produtos.reduce((acc: number, p: any) => Math.round((acc + p.ibscbs.vBC) * 100) / 100, 0);
+  const totalIBSUF = produtos.reduce((acc: number, p: any) => Math.round((acc + p.ibscbs.vIBSUF) * 100) / 100, 0);
+  const totalIBSMun = produtos.reduce((acc: number, p: any) => Math.round((acc + p.ibscbs.vIBSMun) * 100) / 100, 0);
+  const totalIBS = Math.round((totalIBSUF + totalIBSMun) * 100) / 100;
+  const totalCBS = produtos.reduce((acc: number, p: any) => Math.round((acc + p.ibscbs.vCBS) * 100) / 100, 0);
 
   // vNF = vProd + vSeg + vFrete + vOutro - vDesc + vIPI (conforme manual Sefaz)
   // ICMS, PIS, COFINS estão INCLUÍDOS no vProd (CST 00/01)
@@ -209,6 +240,11 @@ export async function normalizarPayloadNFe(payload: any) {
     totalIPI, 
     totalPIS,
     totalCOFINS,
+    totalBaseIBSCBS,
+    totalIBSUF,
+    totalIBSMun,
+    totalIBS,
+    totalCBS,
     totalNF,
     desconto: descontoNum.toFixed(2),
     acrescimo: acrescimoNum.toFixed(2),

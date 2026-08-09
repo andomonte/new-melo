@@ -27,6 +27,7 @@ export default function ConsultaFaturasPage() {
   const router = useRouter();
   const [filtroAgrupadas, setFiltroAgrupadas] = useState<'todas' | 'agrupadas'>('todas');
   const [filtroStatusNFe, setFiltroStatusNFe] = useState<'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas'>('todas');
+  const [filtroCobranca, setFiltroCobranca] = useState<'todas' | 'com' | 'sem'>('todas');
   const [faturasParaFaturar, setFaturasParaFaturar] = useState<any[] | null>(null);
   const [dadosFaturasAgrupadas, setDadosFaturasAgrupadas] = useState<any[] | null>(null);
   const [primeiroCarregamento, setPrimeiroCarregamento] = useState(true);
@@ -59,7 +60,8 @@ export default function ConsultaFaturasPage() {
   perPage = 10,
   filtros: any[] = [],
   filtroAgrupadasParam = 'todas' as 'todas' | 'agrupadas',
-  filtroStatusNFeParam = 'todas' as 'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas'
+  filtroStatusNFeParam = 'todas' as 'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas',
+  filtroCobrancaParam = 'todas' as 'todas' | 'com' | 'sem'
  ) => {
   console.log('🚀 buscarFaturas INICIADA', { page, perPage, filtros, filtroAgrupadasParam, filtroStatusNFeParam });
   try {
@@ -136,6 +138,13 @@ export default function ConsultaFaturasPage() {
     }
     // Se for 'todas', não adiciona nenhum filtro de status NFe
 
+    // Filtro de cobrança (flag dbfatura.cobranca: S = tem cobrança, N = sem)
+    if (filtroCobrancaParam === 'com') {
+      filtrosLimpos.push({ campo: 'cobranca', tipo: 'igual', valor: 'S' });
+    } else if (filtroCobrancaParam === 'sem') {
+      filtrosLimpos.push({ campo: 'cobranca', tipo: 'igual', valor: 'N' });
+    }
+
     console.log('🔍 Frontend - Enviando filtros para API:', filtrosLimpos);
     console.log('📡 Fazendo requisição para /api/faturamento/listar-faturas...');
 
@@ -173,7 +182,7 @@ export default function ConsultaFaturasPage() {
   const handleFiltroChange = (filtros: any[]) => {
 
     setFiltrosAtivos(filtros);
-    buscarFaturas(1, meta.perPage, filtros, filtroAgrupadas, filtroStatusNFe);
+    buscarFaturas(1, meta.perPage, filtros, filtroAgrupadas, filtroStatusNFe, filtroCobranca);
   };
 
   const [abrirNovoFaturamento, setAbrirNovoFaturamento] = useState(false);
@@ -267,7 +276,9 @@ export default function ConsultaFaturasPage() {
           const primeiroCodevenda = vendasRes.data[0].codvenda;
           console.log(`� Usando codvenda ${primeiroCodevenda} para buscar detalhes da fatura ${fat.codfat}`);
           
-          const detalhesRes = await axios.get(`/api/faturamento/detalhes-venda?nrovenda=${primeiroCodevenda}`);
+          // Buscar por codvenda (chave exata) — antes ia como `nrovenda`, o que casava
+          // por ambiguidade com a venda de OUTRO cliente e emitia a NF errada.
+          const detalhesRes = await axios.get(`/api/faturamento/detalhes-venda?codvenda=${primeiroCodevenda}`);
           
           // Adicionar informações da fatura aos detalhes
           const detalhes = detalhesRes.data;
@@ -307,7 +318,7 @@ export default function ConsultaFaturasPage() {
     console.log('🚀 useEffect inicial - primeiroCarregamento:', primeiroCarregamento);
     if (primeiroCarregamento) {
       console.log('📊 Iniciando primeira carga de faturas...');
-      buscarFaturas(1, 10, [], 'todas', 'todas');
+      buscarFaturas(1, 10, [], 'todas', 'todas', 'todas');
       setPrimeiroCarregamento(false);
     }
   }, [primeiroCarregamento, buscarFaturas]); // Dependências corretas
@@ -317,7 +328,7 @@ export default function ConsultaFaturasPage() {
     if (!primeiroCarregamento && termoBusca !== undefined) {
       console.log('🔍 termoBusca alterado:', termoBusca);
       const delay = setTimeout(() => {
-        buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe);
+        buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca);
       }, 300);
       return () => clearTimeout(delay);
     }
@@ -334,7 +345,7 @@ export default function ConsultaFaturasPage() {
   
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300  bg-white dark:bg-slate-900">
-      <main className="p-4  w-full">
+      <main className="p-4 w-full flex flex-col flex-1 min-h-0">
         {/* Header com título e botão */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-black dark:text-white">
@@ -379,7 +390,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroAgrupadas('todas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, 'todas', filtroStatusNFe);
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, 'todas', filtroStatusNFe, filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
                   filtroAgrupadas === 'todas'
@@ -392,7 +403,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroAgrupadas('agrupadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, 'agrupadas', filtroStatusNFe);
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, 'agrupadas', filtroStatusNFe, filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
                   filtroAgrupadas === 'agrupadas'
@@ -420,7 +431,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroStatusNFe('todas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'todas');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'todas', filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
                   filtroStatusNFe === 'todas'
@@ -433,7 +444,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroStatusNFe('autorizadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'autorizadas');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'autorizadas', filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
                   filtroStatusNFe === 'autorizadas'
@@ -449,7 +460,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroStatusNFe('canceladas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'canceladas');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'canceladas', filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
                   filtroStatusNFe === 'canceladas'
@@ -465,7 +476,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroStatusNFe('rejeitadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'rejeitadas');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'rejeitadas', filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
                   filtroStatusNFe === 'rejeitadas'
@@ -481,7 +492,7 @@ export default function ConsultaFaturasPage() {
               <button
                 onClick={() => {
                   setFiltroStatusNFe('denegadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'denegadas');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'denegadas', filtroCobranca);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
                   filtroStatusNFe === 'denegadas'
@@ -493,6 +504,59 @@ export default function ConsultaFaturasPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                 </svg>
                 Denegadas
+              </button>
+            </div>
+          </div>
+
+          {/* Separador vertical */}
+          <div className="h-8 w-px bg-gray-300 dark:bg-zinc-600 hidden sm:block"></div>
+
+          {/* Cobrança (flag dbfatura.cobranca) */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              Cobrança:
+            </span>
+            <div className="flex flex-wrap gap-1">
+              <button
+                onClick={() => {
+                  setFiltroCobranca('todas');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, 'todas');
+                }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
+                  filtroCobranca === 'todas'
+                    ? 'bg-gray-700 text-white shadow-md'
+                    : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                onClick={() => {
+                  setFiltroCobranca('com');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, 'com');
+                }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
+                  filtroCobranca === 'com'
+                    ? 'bg-green-700 text-white shadow-md'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-green-700 inline-block" />
+                Com cobrança
+              </button>
+              <button
+                onClick={() => {
+                  setFiltroCobranca('sem');
+                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, 'sem');
+                }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
+                  filtroCobranca === 'sem'
+                    ? 'bg-pink-600 text-white shadow-md'
+                    : 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400 hover:bg-pink-200 dark:hover:bg-pink-900/50'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block" />
+                Sem cobrança
               </button>
             </div>
           </div>
@@ -542,11 +606,11 @@ export default function ConsultaFaturasPage() {
             'codgp',
             'grupo_pagamento',
           ]}
-          onPageChange={(page) => buscarFaturas(page, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe)}
-          onPerPageChange={(perPage) => buscarFaturas(1, perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe)}
+          onPageChange={(page) => buscarFaturas(page, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca)}
+          onPerPageChange={(perPage) => buscarFaturas(1, perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca)}
           onFiltroChange={handleFiltroChange}
           onAtualizarLista={() =>
-            buscarFaturas(meta.currentPage, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe)
+            buscarFaturas(meta.currentPage, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca)
           }
           termoBusca={termoBusca}
           setTermoBusca={setTermoBusca}
@@ -560,7 +624,13 @@ export default function ConsultaFaturasPage() {
         onOpenChange={handleFecharModalFaturamento}
       >
         {/* CORREÇÃO: Classes ajustadas para um modal grande com padding, e Dialog duplicado removido. */}
-        <DialogContent className="w-[96vw] h-[95vh] max-w-none p-6">
+        {/* Não fechar ao clicar fora nem no Esc: evita perder um faturamento em andamento.
+            O fechamento é intencional, pelo botão X (canto sup. direito) do DialogContent. */}
+        <DialogContent
+          className="w-[96vw] h-[95vh] max-w-none p-6"
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogTitle style={{ position: 'absolute', left: '-9999px', height: '1px', width: '1px', overflow: 'hidden' }}>
             Novo Faturamento
           </DialogTitle>

@@ -46,6 +46,7 @@ export default async function handler(
         c.uf as cliente_uf,
         c.cep as cliente_cep,
         c.email as cliente_fone,
+        c.email as cliente_email,
         c.iest as cliente_iest,
         -- Dados da empresa na venda
         v.cnpj_empresa,
@@ -924,10 +925,25 @@ export default async function handler(
       console.warn('⚠️ Erro ao salvar/inspecionar PDF anexo antes do envio:', e);
     }
 
+    // 🛡️ Destinatário AUTORITATIVO: o e-mail do cliente da FATURA (resolvido por
+    // codfat → codcli no servidor) tem prioridade sobre o `emailCliente` do payload,
+    // evitando enviar a NF para o e-mail de outro cliente por bug de frontend.
+    const emailFaturaCliente = fatura.cliente_email || null;
+    const destinatarioFinal = emailFaturaCliente || emailCliente;
+    if (
+      emailFaturaCliente &&
+      emailCliente &&
+      String(emailFaturaCliente).toLowerCase() !== String(emailCliente).toLowerCase()
+    ) {
+      console.warn(
+        `⚠️ E-mail do payload (${emailCliente}) difere do cadastro do cliente da fatura (${emailFaturaCliente}). Usando o do cadastro.`,
+      );
+    }
+
     // Enviar email usando função unificada
     const resultadoEmail = await enviarDocumentoFiscal({
-      destinatario: emailCliente,
-      nomeCliente: nomeCliente || fatura.nomefant || fatura.nome || 'Cliente',
+      destinatario: destinatarioFinal,
+      nomeCliente: nomeCliente || fatura.cliente_nomefant || fatura.cliente_nome || fatura.nomefant || fatura.nome || 'Cliente',
       numeroNota: numeroDocumento || fatura.nroform,
       valorTotal: Number(fatura.totalnf),
       dataVencimento: fatura.vencimento
@@ -957,7 +973,7 @@ export default async function handler(
       success: true,
       message: forcarReenvio ? 'Email reenviado com sucesso' : 'Email enviado com sucesso',
       messageId: resultadoEmail.messageId,
-      destinatario: emailCliente,
+      destinatario: destinatarioFinal,
       tipoDocumento: tipoDocumento.toUpperCase(),
       reenvio: forcarReenvio || false
     });

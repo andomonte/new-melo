@@ -962,13 +962,21 @@ export default async function handler(
       protocolo,
     });
   } catch (error: any) {
-    const detalhe = error?.response?.data || error.message || error;
-    console.error('❌ Erro ao emitir cupom fiscal:', detalhe);
+    // Extrai uma mensagem REAL em string (evita "[object Object]" que o frontend descarta).
+    const respData = error?.response?.data;
+    const detalheMsg =
+      (respData && typeof respData === 'object'
+        ? respData.motivo || respData.erro || respData.message || JSON.stringify(respData)
+        : respData) ||
+      error?.message ||
+      String(error);
+    console.error('❌ Erro ao emitir cupom fiscal:', detalheMsg);
+    console.error('❌ Stack:', error?.stack || '(sem stack)');
 
     return res.status(500).json({
       sucesso: false,
       erro: 'Erro no processamento do cupom fiscal.',
-      detalhe: detalhe.toString(),
+      detalhe: String(detalheMsg),
     });
   }
 }

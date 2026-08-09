@@ -142,7 +142,9 @@ export default function EditarDadosEmpresaModal({
 
       if (dadosEmpresa.cgc) {
         // Envia tanto os dados da empresa quanto as inscrições estaduais
-        await api.put('/api/dadosEmpresa/edit', {
+        // Endpoint correto: /update lê o cgc do body, CRIPTOGRAFA os PEM do
+        // certificado e grava. (/edit não existe → caía em [cgc].ts e dava 404.)
+        await api.put('/api/dadosEmpresa/update', {
           ...dadosEmpresa,
           inscricoesEstaduais,
         });
@@ -171,8 +173,16 @@ export default function EditarDadosEmpresaModal({
         });
       } else {
         console.error('Erro ao atualizar os dados da empresa:', e);
+        // Mostra a mensagem REAL do backend quando houver (axios: e.response.data).
+        const anyErr = e as any;
+        const detalhe =
+          anyErr?.response?.data?.error ||
+          anyErr?.response?.data?.message ||
+          anyErr?.message;
         setMensagemInfoError(
-          'Ocorreu um erro ao tentar atualizar os dados da empresa. Por favor, tente novamente ou entre em contato com o suporte técnico.',
+          detalhe
+            ? `Erro ao atualizar os dados da empresa: ${detalhe}`
+            : 'Ocorreu um erro ao tentar atualizar os dados da empresa. Por favor, tente novamente ou entre em contato com o suporte técnico.',
         );
         setOpenInfoError(true);
       }

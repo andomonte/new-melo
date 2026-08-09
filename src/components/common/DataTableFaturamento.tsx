@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import DataTable from '@/components/common/DatatableFaturamentoNovo';
+import React, { useMemo, useState, useEffect } from 'react';
+import DataTable from '@/components/common/DataTablePadrao';
 import SelectInput from '@/components/common/SelectPadrao';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -60,6 +60,13 @@ export default function DataTableFaturamentoPadronizado({
 
   const [selecionadas, setSelecionadas] = useState<any[]>([]);
 
+  // Mantém a seleção interna (checkboxes) em sincronia com o carrinho do pai.
+  // Quando o pai limpa o carrinho (ex.: ao fechar a fatura), os checkboxes desmarcam
+  // — antes o checkbox continuava marcado com o carrinho já vazio.
+  useEffect(() => {
+    setSelecionadas(faturasSelecionadas || []);
+  }, [faturasSelecionadas]);
+
   const toggleSelecionar = (fatura: any) => {
     const mesmaFatura = selecionadas.find(
       (s) => s.codvenda === fatura.codvenda,
@@ -113,24 +120,54 @@ export default function DataTableFaturamentoPadronizado({
   const colunasFiltroVisiveis = colunasFiltro.filter((c) => c !== 'selecionar');
   return (
     <div className="flex flex-col w-full min-h-0 flex-1">
-      <div className="flex-1 min-h-0 overflow-hidden text-black dark:text-white">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden text-black dark:text-white">
         <DataTable
           headers={headers}
           rows={rows}
           meta={meta}
           carregando={carregando}
+          semColunaDeAcaoPadrao
+          persistPerPage={false}
+          searchValue={termoBusca}
           onPageChange={onPageChange}
           onPerPageChange={onPerPageChange}
           onSearch={(e) => setTermoBusca(e.target.value)}
           searchInputPlaceholder="Buscar por código, cliente, transporte..."
           onFiltroChange={onFiltroChange}
           colunasFiltro={colunasFiltroVisiveis}
+          colunasSemFiltro={['selecionar']}
+          nonsortableColumns={['selecionar']}
           limiteColunas={limiteColunas}
           onLimiteColunasChange={onLimiteColunasChange}
-          semColunaDeAcaoPadrao={true}
-          faturasSelecionadas={selecionadas}
-          onAbrirDetalhesCliente={onAbrirDetalhesCliente}
-          onAbrirDetalhesProduto={onAbrirDetalhesProduto}
+          columnLabels={{
+            selecionar: '',
+            data: 'Data',
+            tipo: 'Tipo',
+            nrovenda: 'Número da Venda',
+            total: 'Total',
+            cliente: 'Cliente',
+            obs: 'Observações',
+            uf: 'UF',
+            transporte: 'Transporte',
+          }}
+          searchRightSlot={
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onAbrirDetalhesCliente}
+                className="px-2 py-1 text-xs rounded-md border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 whitespace-nowrap"
+              >
+                Detalhes Cliente
+              </button>
+              <button
+                type="button"
+                onClick={onAbrirDetalhesProduto}
+                className="px-2 py-1 text-xs rounded-md border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 whitespace-nowrap"
+              >
+                Detalhes Produto
+              </button>
+            </div>
+          }
         />
       </div>
     </div>

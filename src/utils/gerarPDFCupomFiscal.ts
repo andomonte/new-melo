@@ -823,7 +823,13 @@ export const gerarPreviewCupomFiscal = async (
   drawField('MUNICÍPIO', getValue(fatura.cidade), currentX, y, fieldWidth, 15);
   currentX += fieldWidth;
   fieldWidth = 100;
-  drawField('FONE/FAX', getValue((fatura as any).contato || fatura.fone), currentX, y, fieldWidth, 15);
+  // FONE/FAX do DESTINATÁRIO = telefone do CLIENTE (fatura.fone). NÃO usar `contato`,
+  // que pode conter metadados/JSON do faturamento. Sanitiza p/ nunca imprimir JSON/objeto.
+  const foneDestCupom = (() => {
+    const v = getValue(fatura.fone || (fatura as any).telefone || '');
+    return /^[\s]*[[{]/.test(v) ? '' : v;
+  })();
+  drawField('FONE/FAX', foneDestCupom, currentX, y, fieldWidth, 15);
   currentX += fieldWidth;
   fieldWidth = 35;
   drawField('UF', getValue(fatura.uf), currentX, y, fieldWidth, 15, 'center');
@@ -880,9 +886,8 @@ export const gerarPreviewCupomFiscal = async (
     // parseFloat(String((fatura as any).valor_ipi || 0)) +
     parseFloat(String((fatura as any).vlrfrete || 0)) +
     parseFloat(String((fatura as any).vlrseg || 0)) +
-    parseFloat(String((fatura as any).vlrdesp || 0)) +
-    totalIBSCalculado +
-    totalCBSCalculado -
+    parseFloat(String((fatura as any).vlrdesp || 0)) -
+    // IBS/CBS NÃO compõem o total na transição 2026 (só informativo) — não somar aqui.
     parseFloat(String((fatura as any).desconto || (fatura as any).vlrdesc || 0));
   
   // Usar valor calculado ou fallback para totalnf

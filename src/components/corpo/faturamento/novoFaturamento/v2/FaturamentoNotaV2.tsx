@@ -295,7 +295,18 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
 
               <div className="fat-sec"><div className="fat-sec-header"><span>Volumes e frete</span></div>
                 <div className="fat-g">
-                  <div className="fat-c2"><label>Valor do frete</label><input type="text" value={f.frete ?? '0'} onChange={(e) => set('frete', e.target.value)} /></div>
+                  <div className="fat-c2"><label>Valor do frete</label><input
+                    type="text"
+                    inputMode="numeric"
+                    value={`R$ ${money(f.frete)}`}
+                    onChange={(e) => {
+                      // Máscara de moeda (acumula centavos). Armazena dot-decimal ("20.00")
+                      // para não quebrar os cálculos que usam Number(frete).
+                      const digits = e.target.value.replace(/\D/g, '');
+                      const valor = Number(digits) / 100;
+                      set('frete', valor.toFixed(2));
+                    }}
+                  /></div>
                   <div className="fat-c2"><label>Quantidade</label><input type="text" value={f.quantidade ?? ''} onChange={(e) => set('quantidade', e.target.value)} /></div>
                   <div className="fat-c2"><label>Espécie</label><input type="text" value={f.especie ?? ''} onChange={(e) => set('especie', e.target.value)} /></div>
                   <div className="fat-c2"><label>Marca</label><input type="text" value={f.marca ?? ''} onChange={(e) => set('marca', e.target.value)} /></div>

@@ -1,7 +1,7 @@
 // Handler para emissão de nota fiscal
 
 import React, { useEffect, useMemo, useState } from 'react';
-import DataTable from '@/components/common/DataTableFiltroFatura';
+import DataTable from '@/components/common/DataTablePadrao';
 import { Meta } from '@/data/common/meta';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -915,7 +915,7 @@ const handleCancelarNota = async () => {
 
   return (
     <div className="flex flex-col w-full min-h-0 flex-1">
-      <div className="flex-1 min-h-0 overflow-hidden text-black dark:text-white  ">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden text-black dark:text-white  ">
         {/* Botão para criar grupo de pagamento */}
         {faturasSelecionadas.length > 0 && (
           <div className="mb-2 p-2 bg-blue-100 dark:bg-blue-900 rounded flex items-center justify-between">
@@ -937,15 +937,34 @@ const handleCancelarNota = async () => {
           rows={rows}
           meta={meta}
           carregando={carregando}
+          semColunaDeAcaoPadrao
+          persistPerPage={false}
+          searchValue={termoBusca}
           onPageChange={onPageChange}
           onPerPageChange={onPerPageChange}
           onSearch={(e) => setTermoBusca(e.target.value)}
           searchInputPlaceholder="Buscar por código, cliente, vendedor..."
           onFiltroChange={onFiltroChange}
           colunasFiltro={colunasFiltro}
+          colunasSemFiltro={['selecionar', 'ações', 'status']}
+          nonsortableColumns={['selecionar', 'ações', 'status', '☑️', 'Ações']}
           limiteColunas={limiteColunas}
           onLimiteColunasChange={onLimiteColunasChange}
-          onabrirExportar={() => setMostrarModalExportar(true)}
+          onExportarExcel={() => setMostrarModalExportar(true)}
+          columnLabels={{
+            selecionar: '',
+            ações: 'Ações',
+            status: 'Status',
+            codfat: 'Código da Fatura',
+            nroform: 'Número NF',
+            cliente_nome: 'Cliente',
+            totalnf: 'Valor Total',
+            data: 'Data',
+            codvend: 'Vendedor',
+            codtransp: 'Transportadora',
+            codgp: 'Cód. GP',
+            grupo_pagamento: 'Grupo de Pagamento',
+          }}
         />
 
         {/* Modal de Cancelamento de Nota Fiscal */}

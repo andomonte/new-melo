@@ -221,6 +221,39 @@ export default async function handler(
     console.log('🔄 Iniciando transação...');
     await client.query('BEGIN');
 
+    // 🛡️ EVITAR FATURA DUPLICADA POR VENDA (política: "bloquear e avisar").
+    // Se qualquer venda já possui fatura ativa, NÃO cria outra — orienta a reemitir
+    // a partir da existente. Antes, cada tentativa de emissão criava uma fatura nova.
+    const dupCheck = await client.query(
+      `SELECT fv.codvenda, fv.codfat,
+              CASE WHEN nfe.status = '100' THEN 'autorizada'
+                   WHEN nfe.status IS NOT NULL THEN 'com NF rejeitada/pendente'
+                   ELSE 'sem NF emitida' END AS situacao
+         FROM fatura_venda fv
+         JOIN dbfatura f ON f.codfat = fv.codfat
+         LEFT JOIN LATERAL (
+           SELECT status FROM dbfat_nfe n
+           WHERE n.codfat = f.codfat
+           ORDER BY (n.status = '100') DESC LIMIT 1
+         ) nfe ON true
+        WHERE fv.codvenda = ANY($1) AND fv.status = 'ativo'
+        LIMIT 1`,
+      [vendasArray],
+    );
+    if (dupCheck.rows.length > 0) {
+      const d = dupCheck.rows[0];
+      await client.query('ROLLBACK');
+      const msg = `A venda ${d.codvenda} já possui a fatura ${d.codfat} (${d.situacao}). Não foi criada uma fatura duplicada — reemita a partir dela na Consulta de Faturas.`;
+      console.warn('⛔ [salvar] Fatura duplicada evitada:', msg);
+      return res.status(409).json({
+        sucesso: false,
+        error: msg,
+        erro: msg,
+        detalhe: msg,
+        codfatExistente: d.codfat,
+      });
+    }
+
     console.log('🔒 Aplicando lock na tabela...');
     // Lock na tabela para evitar race conditions
     await client.query('LOCK TABLE dbfatura IN EXCLUSIVE MODE');

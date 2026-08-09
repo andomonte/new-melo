@@ -2,16 +2,13 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { DadosEmpresa } from '@/data/dadosEmpresa/dadosEmpresas'; // Certifique-se de que este caminho está correto
-import { X } from 'lucide-react';
+import { X, Eye, EyeOff } from 'lucide-react';
 import FormInput from '@/components/common/FormInput'; // RE-ADICIONADO: Para os campos normais
 import FormInput2 from '@/components/common/FormInput2'; // RE-ADICIONADO: Para os campos normais
 
 import FormFooter from '@/components/common/FormFooter2';
 import Carregamento from '@/utils/carregamento';
-import {
-  extrairCertificado,
-  CertificadoExtraido,
-} from '@/utils/certificadoExtractor';
+import type { CertificadoExtraido } from '@/utils/certificadoExtractor';
 import InscricaoEstadualField from '@/components/common/InscricaoEstadualField';
 import ModalAdicionarInscricaoEstadual from '@/components/common/ModalAdicionarInscricaoEstadual';
 import { InscricaoEstadual } from '@/data/inscricoesEstaduais/inscricoesEstaduais';
@@ -52,6 +49,7 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
   const [_certificadoFile, setCertificadoFile] = useState<File | null>(null);
   const [certificadoSenha, setCertificadoSenha] = useState('');
   const [isExtractingCertificado, setIsExtractingCertificado] = useState(false);
+  const [mostrarSenhaCert, setMostrarSenhaCert] = useState(false);
   const [certificadoExtraido, setCertificadoExtraido] =
     useState<CertificadoExtraido | null>(null);
 
@@ -205,11 +203,23 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
     setIsExtractingCertificado(true);
 
     try {
+      // Extração NO SERVIDOR (mais confiável que node-forge no navegador) via endpoint.
       const buffer = await file.arrayBuffer();
-      const certificadoExtraido = extrairCertificado(
-        Buffer.from(buffer),
-        certificadoSenha,
-      );
+      const pfxBase64 = Buffer.from(buffer).toString('base64');
+      const resp = await fetch('/api/dadosEmpresa/extrair-certificado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pfxBase64, senha: certificadoSenha }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data?.erro || 'Falha ao extrair o certificado.');
+      }
+      const certificadoExtraido = {
+        certificadoKey: data.certificadoKey,
+        certificadoCrt: data.certificadoCrt,
+        cadeiaCrt: data.cadeiaCrt,
+      };
       setCertificadoExtraido(certificadoExtraido);
 
       // Atualizar os dados da empresa com os valores extraídos
@@ -219,10 +229,12 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
         certificadoCrt: certificadoExtraido.certificadoCrt,
         cadeiaCrt: certificadoExtraido.cadeiaCrt,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao extrair certificado:', error);
+      // Mostra a causa REAL do backend (senha, formato, algoritmo...).
       alert(
-        'Erro ao extrair certificado. Verifique a senha e tente novamente.',
+        error?.message ||
+          'Erro ao extrair certificado. Verifique a senha e tente novamente.',
       );
       setCertificadoFile(null);
     } finally {
@@ -396,16 +408,45 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
                       disabled={isExtractingCertificado}
                     />
                   </div>
-                  <FormInput
-                    autoComplete="off"
-                    name="certificadoSenha"
-                    type="password"
-                    label="Senha do Certificado"
-                    value={certificadoSenha}
-                    onChange={(e) => setCertificadoSenha(e.target.value)}
-                    error={error?.certificadoSenha}
-                    disabled={isExtractingCertificado}
-                  />
+                  {/* Senha do certificado: input próprio (NÃO usa FormInput, que força
+                      maiúsculas e quebraria senhas case-sensitive). Olho para visualizar
+                      e autoComplete="new-password" para evitar autofill do navegador. */}
+                  <div className="space-y-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Senha do Certificado
+                    </label>
+                    <div className="relative">
+                      <input
+                        name="certificadoSenha"
+                        type={mostrarSenhaCert ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={certificadoSenha}
+                        onChange={(e) => setCertificadoSenha(e.target.value)}
+                        disabled={isExtractingCertificado}
+                        className="normal-case block w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setMostrarSenhaCert((v) => !v)}
+                        tabIndex={-1}
+                        aria-label={
+                          mostrarSenhaCert ? 'Ocultar senha' : 'Mostrar senha'
+                        }
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      >
+                        {mostrarSenhaCert ? (
+                          <EyeOff size={18} />
+                        ) : (
+                          <Eye size={18} />
+                        )}
+                      </button>
+                    </div>
+                    {error?.certificadoSenha && (
+                      <p className="text-sm text-red-500">
+                        {error.certificadoSenha}
+                      </p>
+                    )}
+                  </div>
                   {isExtractingCertificado && (
                     <div className="text-sm text-blue-600 dark:text-blue-400">
                       Extraindo certificado...

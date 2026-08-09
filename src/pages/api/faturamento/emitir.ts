@@ -104,6 +104,39 @@ export default async function handler(
       }
     }
 
+    // 🛡️ REDE DE SEGURANÇA — DESTINATÁRIO SEMPRE O CLIENTE DA FATURA.
+    // O dbclien vem do req.body (frontend). Já houve caso de vir o cliente ERRADO
+    // (ambiguidade codvenda/nrovenda) e a NF ser emitida para outro cliente. Aqui
+    // resolvemos o cliente pelo codfat e, se divergir do payload, sobrescrevemos.
+    try {
+      const codfatRef = dados?.codfat || dados?.dbfatura?.codfat || null;
+      if (codfatRef) {
+        const faturaCli = await getPgPool().query(
+          `SELECT c.*
+             FROM db_manaus.dbfatura f
+             JOIN db_manaus.dbclien c ON c.codcli = f.codcli
+            WHERE f.codfat = $1
+            LIMIT 1`,
+          [codfatRef],
+        );
+        const clienteFatura = faturaCli.rows[0];
+        if (clienteFatura) {
+          const docPayload = String(dados?.dbclien?.cpfcgc || '').replace(/\D/g, '');
+          const docFatura = String(clienteFatura.cpfcgc || '').replace(/\D/g, '');
+          if (!dados?.dbclien || docPayload !== docFatura) {
+            console.warn(
+              `⚠️ [NF-e] dbclien do payload (doc ${docPayload || 'vazio'}) diverge do cliente da fatura ${codfatRef} (doc ${docFatura}, codcli ${clienteFatura.codcli}). Sobrescrevendo com o cliente CORRETO da fatura.`,
+            );
+            dados.dbclien = clienteFatura;
+          }
+        } else {
+          console.warn(`⚠️ [NF-e] Não foi possível resolver o cliente da fatura ${codfatRef} — seguindo com o dbclien do payload.`);
+        }
+      }
+    } catch (e) {
+      console.error('❌ [NF-e] Falha ao validar cliente da fatura (seguindo com payload):', e);
+    }
+
     // 🆕 BUSCAR CNPJ E IE DA EMPRESA A PARTIR DE DBVENDA
     let cnpjEmpresaVenda: string | null = null;
     let ieEmpresaVenda: string | null = null;
@@ -532,14 +565,52 @@ export default async function handler(
     const urlSefaz = getUrlSefazAtual('NFE_AUTORIZACAO');
     console.log(`🔗 URL SEFAZ NF-e: ${urlSefaz}`);
 
-    const sefazResponse = await axios.post(urlSefaz, envelope, {
-      httpsAgent: agent,
-      headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8',
-        SOAPAction:
-          'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
-      },
-    });
+    let sefazResponse;
+    try {
+      sefazResponse = await axios.post(urlSefaz, envelope, {
+        httpsAgent: agent,
+        headers: {
+          'Content-Type': 'application/soap+xml; charset=utf-8',
+          SOAPAction:
+            'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
+        },
+        timeout: 30000,
+        // Não lançar em 4xx/5xx: queremos INSPECIONAR o corpo/status real da SEFAZ.
+        validateStatus: () => true,
+      });
+    } catch (errSefaz: any) {
+      // Erro de transporte/TLS (sem resposta HTTP): capturar código e mensagem.
+      const cod = errSefaz?.code || 'SEM_CODIGO';
+      console.error('❌ [SEFAZ] Falha de comunicação:', cod, errSefaz?.message);
+      throw new Error(
+        `Falha na comunicação com a SEFAZ (${cod}): ${errSefaz?.message}. URL: ${urlSefaz}`,
+      );
+    }
+
+    // Se a SEFAZ devolveu HTTP de erro, extrair o CORPO REAL (SOAP-Fault/HTML) e propagar.
+    if (sefazResponse.status >= 400) {
+      const corpoRaw = sefazResponse.data;
+      const corpo =
+        typeof corpoRaw === 'string'
+          ? corpoRaw
+          : (() => {
+              try {
+                return JSON.stringify(corpoRaw);
+              } catch {
+                return String(corpoRaw);
+              }
+            })();
+      console.error(
+        `❌ [SEFAZ] HTTP ${sefazResponse.status} | URL: ${urlSefaz} | headers: ${JSON.stringify(
+          sefazResponse.headers,
+        )} | body(2000): ${(corpo || '(vazio)').slice(0, 2000)}`,
+      );
+      throw new Error(
+        `SEFAZ retornou HTTP ${sefazResponse.status}. Resposta: ${
+          (corpo || '(corpo vazio)').slice(0, 1500)
+        } | URL: ${urlSefaz}`,
+      );
+    }
 
     const xmlResposta = sefazResponse.data;
     console.log('✅ XML de resposta da Sefaz:', xmlResposta);
@@ -802,6 +873,7 @@ export default async function handler(
           uf: dados.emitente?.enderEmit?.UF || '',
           cep: dados.emitente?.enderEmit?.CEP || '',
           telefone: '', // Não disponível na estrutura atual
+          crt: (dados.emitente as any)?.crt || '', // 1/2=Simples, 3=Regime Normal (p/ texto do DANFE)
         };
 
         // Calcular impostos se não estão na fatura

@@ -288,7 +288,13 @@ export default async function listarFaturas(
       LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
       LEFT JOIN db_manaus.dbvend v ON f.codvend = v.codvend
       LEFT JOIN db_manaus.dbtransp t ON f.codtransp = t.codtransp
-      LEFT JOIN db_manaus.dbfat_nfe nfe ON f.codfat = nfe.codfat
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM db_manaus.dbfat_nfe n
+        WHERE n.codfat = f.codfat
+        ORDER BY (n.status = '100') DESC, n.dthrprotocolo DESC NULLS LAST, n.chave DESC NULLS LAST
+        LIMIT 1
+      ) nfe ON true
       ${where}
     `;
     const totalResult = await client.query(totalQuery, values);
@@ -331,7 +337,13 @@ export default async function listarFaturas(
       LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
       LEFT JOIN db_manaus.dbvend v ON f.codvend = v.codvend
       LEFT JOIN db_manaus.dbtransp t ON f.codtransp = t.codtransp
-      LEFT JOIN db_manaus.dbfat_nfe nfe ON f.codfat = nfe.codfat
+      LEFT JOIN LATERAL (
+        SELECT *
+        FROM db_manaus.dbfat_nfe n
+        WHERE n.codfat = f.codfat
+        ORDER BY (n.status = '100') DESC, n.dthrprotocolo DESC NULLS LAST, n.chave DESC NULLS LAST
+        LIMIT 1
+      ) nfe ON true
       ${hasCodgpColumn && hasGrupoPagamentoTable ? 'LEFT JOIN grupo_pagamento gp ON f.codgp = gp.codigo_gp' : ''}
       ${where}
       ORDER BY f.data DESC

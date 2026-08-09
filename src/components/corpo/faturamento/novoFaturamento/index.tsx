@@ -195,7 +195,7 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
 
   return (
     <div className=" h-full flex flex-col flex-grow border border-gray-300  bg-white dark:bg-slate-900">
-      <main className="p-4  w-full">
+      <main className="p-4 w-full flex flex-col flex-1 min-h-0">
         <Head>
           <title className="text-2xl font-semibold text-black dark:text-white">
             Novo Faturamento
@@ -235,7 +235,7 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
           </div>
         </div>
 
-        <div className="h-full">
+        <div className="flex-1 min-h-0 flex flex-col">
           <DataTableFaturamento
             faturas={faturas}
             meta={meta}

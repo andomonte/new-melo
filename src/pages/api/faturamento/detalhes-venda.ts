@@ -10,13 +10,19 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { nrovenda } = req.query;
+  const { nrovenda, codvenda } = req.query;
 
-  if (!nrovenda || typeof nrovenda !== 'string') {
+  // Preferir `codvenda` (chave primária, busca EXATA e sem ambiguidade). Só cai no
+  // `nrovenda` (que historicamente casava por nrovenda OU codvenda) quando codvenda
+  // não é informado. A ambiguidade do OR já causou emitir NF para o cliente errado.
+  const buscarPorCodvenda = typeof codvenda === 'string' && codvenda.trim() !== '';
+  const paramRaw = buscarPorCodvenda ? (codvenda as string) : nrovenda;
+
+  if (!paramRaw || typeof paramRaw !== 'string') {
     return res.status(400).json({ error: 'Número(s) da venda inválido(s)' });
   }
 
-  const numeros = nrovenda
+  const numeros = paramRaw
     .split(',')
     .map((n) => n.trim())
     .filter(Boolean);
@@ -29,7 +35,13 @@ export default async function handler(
 
   const client = await getPgPool().connect();
   try {
-    const codvendaQuery = `
+    const codvendaQuery = buscarPorCodvenda
+      ? `
+      SELECT codvenda
+      FROM dbvenda
+      WHERE codvenda = ANY($1)
+    `
+      : `
       SELECT codvenda
       FROM dbvenda
       WHERE nrovenda = ANY($1) OR codvenda = ANY($1)

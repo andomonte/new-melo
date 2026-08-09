@@ -2,15 +2,12 @@
 
 import React, { useState } from 'react';
 import { DadosEmpresa } from '@/data/dadosEmpresa/dadosEmpresas';
-import { X } from 'lucide-react';
+import { X, Eye, EyeOff } from 'lucide-react';
 import FormInput from '@/components/common/FormInput';
 import FormInput2 from '@/components/common/FormInput2';
 import FormFooter from '@/components/common/FormFooter2';
 import Carregamento from '@/utils/carregamento';
-import {
-  extrairCertificado,
-  CertificadoExtraido,
-} from '@/utils/certificadoExtractor';
+import type { CertificadoExtraido } from '@/utils/certificadoExtractor';
 import InscricaoEstadualField from '@/components/common/InscricaoEstadualField';
 import ModalAdicionarInscricaoEstadual from '@/components/common/ModalAdicionarInscricaoEstadual';
 import { InscricaoEstadual } from '@/data/inscricoesEstaduais/inscricoesEstaduais';
@@ -51,6 +48,7 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
   const [certificadoFile, setCertificadoFile] = useState<File | null>(null);
   const [certificadoSenha, setCertificadoSenha] = useState('');
   const [isExtractingCertificado, setIsExtractingCertificado] = useState(false);
+  const [mostrarSenhaCert, setMostrarSenhaCert] = useState(false);
   const [certificadoExtraido, setCertificadoExtraido] =
     useState<CertificadoExtraido | null>(null);
 
@@ -153,35 +151,39 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
 
     setIsExtractingCertificado(true);
     try {
-      // Converter File para Buffer
+      // Extração NO SERVIDOR (mais confiável que node-forge no navegador) via endpoint.
       const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      console.log('Extraindo certificado com senha:', certificadoSenha);
-      const extraido = await extrairCertificado(buffer, certificadoSenha);
-      console.log('Certificado extraído:', {
-        certificadoKey: extraido.certificadoKey.substring(0, 50) + '...',
-        certificadoCrt: extraido.certificadoCrt.substring(0, 50) + '...',
-        cadeiaCrt: extraido.cadeiaCrt.substring(0, 50) + '...',
+      const pfxBase64 = Buffer.from(arrayBuffer).toString('base64');
+      const resp = await fetch('/api/dadosEmpresa/extrair-certificado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pfxBase64, senha: certificadoSenha }),
       });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data?.erro || 'Falha ao extrair o certificado.');
+      }
+      const extraido = {
+        certificadoKey: data.certificadoKey,
+        certificadoCrt: data.certificadoCrt,
+        cadeiaCrt: data.cadeiaCrt,
+      };
       setCertificadoExtraido(extraido);
 
       // Atualiza os dados da empresa com os dados extraídos
-      const novosDados = {
+      handleDadosEmpresaChange({
         ...dadosEmpresa,
         certificadoKey: extraido.certificadoKey,
         certificadoCrt: extraido.certificadoCrt,
         cadeiaCrt: extraido.cadeiaCrt,
-      };
-      console.log('Atualizando dadosEmpresa com certificado:', {
-        certificadoKey: novosDados.certificadoKey.substring(0, 50) + '...',
-        certificadoCrt: novosDados.certificadoCrt.substring(0, 50) + '...',
-        cadeiaCrt: novosDados.cadeiaCrt.substring(0, 50) + '...',
       });
-      handleDadosEmpresaChange(novosDados);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao extrair certificado:', error);
-      alert('Erro ao extrair certificado. Verifique se a senha está correta.');
+      // Mostra a causa REAL do backend (senha, formato, algoritmo...).
+      alert(
+        error?.message ||
+          'Erro ao extrair certificado. Verifique se a senha está correta.',
+      );
     } finally {
       setIsExtractingCertificado(false);
     }
@@ -465,13 +467,31 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Senha do Certificado
                       </label>
-                      <input
-                        type="password"
-                        value={certificadoSenha}
-                        onChange={(e) => setCertificadoSenha(e.target.value)}
-                        placeholder="Digite a senha do certificado"
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      <div className="relative">
+                        <input
+                          type={mostrarSenhaCert ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          value={certificadoSenha}
+                          onChange={(e) => setCertificadoSenha(e.target.value)}
+                          placeholder="Digite a senha do certificado"
+                          className="normal-case block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setMostrarSenhaCert((v) => !v)}
+                          tabIndex={-1}
+                          aria-label={
+                            mostrarSenhaCert ? 'Ocultar senha' : 'Mostrar senha'
+                          }
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                        >
+                          {mostrarSenhaCert ? (
+                            <EyeOff size={18} />
+                          ) : (
+                            <Eye size={18} />
+                          )}
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() =>

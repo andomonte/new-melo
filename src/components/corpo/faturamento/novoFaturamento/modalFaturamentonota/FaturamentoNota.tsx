@@ -100,6 +100,167 @@ export default function FaturamentoNota({
   const [modalidadeTransporte, setModalidadeTransporte] = useState('');
   // Wizard: 1 = Faturamento & Cobrança · 2 = Dados Básicos · 3 = Valores/Frete/Comissão.
   const [etapa, setEtapa] = useState(1);
+
+  // Modal de progresso da emissão (substitui o antigo popup window.open — acompanha na mesma tela)
+  const [emissaoProgresso, setEmissaoProgresso] = useState<{
+    aberto: boolean;
+    currentStep: number;
+    totalSteps: number;
+    stepName: string;
+    status: 'loading' | 'success' | 'error';
+    errorMsg?: string;
+    detail?: string;
+    pdfUrl?: string;
+    passos?: { nome: string; status: 'pendente' | 'loading' | 'done' | 'error' }[];
+  }>({ aberto: false, currentStep: 0, totalSteps: 1, stepName: '', status: 'loading', passos: [] });
+
+  // Erro tratável: extrai a mensagem real do backend em vez de "Request failed with status code 500".
+  // Os endpoints fiscais retornam a causa em `detalhe` (emitir.ts) ou `motivo`/`erro` (PT);
+  // os de cadastro em `error`/`message` (EN). Preferimos a mais específica.
+  const mensagemDeErro = (error: any): string => {
+    const d = error?.response?.data;
+    const detalhe =
+      typeof d?.detalhe === 'string' && d.detalhe !== '[object Object]'
+        ? d.detalhe
+        : '';
+    return (
+      detalhe ||
+      d?.motivo ||
+      d?.erro ||
+      d?.error ||
+      d?.message ||
+      error?.message ||
+      'Ocorreu um erro inesperado.'
+    );
+  };
+
+  const renderModalEmissao = () => {
+    if (!emissaoProgresso.aberto) return null;
+    const { currentStep, totalSteps, status, errorMsg, detail, pdfUrl, passos } =
+      emissaoProgresso;
+    const pct =
+      totalSteps > 0 ? Math.min(100, Math.round((currentStep / totalSteps) * 100)) : 0;
+    const fecharEmissao = () => {
+      setEmissaoProgresso((p) => ({ ...p, aberto: false }));
+      if (status === 'success')
+        window.location.href = '/faturamento/consultaFatura';
+    };
+    return (
+      <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b dark:border-zinc-700">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+              Emissão do Faturamento
+            </h3>
+            {status !== 'loading' && (
+              <button
+                onClick={fecharEmissao}
+                className="text-gray-500 hover:text-red-500 text-2xl leading-none"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+            <div>
+              <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <span>
+                  Etapa {currentStep} de {totalSteps}
+                </span>
+                <span>{status === 'error' ? '—' : `${pct}%`}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    status === 'error'
+                      ? 'bg-red-500'
+                      : status === 'success'
+                      ? 'bg-green-600'
+                      : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${status === 'error' ? 100 : pct}%` }}
+                />
+              </div>
+            </div>
+            {/* Checklist das etapas (verde = concluída, vermelho = falhou) */}
+            {passos && passos.length > 0 && (
+              <ul className="flex flex-col gap-1.5">
+                {passos.map((p, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm">
+                    {p.status === 'done' && (
+                      <span className="text-green-600 font-bold w-4 text-center">✓</span>
+                    )}
+                    {p.status === 'error' && (
+                      <span className="text-red-500 font-bold w-4 text-center">✕</span>
+                    )}
+                    {p.status === 'loading' && (
+                      <span className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin inline-block" />
+                    )}
+                    {p.status === 'pendente' && (
+                      <span className="text-gray-300 dark:text-zinc-600 w-4 text-center">○</span>
+                    )}
+                    <span
+                      className={
+                        p.status === 'done'
+                          ? 'text-gray-700 dark:text-gray-200'
+                          : p.status === 'error'
+                          ? 'text-red-600 dark:text-red-400 font-medium'
+                          : p.status === 'loading'
+                          ? 'text-blue-700 dark:text-blue-300 font-medium'
+                          : 'text-gray-400 dark:text-zinc-500'
+                      }
+                    >
+                      {p.nome}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {detail && (
+              <div className="text-xs text-gray-500 dark:text-gray-400">{detail}</div>
+            )}
+            {status === 'error' && errorMsg && (
+              <div className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300">
+                <div className="font-semibold mb-1">Detalhe do erro</div>
+                <div className="break-words whitespace-pre-wrap">{errorMsg}</div>
+              </div>
+            )}
+            {pdfUrl && (
+              <iframe
+                src={pdfUrl}
+                title="Nota Fiscal"
+                className="w-full h-[52vh] border rounded-md dark:border-zinc-700"
+              />
+            )}
+          </div>
+          {status !== 'loading' && (
+            <div className="px-5 py-3 border-t dark:border-zinc-700 flex justify-end gap-2">
+              {pdfUrl && (
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 text-sm rounded-md border border-gray-300 dark:border-zinc-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                >
+                  Abrir PDF em nova aba
+                </a>
+              )}
+              <button
+                onClick={fecharEmissao}
+                className={`px-4 py-2 text-sm rounded-md text-white ${
+                  status === 'error'
+                    ? 'bg-gray-600 hover:bg-gray-700'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {status === 'success' ? 'Concluir' : 'Fechar'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   // Parcelas V2 (inline): intervalo de dias + quantidade → gera parcelas (dia útil via feriados/fim de semana)
   const [intervaloDias, setIntervaloDias] = useState<string>('30');
   const [qtdParcelas, setQtdParcelas] = useState<string>('');
@@ -891,14 +1052,20 @@ export default function FaturamentoNota({
   };
 
   const handleProcessoCompleto = async (faturasAgrupadasParam?: any[]) => {
-    // Criar janela imediatamente para evitar bloqueio de pop-up
-    let pdfWindow: Window | null = window.open('about:blank', '_blank');
-    if (!pdfWindow) {
-      toast.error(
-        'A abertura da nova aba foi bloqueada. Por favor, habilite os pop-ups para este site.',
-      );
-      return;
-    }
+    // Progresso agora em modal in-page (renderModalEmissao) — NÃO abre nova janela.
+    // Sentinela mantém válidas as verificações antigas de "janela" sem popup.
+    const pdfWindow: any = {
+      closed: false,
+      document: { open() {}, write() {}, close() {} },
+      location: {} as any,
+    };
+    setEmissaoProgresso({
+      aberto: true,
+      currentStep: 0,
+      totalSteps: 1,
+      stepName: 'Processando sua solicitação...',
+      status: 'loading',
+    });
 
     // Mostrar loading na janela
     pdfWindow.document.write(`
@@ -926,6 +1093,27 @@ export default function FaturamentoNota({
       ? 5
       : 3; // Individual: salvamento + cobrança (opcional) + nota fiscal
 
+    // Inicializa o checklist de etapas do modal de progresso.
+    const stepsNomes = agrupandoFaturas
+      ? [
+          'Salvando dados da fatura',
+          ...(comCobranca ? ['Configurando cobrança'] : []),
+          'Criando agrupamento',
+          'Enviando notificação',
+          'Finalizando processo',
+        ]
+      : [
+          'Salvando dados da fatura',
+          ...(comCobranca ? ['Configurando cobrança'] : []),
+          'Emitindo nota fiscal',
+          'Gerando PDF',
+        ];
+    setEmissaoProgresso((prev) => ({
+      ...prev,
+      totalSteps,
+      passos: stepsNomes.map((nome) => ({ nome, status: 'pendente' as const })),
+    }));
+
     // Função helper para atualizar a janela com progresso
     const updateWindowProgress = (
       currentStep: number,
@@ -934,6 +1122,46 @@ export default function FaturamentoNota({
       errorMessage?: string,
       additionalInfo?: string,
     ) => {
+      // Atualiza o modal de progresso in-page (mesma tela) + checklist das etapas.
+      setEmissaoProgresso((prev) => {
+        const lista = prev.passos ?? [];
+        const mapped =
+          status === 'success' ? 'done' : status === 'error' ? 'error' : 'loading';
+        // Mapeia a etapa pelo NOME (mais confiável que o número, que não bate 1:1).
+        const n = (stepName || '').toLowerCase();
+        const matchPasso = (pn: string) => {
+          const p = pn.toLowerCase();
+          if (p.includes('salvando') || p.includes('dados da fatura'))
+            return n.includes('salvando') || n.includes('dados da fatura');
+          if (p.includes('cobrança')) return n.includes('cobran');
+          if (p.includes('nota fiscal') || p.includes('emitindo'))
+            return n.includes('nota fiscal') || n.includes('emitindo');
+          if (p.includes('pdf')) return n.includes('pdf');
+          if (p.includes('agrupamento')) return n.includes('agrupa');
+          if (p.includes('notificação')) return n.includes('notifica') || n.includes('e-mail');
+          if (p.includes('finalizando')) return n.includes('finaliz');
+          return false;
+        };
+        let idx = lista.findIndex((p) => matchPasso(p.nome));
+        if (idx < 0) idx = Math.min(Math.max(currentStep, 1), lista.length) - 1;
+        const passos = lista.map((p, i) => {
+          if (i < idx) return p.status === 'error' ? p : { ...p, status: 'done' as const };
+          if (i === idx)
+            return { ...p, status: mapped as 'done' | 'error' | 'loading' };
+          return p;
+        });
+        return {
+          ...prev,
+          aberto: true,
+          currentStep,
+          totalSteps,
+          stepName,
+          status,
+          errorMsg: errorMessage,
+          detail: additionalInfo,
+          passos,
+        };
+      });
       if (!pdfWindow || pdfWindow.closed) return;
 
       const steps = agrupandoFaturas
@@ -1736,6 +1964,8 @@ export default function FaturamentoNota({
         } catch (errorSefaz: any) {
           const mensagemCompleta =
             errorSefaz?.response?.data?.motivo ||
+            errorSefaz?.response?.data?.detalhe || // NFC-e (emitir-cupom) retorna em `detalhe`
+            errorSefaz?.response?.data?.erro ||
             errorSefaz?.message ||
             'Erro na SEFAZ';
           const detalhesErro = errorSefaz?.response?.data?.detalhes;
@@ -2048,8 +2278,8 @@ O problema está na Inscrição Estadual (IE), não na série!
           }
 
           updateWindowProgress(pdfStep, 'PDF gerado com sucesso', 'success');
-          // 3. Define o endereço da janela aberta.
-          pdfWindow.location.href = url;
+          // PDF agora é exibido dentro do modal (iframe), na mesma tela.
+          setEmissaoProgresso((prev) => ({ ...prev, pdfUrl: url, status: 'success' }));
         } else {
           // Se não houver PDF, avisa o usuário e atualiza a janela aberta.
           updateWindowProgress(
@@ -2080,18 +2310,15 @@ O problema está na Inscrição Estadual (IE), não na série!
         todasEtapasSucesso = true; // Marcar sucesso completo
       }
       
-      // ✅ Redirecionamento APENAS se todas as etapas foram bem-sucedidas
+      // Sucesso: mantém o modal aberto (conclusão + PDF). O usuário fecha pelo botão
+      // do modal, que retorna à Consulta de Faturas.
       if (todasEtapasSucesso) {
-        console.log('✅ Todas as etapas concluídas com sucesso, redirecionando...');
-        setTimeout(() => {
-          window.location.href = '/faturamento/consultaFatura';
-        }, 1500);
+        setEmissaoProgresso((prev) => ({ ...prev, status: 'success' }));
       } else {
         console.warn('⚠️ Processo finalizado com erros - NÃO redirecionando');
       }
     } catch (error: any) {
-      const mensagemErro =
-        error?.response?.data?.motivo || error?.message || String(error);
+      const mensagemErro = mensagemDeErro(error);
 
       // Verificar se o erro é apenas da SEFAZ (fatura já foi salva)
       if (etapa === 'emissão da nota fiscal' && novoCodfat) {
@@ -3415,6 +3642,7 @@ O problema está na Inscrição Estadual (IE), não na série!
           onClose={() => setIsMensagemModalOpen(false)}
           onSave={handleSalvarNovaMensagem}
         />
+        {renderModalEmissao()}
       </>
     );
   }
@@ -4776,6 +5004,7 @@ O problema está na Inscrição Estadual (IE), não na série!
             venda={vendaData}
           />
         )}
+        {renderModalEmissao()}
       </div>
     </>
   );

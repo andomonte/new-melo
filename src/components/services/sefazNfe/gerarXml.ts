@@ -16,6 +16,131 @@ function calcularDV(chave: string): number {
   return (dv === 0 || dv === 10 || dv === 11) ? 0 : dv;
 }
 
+// Monta o grupo de ICMS conforme o CST. O schema da SEFAZ exige a tag compatível
+// com o código: CST 00 -> <ICMS00>, 60 -> <ICMS60>, 40/41/50 -> <ICMS40>, etc.
+// Emitir o CST dentro da tag errada causa "cvc-enumeration-valid".
+// O payload traz apenas os campos básicos (base, alíquota, valor); campos de ST
+// retido (CST 60) são opcionais no schema — só entram se vierem no payload.
+function montarGrupoICMS(icms: any, vProdStr: string): Record<string, any> {
+  const orig = String(icms?.origem ?? '0');
+  const cst = String(icms?.cstICMS ?? '00').padStart(2, '0').slice(-2);
+  const modBC = String(icms?.modBC ?? '3');
+  const vBC = (icms?.baseICMS != null ? Number(icms.baseICMS) : Number(vProdStr)).toFixed(2);
+  const pICMS = Number(icms?.pICMS ?? 0).toFixed(2);
+  const vICMS = Number(icms?.vICMS ?? 0).toFixed(2);
+  // Campos de ST na própria operação (CST 10/70), quando existirem.
+  const modBCST = String(icms?.modBCST ?? '4');
+  const vBCST = Number(icms?.vBCST ?? 0).toFixed(2);
+  const pICMSST = Number(icms?.pICMSST ?? 0).toFixed(2);
+  const vICMSST = Number(icms?.vICMSST ?? 0).toFixed(2);
+
+  switch (cst) {
+    case '00':
+      return { ICMS00: { orig, CST: cst, modBC, vBC, pICMS, vICMS } };
+
+    case '10':
+      return { ICMS10: { orig, CST: cst, modBC, vBC, pICMS, vICMS, modBCST, vBCST, pICMSST, vICMSST } };
+
+    case '20':
+      return { ICMS20: { orig, CST: cst, modBC, pRedBC: Number(icms?.pRedBC ?? 0).toFixed(2), vBC, pICMS, vICMS } };
+
+    case '40':
+    case '41':
+    case '50':
+      // Isenta / não tributada / suspensão: apenas origem e CST.
+      return { ICMS40: { orig, CST: cst } };
+
+    case '51':
+      return { ICMS51: { orig, CST: cst, modBC, vBC, pICMS, vICMS } };
+
+    case '60': {
+      // ICMS cobrado anteriormente por ST. Retenção (vBCSTRet, pST,
+      // vICMSSubstituto, vICMSSTRet) é opcional — só inclui se vier no payload.
+      const grupo: Record<string, any> = { orig, CST: cst };
+      if (icms?.vBCSTRet != null) {
+        grupo.vBCSTRet = Number(icms.vBCSTRet).toFixed(2);
+        grupo.pST = Number(icms?.pST ?? 0).toFixed(4);
+        grupo.vICMSSubstituto = Number(icms?.vICMSSubstituto ?? 0).toFixed(2);
+        grupo.vICMSSTRet = Number(icms?.vICMSSTRet ?? 0).toFixed(2);
+      }
+      return { ICMS60: grupo };
+    }
+
+    case '70':
+      return { ICMS70: { orig, CST: cst, modBC, pRedBC: Number(icms?.pRedBC ?? 0).toFixed(2), vBC, pICMS, vICMS, modBCST, vBCST, pICMSST, vICMSST } };
+
+    default:
+      // Catch-all schema-válido: <ICMS90> exige CST 90.
+      return { ICMS90: { orig, CST: '90', modBC, vBC, pICMS, vICMS, vBCST, pICMSST, vICMSST } };
+  }
+}
+
+// Monta o grupo de IPI conforme o CST. Tributado (00,49,50,99) -> <IPITrib> com
+// base/alíquota/valor; demais (não tributado/isento/suspenso) -> <IPINT> só com CST.
+function montarGrupoIPI(ipi: any, vProdStr: string): Record<string, any> {
+  const cst = String(ipi?.cstIPI ?? '50').padStart(2, '0').slice(-2);
+  const tributado = ['00', '49', '50', '99'].includes(cst);
+  if (tributado) {
+    return {
+      cEnq: '999',
+      IPITrib: {
+        CST: cst,
+        vBC: (ipi?.baseIPI != null ? Number(ipi.baseIPI) : Number(vProdStr)).toFixed(2),
+        pIPI: Number(ipi?.pIPI ?? 0).toFixed(2),
+        vIPI: Number(ipi?.vIPI ?? 0).toFixed(2),
+      },
+    };
+  }
+  return { cEnq: '999', IPINT: { CST: cst } };
+}
+
+// Monta o grupo de PIS conforme o CST. Tributado por alíquota (01,02) -> <PISAliq>;
+// não tributado (04..09) -> <PISNT> só com CST; demais (49..99) -> <PISOutr>.
+function montarGrupoPIS(pis: any, vProdStr: string): Record<string, any> {
+  const cst = String(pis?.cstPIS ?? '01').padStart(2, '0').slice(-2);
+  const vBC = Number(vProdStr).toFixed(2);
+  const pPIS = Number(pis?.pPIS ?? 0).toFixed(4);
+  const vPIS = Number(pis?.vPIS ?? 0).toFixed(2);
+  if (['01', '02'].includes(cst)) return { PISAliq: { CST: cst, vBC, pPIS, vPIS } };
+  if (['04', '05', '06', '07', '08', '09'].includes(cst)) return { PISNT: { CST: cst } };
+  return { PISOutr: { CST: cst, vBC, pPIS, vPIS } };
+}
+
+// Monta o grupo de COFINS conforme o CST (mesma lógica do PIS).
+function montarGrupoCOFINS(cofins: any, vProdStr: string): Record<string, any> {
+  const cst = String(cofins?.cstCOFINS ?? '01').padStart(2, '0').slice(-2);
+  const vBC = Number(vProdStr).toFixed(2);
+  const pCOFINS = Number(cofins?.pCOFINS ?? 0).toFixed(4);
+  const vCOFINS = Number(cofins?.vCOFINS ?? 0).toFixed(2);
+  if (['01', '02'].includes(cst)) return { COFINSAliq: { CST: cst, vBC, pCOFINS, vCOFINS } };
+  if (['04', '05', '06', '07', '08', '09'].includes(cst)) return { COFINSNT: { CST: cst } };
+  return { COFINSOutr: { CST: cst, vBC, pCOFINS, vCOFINS } };
+}
+
+// Monta o grupo IBS/CBS por item (Reforma Tributária 2026 — NT 2025.002).
+// O IBS é dividido em estadual (gIBSUF) e municipal (gIBSMun); vIBS = vIBSUF + vIBSMun.
+function montarGrupoIBSCBS(ibs: any, vProdStr: string): Record<string, any> {
+  const vBC = Number(ibs?.vBC ?? vProdStr).toFixed(2);
+  const pIBSUF = Number(ibs?.pIBSUF ?? 0).toFixed(4);
+  const vIBSUF = Number(ibs?.vIBSUF ?? 0).toFixed(2);
+  const pIBSMun = Number(ibs?.pIBSMun ?? 0).toFixed(4);
+  const vIBSMun = Number(ibs?.vIBSMun ?? 0).toFixed(2);
+  const vIBS = Number(ibs?.vIBS ?? 0).toFixed(2);
+  const pCBS = Number(ibs?.pCBS ?? 0).toFixed(4);
+  const vCBS = Number(ibs?.vCBS ?? 0).toFixed(2);
+  return {
+    CST: String(ibs?.cst ?? '000').padStart(3, '0'),
+    cClassTrib: String(ibs?.cClassTrib ?? '000001').padStart(6, '0'),
+    gIBSCBS: {
+      vBC,
+      gIBSUF: { pIBSUF, vIBSUF },
+      gIBSMun: { pIBSMun, vIBSMun },
+      vIBS,
+      gCBS: { pCBS, vCBS },
+    },
+  };
+}
+
 // Função para formatar a data/hora no padrão exigido pela Sefaz (com fuso horário)
 function formatarDataSefaz(data: Date): string {
   const pad = (num: number) => num.toString().padStart(2, '0');
@@ -54,6 +179,11 @@ export function gerarXMLNFe(dados: any): string {
     totalIPI,
     totalPIS,
     totalCOFINS,
+    totalBaseIBSCBS,
+    totalIBSUF,
+    totalIBSMun,
+    totalIBS,
+    totalCBS,
     totalNF,
     desconto,
     acrescimo,
@@ -282,41 +412,14 @@ export function gerarXMLNFe(dados: any): string {
             imposto: {
               // USANDO IMPOSTOS REAIS DO BANCO (aritmética de centavos)
               vTotTrib: (item.icms?.vICMS + item.ipi?.vIPI + item.pis?.vPIS + item.cofins?.vCOFINS + (item.fcp?.vFCP ?? 0)).toFixed(2),
-              ICMS: {
-                ICMS00: {
-                  orig: '0',
-                  CST: item.icms?.cstICMS ?? '00',
-                  modBC: '3',
-                  vBC: item.icms?.baseICMS?.toFixed(2) ?? vProd.toFixed(2),
-                  pICMS: item.icms?.pICMS?.toFixed(2) ?? '0.00',
-                  vICMS: item.icms?.vICMS?.toFixed(2) ?? '0.00',
-                },
-              },
-              IPI: {
-                cEnq: '999',
-                IPITrib: {
-                  CST: item.ipi?.cstIPI ?? '50',
-                  vBC: item.ipi?.baseIPI?.toFixed(2) ?? vProd.toFixed(2),
-                  pIPI: item.ipi?.pIPI?.toFixed(2) ?? '0.00',
-                  vIPI: item.ipi?.vIPI?.toFixed(2) ?? '0.00',
-                },
-              },
-              PIS: { 
-                PISAliq: { 
-                  CST: item.pis?.cstPIS ?? '01', 
-                  vBC: vProd.toFixed(2), 
-                  pPIS: item.pis?.pPIS?.toFixed(4) ?? '0.0000', 
-                  vPIS: item.pis?.vPIS?.toFixed(2) ?? '0.00' 
-                } 
-              },
-              COFINS: { 
-                COFINSAliq: { 
-                  CST: item.cofins?.cstCOFINS ?? '01', 
-                  vBC: vProd.toFixed(2), 
-                  pCOFINS: item.cofins?.pCOFINS?.toFixed(4) ?? '0.0000', 
-                  vCOFINS: item.cofins?.vCOFINS?.toFixed(2) ?? '0.00' 
-                } 
-              }
+              // Grupo de ICMS montado conforme o CST (tag precisa casar com o código).
+              ICMS: montarGrupoICMS(item.icms, vProd.toFixed(2)),
+              // Grupos IPI/PIS/COFINS montados conforme o CST (tag casa com o código).
+              IPI: montarGrupoIPI(item.ipi, vProd.toFixed(2)),
+              PIS: montarGrupoPIS(item.pis, vProd.toFixed(2)),
+              COFINS: montarGrupoCOFINS(item.cofins, vProd.toFixed(2)),
+              // IBS/CBS (Reforma Tributária 2026)
+              IBSCBS: montarGrupoIBSCBS(item.ibscbs, vProd.toFixed(2)),
             },
           };
         }),
@@ -342,6 +445,32 @@ export function gerarXMLNFe(dados: any): string {
             vCOFINS: Number(totalCOFINS ?? 0).toFixed(2),
             vOutro: Number(acrescimo ?? 0).toFixed(2),
             vNF: Number(totalNF).toFixed(2),
+          },
+          // Totais IBS/CBS (Reforma Tributária 2026 — NT 2025.002)
+          IBSCBSTot: {
+            vBCIBSCBS: Number(totalBaseIBSCBS ?? 0).toFixed(2),
+            gIBS: {
+              gIBSUF: {
+                vDif: '0.00',
+                vDevTrib: '0.00',
+                vIBSUF: Number(totalIBSUF ?? 0).toFixed(2),
+              },
+              gIBSMun: {
+                vDif: '0.00',
+                vDevTrib: '0.00',
+                vIBSMun: Number(totalIBSMun ?? 0).toFixed(2),
+              },
+              vIBS: Number(totalIBS ?? 0).toFixed(2),
+              vCredPres: '0.00',
+              vCredPresCondSus: '0.00',
+            },
+            gCBS: {
+              vDif: '0.00',
+              vDevTrib: '0.00',
+              vCBS: Number(totalCBS ?? 0).toFixed(2),
+              vCredPres: '0.00',
+              vCredPresCondSus: '0.00',
+            },
           },
         },
         transp: {

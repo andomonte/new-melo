@@ -749,18 +749,36 @@ export const gerarPreviewNF = async (
   
   doc.setFontSize(11).setFont('helvetica', 'bold');
   doc.text('Identificação do Emitente', emitterTextX, emitterTextY);
-  
+
+  // Razão social do emitente (autoritativo — independe da imagem do logo)
+  emitterTextY += 12;
+  doc.setFontSize(9).setFont('helvetica', 'bold');
+  doc.text(
+    getValue(dadosEmpresa.nomecontribuinte, 'EMITENTE').toUpperCase(),
+    emitterTextX,
+    emitterTextY,
+  );
+
   // Dados da empresa - fonte maior
-  emitterTextY += 14;
+  emitterTextY += 12;
   doc.setFontSize(8).setFont('helvetica', 'normal');
-  doc.text(`${getValue(dadosEmpresa.logradouro)}, No.${getValue(dadosEmpresa.numero)} PC 14 JANEIRO`, emitterTextX, emitterTextY);
+  const bairroEmp = getValue(dadosEmpresa.bairro);
+  doc.text(
+    `${getValue(dadosEmpresa.logradouro)}, No.${getValue(dadosEmpresa.numero)}${bairroEmp ? ' ' + bairroEmp : ''}`,
+    emitterTextX,
+    emitterTextY,
+  );
 
   emitterTextY += 10;
   doc.text(`CEP: ${getValue(dadosEmpresa.cep)} ${getValue(dadosEmpresa.municipio)} (${getValue(dadosEmpresa.uf)})`, emitterTextX, emitterTextY);
 
-  emitterTextY += 10;
-  const tel = getValue(dadosEmpresa.contato);
-  doc.text(`FONE: (${tel.substring(0, 2)})${tel.substring(2)}`, emitterTextX, emitterTextY);
+  // FONE só quando houver telefone (evita "FONE: ()")
+  const tel = getValue(dadosEmpresa.contato || dadosEmpresa.telefone || dadosEmpresa.fone);
+  if (tel && tel.replace(/\D/g, '').length >= 2) {
+    emitterTextY += 10;
+    const telNum = tel.replace(/\D/g, '');
+    doc.text(`FONE: (${telNum.substring(0, 2)})${telNum.substring(2)}`, emitterTextX, emitterTextY);
+  }
 
   // -- COLUNA 2: DANFE (DENTRO DO QUADRADO) - Layout compacto
   
@@ -1046,7 +1064,13 @@ export const gerarPreviewNF = async (
   drawField('MUNICÍPIO', getValue(fatura.cidade), currentX, y, fieldWidth, 15);
   currentX += fieldWidth;
   fieldWidth = 100;
-  drawField('FONE/FAX', getValue((fatura as any).contato || fatura.fone), currentX, y, fieldWidth, 15);
+  // FONE/FAX do DESTINATÁRIO = telefone do CLIENTE (fatura.fone). NÃO usar `contato`
+  // (pode conter metadados/JSON do faturamento). Sanitiza p/ nunca imprimir JSON/objeto.
+  const foneDestNF = (() => {
+    const v = getValue(fatura.fone || (fatura as any).telefone || '');
+    return /^[\s]*[[{]/.test(v) ? '' : v;
+  })();
+  drawField('FONE/FAX', foneDestNF, currentX, y, fieldWidth, 15);
   currentX += fieldWidth;
   fieldWidth = 35;
   drawField('UF', getValue(fatura.uf), currentX, y, fieldWidth, 15, 'center');
@@ -1075,6 +1099,22 @@ export const gerarPreviewNF = async (
   drawField('DATA DE ENTR./SAÍDA', dataHoraSaida, currentX, y, fieldWidth, 15);
 
   y += 25; // Aumentado para dar mais espaço
+
+  // Totais IBS/CBS calculados a partir dos ITENS (mesma fórmula da tabela de produtos),
+  // para o quadro "CÁLCULO DO IMPOSTO" e a observação baterem com as linhas dos itens
+  // (antes liam fatura.valor_ibs, que vinha 0 e ficava inconsistente).
+  const _valorItemIBSCBS = (p: any) =>
+    parseFloat(p.total_item || p.totalproduto || String(Number(p.qtd || 0) * Number(p.prunit || 0)) || '0');
+  const totalIBSCalc = (produtos || []).reduce(
+    (acc: number, p: any) => acc + (parseFloat((p as any).aliquota_ibs || (p as any).aliq_ibs || 0.1) / 100) * _valorItemIBSCBS(p),
+    0,
+  );
+  const totalCBSCalc = (produtos || []).reduce(
+    (acc: number, p: any) => acc + (parseFloat((p as any).aliquota_cbs || (p as any).aliq_cbs || 0.9) / 100) * _valorItemIBSCBS(p),
+    0,
+  );
+  const aliqIBSExib = Number((fatura as any).aliquota_ibs || (produtos?.[0] as any)?.aliquota_ibs || 0.1);
+  const aliqCBSExib = Number((fatura as any).aliquota_cbs || (produtos?.[0] as any)?.aliquota_cbs || 0.9);
 
   // 5. CÁLCULO DO IMPOSTO (NOVA LEI - IBS/CBS + ICMS/IPI)
   doc.setFontSize(7.45).setFont('helvetica', 'bold');
@@ -1105,11 +1145,12 @@ export const gerarPreviewNF = async (
   const linha2Y = impostoY + impostoH;
   // Assumindo que dadosNota ou fatura tenham esses campos. Se não tiverem, usar valores padrão ou placeholders.
   // Baseado na imagem anterior: Aliquota IBS, Valor IBS, Aliquota CBS, Valor CBS, IBS Estadual, IBS Municipal
-  drawField('ALÍQUOTA IBS (%)', formatPercent((fatura as any).aliquota_ibs || 0), margin, linha2Y, colW1, impostoH, 'right');
-  drawField('VALOR IBS', formatValue((fatura as any).valor_ibs || 0), margin + colW1, linha2Y, colW1, impostoH, 'right');
-  drawField('ALÍQUOTA CBS (%)', formatPercent((fatura as any).aliquota_cbs || 0), margin + colW1 * 2, linha2Y, colW1, impostoH, 'right');
-  drawField('VALOR CBS', formatValue((fatura as any).valor_cbs || 0), margin + colW1 * 3, linha2Y, colW1, impostoH, 'right');
-  drawField('IBS ESTADUAL', formatValue((fatura as any).ibs_estadual || 0), margin + colW1 * 4, linha2Y, colW1, impostoH, 'right');
+  drawField('ALÍQUOTA IBS (%)', formatPercent(aliqIBSExib), margin, linha2Y, colW1, impostoH, 'right');
+  drawField('VALOR IBS', formatValue(totalIBSCalc), margin + colW1, linha2Y, colW1, impostoH, 'right');
+  drawField('ALÍQUOTA CBS (%)', formatPercent(aliqCBSExib), margin + colW1 * 2, linha2Y, colW1, impostoH, 'right');
+  drawField('VALOR CBS', formatValue(totalCBSCalc), margin + colW1 * 3, linha2Y, colW1, impostoH, 'right');
+  // IBS é dividido em estadual + municipal; para mercadoria (transição) tratamos como estadual.
+  drawField('IBS ESTADUAL', formatValue((fatura as any).ibs_estadual || totalIBSCalc), margin + colW1 * 4, linha2Y, colW1, impostoH, 'right');
   drawField('IBS MUNICIPAL', formatValue((fatura as any).ibs_municipal || 0), margin + colW1 * 5, linha2Y, colW1, impostoH, 'right');
 
   // Linha 3 (7 colunas)
@@ -1609,18 +1650,26 @@ export const gerarPreviewNF = async (
   doc.setFontSize(5).setFont('helvetica', 'normal'); // Fonte reduzida para 5
   
   // 🆕 Observação obrigatória IBS/CBS (Lei Complementar nº 214/2025))
-  const aliquotaIBS = formatPercent(fatura.aliquota_ibs || 0.1);
-  const aliquotaCBS = formatPercent(fatura.aliquota_cbs || 0.9);
-  const valorIBS = formatValue(fatura.valor_ibs || 0);
-  const valorCBS = formatValue(fatura.valor_cbs || 0);
+  const aliquotaIBS = formatPercent(aliqIBSExib);
+  const aliquotaCBS = formatPercent(aliqCBSExib);
+  const valorIBS = formatValue(totalIBSCalc);
+  const valorCBS = formatValue(totalCBSCalc);
   
   const obsIBSCBS = `VALORES REFERENTES AO IBS (${aliquotaIBS}%) E CBS (${aliquotaCBS}%) CALCULADOS PARA FINS DE TRANSIÇÃO E APRENDIZADO, CONFORME LEI COMPLEMENTAR Nº 214/2025. ESTES VALORES NÃO COMPÕEM O TOTAL DA OPERAÇÃO NESTE PERÍODO. VALOR IBS: R$ ${valorIBS} | VALOR CBS: R$ ${valorCBS}`;
   
+  // Texto de regime conforme o CRT do emitente (1/2 = Simples Nacional, 3 = Regime Normal).
+  // Só o Simples exibe a frase obrigatória de crédito; Regime Normal não a exibe.
+  const crtEmp = String((dadosEmpresa as any).crt || '').trim();
+  const regimeTexto =
+    crtEmp === '3'
+      ? ''
+      : 'DOCUMENTO EMITIDO POR ME OU EPP OPTANTE PELO SIMPLES NACIONAL.\nNÃO GERA DIREITO A CRÉDITO FISCAL DE ICMS, ISS E IPI.\n\n';
+
   const infoText = `Venda: ${getValue(venda.nrovenda)} | Vendedor: ${getValue(
     fatura.nomevendedor,
   )} | Obs: ${getValue(
     venda.obs,
-  )}\nDOCUMENTO EMITIDO POR ME OU EPP OPTANTE PELO SIMPLES NACIONAL.\nNÃO GERA DIREITO A CRÉDITO FISCAL DE ICMS, ISS E IPI.\n\n${obsIBSCBS}`;
+  )}\n${regimeTexto}${obsIBSCBS}`;
   const infoLines = doc.splitTextToSize(infoText, infoComplWidth - 6);
   doc.text(infoLines, margin + 3, y + 30);
   

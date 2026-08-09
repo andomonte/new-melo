@@ -432,7 +432,13 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
   // Determinar CRT para saber qual estrutura de ICMS usar
   const crt = emitente?.crt || '1';
   const isSimples = crt === '1' || crt === '2'; // 1 = Simples Nacional, 2 = Simples Excesso
-  
+
+  // Acumuladores IBS/CBS (Reforma Tributária 2026) para o total IBSCBSTot
+  let accBaseIBSCBS = 0;
+  let accIBSUF = 0;
+  let accIBSMun = 0;
+  let accCBS = 0;
+
   for (const prod of produtos) {
     const det = infNFe.ele('det', { nItem: String(itemNum) });
     const prodEle = det.ele('prod');
@@ -482,11 +488,32 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
     // ICMS baseado no CRT
     const icms = imposto.ele('ICMS');
     if (isSimples) {
-      // Simples Nacional - usar CSOSN
-      const icmssn = icms.ele('ICMSSN102');
-      icmssn.ele('orig').txt('0').up();
-      icmssn.ele('CSOSN').txt('102').up(); // 102 = Tributada sem permissão de crédito
-      icmssn.up();
+      // Simples Nacional - CSOSN precisa casar com o CFOP/operação (senão a SEFAZ
+      // rejeita "CFOP não permitido para o CSOSN"). Mapeia a partir do CST/CFOP:
+      //   CST 60 ou CFOP 5405/6405 (ST já recolhido) -> CSOSN 500 (ICMSSN500)
+      //   CST 40/41/50 (isento/não trib.)            -> CSOSN 400 (ICMSSN102)
+      //   demais (tributado normal)                  -> CSOSN 102 (ICMSSN102)
+      const cstItem = String(prod.icms?.cstICMS ?? '').replace(/\D/g, '').padStart(2, '0').slice(-2);
+      const cfopItem = String(prod.cfop ?? '');
+      const origItem = String(prod.icms?.origem ?? '0');
+      const isST = cstItem === '60' || cfopItem === '5405' || cfopItem === '6405';
+
+      if (isST) {
+        const g = icms.ele('ICMSSN500');
+        g.ele('orig').txt(origItem).up();
+        g.ele('CSOSN').txt('500').up();
+        g.up();
+      } else if (['40', '41', '50'].includes(cstItem)) {
+        const g = icms.ele('ICMSSN102');
+        g.ele('orig').txt(origItem).up();
+        g.ele('CSOSN').txt('400').up(); // 400 = não tributada pelo Simples
+        g.up();
+      } else {
+        const g = icms.ele('ICMSSN102');
+        g.ele('orig').txt(origItem).up();
+        g.ele('CSOSN').txt('102').up(); // 102 = tributada sem permissão de crédito
+        g.up();
+      }
     } else {
       // Regime Normal - usar CST com valores reais
       const icms00 = icms.ele('ICMS00');
@@ -540,8 +567,42 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
     // NOTA: IPI NAO e permitido em NFC-e (modelo 65)
     // O IPI so existe para NF-e modelo 55 (venda entre empresas)
     // Se incluir IPI em NFC-e, a SEFAZ rejeita com erro 215 (Falha no schema XML)
-    // Da mesma forma, tags IBS e CBS ainda causam erro de schema se o ambiente não estiver atualizado.
-    // Por enquanto, manter apenas nos dados adicionais/PDF.
+
+    // IBS/CBS (Reforma Tributária 2026) — OBRIGATÓRIO na homologação AM
+    // (rejeição "IBS/CBS não informado"). Mesma estrutura da NF-e.
+    const baseIBSCBSItem = Number(prod.icms?.baseICMS ?? prod.valorTotal ?? 0);
+    const pIBSUFItem = Number((prod as any).ibs_e ?? 0.1); // IBS estadual (transição 2026)
+    const pIBSMunItem = Number((prod as any).ibs_m ?? 0); // IBS municipal
+    const pCBSItem = Number((prod as any).aliquota_cbs ?? 0.9);
+    const vIBSUFItem = Math.round(baseIBSCBSItem * pIBSUFItem) / 100;
+    const vIBSMunItem = Math.round(baseIBSCBSItem * pIBSMunItem) / 100;
+    const vIBSItem = Math.round((vIBSUFItem + vIBSMunItem) * 100) / 100;
+    const vCBSItem = Math.round(baseIBSCBSItem * pCBSItem) / 100;
+    accBaseIBSCBS += baseIBSCBSItem;
+    accIBSUF += vIBSUFItem;
+    accIBSMun += vIBSMunItem;
+    accCBS += vCBSItem;
+
+    const ibscbs = imposto.ele('IBSCBS');
+    ibscbs.ele('CST').txt(String((prod as any).cstibscbs ?? '000').padStart(3, '0')).up();
+    ibscbs.ele('cClassTrib').txt(String((prod as any).cclasstrib ?? '000001').padStart(6, '0')).up();
+    const gIBSCBS = ibscbs.ele('gIBSCBS');
+    gIBSCBS.ele('vBC').txt(baseIBSCBSItem.toFixed(2)).up();
+    const gIBSUFe = gIBSCBS.ele('gIBSUF');
+    gIBSUFe.ele('pIBSUF').txt(pIBSUFItem.toFixed(4)).up();
+    gIBSUFe.ele('vIBSUF').txt(vIBSUFItem.toFixed(2)).up();
+    gIBSUFe.up();
+    const gIBSMune = gIBSCBS.ele('gIBSMun');
+    gIBSMune.ele('pIBSMun').txt(pIBSMunItem.toFixed(4)).up();
+    gIBSMune.ele('vIBSMun').txt(vIBSMunItem.toFixed(2)).up();
+    gIBSMune.up();
+    gIBSCBS.ele('vIBS').txt(vIBSItem.toFixed(2)).up();
+    const gCBSe = gIBSCBS.ele('gCBS');
+    gCBSe.ele('pCBS').txt(pCBSItem.toFixed(4)).up();
+    gCBSe.ele('vCBS').txt(vCBSItem.toFixed(2)).up();
+    gCBSe.up();
+    gIBSCBS.up();
+    ibscbs.up();
 
     imposto.up(); // Fecha imposto
     det.up(); // Fecha det
@@ -572,7 +633,35 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
   total.ele('vCOFINS').txt(Number(totalCOFINS || 0).toFixed(2)).up();     // Total COFINS calculado
   total.ele('vOutro').txt(Number(acrescimo || 0).toFixed(2)).up();
   total.ele('vNF').txt(Number(totalNF || 0).toFixed(2)).up();
-  total.up().up();
+
+  // IBSCBSTot (Reforma Tributária 2026) — total obrigatório junto do grupo por item
+  const totalEle = total.up(); // fecha ICMSTot, retorna <total>
+  const ibscbsTot = totalEle.ele('IBSCBSTot');
+  ibscbsTot.ele('vBCIBSCBS').txt(accBaseIBSCBS.toFixed(2)).up();
+  const gIBST = ibscbsTot.ele('gIBS');
+  const gIBSUFt = gIBST.ele('gIBSUF');
+  gIBSUFt.ele('vDif').txt('0.00').up();
+  gIBSUFt.ele('vDevTrib').txt('0.00').up();
+  gIBSUFt.ele('vIBSUF').txt(accIBSUF.toFixed(2)).up();
+  gIBSUFt.up();
+  const gIBSMunt = gIBST.ele('gIBSMun');
+  gIBSMunt.ele('vDif').txt('0.00').up();
+  gIBSMunt.ele('vDevTrib').txt('0.00').up();
+  gIBSMunt.ele('vIBSMun').txt(accIBSMun.toFixed(2)).up();
+  gIBSMunt.up();
+  gIBST.ele('vIBS').txt((accIBSUF + accIBSMun).toFixed(2)).up();
+  gIBST.ele('vCredPres').txt('0.00').up();
+  gIBST.ele('vCredPresCondSus').txt('0.00').up();
+  gIBST.up();
+  const gCBSt = ibscbsTot.ele('gCBS');
+  gCBSt.ele('vDif').txt('0.00').up();
+  gCBSt.ele('vDevTrib').txt('0.00').up();
+  gCBSt.ele('vCBS').txt(accCBS.toFixed(2)).up();
+  gCBSt.ele('vCredPres').txt('0.00').up();
+  gCBSt.ele('vCredPresCondSus').txt('0.00').up();
+  gCBSt.up();
+  ibscbsTot.up();
+  totalEle.up(); // fecha <total>
 
   // Transporte - NFC-e DEVE usar modFrete=9 (sem frete)
   infNFe.ele('transp').ele('modFrete').txt('9').up().up(); // 9 = Sem frete (obrigatório para NFC-e)

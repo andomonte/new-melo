@@ -173,7 +173,7 @@ export default async function handle(
     }
 
     const updateQuery = `
-      UPDATE dadosempresa
+      UPDATE db_manaus."dadosempresa"
       SET ${updates.join(', ')}
       WHERE cgc = $${paramIndex++}
       RETURNING *;
@@ -198,14 +198,14 @@ export default async function handle(
         if (ie.inscricaoestadual && ie.inscricaoestadual.trim() !== '') {
           // Verifica se a IE já existe
           const checkIEQuery = `
-            SELECT inscricaoestadual FROM db_ie WHERE inscricaoestadual = $1
+            SELECT inscricaoestadual FROM db_manaus."db_ie" WHERE inscricaoestadual = $1
           `;
           const checkResult = await client.query(checkIEQuery, [ie.inscricaoestadual]);
 
           if (checkResult.rows.length === 0) {
             // Se não existe, insere
             const insertIEQuery = `
-              INSERT INTO db_ie (cgc, inscricaoestadual, nomecontribuinte)
+              INSERT INTO db_manaus."db_ie" (cgc, inscricaoestadual, nomecontribuinte)
               VALUES ($1, $2, $3)
             `;
             await client.query(insertIEQuery, [
@@ -216,7 +216,7 @@ export default async function handle(
           } else {
             // Se já existe, atualiza
             const updateIEQuery = `
-              UPDATE db_ie
+              UPDATE db_manaus."db_ie"
               SET cgc = $1, nomecontribuinte = $2
               WHERE inscricaoestadual = $3
             `;
