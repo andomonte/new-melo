@@ -21,7 +21,7 @@ export default function ConsultaFatura({ }: ConsultaFaturaProps) {
     impostoNa1Parcela: false,
     freteNa1Parcela: false,
   });
-  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string }[]>([]);
+  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string; valor: number }[]>([]);
   const [opcoesTipoFatura, setOpcoesTipoFatura] = useState([
     { value: 'BOLETO', label: 'BOLETO' },
     { value: 'BOLETO BANCARIO', label: 'BOLETO BANCÁRIO' },

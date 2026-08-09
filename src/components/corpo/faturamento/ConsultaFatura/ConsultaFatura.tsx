@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import FaturamentoNota from '../novoFaturamento/modalFaturamentonota/FaturamentoNota';
 import { useRouter } from 'next/router';
@@ -9,6 +9,39 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import NovoFaturamento from '../novoFaturamento';
 import { toast } from 'sonner';
 import { StatusEstruturaBanco } from '@/components/common/StatusEstruturaBanco';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
+
+// Cor da LINHA por status (estilo Delphi), calibrada p/ tema escuro:
+// borda lateral + fundo levíssimo + texto das células tonalizado. Prioridade
+// (a categoria vem de __statusCor no wrapper): Cancelado > Denegada > Agrupado > Com/Sem cobrança.
+// Listra lateral via box-shadow inset (funciona com border-collapse, diferente de border-l)
+// + fundo levíssimo + texto tonalizado. Cores por categoria (__statusCor do wrapper).
+// Sem fundo colorido (distraía): só a listra lateral + o texto tonalizado, estilo Delphi.
+const MAPA_COR_LINHA: Record<string, string> = {
+  cancel:   'shadow-[inset_4px_0_0_0_#f43f5e] [&_td]:text-rose-700 dark:[&_td]:text-rose-300',
+  denegada: 'shadow-[inset_4px_0_0_0_#f59e0b] [&_td]:text-amber-700 dark:[&_td]:text-amber-300',
+  agrupado: 'shadow-[inset_4px_0_0_0_#3b82f6] [&_td]:text-blue-700 dark:[&_td]:text-blue-300',
+  cobranca: 'shadow-[inset_4px_0_0_0_#10b981] [&_td]:text-emerald-700 dark:[&_td]:text-emerald-300',
+  sem:      'shadow-[inset_4px_0_0_0_#ec4899] [&_td]:text-pink-700 dark:[&_td]:text-pink-300',
+};
+
+const fmtData = (d: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+// Calcula o range De/Até de um atalho de período (Até sempre = hoje).
+const calcPeriodo = (preset: string): { de: string; ate: string } => {
+  const hoje = new Date();
+  const ate = fmtData(hoje);
+  if (preset === 'hoje') return { de: ate, ate };
+  if (preset === 'semana') {
+    const d = new Date(hoje); d.setDate(hoje.getDate() - 6);
+    return { de: fmtData(d), ate };
+  }
+  if (preset === 'mes') return { de: fmtData(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), ate };
+  if (preset === 'ano') return { de: fmtData(new Date(hoje.getFullYear(), 0, 1)), ate };
+  return { de: '', ate: '' }; // todos
+};
 
 export default function ConsultaFaturasPage() {
   console.log('🎬 ConsultaFaturasPage RENDERIZANDO');
@@ -24,9 +57,22 @@ export default function ConsultaFaturasPage() {
   console.log('📊 Estado carregando:', carregando);
   const [filtrosAtivos, setFiltrosAtivos] = useState<any[]>([]);
   const [termoBusca, setTermoBusca] = useState('');
+  // Ref sempre atual do termo (buscarFaturas é useCallback sem deps → sem ref pegaria
+  // o valor inicial). A busca só dispara no Enter/blur, então basta ler o ref na hora.
+  const termoBuscaRef = useRef('');
+  termoBuscaRef.current = termoBusca;
+
+  // Período (De/Até) — atalhos preenchem o range; De/Até é a fonte da verdade.
+  // Default = Mês (1º dia do mês até hoje). `periodoRef` é lido pelo buscarFaturas
+  // (useCallback sem deps), assim TODAS as chamadas já incluem o filtro de data.
+  const [dataDe, setDataDe] = useState(() => calcPeriodo('hoje').de);
+  const [dataAte, setDataAte] = useState(() => calcPeriodo('hoje').ate);
+  const [presetPeriodo, setPresetPeriodo] = useState<string>('hoje');
+  const periodoRef = useRef(calcPeriodo('hoje'));
+  const [legendaAberta, setLegendaAberta] = useState(false);
   const router = useRouter();
   const [filtroAgrupadas, setFiltroAgrupadas] = useState<'todas' | 'agrupadas'>('todas');
-  const [filtroStatusNFe, setFiltroStatusNFe] = useState<'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas'>('todas');
+  const [filtroStatusNFe, setFiltroStatusNFe] = useState<'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas' | 'pendentes'>('todas');
   const [filtroCobranca, setFiltroCobranca] = useState<'todas' | 'com' | 'sem'>('todas');
   const [faturasParaFaturar, setFaturasParaFaturar] = useState<any[] | null>(null);
   const [dadosFaturasAgrupadas, setDadosFaturasAgrupadas] = useState<any[] | null>(null);
@@ -60,7 +106,7 @@ export default function ConsultaFaturasPage() {
   perPage = 10,
   filtros: any[] = [],
   filtroAgrupadasParam = 'todas' as 'todas' | 'agrupadas',
-  filtroStatusNFeParam = 'todas' as 'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas',
+  filtroStatusNFeParam = 'todas' as 'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas' | 'pendentes',
   filtroCobrancaParam = 'todas' as 'todas' | 'com' | 'sem'
  ) => {
   console.log('🚀 buscarFaturas INICIADA', { page, perPage, filtros, filtroAgrupadasParam, filtroStatusNFeParam });
@@ -87,14 +133,22 @@ export default function ConsultaFaturasPage() {
       ? [...filtros.filter((f) => colunasValidas.includes(f.campo))]
       : [];
 
-    if (termoBusca?.trim()) {
-      const busca = termoBusca.trim().toLowerCase();
+    if (termoBuscaRef.current?.trim()) {
+      const busca = termoBuscaRef.current.trim().toLowerCase();
       filtrosLimpos.push(
         { campo: 'codfat', tipo: 'contém', valor: busca, global: true },
         { campo: 'nroform', tipo: 'contém', valor: busca, global: true },
         { campo: 'cliente_nome', tipo: 'contém', valor: busca, global: true },
         { campo: 'codvend', tipo: 'contém', valor: busca, global: true },
       );
+    }
+
+    // Período (De/Até) — backend já suporta maior_igual/menor_igual no campo `data`.
+    if (periodoRef.current?.de) {
+      filtrosLimpos.push({ campo: 'data', tipo: 'maior_igual', valor: periodoRef.current.de });
+    }
+    if (periodoRef.current?.ate) {
+      filtrosLimpos.push({ campo: 'data', tipo: 'menor_igual', valor: periodoRef.current.ate });
     }
 
     // Filtro para faturas agrupadas
@@ -134,6 +188,14 @@ export default function ConsultaFaturasPage() {
         campo: 'denegada',
         tipo: 'igual',
         valor: 'S',
+      });
+    } else if (filtroStatusNFeParam === 'pendentes') {
+      // Pendente = casa com a pill: nenhuma NFe emitida (o LATERAL não achou linha
+      // em dbfat_nfe, logo nfe_status é NULL). Denegada tem registro na SEFAZ.
+      filtrosLimpos.push({
+        campo: 'nfe_status',
+        tipo: 'nulo',
+        valor: '',
       });
     }
     // Se for 'todas', não adiciona nenhum filtro de status NFe
@@ -186,6 +248,35 @@ export default function ConsultaFaturasPage() {
   };
 
   const [abrirNovoFaturamento, setAbrirNovoFaturamento] = useState(false);
+
+  // Navegação por teclado (setas ↑/↓) na grade, no padrão de produtos/requisição.
+  // `linhasExibidas` acompanha a ORDEM exibida (filtro + ordenação de coluna),
+  // reportada pelo DataTable via onOrderedRowsChange, para o índice bater com a tela.
+  const [linhasExibidas, setLinhasExibidas] = useState<any[]>([]);
+
+  // Abre o menu "Ações" da linha selecionada (clica o trigger do dropdown na linha ativa).
+  const abrirAcoesLinhaAtiva = () => {
+    const rowEl = document.querySelector<HTMLElement>('.' + CLASSE_LINHA_ATIVA);
+    const btn = rowEl?.querySelector<HTMLElement>('button[aria-haspopup="menu"]');
+    btn?.click();
+  };
+  // Abre um novo faturamento (mesmo do botão "Novo").
+  const abrirNovoFaturamentoLimpo = () => {
+    setFaturasParaFaturar(null);
+    setDadosFaturasAgrupadas(null);
+    setAbrirNovoFaturamento(true);
+  };
+
+  const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<any>({
+    data: linhasExibidas,
+    ativo: !abrirNovoFaturamento && !legendaAberta,
+    // Atalhos (padrão da tela de produtos): ↑/↓ navega, Enter abre ações, Ctrl+N = Novo.
+    onEnter: () => abrirAcoesLinhaAtiva(),
+    atalhos: [
+      { key: 'n', ctrl: true, precisaLinha: false, handler: () => abrirNovoFaturamentoLimpo() },
+    ],
+  });
+
   const handleNovaFatura = () => {
     // Aqui você pode navegar para a página de nova fatura
     router.push('/faturamento/novoFaturamento');
@@ -323,16 +414,208 @@ export default function ConsultaFaturasPage() {
     }
   }, [primeiroCarregamento, buscarFaturas]); // Dependências corretas
 
-  useEffect(() => {
-    // Busca com delay ao alterar termoBusca
-    if (!primeiroCarregamento && termoBusca !== undefined) {
-      console.log('🔍 termoBusca alterado:', termoBusca);
-      const delay = setTimeout(() => {
-        buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca);
-      }, 300);
-      return () => clearTimeout(delay);
+  // Busca dispara apenas no Enter ou ao sair do campo (onBuscar) — não a cada tecla.
+
+  // ---- Período (De/Até + atalhos) ----
+  const selecionarPreset = (p: string) => {
+    const { de, ate } = calcPeriodo(p);
+    setPresetPeriodo(p);
+    setDataDe(de);
+    setDataAte(ate);
+    periodoRef.current = { de, ate };
+    buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca);
+  };
+  const mudarDataManual = (campo: 'de' | 'ate', valor: string) => {
+    const novo = { de: campo === 'de' ? valor : dataDe, ate: campo === 'ate' ? valor : dataAte };
+    setPresetPeriodo(''); // range personalizado — nenhum atalho aceso
+    if (campo === 'de') setDataDe(valor); else setDataAte(valor);
+    periodoRef.current = novo;
+    buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca);
+  };
+
+  // ---- Legenda-filtro (cada chip alterna um filtro existente do backend) ----
+  const toggleLegenda = (cat: 'cancel' | 'denegada' | 'agrupado' | 'cobranca' | 'sem') => {
+    if (cat === 'cancel') {
+      const n = filtroStatusNFe === 'canceladas' ? 'todas' : 'canceladas';
+      setFiltroStatusNFe(n as any);
+      buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, n as any, filtroCobranca);
+    } else if (cat === 'denegada') {
+      const n = filtroStatusNFe === 'denegadas' ? 'todas' : 'denegadas';
+      setFiltroStatusNFe(n as any);
+      buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, n as any, filtroCobranca);
+    } else if (cat === 'agrupado') {
+      const n = filtroAgrupadas === 'agrupadas' ? 'todas' : 'agrupadas';
+      setFiltroAgrupadas(n as any);
+      buscarFaturas(1, meta.perPage, filtrosAtivos, n as any, filtroStatusNFe, filtroCobranca);
+    } else if (cat === 'cobranca') {
+      const n = filtroCobranca === 'com' ? 'todas' : 'com';
+      setFiltroCobranca(n as any);
+      buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, n as any);
+    } else {
+      const n = filtroCobranca === 'sem' ? 'todas' : 'sem';
+      setFiltroCobranca(n as any);
+      buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, n as any);
     }
-  }, [termoBusca, primeiroCarregamento, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, buscarFaturas]); // Todas as dependências
+  };
+
+  // ---- Filtro por Status NFe (dropdown na coluna "Status NFe") ----
+  // Casa 1:1 com a pill da coluna. Um por vez (backend já é enum).
+  const opcoesStatusNFe = [
+    { value: 'autorizadas', label: 'Autorizada' },
+    { value: 'rejeitadas', label: 'Rejeitada' },
+    { value: 'pendentes', label: 'Pendente' },
+    { value: 'canceladas', label: 'Cancelada' },
+    { value: 'denegadas', label: 'Denegada' },
+  ];
+  const mudarStatusNFe = (v: string) => {
+    setFiltroStatusNFe(v as any);
+    buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, v as any, filtroCobranca);
+  };
+
+  // Legenda-filtro (renderizada no RODAPÉ da tabela, ao lado de "Colunas").
+  const legendaItens = [
+    ['cancel', 'Cancelado', 'bg-rose-500', filtroStatusNFe === 'canceladas'],
+    ['denegada', 'Denegada', 'bg-amber-400', filtroStatusNFe === 'denegadas'],
+    ['agrupado', 'Agrupado', 'bg-blue-500', filtroAgrupadas === 'agrupadas'],
+    ['cobranca', 'Com cobrança', 'bg-emerald-500', filtroCobranca === 'com'],
+    ['sem', 'Sem cobrança', 'bg-pink-500', filtroCobranca === 'sem'],
+  ] as [any, string, string, boolean][];
+  const legendaAtivos = legendaItens.filter((i) => i[3]).length;
+
+  // Legenda-filtro compacta: um botão (com preview das cores) que abre um popover
+  // com os NOMES + cores clicáveis. Cabe numa linha no rodapé e mostra o significado.
+  const legendaFiltro = (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setLegendaAberta((v) => !v)}
+        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-xs text-gray-700 dark:text-gray-200 hover:border-gray-400 transition-colors"
+      >
+        <span className="flex items-center gap-0.5">
+          <span className="w-2 h-2 rounded-full bg-rose-500" />
+          <span className="w-2 h-2 rounded-full bg-amber-400" />
+          <span className="w-2 h-2 rounded-full bg-blue-500" />
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="w-2 h-2 rounded-full bg-pink-500" />
+        </span>
+        <span className="hidden lg:inline">Legenda</span>
+        {legendaAtivos > 0 && (
+          <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-blue-600 text-white text-[10px] leading-none">
+            {legendaAtivos}
+          </span>
+        )}
+        <span className="text-[9px] text-gray-400">▴</span>
+      </button>
+
+      {legendaAberta && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setLegendaAberta(false)} />
+          <div className="absolute bottom-full left-0 mb-2 z-50 w-56 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-2 shadow-xl">
+            <div className="px-1 pb-1 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              Legenda / filtro por status
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {legendaItens.map(([cat, label, cor, ativo]) => (
+                <button
+                  key={cat}
+                  onClick={() => toggleLegenda(cat)}
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                    ativo
+                      ? 'bg-blue-50 dark:bg-blue-900/30 text-gray-900 dark:text-white font-medium'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full ${cor}`} />
+                  <span className="flex-1 text-left">{label}</span>
+                  {ativo && <span className="text-blue-600 dark:text-blue-400">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // Toolbar (Tipo + Período) — injetada no HEADER da tabela (headerLeftSlot),
+  // formando uma barra única com a busca e o Opções.
+  const toolbarFiltros = (
+    <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Tipo:</span>
+        <div className="flex gap-1">
+          <button
+            onClick={() => {
+              setFiltroAgrupadas('todas');
+              buscarFaturas(1, meta.perPage, filtrosAtivos, 'todas', filtroStatusNFe, filtroCobranca);
+            }}
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${
+              filtroAgrupadas === 'todas'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
+            }`}
+          >
+            Todas
+          </button>
+          <button
+            onClick={() => {
+              setFiltroAgrupadas('agrupadas');
+              buscarFaturas(1, meta.perPage, filtrosAtivos, 'agrupadas', filtroStatusNFe, filtroCobranca);
+            }}
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${
+              filtroAgrupadas === 'agrupadas'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
+            }`}
+          >
+            Agrupadas
+          </button>
+        </div>
+      </div>
+      <div className="h-6 w-px bg-gray-300 dark:bg-zinc-600 hidden sm:block" />
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Período:</span>
+        <div className="flex gap-1">
+          {(
+            [
+              ['hoje', 'Hoje'],
+              ['semana', 'Semana'],
+              ['mes', 'Mês'],
+              ['ano', 'Ano'],
+              ['todos', 'Todos'],
+            ] as [string, string][]
+          ).map(([p, label]) => (
+            <button
+              key={p}
+              onClick={() => selecionarPreset(p)}
+              className={`px-3 py-1 text-xs font-medium rounded-full transition-all ${
+                presetPeriodo === p
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+          <span>De</span>
+          <input
+            type="date"
+            value={dataDe}
+            onChange={(e) => mudarDataManual('de', e.target.value)}
+            className="px-2 py-1 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-gray-800 dark:text-white text-xs"
+          />
+          <span>Até</span>
+          <input
+            type="date"
+            value={dataAte}
+            onChange={(e) => mudarDataManual('ate', e.target.value)}
+            className="px-2 py-1 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-gray-800 dark:text-white text-xs"
+          />
+        </div>
+      </div>
+    </div>
+  );
   const [limiteColunas, setLimiteColunas] = useState(9);
   const [mostrarStatusBanco, setMostrarStatusBanco] = useState(false);
   
@@ -379,216 +662,8 @@ export default function ConsultaFaturasPage() {
           </div>
         )} */}
 
-        {/* Filtros com design moderno */}
-        <div className="flex flex-wrap items-center gap-6 mb-4 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-200 dark:border-zinc-700">
-          {/* Tipo de Fatura */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              Tipo:
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={() => {
-                  setFiltroAgrupadas('todas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, 'todas', filtroStatusNFe, filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
-                  filtroAgrupadas === 'todas'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
-                }`}
-              >
-                Todas
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroAgrupadas('agrupadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, 'agrupadas', filtroStatusNFe, filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroAgrupadas === 'agrupadas'
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
-                }`}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Agrupadas
-              </button>
-            </div>
-          </div>
-
-          {/* Separador vertical */}
-          <div className="h-8 w-px bg-gray-300 dark:bg-zinc-600 hidden sm:block"></div>
-
-          {/* Status NFe */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              Status NFe:
-            </span>
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => {
-                  setFiltroStatusNFe('todas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'todas', filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
-                  filtroStatusNFe === 'todas'
-                    ? 'bg-gray-700 text-white shadow-md'
-                    : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
-                }`}
-              >
-                Todas
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroStatusNFe('autorizadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'autorizadas', filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroStatusNFe === 'autorizadas'
-                    ? 'bg-green-600 text-white shadow-md'
-                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
-                }`}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Autorizadas
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroStatusNFe('canceladas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'canceladas', filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroStatusNFe === 'canceladas'
-                    ? 'bg-red-600 text-white shadow-md'
-                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
-                }`}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Canceladas
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroStatusNFe('rejeitadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'rejeitadas', filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroStatusNFe === 'rejeitadas'
-                    ? 'bg-yellow-600 text-white shadow-md'
-                    : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50'
-                }`}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Rejeitadas
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroStatusNFe('denegadas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, 'denegadas', filtroCobranca);
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroStatusNFe === 'denegadas'
-                    ? 'bg-orange-600 text-white shadow-md'
-                    : 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50'
-                }`}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                </svg>
-                Denegadas
-              </button>
-            </div>
-          </div>
-
-          {/* Separador vertical */}
-          <div className="h-8 w-px bg-gray-300 dark:bg-zinc-600 hidden sm:block"></div>
-
-          {/* Cobrança (flag dbfatura.cobranca) */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              Cobrança:
-            </span>
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => {
-                  setFiltroCobranca('todas');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, 'todas');
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
-                  filtroCobranca === 'todas'
-                    ? 'bg-gray-700 text-white shadow-md'
-                    : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-zinc-600'
-                }`}
-              >
-                Todas
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroCobranca('com');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, 'com');
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroCobranca === 'com'
-                    ? 'bg-green-700 text-white shadow-md'
-                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-green-700 inline-block" />
-                Com cobrança
-              </button>
-              <button
-                onClick={() => {
-                  setFiltroCobranca('sem');
-                  buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, 'sem');
-                }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1 ${
-                  filtroCobranca === 'sem'
-                    ? 'bg-pink-600 text-white shadow-md'
-                    : 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400 hover:bg-pink-200 dark:hover:bg-pink-900/50'
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block" />
-                Sem cobrança
-              </button>
-            </div>
-          </div>
-
-          {/* Separador */}
-          <div className="h-8 w-px bg-gray-300 dark:bg-zinc-600 hidden lg:block"></div>
-
-          {/* Legenda de cores */}
-          <div className="flex flex-wrap items-center gap-3 ml-auto">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400 hidden sm:block">Legenda:</span>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />
-              <span className="text-xs text-gray-600 dark:text-gray-300">Cancelado</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />
-              <span className="text-xs text-gray-600 dark:text-gray-300">Denegada</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
-              <span className="text-xs text-gray-600 dark:text-gray-300">Agrupado</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-700 inline-block" />
-              <span className="text-xs text-gray-600 dark:text-gray-300">Cobrança</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-pink-500 inline-block" />
-              <span className="text-xs text-gray-600 dark:text-gray-300">S/ Cobrança</span>
-            </div>
-          </div>
-        </div>
+        {/* Toolbar (Tipo + Período) foi para o HEADER da tabela (headerLeftSlot),
+            junto da busca e do Opções — barra única, mais espaço pra grade. */}
         <DataTableFaturasAvancado
           faturas={faturas}
           meta={meta}
@@ -614,9 +689,28 @@ export default function ConsultaFaturasPage() {
           }
           termoBusca={termoBusca}
           setTermoBusca={setTermoBusca}
+          onBuscar={() =>
+            buscarFaturas(1, meta.perPage, filtrosAtivos, filtroAgrupadas, filtroStatusNFe, filtroCobranca)
+          }
           limiteColunas={limiteColunas}
           onLimiteColunasChange={setLimiteColunas}
           onCriarGrupoPagamento={handleCriarGrupoPagamento}
+          onOrderedRowsChange={setLinhasExibidas}
+          rowClassName={(row, i) => {
+            const cor = MAPA_COR_LINHA[(row as any).__statusCor] || '';
+            const sel =
+              i === linhaSelecionada
+                ? `ring-1 ring-inset ring-blue-400 ${CLASSE_LINHA_ATIVA}`
+                : '';
+            return `${cor} ${sel}`;
+          }}
+          onRowClick={(row) => setLinhaSelecionada(linhasExibidas.indexOf(row))}
+          legendaSlot={legendaFiltro}
+          headerLeftSlot={toolbarFiltros}
+          searchCompacto
+          statusFilterValue={filtroStatusNFe}
+          onStatusFilterChange={mudarStatusNFe}
+          statusFilterOptions={opcoesStatusNFe}
         />
       </main>
       <Dialog

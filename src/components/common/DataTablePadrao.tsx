@@ -76,6 +76,15 @@ interface DataTablePadraoProps {
   userName?: string;
   initialFilters?: Record<string, { tipo: string; valor: string }>;
   statusFilterOptions?: { value: string; label: string }[];
+  /** Coluna (header) que renderiza o dropdown de status na linha de filtros.
+   *  Default 'Status'. Ex.: 'status' na Consulta de Faturas (coluna "Status NFe"). */
+  statusFilterColumn?: string;
+  /** Modo controlado do dropdown de status: valor atual selecionado. */
+  statusFilterValue?: string;
+  /** Modo controlado: chamado com o valor selecionado (o pai traduz para os
+   *  filtros específicos do backend). Quando informado, o dropdown NÃO usa o
+   *  pipeline genérico de filtros de coluna. */
+  onStatusFilterChange?: (value: string) => void;
   /** Props do DataTableFiltro para compatibilidade */
   semColunaDeAcaoPadrao?: boolean;
   onRowClick?: (row: any) => void;
@@ -83,6 +92,13 @@ interface DataTablePadraoProps {
   limiteColunas?: number;
   onLimiteColunasChange?: (novoLimite: number) => void;
   customHeaderActions?: React.ReactNode;
+  /** Conteúdo extra no rodapé: à esquerda (após "Colunas") e à direita (antes da paginação). */
+  footerLeftSlot?: React.ReactNode;
+  footerRightSlot?: React.ReactNode;
+  /** Conteúdo à ESQUERDA do header — vira a toolbar única (filtros + busca na mesma linha). */
+  headerLeftSlot?: React.ReactNode;
+  /** Busca compacta (largura fixa à direita) em vez de ocupar a linha inteira. */
+  searchCompacto?: boolean;
   /** Rótulos customizados por coluna (override do mapa global obterNomeAmigavel) */
   columnLabels?: Record<string, string>;
   /** Quando informado, controla o valor da busca (mantém o texto em sincronia
@@ -148,6 +164,9 @@ export default function DataTablePadrao({
   userName,
   initialFilters,
   statusFilterOptions,
+  statusFilterColumn,
+  statusFilterValue,
+  onStatusFilterChange,
   carregando,
   onSearchBlur,
   semColunaDeAcaoPadrao,
@@ -155,6 +174,10 @@ export default function DataTablePadrao({
   renderCell,
   limiteColunas,
   onLimiteColunasChange,
+  footerLeftSlot,
+  footerRightSlot,
+  headerLeftSlot,
+  searchCompacto,
   customHeaderActions,
   columnLabels,
   searchValue,
@@ -593,7 +616,9 @@ export default function DataTablePadrao({
     <div className="relative border border-gray-300 dark:border-gray-300 bg-white dark:bg-zinc-900 rounded-lg flex flex-col flex-1 min-h-0 overflow-hidden shadow-sm">
       {/* Cabeçalho de busca */}
       <div className="border-b border-gray-200 dark:border-zinc-700 p-2">
-        <div className="flex justify-between items-center gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          {headerLeftSlot}
+          <div className={searchCompacto ? 'w-56 sm:w-72 shrink-0 ml-auto' : 'flex-1 min-w-0'}>
           <SearchInput
             placeholder={searchInputPlaceholder ?? 'Pesquisar...'}
             value={searchValue !== undefined ? termoBuscaGlobal : undefined}
@@ -607,6 +632,7 @@ export default function DataTablePadrao({
             }}
             onKeyDown={onSearchKeyDown}
           />
+          </div>
 
           <div className="flex items-center gap-2">
             {searchRightSlot}
@@ -853,10 +879,21 @@ export default function DataTablePadrao({
                         className="px-2 py-1 bg-gray-50 dark:bg-zinc-900"
                         style={header === '☑️' ? { width: '40px', maxWidth: '40px' } : header === 'Ações' ? { width: '50px', maxWidth: '50px' } : undefined}
                       >
-                      {header === 'Status' ? (
+                      {header === (statusFilterColumn ?? 'Status') ? (
                         <RadixSelect
-                          value={filtrosColuna['status']?.valor || 'todos'}
+                          value={
+                            onStatusFilterChange
+                              ? (statusFilterValue ?? 'todas')
+                              : (filtrosColuna['status']?.valor || 'todos')
+                          }
                           onValueChange={(novoValor) => {
+                            // Modo controlado externo (ex.: "Status NFe" da Consulta
+                            // de Faturas): o pai traduz o valor para os filtros
+                            // específicos do backend (autorizadas/rejeitadas/etc.).
+                            if (onStatusFilterChange) {
+                              onStatusFilterChange(novoValor);
+                              return;
+                            }
                             const valor = novoValor === 'todos' ? '' : novoValor;
                             const novosFiltros = { ...filtrosColuna };
                             if (valor) {
@@ -876,7 +913,7 @@ export default function DataTablePadrao({
                             <RadixSelectValue />
                           </RadixSelectTrigger>
                           <RadixSelectContent>
-                            <RadixSelectItem value="todos">Todos</RadixSelectItem>
+                            <RadixSelectItem value={onStatusFilterChange ? 'todas' : 'todos'}>Todos</RadixSelectItem>
                             {(statusFilterOptions || [
                               { value: 'pendente_parcial', label: 'Pendente/Parcial' },
                               { value: 'pago', label: 'Pago' },
@@ -1168,8 +1205,11 @@ export default function DataTablePadrao({
               </div>
             )}
           </div>
+          {footerLeftSlot}
         </div>
 
+        <div className="flex items-center gap-4">
+        {footerRightSlot}
         <div className="flex gap-3 items-center text-xs text-gray-700 dark:text-gray-300">
           <span className="whitespace-nowrap text-xs font-medium">
             {isLoading && !meta?.total ? (
@@ -1235,6 +1275,7 @@ export default function DataTablePadrao({
               <ChevronsRight size={16} />
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

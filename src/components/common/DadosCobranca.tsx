@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import FormInput from '@/components/common/FormInput';
 import SelectInput from '@/components/common/SelectPadrao';
 import SecaoCollapse from '@/components/common/SecaoCollapse';
@@ -6,6 +6,10 @@ import { FaMoneyBill } from 'react-icons/fa6';
 import { FileSymlink } from 'lucide-react';
 import { TrashIcon } from '@radix-ui/react-icons';
 import { toast } from 'sonner';
+import {
+  carregarFeriados,
+  getProximoDiaUtil,
+} from '@/components/corpo/vendas/novaVenda/prazo';
 
 interface Banco {
   banco: string;
@@ -14,7 +18,8 @@ interface Banco {
 
 interface Parcela {
   dias: number;
-  vencimento: string;
+  vencimento: string; // yyyy-MM-dd
+  valor: number;
 }
 
 interface FormCobranca {
@@ -35,9 +40,22 @@ interface Props {
   parcelas: Parcela[];
   setParcelas: React.Dispatch<React.SetStateAction<Parcela[]>>;
   opcoesTipoFatura: { value: string; label: string }[];
+  /** Valor total da nota/fatura — base para dividir o valor das parcelas. */
+  totalNota?: number;
   onGerarPreviewBoleto?: () => void;
   padraoAberto?: boolean;
 }
+
+const fmtLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+
+const money = (n: number) =>
+  Number(n || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export default function DadosCobranca({
   statusVenda,
@@ -47,12 +65,83 @@ export default function DadosCobranca({
   parcelas,
   setParcelas,
   opcoesTipoFatura,
+  totalNota = 0,
   onGerarPreviewBoleto,
   padraoAberto = true,
 }: Props) {
+  // Intervalo + quantidade (mesmo mecanismo da tela de faturar V2).
+  const [intervaloDias, setIntervaloDias] = useState<string>('30');
+  const [qtdParcelas, setQtdParcelas] = useState<string>('');
+
+  // Carrega feriados (para o ajuste de dia útil de getProximoDiaUtil).
+  useEffect(() => {
+    const ano = new Date().getFullYear();
+    carregarFeriados(ano);
+    carregarFeriados(ano + 1);
+  }, []);
+
   const handleCobrancaChange = (field: keyof FormCobranca, value: any) => {
     setFormCobranca((prev) => ({ ...prev, [field]: value }));
   };
+
+  const isBoleto =
+    formCobranca.tipoFatura === 'BOLETO' ||
+    formCobranca.tipoFatura === 'BOLETO BANCARIO';
+
+  // Gera N parcelas: intervalo acumulado, ajustando p/ dia útil, e divide o
+  // total da nota igualmente (a última parcela absorve o arredondamento).
+  const gerarParcelas = () => {
+    const prazo = parseInt(intervaloDias) || 0;
+    const qtd = parseInt(qtdParcelas) || 0;
+    if (prazo <= 0 || qtd <= 0) {
+      toast.error('Informe um intervalo e uma quantidade válidos.');
+      return;
+    }
+    const total = Number(totalNota) || 0;
+    const valorBase = Math.floor((total / qtd) * 100) / 100;
+    const base = new Date();
+    const novas: Parcela[] = [];
+    let acum = 0;
+    for (let i = 0; i < qtd; i++) {
+      acum += prazo;
+      const venc = new Date(base.getTime());
+      venc.setDate(venc.getDate() + acum);
+      const util = getProximoDiaUtil(venc);
+      const valor =
+        i === qtd - 1
+          ? Number((total - valorBase * (qtd - 1)).toFixed(2))
+          : valorBase;
+      novas.push({ dias: acum, vencimento: fmtLocal(util), valor });
+    }
+    setParcelas(novas);
+  };
+
+  const atualizarVencimento = (idx: number, isoDate: string) => {
+    if (!isoDate) return;
+    const d = new Date(isoDate + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    if (d <= hoje) {
+      toast.error('O vencimento deve ser maior que a data de hoje.');
+      return;
+    }
+    const util = getProximoDiaUtil(d);
+    const novosDias = Math.ceil(
+      (util.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    setParcelas((prev) =>
+      prev.map((p, i) =>
+        i === idx ? { ...p, vencimento: fmtLocal(util), dias: novosDias } : p,
+      ),
+    );
+  };
+
+  const removerParcela = (idx: number) => {
+    setParcelas((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const totalParcelas = parcelas.reduce((s, p) => s + Number(p.valor || 0), 0);
 
   if (statusVenda.cobranca !== 'S') return null;
 
@@ -100,7 +189,7 @@ export default function DadosCobranca({
                   handleCobrancaChange('habilitarValor', e.target.checked)
                 }
               />{' '}
-              Habilitar valor de entrada(aaaa)
+              Habilitar valor de entrada
             </label>
             {formCobranca.habilitarValor && (
               <FormInput
@@ -118,159 +207,153 @@ export default function DadosCobranca({
 
         <fieldset
           className={`col-span-1 border-2 rounded-lg p-4 flex flex-col justify-between ${
-            formCobranca.tipoFatura !== 'BOLETO' &&
-            formCobranca.tipoFatura !== 'BOLETO BANCARIO'
+            !isBoleto
               ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 opacity-70'
               : 'border-zinc-200 dark:border-zinc-700'
           }`}
-          disabled={
-            formCobranca.tipoFatura !== 'BOLETO' &&
-            formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-          }
+          disabled={!isBoleto}
         >
           <legend className="text-sm font-semibold px-2">
             Prazo e Parcelas
           </legend>
 
           <div>
-            <div className="mt-2">
-              <label
-                className={`block text-sm font-medium mb-1 ${
-                  formCobranca.tipoFatura !== 'BOLETO' &&
-                  formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                    ? 'text-gray-500 dark:text-gray-400'
-                    : ''
-                }`}
-              >
-                Prazo (em dias)
-              </label>
-              <div className="flex items-center gap-2">
+            {/* Intervalo + Quantidade → Gerar parcelas (mecanismo do faturar) */}
+            <div className="grid grid-cols-2 gap-2 items-end">
+              <div>
+                <label
+                  className={`block text-sm font-medium mb-1 ${
+                    !isBoleto ? 'text-gray-500 dark:text-gray-400' : ''
+                  }`}
+                >
+                  Intervalo de dias
+                </label>
                 <FormInput
-                  name="prazo"
+                  name="intervaloDias"
                   type="number"
-                  value={formCobranca.prazoSelecionado}
-                  onChange={(e) =>
-                    handleCobrancaChange('prazoSelecionado', e.target.value)
-                  }
+                  value={intervaloDias}
+                  onChange={(e) => setIntervaloDias(e.target.value)}
+                  placeholder="Ex: 30"
+                  disabled={!isBoleto}
+                />
+              </div>
+              <div>
+                <label
+                  className={`block text-sm font-medium mb-1 ${
+                    !isBoleto ? 'text-gray-500 dark:text-gray-400' : ''
+                  }`}
+                >
+                  Quantidade (vezes)
+                </label>
+                <FormInput
+                  name="qtdParcelas"
+                  type="number"
+                  value={qtdParcelas}
+                  onChange={(e) => setQtdParcelas(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      const dias = parseInt(formCobranca.prazoSelecionado);
-                      if (!dias || dias <= 0) {
-                        toast.error('Insira um prazo válido.');
-                        return;
-                      }
-                      const vencimento = new Date();
-                      vencimento.setDate(vencimento.getDate() + dias);
-                      setParcelas([
-                        ...parcelas,
-                        {
-                          dias,
-                          vencimento: vencimento.toISOString().split('T')[0],
-                        },
-                      ]);
-                      handleCobrancaChange('prazoSelecionado', '');
+                      gerarParcelas();
                     }
                   }}
-                  placeholder="Ex: 30"
-                  disabled={
-                    formCobranca.tipoFatura !== 'BOLETO' &&
-                    formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                  }
+                  placeholder="Ex: 3"
+                  disabled={!isBoleto}
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const dias = parseInt(formCobranca.prazoSelecionado);
-                    if (!dias || dias <= 0)
-                      return toast.error('Insira um prazo válido.');
-                    const vencimento = new Date();
-                    vencimento.setDate(vencimento.getDate() + dias);
-                    setParcelas([
-                      ...parcelas,
-                      {
-                        dias,
-                        vencimento: vencimento.toISOString().split('T')[0],
-                      },
-                    ]);
-                    handleCobrancaChange('prazoSelecionado', '');
-                  }}
-                  className={`h-10 px-4 rounded whitespace-nowrap ${
-                    formCobranca.tipoFatura !== 'BOLETO' &&
-                    formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                      ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}
-                  disabled={
-                    formCobranca.tipoFatura !== 'BOLETO' &&
-                    formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                  }
-                >
-                  + Adicionar
-                </button>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={gerarParcelas}
+              className={`mt-2 h-9 w-full px-4 rounded text-sm font-medium ${
+                !isBoleto
+                  ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+              disabled={!isBoleto}
+            >
+              + Gerar parcelas
+            </button>
 
-            <ul className="mt-3 text-sm space-y-2 h-40 overflow-y-auto p-1 rounded bg-gray-100 dark:bg-zinc-800">
-              {parcelas.map((p, i) => (
-                <li
-                  key={i}
-                  className={`flex flex-col gap-2 p-2 rounded shadow-sm ${
-                    formCobranca.tipoFatura !== 'BOLETO' &&
-                    formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-                      : 'bg-white dark:bg-zinc-700'
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">
-                      Parcela {i + 1} - {p.dias} dias
-                    </span>
-                    <button
-                      onClick={() =>
-                        setParcelas(parcelas.filter((_, idx) => idx !== i))
-                      }
-                      className={`${
-                        formCobranca.tipoFatura !== 'BOLETO' &&
-                        formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                          ? 'text-gray-400 cursor-not-allowed'
-                          : 'text-red-500 hover:text-red-700'
-                      }`}
-                      disabled={
-                        formCobranca.tipoFatura !== 'BOLETO' &&
-                        formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                      }
+            <div className="mt-3 h-44 overflow-y-auto rounded bg-gray-100 dark:bg-zinc-800">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-gray-200 dark:bg-zinc-700">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Parcela</th>
+                    <th className="px-2 py-1 text-center">Dias</th>
+                    <th className="px-2 py-1 text-left">Vencimento</th>
+                    <th className="px-2 py-1 text-right">Valor</th>
+                    <th className="px-2 py-1 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parcelas.map((p, i) => (
+                    <tr
+                      key={i}
+                      className="border-b border-gray-200 dark:border-zinc-700"
                     >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium">
-                      Data de Vencimento:
-                    </label>
-                    <input
-                      type="date"
-                      value={p.vencimento}
-                      onChange={(e) => {
-                        const novasParcelas = [...parcelas];
-                        novasParcelas[i] = { ...p, vencimento: e.target.value };
-                        setParcelas(novasParcelas);
-                      }}
-                      className={`text-xs px-2 py-1 border rounded ${
-                        formCobranca.tipoFatura !== 'BOLETO' &&
-                        formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                          ? 'bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-600 text-gray-500 cursor-not-allowed'
-                          : 'bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-black dark:text-white'
-                      }`}
-                      disabled={
-                        formCobranca.tipoFatura !== 'BOLETO' &&
-                        formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                      }
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <td className="px-2 py-1">{i + 1}</td>
+                      <td className="px-2 py-1 text-center">{p.dias}</td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="date"
+                          value={p.vencimento}
+                          onChange={(e) =>
+                            atualizarVencimento(i, e.target.value)
+                          }
+                          className={`text-xs px-1 py-0.5 border rounded ${
+                            !isBoleto
+                              ? 'bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-600 text-gray-500 cursor-not-allowed'
+                              : 'bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-black dark:text-white'
+                          }`}
+                          disabled={!isBoleto}
+                        />
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums">
+                        R$ {money(p.valor)}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removerParcela(i)}
+                          className={`${
+                            !isBoleto
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-500 hover:text-red-700'
+                          }`}
+                          disabled={!isBoleto}
+                        >
+                          <TrashIcon />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {parcelas.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-2 py-4 text-center text-gray-500"
+                      >
+                        Sem parcelas. Informe intervalo + quantidade e clique em
+                        "Gerar parcelas".
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {parcelas.length > 0 && (
+                  <tfoot>
+                    <tr className="font-semibold bg-gray-200 dark:bg-zinc-700">
+                      <td className="px-2 py-1 text-left" colSpan={3}>
+                        Total
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums">
+                        R$ {money(totalParcelas)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </div>
 
           {onGerarPreviewBoleto && (
@@ -279,15 +362,11 @@ export default function DadosCobranca({
                 type="button"
                 onClick={onGerarPreviewBoleto}
                 className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md ${
-                  formCobranca.tipoFatura !== 'BOLETO' &&
-                  formCobranca.tipoFatura !== 'BOLETO BANCARIO'
+                  !isBoleto
                     ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
                     : 'bg-gray-600 text-white hover:bg-gray-700'
                 }`}
-                disabled={
-                  formCobranca.tipoFatura !== 'BOLETO' &&
-                  formCobranca.tipoFatura !== 'BOLETO BANCARIO'
-                }
+                disabled={!isBoleto}
               >
                 <FileSymlink size={16} /> Gerar Preview do Boleto
               </button>

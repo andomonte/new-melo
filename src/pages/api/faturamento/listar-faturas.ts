@@ -123,13 +123,32 @@ export default async function listarFaturas(
     } else if (tipo === 'nao_nulo') {
       expressao = `${coluna} IS NOT NULL`;
     } else if (['contém', 'começa', 'termina'].includes(tipo)) {
-      let val = valor;
-      if (tipo === 'contém') val = `%${valor}%`;
-      if (tipo === 'começa') val = `${valor}%`;
-      if (tipo === 'termina') val = `%${valor}`;
+      // Multi-valor (mesmo filtro do produtos): ';' = OU (grupos), espaço = E (termos).
+      // Ex.: "melo pesado;retira" => (col ILIKE %melo% AND col ILIKE %pesado%) OR (col ILIKE %retira%)
+      const molde = (t: string) =>
+        tipo === 'começa' ? `${t}%` : tipo === 'termina' ? `%${t}` : `%${t}%`;
+      const grupos = String(valor)
+        .split(';')
+        .map((g) =>
+          g
+            .trim()
+            .split(/\s+/)
+            .map((t) => t.replace(/^%+|%+$/g, '').trim())
+            .filter(Boolean),
+        )
+        .filter((g) => g.length > 0);
 
-      expressao = `${coluna} ILIKE $${index}`;
-      values.push(val);
+      if (grupos.length > 0) {
+        const orConds = grupos.map((termos) => {
+          const andConds = termos.map((t) => {
+            const idx = values.length + 1;
+            values.push(molde(t));
+            return `${coluna} ILIKE $${idx}`;
+          });
+          return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
+        });
+        expressao = orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0];
+      }
     } else if (operadoresSQL[tipo]) {
       const valorCorrigido = valor;
       if (campo === 'nfs' && valor !== 'S' && valor !== 'N') {
@@ -304,7 +323,14 @@ export default async function listarFaturas(
       SELECT
         f.*,
         COALESCE(f.totalnf, f.totalfat, f.totalprod, 0) AS totalnf,
+        EXISTS (
+          SELECT 1 FROM db_manaus.dbreceb r
+          WHERE r.cod_fat = f.codfat
+            AND (r.cancel IS NULL OR r.cancel <> 'S')
+            AND (r.dt_pgto IS NOT NULL OR (r.valor_pgto IS NOT NULL AND r.valor_pgto > 0))
+        ) AS tem_pagamento,
         c.nome AS cliente_nome,
+        c.banco AS cliente_banco,
         v.nome AS nome_vendedor,
         t.nome AS nome_transportadora,
         nfe.status AS nfe_status,

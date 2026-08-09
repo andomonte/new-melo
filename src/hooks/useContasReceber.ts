@@ -212,7 +212,11 @@ export function useContasReceber() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.erro || `Erro HTTP: ${response.status}`);
+        // Mostra o motivo REAL (detalhes) quando o backend envia, não só o genérico.
+        const msg = errorData.detalhes
+          ? `${errorData.erro}: ${errorData.detalhes}`
+          : (errorData.erro || `Erro HTTP: ${response.status}`);
+        throw new Error(msg);
       }
 
       const result = await response.json();
@@ -249,7 +253,11 @@ export function useContasReceber() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.erro || `Erro HTTP: ${response.status}`);
+        // Mostra o motivo REAL (detalhes) quando o backend envia, não só o genérico.
+        const msg = errorData.detalhes
+          ? `${errorData.erro}: ${errorData.detalhes}`
+          : (errorData.erro || `Erro HTTP: ${response.status}`);
+        throw new Error(msg);
       }
 
       const result = await response.json();
@@ -288,7 +296,11 @@ export function useContasReceber() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.erro || `Erro HTTP: ${response.status}`);
+        // Mostra o motivo REAL (detalhes) quando o backend envia, não só o genérico.
+        const msg = errorData.detalhes
+          ? `${errorData.erro}: ${errorData.detalhes}`
+          : (errorData.erro || `Erro HTTP: ${response.status}`);
+        throw new Error(msg);
       }
 
       const result = await response.json();
@@ -325,7 +337,11 @@ export function useContasReceber() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.erro || `Erro HTTP: ${response.status}`);
+        // Mostra o motivo REAL (detalhes) quando o backend envia, não só o genérico.
+        const msg = errorData.detalhes
+          ? `${errorData.erro}: ${errorData.detalhes}`
+          : (errorData.erro || `Erro HTTP: ${response.status}`);
+        throw new Error(msg);
       }
 
       const result = await response.json();
@@ -362,7 +378,11 @@ export function useContasReceber() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.erro || `Erro HTTP: ${response.status}`);
+        // Mostra o motivo REAL (detalhes) quando o backend envia, não só o genérico.
+        const msg = errorData.detalhes
+          ? `${errorData.erro}: ${errorData.detalhes}`
+          : (errorData.erro || `Erro HTTP: ${response.status}`);
+        throw new Error(msg);
       }
 
       const result = await response.json();

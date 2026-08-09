@@ -5,7 +5,11 @@ import { salvarParcelasPagamento } from '@/utils/parcelasPagamento';
 // Mapeamento das formas de faturamento para seus códigos de 1 caractere
 const mapaFormaFatura: { [key: string]: string } = {
   BOLETO: 'B',
+  'BOLETO BANCARIO': 'B',
+  'BOLETO BANCÁRIO': 'B',
+  DM: 'D', // Duplicata Mercantil
   DUPLICATA: 'D',
+  'DUPLICATA MERCANTIL': 'D',
   PIX: 'P',
   'CARTÃO DE CRÉDITO': 'C',
   'CARTÃO DE DÉBITO': 'V',

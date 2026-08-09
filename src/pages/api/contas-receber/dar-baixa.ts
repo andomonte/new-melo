@@ -98,10 +98,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Iniciar transação
     await client.query('BEGIN');
 
+    // bradesco = 'B' quando o título é quitado; senão mantém o valor atual.
+    // Calculado em JS e passado como $9 para NÃO reusar $3 em dois contextos
+    // (rec=$3 e CASE $3='S'), o que fazia o Postgres falhar com 42P08
+    // "tipos inconsistentes deduzidos do parâmetro $3".
+    const novoBradesco = totalmentePago === 'S' ? 'B' : null;
+
     // Atualizar título com novo valor recebido (não marcar como pago até atingir o total)
     const updateQuery = `
       UPDATE db_manaus.dbreceb
-      SET 
+      SET
         valor_rec = $2,
         rec = $3,
         dt_pgto = COALESCE($4, dt_pgto),
@@ -109,10 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cod_conta = COALESCE($6, cod_conta),
         rec_cof_id = COALESCE($7, rec_cof_id),
         forma_fat = COALESCE($8, forma_fat),
-        bradesco = CASE 
-          WHEN $3 = 'S' THEN 'B'
-          ELSE bradesco
-        END
+        bradesco = COALESCE($9, bradesco)
       WHERE cod_receb = $1
       RETURNING *
     `;
@@ -125,7 +128,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       banco || null,
       cod_conta || null,
       cof_id || null,
-      forma_pgto || null
+      forma_pgto || null,
+      novoBradesco
     ]);
 
     // Registrar no histórico (dbfreceb) - valor principal e juros
@@ -163,10 +167,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return { sql, vals };
     };
 
-    // Formatar parcela no formato XX-YY (ex: 01-03, 02-03, 03-03)
-    let parcelaFormatada = parcela || null;
-    if (num_parcela && total_parcelas) {
-      parcelaFormatada = `${String(num_parcela).padStart(2, '0')}-${String(total_parcelas).padStart(2, '0')}`;
+    // dbfreceb.parcela é varchar(2) e representa o NÚMERO da parcela (Oracle:
+    // "Número parcela"). O formato "XX-YY" (5 chars) estourava a coluna
+    // (character varying(2)). Guarda só o número (2 dígitos) e apenas quando há
+    // parcelamento real (total > 1); em pagamento à vista/único fica nulo.
+    let parcelaFormatada: string | null = null;
+    const ehParcelado = (Number(total_parcelas) || 0) > 1;
+    if (ehParcelado && num_parcela) {
+      parcelaFormatada = String(num_parcela).padStart(2, '0').slice(0, 2);
+    } else if (parcela && String(parcela).length <= 2) {
+      parcelaFormatada = String(parcela);
     }
 
     // Valores base para o lançamento principal
@@ -236,9 +246,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `SELECT table_name FROM information_schema.tables WHERE table_schema='db_manaus' AND table_name = 'dbfprereceb'`
     );
     if (fpreRecebColsRes.rows.length > 0) {
+      // cod_fprereceb é NOT NULL sem default (varchar) — gerar o próximo código
+      // a partir do MAX global, senão o INSERT viola a restrição de não-nulo (23502).
+      const seqFpre = await client.query(
+        `SELECT COALESCE(MAX(CAST(cod_fprereceb AS INTEGER)), 0) + 1 AS novo
+           FROM db_manaus.dbfprereceb`
+      );
+      const novoCodFpre = String(seqFpre.rows[0]?.novo ?? 1);
       await client.query(
-        `INSERT INTO db_manaus.dbfprereceb (cod_receb, dt_pgto, valor) VALUES ($1, $2, $3)`,
-        [cod_receb, baseDtPgto, valorReceberNum]
+        `INSERT INTO db_manaus.dbfprereceb (cod_fprereceb, cod_receb, dt_pgto, valor) VALUES ($1, $2, $3, $4)`,
+        [novoCodFpre, cod_receb, baseDtPgto, valorReceberNum]
       );
     }
 

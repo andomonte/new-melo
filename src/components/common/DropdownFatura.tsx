@@ -65,11 +65,12 @@ export default function DropdownFatura({
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent 
-        side="left" 
-        align="start" 
+      <DropdownMenuContent
+        side="left"
+        align="start"
         sideOffset={5}
-        className="bg-white dark:bg-zinc-800 border rounded-md shadow text-sm z-50 max-h-[80vh] overflow-y-auto"
+        collisionPadding={8}
+        className="bg-white dark:bg-zinc-800 border rounded-md shadow text-sm z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto"
       >
         <DropdownMenuItem
           onClick={onEmitirNotaClick}
@@ -134,17 +135,23 @@ export default function DropdownFatura({
         </DropdownMenuItem>
 
         <DropdownMenuItem
-          disabled={fatura.cobranca === 'N'}
+          disabled={fatura.cobranca === 'N' || fatura.tem_pagamento === true}
           onClick={onCancelarCobranca}
           className={`group flex items-center gap-2 px-2 py-2 transition ${
-            fatura.cobranca === 'S'
+            fatura.cobranca === 'S' && fatura.tem_pagamento !== true
               ? 'hover:bg-red-600 hover:text-white'
               : 'opacity-50 cursor-not-allowed'
           }`}
-          title={fatura.cobranca === 'N' ? 'Esta fatura não possui cobrança para cancelar' : 'Cancelar cobrança existente'}
+          title={
+            fatura.cobranca === 'N'
+              ? 'Esta fatura não possui cobrança para cancelar'
+              : fatura.tem_pagamento === true
+                ? 'Cobrança com parcela(s) paga(s) não pode ser cancelada'
+                : 'Cancelar cobrança existente'
+          }
         >
           <DollarSign className={`size-4 transition ${
-            fatura.cobranca === 'S'
+            fatura.cobranca === 'S' && fatura.tem_pagamento !== true
               ? 'text-red-600 group-hover:text-white'
               : 'text-gray-400'
           }`} />

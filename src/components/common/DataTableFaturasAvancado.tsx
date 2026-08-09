@@ -27,6 +27,7 @@ import AutocompletePessoa from './AutoCompletePessoa';
 import NotaFiscalPreviewModal from '../corpo/faturamento/NotaFiscalPreviewModal';
 import { time } from 'console';
 import ModalBoletos from './ModalBoletos';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 interface Props {
   faturas: any[];
   meta: Meta;
@@ -43,6 +44,21 @@ interface Props {
   onLimiteColunasChange: (novoLimite: number) => void;
   onAtualizarLista?: () => void;
   onCriarGrupoPagamento?: (faturas: any[]) => void;
+  // Navegação por teclado (setas) — repassados ao DataTablePadrao pela página.
+  rowClassName?: (row: any, index: number) => string;
+  onRowClick?: (row: any) => void;
+  onOrderedRowsChange?: (rows: any[]) => void;
+  // Dispara a busca (Enter ou ao sair do campo), no padrão de produtos/requisição.
+  onBuscar?: () => void;
+  // Legenda-filtro renderizada no rodapé (montada pela página, com estado/clique).
+  legendaSlot?: React.ReactNode;
+  // Toolbar (Tipo + Período) injetada no header do DataTablePadrao + busca compacta.
+  headerLeftSlot?: React.ReactNode;
+  searchCompacto?: boolean;
+  // Filtro por Status NFe (dropdown na coluna "Status NFe" — controlado pela página).
+  statusFilterValue?: string;
+  onStatusFilterChange?: (value: string) => void;
+  statusFilterOptions?: { value: string; label: string }[];
 }
 
 export default function DataTableFaturasAvancado({
@@ -59,10 +75,22 @@ export default function DataTableFaturasAvancado({
   onLimiteColunasChange,
   onAtualizarLista,
   onCriarGrupoPagamento,
+  rowClassName,
+  onRowClick,
+  onOrderedRowsChange,
+  onBuscar,
+  legendaSlot,
+  headerLeftSlot,
+  searchCompacto,
+  statusFilterValue,
+  onStatusFilterChange,
+  statusFilterOptions,
 }: Props) {
   const [faturasDesabilitadas, setFaturasDesabilitadas] = useState<Set<string>>(new Set());
   const [gpSelecionado, setGpSelecionado] = useState<string | null>(null);
   const [faturasSelecionadas, setFaturasSelecionadas] = useState<string[]>([]);
+  // Modal de confirmação padrão (substitui window.confirm) — usado no cancelar cobrança.
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
   const getVendedorSelecionado = () => {
     if (faturasSelecionadas.length === 0) return null;
     const fatura = faturas.find(f => f.codfat === faturasSelecionadas[0]);
@@ -233,7 +261,10 @@ export default function DataTableFaturasAvancado({
   };
 
   // Estados para o componente DadosCobranca
-  const [bancos, setBancos] = useState([]);
+  // bancosTodos = lista completa (dbbanco_cobranca); bancos = opções exibidas no
+  // modal (filtradas para: banco do cliente + MELO).
+  const [bancosTodos, setBancosTodos] = useState<{ banco: string; nome: string }[]>([]);
+  const [bancos, setBancos] = useState<{ banco: string; nome: string }[]>([]);
   const [formCobranca, setFormCobranca] = useState({
     banco: '',
     tipoFatura: '',
@@ -243,7 +274,7 @@ export default function DataTableFaturasAvancado({
     impostoNa1Parcela: false,
     freteNa1Parcela: false,
   });
-  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string }[]>([]);
+  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string; valor: number }[]>([]);
   const [opcoesTipoFatura] = useState([
     { value: 'BOLETO', label: 'BOLETO' },
     { value: 'BOLETO BANCARIO', label: 'BOLETO BANCÁRIO' },
@@ -285,6 +316,41 @@ export default function DataTableFaturasAvancado({
     
     atualizarFaturasDesabilitadas();
   }, [faturas, faturasSelecionadas]);
+
+  // Carrega a lista completa de bancos de cobrança (mesma fonte do faturar).
+  useEffect(() => {
+    axios
+      .get('/api/faturamento/opcoes-cobranca')
+      .then((res) => setBancosTodos(res.data?.bancos || []))
+      .catch(() => setBancosTodos([]));
+  }, []);
+
+  // Abre o modal de cobrança para a fatura, filtrando os bancos para: o banco
+  // do cliente (dbclien.banco) + MELO (carteira própria). Default = banco do
+  // cliente quando existir na lista; caso contrário, MELO.
+  const abrirModalCobranca = (f: any) => {
+    const melo = bancosTodos.find((b) => (b.nome || '').toUpperCase() === 'MELO');
+    const bancoCliente = bancosTodos.find(
+      (b) => String(b.banco).trim() === String(f.cliente_banco ?? '').trim(),
+    );
+    const opcoes = [bancoCliente, melo].filter(
+      (b, i, arr): b is { banco: string; nome: string } =>
+        !!b && arr.findIndex((x) => x && x.banco === b!.banco) === i,
+    );
+    setBancos(opcoes);
+    const bancoDefault = bancoCliente?.banco ?? melo?.banco ?? '';
+    setFormCobranca({
+      banco: bancoDefault,
+      tipoFatura: '',
+      prazoSelecionado: '',
+      valorVista: '',
+      habilitarValor: false,
+      impostoNa1Parcela: false,
+      freteNa1Parcela: false,
+    });
+    setParcelas([]);
+    setCobrancaModalAberto(f);
+  };
 
   // Função para gerar preview do boleto
   const handleGerarPreviewBoleto = async () => {
@@ -554,24 +620,31 @@ export default function DataTableFaturasAvancado({
     }
   };
 
-  const handleCancelarCobranca = async (fatura: any) => {
-    if (
-      !window.confirm(
-        `Deseja realmente cancelar a cobrança da fatura ${fatura.codfat}?`,
-      )
-    )
-      return;
-
+  // Executa de fato o cancelamento (após confirmação no modal padrão).
+  const executarCancelarCobranca = async (fatura: any) => {
     try {
       await axios.post('/api/faturamento/cancelar-cobranca', {
         codfat: fatura.codfat,
       });
       toast.success('Cobrança cancelada com sucesso.');
       onAtualizarLista?.();
-    } catch (err) {
-      toast.error('Erro ao cancelar cobrança.');
+    } catch (err: any) {
+      // Surfacar o motivo real (ex.: 409 "já possui parcela(s) paga(s)").
+      const msg = err?.response?.data?.error || 'Erro ao cancelar cobrança.';
+      toast.error(msg);
       console.error(err);
     }
+  };
+
+  // Abre o modal de confirmação estilizado (padrão do projeto) antes de cancelar.
+  const handleCancelarCobranca = (fatura: any) => {
+    pedirConfirmacao(() => executarCancelarCobranca(fatura), {
+      title: 'Cancelar cobrança',
+      message: `Deseja realmente cancelar a cobrança da fatura ${fatura.codfat}?`,
+      type: 'warning',
+      confirmText: 'Sim, cancelar',
+      cancelText: 'Não',
+    });
   };
 
   const handleUpdateFatura = async (dadosAtualizados: any) => {
@@ -684,13 +757,54 @@ const handleCancelarNota = async () => {
     setFaturasDoGrupo([]);
   };
 
+  // Categoria de COR DA LINHA (prioridade estilo Delphi):
+  // Cancelado > Denegada > Agrupado > Com cobrança > Sem cobrança.
+  const statusCorLinha = (f: any): string => {
+    if (f.cancel === 'S' || f.nfe_status === 'C') return 'cancel';
+    if (f.denegada === 'S') return 'denegada';
+    if (f.agp === 'S') return 'agrupado';
+    if (f.cobranca === 'S') return 'cobranca';
+    return 'sem';
+  };
+
+  // Pill da coluna STATUS NFe (Autorizada / Rejeitada / Cancelada / Denegada / Pendente).
+  const statusNfePill = (f: any) => {
+    let cls = 'pen';
+    let txt = 'Pendente';
+    if (f.nfe_status === '100') { cls = 'aut'; txt = 'Autorizada'; }
+    else if (f.cancel === 'S' || f.nfe_status === 'C') { cls = 'can'; txt = 'Cancelada'; }
+    else if (f.denegada === 'S') { cls = 'rej'; txt = 'Denegada'; }
+    else if (f.mensagem_rejeicao || f.nfe_motivo) { cls = 'rej'; txt = 'Rejeitada'; }
+    const box: Record<string, string> = {
+      aut: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/40',
+      rej: 'text-amber-700 dark:text-amber-300 bg-amber-500/10 border-amber-500/40',
+      can: 'text-rose-700 dark:text-rose-300 bg-rose-500/10 border-rose-500/40',
+      pen: 'text-slate-600 dark:text-slate-300 bg-slate-500/10 border-slate-500/40',
+    };
+    const dot: Record<string, string> = {
+      aut: 'bg-emerald-400', rej: 'bg-amber-400', can: 'bg-rose-400', pen: 'bg-slate-400',
+    };
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${box[cls]}`}
+        title={f.mensagem_rejeicao || f.nfe_motivo || f.motivocancelamento || txt}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${dot[cls]}`} />
+        {txt}
+      </span>
+    );
+  };
+
   const rows = faturas.map((f) => ({
     selecionar: (
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
+          className="disabled:opacity-40 disabled:cursor-not-allowed"
           checked={faturasSelecionadas.includes(f.codfat)}
-          // disabled={faturasDesabilitadas.has(f.codfat)}
+          // Já tem cobrança gerada => não pode entrar em "Gerar Cobrança" de novo.
+          disabled={f.cobranca === 'S'}
+          title={f.cobranca === 'S' ? 'Fatura já possui cobrança gerada' : undefined}
           onClick={e => e.stopPropagation()} // Evita propagar o clique para a linha
           onChange={async (e) => {
             console.log('🔄 onChange executado - checked:', e.target.checked, 'fatura:', f.codfat, 'cliente:', f.codcli);
@@ -753,18 +867,8 @@ const handleCancelarNota = async () => {
             toast.warning('Esta fatura já possui cobrança gerada.');
             return;
           }
-          // Limpar formulário antes de abrir
-          setFormCobranca({
-            banco: '',
-            tipoFatura: '',
-            prazoSelecionado: '',
-            valorVista: '',
-            habilitarValor: false,
-            impostoNa1Parcela: false,
-            freteNa1Parcela: false,
-          });
-          setParcelas([]);
-          setCobrancaModalAberto(f);
+          // Abre o modal com bancos filtrados (cliente + MELO) e banco default.
+          abrirModalCobranca(f);
         }}
         onEditarClick={() => setFaturaParaEdicao(f)}
         onCancelarCobranca={() => handleCancelarCobranca(f)}
@@ -809,58 +913,9 @@ const handleCancelarNota = async () => {
         onEmitirNotaClick={() => handleEmitirNota(f)}
       />
     ),
-    status: (
-      <div className="flex gap-1 items-center">
-        {(f.cancel === 'S' || f.nfe_status === 'C') && (
-          <span className="w-3 h-3 rounded-full bg-red-600" title={
-            f.nfe_status === 'C' && f.motivocancelamento 
-              ? `NFe Cancelada: ${f.motivocancelamento}` 
-              : "Cancelado"
-          } />
-        )}
-        {/* CORREÇÃO: Só mostra rejeição se NFe NÃO foi autorizada (status diferente de '100') */}
-        {f.mensagem_rejeicao && f.nfe_status !== '100' && (
-          <span 
-            className="w-3 h-3 rounded-full bg-yellow-500" 
-            title={`Rejeição SEFAZ: ${f.mensagem_rejeicao}`} 
-          />
-        )}
-        {f.nfe_motivo && !f.mensagem_rejeicao && f.nfe_status !== '100' && (
-          <span 
-            className="w-3 h-3 rounded-full bg-yellow-500" 
-            title={`SEFAZ: ${f.nfe_motivo}`} 
-          />
-        )}
-        {f.denegada === 'S' && (
-          <span
-            className="w-3 h-3 rounded-full bg-yellow-400"
-            title="Denegada"
-          />
-        )}
-        {f.cobranca === 'S' && (
-          <span
-            className="w-3 h-3 rounded-full bg-green-700"
-            title="Com Cobrança"
-          />
-        )}
-        {f.agp === 'S' && (
-          <span className="w-3 h-3 rounded-full bg-blue-600" title="Agrupada" />
-        )}
-        {/* Se nenhum status especial, mostra "sem cobrança" */}
-        {f.cancel !== 'S' &&
-          f.nfe_status !== 'C' &&
-          f.denegada !== 'S' &&
-          f.cobranca !== 'S' &&
-          f.agp !== 'S' &&
-          !(f.mensagem_rejeicao && f.nfe_status !== '100') &&
-          !(f.nfe_motivo && f.nfe_status !== '100') && (
-            <span
-              className="w-3 h-3 rounded-full bg-pink-500"
-              title="Sem Cobrança"
-            />
-          )}
-      </div>
-    ),
+    status: statusNfePill(f),
+    // Categoria de cor da LINHA (estilo Delphi) — lida no rowClassName da página.
+    __statusCor: statusCorLinha(f),
     codfat: f.codfat,
     nroform: f.nroform ?? '-',
     cliente_nome: ` ${f.codcli}-${f.cliente_nome ?? f.dbclien?.nome ?? '-'}`,
@@ -943,9 +998,34 @@ const handleCancelarNota = async () => {
           onPageChange={onPageChange}
           onPerPageChange={onPerPageChange}
           onSearch={(e) => setTermoBusca(e.target.value)}
+          onSearchBlur={() => onBuscar?.()}
+          onSearchKeyDown={(e) => {
+            if (e.key === 'Enter') onBuscar?.();
+          }}
           searchInputPlaceholder="Buscar por código, cliente, vendedor..."
           onFiltroChange={onFiltroChange}
           colunasFiltro={colunasFiltro}
+          rowClassName={rowClassName}
+          onRowClick={onRowClick}
+          onOrderedRowsChange={onOrderedRowsChange}
+          headerLeftSlot={headerLeftSlot}
+          searchCompacto={searchCompacto}
+          // Dropdown de Status NFe na linha de filtros da coluna "status".
+          statusFilterColumn="status"
+          statusFilterValue={statusFilterValue}
+          onStatusFilterChange={onStatusFilterChange}
+          statusFilterOptions={statusFilterOptions}
+          footerLeftSlot={legendaSlot}
+          footerRightSlot={
+            <span className="text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
+              Total faturado:{' '}
+              <b className="text-emerald-600 dark:text-emerald-400 tabular-nums">
+                R$ {totalFaturado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </b>
+              {' · '}
+              {(meta?.total ?? 0).toLocaleString('pt-BR')} registros
+            </span>
+          }
           colunasSemFiltro={['selecionar', 'ações', 'status']}
           nonsortableColumns={['selecionar', 'ações', 'status', '☑️', 'Ações']}
           limiteColunas={limiteColunas}
@@ -954,7 +1034,7 @@ const handleCancelarNota = async () => {
           columnLabels={{
             selecionar: '',
             ações: 'Ações',
-            status: 'Status',
+            status: 'Status NFe',
             codfat: 'Código da Fatura',
             nroform: 'Número NF',
             cliente_nome: 'Cliente',
@@ -966,6 +1046,9 @@ const handleCancelarNota = async () => {
             grupo_pagamento: 'Grupo de Pagamento',
           }}
         />
+
+        {/* Modal de confirmação padrão (cancelar cobrança etc.) */}
+        {ConfirmacaoSalvarModal}
 
         {/* Modal de Cancelamento de Nota Fiscal */}
         <Dialog
@@ -1214,6 +1297,7 @@ const handleCancelarNota = async () => {
                   parcelas={parcelas}
                   setParcelas={setParcelas}
                   opcoesTipoFatura={opcoesTipoFatura}
+                  totalNota={Number(cobrancaModalAberto.totalnf || 0)}
                   onGerarPreviewBoleto={handleGerarPreviewBoleto}
                   padraoAberto={true}
                 />
@@ -1227,16 +1311,25 @@ const handleCancelarNota = async () => {
                   <button
                     onClick={async () => {
                       try {
-                        // Aqui você pode implementar a lógica de salvar a cobrança
+                        if (!parcelas.length) {
+                          toast.error('Gere ao menos uma parcela antes de salvar.');
+                          return;
+                        }
+                        // Payload no formato que /salvar-cobranca espera:
+                        // codcli + tipofat + parcelas com { vencimento, valor }.
                         const dadosCobranca = {
                           codfat: cobrancaModalAberto.codfat,
+                          codcli: cobrancaModalAberto.codcli,
                           banco: formCobranca.banco,
-                          tipoFatura: formCobranca.tipoFatura,
-                          parcelas: parcelas,
-                          // adicione outros campos necessários
+                          tipofat: formCobranca.tipoFatura,
+                          parcelas: parcelas.map((p) => ({
+                            vencimento: p.vencimento,
+                            valor: p.valor,
+                            documento: null,
+                          })),
                         };
-                        
-                        // Chamar API para salvar cobrançad
+
+                        // Chamar API para salvar cobrança
                         const response = await axios.post('/api/faturamento/salvar-cobranca', dadosCobranca);
                         
                         if (response.status === 200) {

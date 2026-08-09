@@ -91,6 +91,14 @@ export function useNavegacaoTecladoTabela<T>({
     const handler = (e: KeyboardEvent) => {
       if (!ativoRef.current) return;
 
+      // Se há um menu (Radix) ou diálogo aberto, o teclado é dele — não navega a grade.
+      if (
+        document.querySelector(
+          '[data-state="open"][role="menu"], [role="dialog"][data-state="open"]',
+        )
+      )
+        return;
+
       const linhas = dataRef.current;
       if (!linhas || linhas.length === 0) return;
 
