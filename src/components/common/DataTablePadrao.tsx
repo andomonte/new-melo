@@ -434,7 +434,19 @@ export default function DataTablePadrao({
   // na mesma sequência da grade).
   const onOrderedRowsChangeRef = useRef(onOrderedRowsChange);
   onOrderedRowsChangeRef.current = onOrderedRowsChange;
+  const prevRowsSigRef = useRef<string>('');
   useEffect(() => {
+    // Evita LOOP INFINITO: só notifica o pai quando a ORDEM/identidade das linhas
+    // muda de fato — não a cada novo array de MESMO conteúdo. Sem isso, um pai que
+    // faz setState com as linhas recebidas (ex.: navegação por teclado) re-renderiza
+    // → monta um `rows` novo → linhasOrdenadas novo → este efeito → setState → ...
+    const sig = (linhasOrdenadas || [])
+      .map((r: any, i: number) =>
+        String(r?.codfat ?? r?.__codprod ?? r?.codprod ?? r?.id ?? i),
+      )
+      .join('|');
+    if (sig === prevRowsSigRef.current) return;
+    prevRowsSigRef.current = sig;
     onOrderedRowsChangeRef.current?.(linhasOrdenadas);
   }, [linhasOrdenadas]);
 

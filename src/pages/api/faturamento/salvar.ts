@@ -2,6 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
 
 /**
  * Resolve a operação fiscal do faturamento a partir de Movimentação (SAIDA/ENTRADA)
@@ -186,6 +187,7 @@ export default async function handler(
     // FASE 4 (A) — ajustes fiscais do faturamento (default = comportamento de venda "limpo")
     tipo_movimentacao,      // SAIDA | ENTRADA
     tipo_operacao,          // operação do CFOP (VENDA, TRANSFERENCIA, REMESSA_*, ...)
+    natureza_operacao,      // natureza informada (usada quando operação = OUTROS)
     cfop: cfopManual,       // CFOP manual (override)
     zerar_ipi = 'N',
     zerar_icms = 'N',
@@ -388,12 +390,16 @@ export default async function handler(
     const codvendFinal = nzFk(vendedor);
 
     // 🔧 CORREÇÃO CRÍTICA: Adicionar série='2' ao criar fatura
+    // Natureza da Operação (cabeçalho) = derivada da OPERAÇÃO (tipo_operacao),
+    // NÃO do CFOP dos itens. Gravada em dbfatura.descrcfop (coluna existente).
+    const natOpFatura = naturezaPorOperacao(tipo_operacao, natureza_operacao);
+
     const insertQuery = `
       INSERT INTO dbfatura (
-        codfat, codcli, nroform, data, codvend, codtransp, 
-        totalprod, totalfat, totalnf, cod_conta, tipodoc, cobranca, insc07, pedido, nfs, selo, serie
+        codfat, codcli, nroform, data, codvend, codtransp,
+        totalprod, totalfat, totalnf, cod_conta, tipodoc, cobranca, insc07, pedido, nfs, selo, serie, descrcfop
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
     `;
 
     // Log dos valores antes do INSERT para debug
@@ -434,7 +440,8 @@ export default async function handler(
       pedidoProcessado, // Usa o pedido processado (truncado se necessário)
       nfs, // nfs = 'S'
       novoSelo,       // Adiciona o selo incremental
-      '2'             // ✅ série padrão para NFe
+      '2',            // ✅ série padrão para NFe
+      natOpFatura.substring(0, 60), // descrcfop = Natureza da Operação
     ]);
 
     // Associa todas as vendas à fatura na tabela intermediária

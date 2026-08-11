@@ -106,6 +106,7 @@ const handleUpdate = async (
     'id_token',
     'token',
     'certificado',
+    'ambiente', // NF-e/NFC-e: '1'=produção, '2'=homologação (parâmetro central de emissão)
   ];
 
   const dataToUpdate: { [key: string]: any } = {};

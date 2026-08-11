@@ -46,12 +46,14 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
   const [loadingCep, setLoadingCep] = useState(false);
 
   // Estados para upload de certificado
-  const [_certificadoFile, setCertificadoFile] = useState<File | null>(null);
+  const [certificadoFile, setCertificadoFile] = useState<File | null>(null);
   const [certificadoSenha, setCertificadoSenha] = useState('');
   const [isExtractingCertificado, setIsExtractingCertificado] = useState(false);
   const [mostrarSenhaCert, setMostrarSenhaCert] = useState(false);
+  const [certificadoErro, setCertificadoErro] = useState<string | null>(null);
   const [certificadoExtraido, setCertificadoExtraido] =
     useState<CertificadoExtraido | null>(null);
+  const senhaCertRef = useRef<HTMLInputElement>(null);
 
   // Estados para modal de inscrição estadual
   const [showModalInscricaoEstadual, setShowModalInscricaoEstadual] =
@@ -100,7 +102,8 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
         current.suframa !== initial.suframa ||
         current.certificadoKey !== initial.certificadoKey ||
         current.certificadoCrt !== initial.certificadoCrt ||
-        current.cadeiaCrt !== initial.cadeiaCrt;
+        current.cadeiaCrt !== initial.cadeiaCrt ||
+        current.ambiente !== initial.ambiente;
 
       setHasChanges(changesMade);
     }
@@ -182,61 +185,81 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
     // dos FormInputEditavel.
   };
 
-  // Função para lidar com upload de certificado
-  const handleCertificadoUpload = async (
+  // 1) Seleção do arquivo: guarda o .pfx e pede/usa a senha para extrair.
+  //    Fluxo: selecionar arquivo → (foca a senha) → extrair → depois Salvar.
+  const handleCertificadoFileSelect = (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.pfx')) {
-      alert('Por favor, selecione um arquivo .pfx');
+      setCertificadoErro('Selecione um arquivo .pfx válido.');
+      setCertificadoFile(null);
       return;
     }
 
-    if (!certificadoSenha) {
-      alert('Por favor, digite a senha do certificado');
-      return;
-    }
-
+    setCertificadoErro(null);
+    setCertificadoExtraido(null);
     setCertificadoFile(file);
-    setIsExtractingCertificado(true);
 
+    // Se a senha já foi informada, extrai direto; senão foca o campo de senha.
+    if (certificadoSenha) {
+      extrairCertificado(file, certificadoSenha);
+    } else {
+      senhaCertRef.current?.focus();
+    }
+  };
+
+  // 2) Extração de fato (usa o arquivo já selecionado + a senha).
+  const extrairCertificado = async (file: File | null, senha: string) => {
+    if (!file) {
+      setCertificadoErro('Selecione o arquivo .pfx primeiro.');
+      return;
+    }
+    if (!senha) {
+      setCertificadoErro('Digite a senha do certificado.');
+      senhaCertRef.current?.focus();
+      return;
+    }
+
+    setCertificadoErro(null);
+    setIsExtractingCertificado(true);
     try {
-      // Extração NO SERVIDOR (mais confiável que node-forge no navegador) via endpoint.
+      // Extração NO SERVIDOR (node-forge) via endpoint.
       const buffer = await file.arrayBuffer();
       const pfxBase64 = Buffer.from(buffer).toString('base64');
       const resp = await fetch('/api/dadosEmpresa/extrair-certificado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pfxBase64, senha: certificadoSenha }),
+        body: JSON.stringify({ pfxBase64, senha }),
       });
       const data = await resp.json();
       if (!resp.ok) {
         throw new Error(data?.erro || 'Falha ao extrair o certificado.');
       }
-      const certificadoExtraido = {
+      const extraido = {
         certificadoKey: data.certificadoKey,
         certificadoCrt: data.certificadoCrt,
         cadeiaCrt: data.cadeiaCrt,
       };
-      setCertificadoExtraido(certificadoExtraido);
+      setCertificadoExtraido(extraido);
 
-      // Atualizar os dados da empresa com os valores extraídos
+      // Atualizar os dados da empresa com os valores extraídos (vão no Salvar).
       handleDadosEmpresaChange({
         ...dadosEmpresa,
-        certificadoKey: certificadoExtraido.certificadoKey,
-        certificadoCrt: certificadoExtraido.certificadoCrt,
-        cadeiaCrt: certificadoExtraido.cadeiaCrt,
+        certificadoKey: extraido.certificadoKey,
+        certificadoCrt: extraido.certificadoCrt,
+        cadeiaCrt: extraido.cadeiaCrt,
       });
     } catch (error: any) {
       console.error('Erro ao extrair certificado:', error);
       // Mostra a causa REAL do backend (senha, formato, algoritmo...).
-      alert(
+      // NÃO limpa o arquivo — permite corrigir a senha e tentar de novo.
+      setCertificadoErro(
         error?.message ||
           'Erro ao extrair certificado. Verifique a senha e tente novamente.',
       );
-      setCertificadoFile(null);
     } finally {
       setIsExtractingCertificado(false);
     }
@@ -384,6 +407,32 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
                   onChange={handleChange}
                   error={error?.suframa}
                 />
+                {/* Ambiente de emissão (parâmetro central de NF-e/NFC-e). */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Ambiente NF-e / NFC-e
+                  </label>
+                  <select
+                    name="ambiente"
+                    value={dadosEmpresa.ambiente || '2'}
+                    onChange={(e) =>
+                      handleDadosEmpresaChange({
+                        ...dadosEmpresa,
+                        ambiente: e.target.value,
+                      })
+                    }
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="2">
+                      2 · Homologação (teste, sem valor fiscal)
+                    </option>
+                    <option value="1">1 · Produção (valor fiscal)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Define o ambiente de TODAS as notas. Troque para Produção
+                    quando for emitir de verdade.
+                  </p>
+                </div>
               </div>
               {/* Campo de Upload de Certificado */}
               <div className="grid grid-cols-1 gap-4">
@@ -398,7 +447,7 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
                     <input
                       type="file"
                       accept=".pfx"
-                      onChange={handleCertificadoUpload}
+                      onChange={handleCertificadoFileSelect}
                       className="block w-full text-sm text-gray-500 dark:text-gray-400
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-full file:border-0
@@ -417,11 +466,23 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
                     </label>
                     <div className="relative">
                       <input
+                        ref={senhaCertRef}
                         name="certificadoSenha"
                         type={mostrarSenhaCert ? 'text' : 'password'}
                         autoComplete="new-password"
                         value={certificadoSenha}
                         onChange={(e) => setCertificadoSenha(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            extrairCertificado(certificadoFile, certificadoSenha);
+                          }
+                        }}
+                        placeholder={
+                          certificadoFile
+                            ? 'Digite a senha e pressione Enter para extrair'
+                            : undefined
+                        }
                         disabled={isExtractingCertificado}
                         className="normal-case block w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 dark:disabled:bg-gray-800"
                       />
@@ -447,14 +508,36 @@ const ModalFormEditarDadosEmpresa: React.FC<FormDadosEmpresaContainerProps> = ({
                       </p>
                     )}
                   </div>
+                  {/* Botão de extrair: aparece quando há arquivo selecionado e ainda
+                      não foi extraído (ou após erro, para tentar de novo). */}
+                  {certificadoFile && !certificadoExtraido && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        extrairCertificado(certificadoFile, certificadoSenha)
+                      }
+                      disabled={isExtractingCertificado}
+                      className="px-4 py-2 rounded-md bg-[#347AB6] text-white text-sm font-semibold hover:bg-[#2a5a8a] disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isExtractingCertificado
+                        ? 'Extraindo...'
+                        : 'Extrair certificado'}
+                    </button>
+                  )}
                   {isExtractingCertificado && (
                     <div className="text-sm text-blue-600 dark:text-blue-400">
                       Extraindo certificado...
                     </div>
                   )}
+                  {certificadoErro && (
+                    <div className="text-sm text-red-600 dark:text-red-400">
+                      {certificadoErro}
+                    </div>
+                  )}
                   {certificadoExtraido && (
                     <div className="text-sm text-green-600 dark:text-green-400">
-                      Certificado extraído com sucesso!
+                      ✅ Certificado extraído com sucesso. Clique em{' '}
+                      <b>Salvar</b> para gravar.
                     </div>
                   )}
                 </div>

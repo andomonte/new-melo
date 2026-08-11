@@ -4,7 +4,7 @@ import withAuth from '@/utils/withAuth';
 
 const Page = () => {
   if (typeof window !== 'undefined') {
-    window.history.replaceState(null, '', '/admin/cadastros/cfop');
+    window.history.replaceState(window.history.state, '', '/admin/cadastros/cfop');
   }
 
   return <Admin tela={'/admin/cadastros/cfop'} />;

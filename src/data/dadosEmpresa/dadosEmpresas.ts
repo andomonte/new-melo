@@ -31,6 +31,8 @@ export interface DadosEmpresa {
   certificadoKey?: string | null;
   certificadoCrt?: string | null;
   cadeiaCrt?: string | null;
+  /** Ambiente de emissão NF-e/NFC-e: '1' = Produção, '2' = Homologação. */
+  ambiente?: string | null;
   // Adicione data_cadastro aqui SE você espera que ele exista para DadosEmpresa
   // data_cadastro?: string | null; // <-- Adicionar se for um campo válido para DadosEmpresa
 }
@@ -61,6 +63,7 @@ export interface DBDadosEmpresa {
   certificadoKey: string | null;
   certificadoCrt: string | null;
   cadeiaCrt: string | null;
+  ambiente: string | null;
   // Adicione data_cadastro aqui se ele existe no DB
   // data_cadastro: string | null;
 }

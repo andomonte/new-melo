@@ -8,7 +8,7 @@ const SMTPPage = () => {
   const [showModal, setShowModal] = useState(true);
 
   if (typeof window !== 'undefined') {
-    window.history.replaceState(null, '', '/admin/cadastros/smtp');
+    window.history.replaceState(window.history.state, '', '/admin/cadastros/smtp');
   }
 
   const handleClose = () => {

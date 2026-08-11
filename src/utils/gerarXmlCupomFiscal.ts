@@ -14,8 +14,10 @@ const AMBIENTE_NFCE = process.env.NEXT_PUBLIC_AMBIENTE_NFCE || process.env.AMBIE
  * Determina o ambiente SEFAZ baseado na configuração
  * @returns 'PRODUCAO' ou 'HOMOLOGACAO'
  */
-export function getAmbienteSefaz(): 'PRODUCAO' | 'HOMOLOGACAO' {
-  return AMBIENTE_NFCE === '1' ? 'PRODUCAO' : 'HOMOLOGACAO';
+export function getAmbienteSefaz(override?: string): 'PRODUCAO' | 'HOMOLOGACAO' {
+  // override (ex.: dadosEmpresa.ambiente) tem prioridade sobre o env.
+  const amb = override != null && override !== '' ? String(override) : AMBIENTE_NFCE;
+  return amb === '1' ? 'PRODUCAO' : 'HOMOLOGACAO';
 }
 
 /**
@@ -23,8 +25,11 @@ export function getAmbienteSefaz(): 'PRODUCAO' | 'HOMOLOGACAO' {
  * @param tipo Tipo do serviço SEFAZ
  * @returns URL completa do serviço
  */
-export function getUrlSefazAtual(tipo: keyof typeof import('./sefazUrls').SEFAZ_AM_URLS.HOMOLOGACAO): string {
-  const ambiente = getAmbienteSefaz();
+export function getUrlSefazAtual(
+  tipo: keyof typeof import('./sefazUrls').SEFAZ_AM_URLS.HOMOLOGACAO,
+  override?: string,
+): string {
+  const ambiente = getAmbienteSefaz(override);
   return getSefazUrl(ambiente, tipo);
 }
 
@@ -375,7 +380,7 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
      .ele('tpImp').txt('4').up()                // B21
      .ele('tpEmis').txt(tpEmis).up()           // B22
      .ele('cDV').txt(String(cDV)).up()         // B23
-     .ele('tpAmb').txt(AMBIENTE_NFCE).up()     // B24 - 1=Produção, 2=Homologação
+     .ele('tpAmb').txt(String(dados?.ambiente ?? AMBIENTE_NFCE)).up()     // B24 - 1=Produção, 2=Homologação (parametrizado por dadosEmpresa)
      .ele('finNFe').txt('1').up()              // B25
      .ele('indFinal').txt('1').up()            // B25a
      .ele('indPres').txt('1').up()             // B25b

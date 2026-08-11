@@ -233,6 +233,9 @@ export default async function handler(
       );
     }
 
+    // Ambiente NF-e parametrizado por empresa (dadosEmpresa.ambiente): 1=prod, 2=homolog.
+    const ambienteEmpresa = String(emitenteRaw?.ambiente || process.env.AMBIENTE_NFCE || '2');
+
     // Buscar código do município baseado no nome e UF
     let cMun = '1302603'; // Default: Manaus
     if (emitenteRaw.municipio && emitenteRaw.uf) {
@@ -374,6 +377,7 @@ export default async function handler(
     }
 
     const dadosNormalizados = await normalizarPayloadNFe(dados);
+    (dadosNormalizados as any).ambiente = ambienteEmpresa;
 
     // 🔍 DEBUG: Verificar estrutura dos dados originais e normalizados
     console.log('🔍 [DEBUG] dados originais:', Object.keys(dados));
@@ -383,6 +387,15 @@ export default async function handler(
       '🔍 [DEBUG] dadosNormalizados.fatura:',
       dadosNormalizados.fatura,
     );
+
+    // Natureza da operação (cabeçalho) = dbfatura.descrcfop (derivada da OPERAÇÃO
+    // no faturamento — NÃO do CFOP dos itens). Fallback p/ faturas antigas.
+    (dadosNormalizados as any).naturezaOperacao =
+      String(
+        (dados as any).dbfatura?.descrcfop ||
+          (dadosNormalizados as any).fatura?.descrcfop ||
+          '',
+      ).trim() || 'VENDA DE MERCADORIAS';
 
     const xmlBruto = gerarXMLNFe(dadosNormalizados);
 
@@ -559,10 +572,10 @@ export default async function handler(
       rejectUnauthorized: false,
     });
 
-    const ambienteSefaz = getAmbienteSefaz();
+    const ambienteSefaz = getAmbienteSefaz(ambienteEmpresa);
     console.log(`🌐 Ambiente SEFAZ determinado para NF-e: ${ambienteSefaz}`);
     
-    const urlSefaz = getUrlSefazAtual('NFE_AUTORIZACAO');
+    const urlSefaz = getUrlSefazAtual('NFE_AUTORIZACAO', ambienteEmpresa);
     console.log(`🔗 URL SEFAZ NF-e: ${urlSefaz}`);
 
     let sefazResponse;

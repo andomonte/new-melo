@@ -39,7 +39,7 @@ export default function PedidosConferidos() {
       typeof window !== 'undefined' &&
       window.location.pathname !== telaAtual
     ) {
-      window.history.replaceState(null, '', telaAtual);
+      window.history.replaceState(window.history.state, '', telaAtual);
     }
 
     setDadosCarregados(true);

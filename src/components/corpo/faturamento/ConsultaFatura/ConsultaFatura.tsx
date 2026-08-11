@@ -44,8 +44,6 @@ const calcPeriodo = (preset: string): { de: string; ate: string } => {
 };
 
 export default function ConsultaFaturasPage() {
-  console.log('🎬 ConsultaFaturasPage RENDERIZANDO');
-  
   const [faturas, setFaturas] = useState<any[]>([]);
   const [meta, setMeta] = useState({
     currentPage: 1,
@@ -54,7 +52,6 @@ export default function ConsultaFaturasPage() {
     total: 0,
   });
   const [carregando, setCarregando] = useState(false);
-  console.log('📊 Estado carregando:', carregando);
   const [filtrosAtivos, setFiltrosAtivos] = useState<any[]>([]);
   const [termoBusca, setTermoBusca] = useState('');
   // Ref sempre atual do termo (buscarFaturas é useCallback sem deps → sem ref pegaria
@@ -80,26 +77,21 @@ export default function ConsultaFaturasPage() {
 
   // Listener para detectar quando a rota muda
   useEffect(() => {
-    console.log('🔄 ConsultaFatura MONTADO/ATUALIZADO');
-    console.log('📍 Router path:', router.pathname);
-    console.log('🎯 Router query:', router.query);
-    
-    // Quando o componente montar ou a rota mudar, forçar recarga
+    // Ao voltar para a Consulta de Faturas, força recarregar a lista.
     const handleRouteChange = (url: string) => {
-      console.log('🔄 Rota mudou para:', url);
       if (url.includes('/faturamento/consultaFatura')) {
-        console.log('🔄 Rota é consultaFatura - resetando estado');
         setPrimeiroCarregamento(true);
         setCarregando(false);
       }
     };
 
     router.events?.on('routeChangeComplete', handleRouteChange);
-    
+
     return () => {
       router.events?.off('routeChangeComplete', handleRouteChange);
     };
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
  const buscarFaturas = useCallback(async (
   page = 1,
@@ -406,9 +398,7 @@ export default function ConsultaFaturasPage() {
 
   useEffect(() => {
     // Carregamento inicial das faturas sem filtros - só executa uma vez
-    console.log('🚀 useEffect inicial - primeiroCarregamento:', primeiroCarregamento);
     if (primeiroCarregamento) {
-      console.log('📊 Iniciando primeira carga de faturas...');
       buscarFaturas(1, 10, [], 'todas', 'todas', 'todas');
       setPrimeiroCarregamento(false);
     }

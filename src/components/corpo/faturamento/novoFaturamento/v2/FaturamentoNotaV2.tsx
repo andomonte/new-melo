@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AutocompletePessoa from '@/components/common/AutoCompletePessoa';
+import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
 
 /**
  * FaturamentoNotaV2 — LAYOUT (apresentacional) reconstruído de faturamento-compacto.html.
@@ -50,6 +51,26 @@ const money = (v: any) =>
 export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const [aba, setAba] = useState<Aba>('dados');
 
+  // Vendedores (código → nome) para exibir "código - nome" no campo Vendedor.
+  const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch('/api/faturamento/vendedorget')
+      .then((r) => r.json())
+      .then((rows: any[]) => {
+        const m: Record<string, string> = {};
+        (rows || []).forEach((v: any) => {
+          const k = String(v?.codvend ?? '').trim().replace(/^0+/, '');
+          if (k) m[k] = v?.nome ?? '';
+        });
+        setVendedoresMap(m);
+      })
+      .catch(() => {});
+  }, []);
+  const nomeVendedor = (cod?: string) => {
+    const k = String(cod ?? '').trim().replace(/^0+/, '');
+    return vendedoresMap[k] || '';
+  };
+
   // Fallback local (preview) se não vier ctx
   const [local, setLocal] = useState<Record<string, any>>({
     tipodoc: 'N', cobranca: 'N', inscFat: '04', nfeAmbiente: '2', nfeFinalidade: '1', nfeFormaEmissao: '1',
@@ -68,6 +89,15 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const itens = data.itens ?? [];
   const resumo = data.resumo ?? {};
   const titulo = data.titulo ?? 'FATURA · VENDA · CLIENTE';
+
+  // Natureza da operação (cabeçalho) = derivada da OPERAÇÃO (tipo_operacao),
+  // NÃO do CFOP dos itens (o CFOP fica POR ITEM). Em "Escolher Outros" o usuário
+  // informa a natureza manualmente.
+  const isOperacaoOutros =
+    String(f.operacaoFiscal ?? '').toUpperCase() === 'OUTROS';
+  const naturezaDaOperacao = isOperacaoOutros
+    ? String(f.naturezaOperacao ?? '')
+    : naturezaPorOperacao(f.operacaoFiscal);
   // vencimento mínimo = amanhã (não permite data <= hoje)
   const minVenc = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
@@ -132,11 +162,10 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                     <select value={f.cobranca} onChange={(e) => set('cobranca', e.target.value)}>
                       <option value="S">Sim</option><option value="N">Não</option></select></div>
                   <div className="fat-c3"><label>Insc. estadual (AM)</label>
-                    <select value={f.inscFat} onChange={(e) => set('inscFat', e.target.value)}>
+                    <select value={f.inscFat} onChange={(e) => set('inscFat', e.target.value)} disabled title="Definida pela venda/empresa — não editável">
                       <option value="04">Inscrição estadual 04</option><option value="07">Inscrição estadual 07</option></select></div>
-                  <div className="fat-c2"><label>NF-e · ambiente</label>
-                    <select value={f.nfeAmbiente} onChange={(e) => set('nfeAmbiente', e.target.value)}>
-                      <option value="2">2 · Homologação</option><option value="1">1 · Produção</option></select></div>
+                  {/* NF-e · ambiente: removido da tela — o ambiente (homolog/produção)
+                      vem de um parâmetro central (dadosEmpresa.ambiente), não por fatura. */}
                   <div className="fat-c2"><label>NF-e · finalidade</label>
                     <select value={f.nfeFinalidade} onChange={(e) => set('nfeFinalidade', e.target.value)}>
                       <option value="1">1 · Normal</option><option value="2">2 · Complementar</option>
@@ -153,15 +182,15 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                     <select value={f.operacaoFiscal} onChange={(e) => set('operacaoFiscal', e.target.value)}>
                       {OPER.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
                   <div className="fat-c3"><label>Natureza da operação</label>
-                    <input type="text" value={f.naturezaOperacao ?? ''} onChange={(e) => set('naturezaOperacao', e.target.value)} /></div>
+                    {isOperacaoOutros ? (
+                      <input type="text" placeholder="Informe a natureza da operação" value={f.naturezaOperacao ?? ''} onChange={(e) => set('naturezaOperacao', e.target.value)} />
+                    ) : (
+                      <input type="text" readOnly title="Definida pela operação selecionada" value={naturezaDaOperacao} />
+                    )}</div>
                   <div className="fat-c2"><label>CFOP</label>
-                    <input type="text" placeholder="calculado" value={f.cfop ?? ''} onChange={(e) => set('cfop', e.target.value)} /></div>
-                  <div className="fat-c1"><label>Origem</label>
-                    <input type="text" value={f.origem ?? ''} onChange={(e) => set('origem', e.target.value)} /></div>
-                  <div className="fat-c2"><label>NF-e · forma de emissão</label>
-                    <select value={f.nfeFormaEmissao} onChange={(e) => set('nfeFormaEmissao', e.target.value)}>
-                      <option value="1">1 · Normal</option><option value="2">2 · Contingência FS-IA</option>
-                      <option value="9">9 · Off-line (NFC-e)</option></select></div>
+                    <input type="text" placeholder="por item" title="O CFOP é definido por item (na venda). Em 'Escolher Outros' informe o CFOP manual." value={f.cfop ?? ''} onChange={(e) => set('cfop', e.target.value)} readOnly={!isOperacaoOutros} /></div>
+                  {/* Origem (canal da venda B/E/N) e NF-e · forma de emissão (sempre Normal=1,
+                      sem contingência) removidos da tela — mantêm os defaults no payload. */}
                 </div>
               </div>
 
@@ -182,7 +211,21 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                       {MODAIS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
                   <div className="fat-c2"><label>Pedido</label><input type="text" value={f.pedido ?? ''} onChange={(e) => set('pedido', e.target.value)} /></div>
                   <div className="fat-c3"><AutocompletePessoa label="Transportadora" tipo="transportadora" value={f.transportadora ?? ''} onChange={(cod) => set('transportadora', cod)} /></div>
-                  <div className="fat-c4"><label>Vendedor</label><input type="text" value={f.vendedor ?? ''} onChange={(e) => set('vendedor', e.target.value)} /></div>
+                  <div className="fat-c4"><label>Vendedor</label>
+                    <input
+                      type="text"
+                      readOnly
+                      title="Vendedor da venda"
+                      value={
+                        f.vendedor
+                          ? `${f.vendedor}${
+                              nomeVendedor(f.vendedor)
+                                ? ' - ' + nomeVendedor(f.vendedor)
+                                : ''
+                            }`
+                          : ''
+                      }
+                    /></div>
                 </div>
               </div>
 

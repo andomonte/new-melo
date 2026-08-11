@@ -166,6 +166,12 @@ export default async function handle(
       values.push(suframa);
       placeholders.push(`$${paramIndex++}`);
     }
+    if (req.body.ambiente !== undefined) {
+      // Ambiente NF-e/NFC-e ('1'=produção, '2'=homologação). Default no DB é '2'.
+      columns.push('ambiente');
+      values.push(req.body.ambiente);
+      placeholders.push(`$${paramIndex++}`);
+    }
     if (email !== undefined) {
       columns.push('email');
       values.push(email);

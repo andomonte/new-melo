@@ -1,6 +1,6 @@
 // src/pages/cadastro/dadosEmpresa/_forms/modalFormCadastrarDadosEmpresa.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { DadosEmpresa } from '@/data/dadosEmpresa/dadosEmpresas';
 import { X, Eye, EyeOff } from 'lucide-react';
 import FormInput from '@/components/common/FormInput';
@@ -49,8 +49,10 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
   const [certificadoSenha, setCertificadoSenha] = useState('');
   const [isExtractingCertificado, setIsExtractingCertificado] = useState(false);
   const [mostrarSenhaCert, setMostrarSenhaCert] = useState(false);
+  const [certificadoErro, setCertificadoErro] = useState<string | null>(null);
   const [certificadoExtraido, setCertificadoExtraido] =
     useState<CertificadoExtraido | null>(null);
+  const senhaCertRef = useRef<HTMLInputElement>(null);
 
   // Estados para modal de inscrição estadual
   const [showModalInscricaoEstadual, setShowModalInscricaoEstadual] =
@@ -148,7 +150,13 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
 
   const handleCertificadoUpload = async (file: File) => {
     if (!file) return;
+    if (!certificadoSenha) {
+      setCertificadoErro('Digite a senha do certificado.');
+      senhaCertRef.current?.focus();
+      return;
+    }
 
+    setCertificadoErro(null);
     setIsExtractingCertificado(true);
     try {
       // Extração NO SERVIDOR (mais confiável que node-forge no navegador) via endpoint.
@@ -179,8 +187,8 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
       });
     } catch (error: any) {
       console.error('Erro ao extrair certificado:', error);
-      // Mostra a causa REAL do backend (senha, formato, algoritmo...).
-      alert(
+      // Mostra a causa REAL do backend inline (senha, formato, algoritmo...).
+      setCertificadoErro(
         error?.message ||
           'Erro ao extrair certificado. Verifique se a senha está correta.',
       );
@@ -325,6 +333,32 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
                   onChange={handleChange}
                   error={error?.suframa}
                 />
+                {/* Ambiente de emissão (parâmetro central de NF-e/NFC-e). */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Ambiente NF-e / NFC-e
+                  </label>
+                  <select
+                    name="ambiente"
+                    value={dadosEmpresa.ambiente || '2'}
+                    onChange={(e) =>
+                      handleDadosEmpresaChange({
+                        ...dadosEmpresa,
+                        ambiente: e.target.value,
+                      })
+                    }
+                    className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="2">
+                      2 · Homologação (teste, sem valor fiscal)
+                    </option>
+                    <option value="1">1 · Produção (valor fiscal)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Empresa nova nasce em Homologação. Troque para Produção
+                    quando for emitir de verdade.
+                  </p>
+                </div>
               </div>
 
               <hr className="my-8 border-gray-300 dark:border-gray-600" />
@@ -431,8 +465,11 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
                       accept=".pfx"
                       onChange={(e) => {
                         const file = e.target.files?.[0] || null;
+                        setCertificadoErro(null);
+                        setCertificadoExtraido(null);
                         setCertificadoFile(file);
-                        // Não extrair automaticamente mais - aguardar senha
+                        // Foca a senha para o usuário extrair em seguida.
+                        if (file) setTimeout(() => senhaCertRef.current?.focus(), 0);
                       }}
                       className="block w-full text-sm text-gray-500 dark:text-gray-400
                         file:mr-4 file:py-2 file:px-4
@@ -469,11 +506,19 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
                       </label>
                       <div className="relative">
                         <input
+                          ref={senhaCertRef}
                           type={mostrarSenhaCert ? 'text' : 'password'}
                           autoComplete="new-password"
                           value={certificadoSenha}
                           onChange={(e) => setCertificadoSenha(e.target.value)}
-                          placeholder="Digite a senha do certificado"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (certificadoFile)
+                                handleCertificadoUpload(certificadoFile);
+                            }
+                          }}
+                          placeholder="Digite a senha e pressione Enter para extrair"
                           className="normal-case block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                         />
                         <button
@@ -510,6 +555,11 @@ const ModalFormCadastrarDadosEmpresa: React.FC<
                           ? 'Extraindo...'
                           : 'Extrair Certificado'}
                       </button>
+                      {certificadoErro && (
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          {certificadoErro}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

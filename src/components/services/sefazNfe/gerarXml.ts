@@ -276,7 +276,10 @@ export function gerarXMLNFe(dados: any): string {
   }
   
   const nNFChave = ('000000000' + numeroNF).slice(-9); // 9 dígitos com zeros à esquerda
-  const tpEmis = '1'; // Tipo de emissão: 1 = Normal
+  const tpEmis = '1'; // Tipo de emissão: 1 = Normal (sem contingência — igual ao legado)
+  // Ambiente (1=produção, 2=homologação) vem parametrizado do chamador
+  // (dadosEmpresa.ambiente); default homologação. Não entra na chave de acesso.
+  const tpAmb = String(dados?.ambiente ?? '2');
 
   // CORREÇÃO: cNF (Código Numérico) - SEMPRE 8 dígitos
   // IMPORTANTE: Deve ser único para cada emissão, mesmo com o mesmo número de NFe
@@ -339,6 +342,13 @@ export function gerarXMLNFe(dados: any): string {
     destBlock.indIEDest = '9';
   }
 
+  // SEFAZ (NT 2014/... regra de homologação): em AMBIENTE DE HOMOLOGAÇÃO
+  // (tpAmb=2) o nome do destinatário DEVE ser exatamente este texto — senão
+  // algumas UFs rejeitam. Deixa a emissão 100% conforme. Sem valor fiscal.
+  if (tpAmb === '2') {
+    destBlock.xNome = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
+  }
+
   const xmlObj = {
     NFe: {
       '@xmlns': 'http://www.portalfiscal.inf.br/nfe',
@@ -348,7 +358,9 @@ export function gerarXMLNFe(dados: any): string {
         ide: {
           cUF,
           cNF,
-          natOp: 'VENDA',
+          // Natureza da operação vem da fatura (conforme a operação escolhida),
+          // igual ao Delphi; default 'VENDA' quando não informada.
+          natOp: String(dados?.naturezaOperacao || 'VENDA'),
           mod,
           // CORREÇÃO: Usar a mesma variável 'serieNF' aqui para garantir consistência.
           serie: serieNF,
@@ -360,7 +372,7 @@ export function gerarXMLNFe(dados: any): string {
           tpImp: '1',
           tpEmis,
           cDV,
-          tpAmb: '2',
+          tpAmb,
           finNFe: '1',
           indFinal: '1',
           indPres: '1',

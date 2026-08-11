@@ -59,7 +59,10 @@ const Page = () => {
       typeof window !== 'undefined' &&
       window.location.pathname !== telaAtual
     ) {
-      window.history.replaceState(null, '', telaAtual);
+      // Preserva o history.state do Next (NÃO passar null — zerar o state quebra
+      // o router do Next: as navegações seguintes mudam a URL mas não trocam a
+      // página, só voltando com refresh).
+      window.history.replaceState(window.history.state, '', telaAtual);
     }
 
     setDadosCarregados(true);

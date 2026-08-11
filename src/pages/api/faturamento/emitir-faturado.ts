@@ -146,7 +146,11 @@ export default async function handler(
     }
 
     const emitenteRaw = empresaQuery.rows[0];
-    
+
+    // Ambiente NF-e/NFC-e parametrizado por empresa (dadosEmpresa.ambiente):
+    // '1'=produção, '2'=homologação. Fallback env e default homologação.
+    const ambienteEmpresa = String(emitenteRaw?.ambiente || process.env.AMBIENTE_NFCE || '2');
+
     // Descriptografar certificados
     const certificadoKey = await decrypt(emitenteRaw.certificadoKey);
     const certificadoCrt = await decrypt(emitenteRaw.certificadoCrt);
@@ -205,8 +209,15 @@ export default async function handler(
       emitente,
     };
 
+    // Natureza da Operação (cabeçalho) = dbfatura.descrcfop, gravada no faturamento
+    // a partir da OPERAÇÃO (tipo_operacao) — NÃO do CFOP dos itens (o CFOP fica por
+    // item). Fallback p/ faturas antigas sem descrcfop.
+    const naturezaOperacao =
+      String(dbfatura.descrcfop || '').trim() || 'VENDA DE MERCADORIAS';
+    console.log(`🧾 Natureza da operação (descrcfop): "${naturezaOperacao}"`);
+
     // Ambiente SEFAZ
-    const ambienteSefaz = getAmbienteSefaz();
+    const ambienteSefaz = getAmbienteSefaz(ambienteEmpresa);
     const isHomologacao = ambienteSefaz === 'HOMOLOGACAO';
     console.log(`🌐 Ambiente SEFAZ: ${ambienteSefaz}`);
 
@@ -344,6 +355,7 @@ export default async function handler(
         frete: '0.00',
         seguro: '0.00',
         observacoes: '.',
+        ambiente: ambienteEmpresa,
       });
 
       // Assinar XML
@@ -382,14 +394,18 @@ export default async function handler(
         dataEmissao
       );
 
-      urlSefaz = getUrlSefazAtual('NFCE_AUTORIZACAO');
+      urlSefaz = getUrlSefazAtual('NFCE_AUTORIZACAO', ambienteEmpresa);
 
     } else {
       // ========== NF-e (NOTA FISCAL) ==========
       console.log('📄 Gerando NF-e (Nota Fiscal) para pessoa jurídica...');
       
       const dadosNormalizados = await normalizarPayloadNFe(dados);
-      const xmlBruto = gerarXMLNFe(dadosNormalizados);
+      const xmlBruto = gerarXMLNFe({
+        ...dadosNormalizados,
+        ambiente: ambienteEmpresa,
+        naturezaOperacao,
+      });
 
       xmlAssinado = await assinarXMLComCertificados(
         xmlBruto,
@@ -402,7 +418,7 @@ export default async function handler(
       const chaveMatch = xmlAssinado.match(/Id="NFe(\d{44})"/);
       chaveAcesso = chaveMatch ? chaveMatch[1] : '';
 
-      urlSefaz = getUrlSefazAtual('NFE_AUTORIZACAO');
+      urlSefaz = getUrlSefazAtual('NFE_AUTORIZACAO', ambienteEmpresa);
     }
 
     console.log('✅ XML assinado, chave:', chaveAcesso);
@@ -505,6 +521,8 @@ export default async function handler(
 
       const faturaParaPdf = {
         ...dbfatura,
+        // DANFE mostra a MESMA natureza do XML (o gerarPreviewNF lê fatura.natureza).
+        natureza: naturezaOperacao,
         nomefant: dbclien?.nomefant || dbclien?.nome || '',
         cpfcgc: dbclien?.cpfcgc || '',
         ender: dbclien?.ender || '',

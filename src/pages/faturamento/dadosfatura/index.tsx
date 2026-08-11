@@ -4,7 +4,7 @@ import withAuth from '@/utils/withAuth';
 
 const Page = () => {
   if (typeof window !== 'undefined') {
-    window.history.replaceState(null, '', '/faturamento/dadosfatura');
+    window.history.replaceState(window.history.state, '', '/faturamento/dadosfatura');
   }
 
   return <Faturamento tela={'dadosfatura'} />;

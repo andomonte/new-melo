@@ -6,7 +6,7 @@ import withAuth from '@/utils/withAuth';
 
 const Page = () => {
   if (typeof window !== 'undefined') {
-    window.history.replaceState(null, '', '/faturamento/calculofaturamento');
+    window.history.replaceState(window.history.state, '', '/faturamento/calculofaturamento');
   }
 
   return <Faturamento tela={'calculofaturamento'} />;

@@ -6,7 +6,7 @@ import withAuth from '@/utils/withAuth';
 
 const Page = () => {
   if (typeof window !== 'undefined') {
-    window.history.replaceState(null, '', '/compras/dashBoard');
+    window.history.replaceState(window.history.state, '', '/compras/dashBoard');
   }
 
   return <Comprador tela={'dashBoard'} />;
