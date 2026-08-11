@@ -860,7 +860,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     setSalvarStep('montando');
     setSalvarMsg('Preparando os dados do orçamento...');
 
-    if (!clienteSelecionado?.codcli) { setSalvarStep('erro'); setSalvarMsg('Selecione um cliente.'); return; }
+    const codcliSalvar = clienteSelecionado?.codcli || clienteSelecionado?.CODCLI || '';
+    if (!codcliSalvar) { setSalvarStep('erro'); setSalvarMsg('Selecione pelo menos um cliente.'); console.error('[SalvarOrc] clienteSelecionado:', clienteSelecionado); return; }
     if (itensGrid.length === 0) { setSalvarStep('erro'); setSalvarMsg('Carrinho vazio.'); return; }
 
     try {
@@ -875,7 +876,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         expires_at: expiresAt.toISOString(),
         header: {
           operacao: Number(documento?.COD_OPERACAO) || 1,
-          codcli: String(clienteSelecionado.codcli),
+          codcli: String(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI || ''),
           codusr: Number(user?.codusr) || 0,
           pedido: pedido || '',
           tipo: 'P',
@@ -945,7 +946,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     setEnvioStep('montando');
     setEnvioMsg('Preparando os dados para envio...');
 
-    if (!clienteSelecionado?.codcli) { setEnvioStep('erro'); setEnvioMsg('Selecione um cliente.'); return; }
+    if (!(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI)) { setEnvioStep('erro'); setEnvioMsg('Selecione um cliente.'); return; }
     if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('Carrinho vazio.'); return; }
 
     try {
@@ -957,7 +958,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       const payload = {
         header: {
           operacao: Number(documento?.COD_OPERACAO) || 1,
-          codcli: String(clienteSelecionado.codcli),
+          codcli: String(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI || ''),
           codusr: Number(user?.codusr) || 0,
           pedido: pedido || '',
           tipo: 'P',
@@ -2155,7 +2156,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                         const payload = {
                           header: {
                             operacao: Number(documento?.COD_OPERACAO) || 1,
-                            codcli: String(clienteSelecionado.codcli),
+                            codcli: String(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI || ''),
                             codusr: Number(user?.codusr) || 0,
                             pedido: pedido || '', tipo: 'P',
                             tele: operadorSel?.nome ? 'S' : 'N',
