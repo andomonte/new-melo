@@ -21,6 +21,7 @@ import { AuthContext } from '@/contexts/authContexts';
 import ModalVerItensVenda from '../centralVendas/ModalVerItensVenda';
 import CompartilharOrcamentoModal from '../centralVendas/CompartilharOrcamentoModal';
 import NovaVendaV2 from '../novaVendaV2';
+import ModalAnaliseLiberacao from '../bloqueadas/ModalAnaliseLiberacao';
 import { useRouter } from 'next/router';
 
 // Tipos e Interfaces
@@ -101,6 +102,8 @@ const VendasPage = () => {
   const [isLoadingVendedor, setIsLoadingVendedor] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<string | null>('data');
   const [sortDir, setSortDir] = useState<SortDir>('desc'); // Padrão: 'desc' (mais recente/maior)
+  const [modalDesbloqueio, setModalDesbloqueio] = useState(false);
+  const [codvendaDesbloqueio, setCodvendaDesbloqueio] = useState('');
   const [modalNovaVenda, setModalNovaVenda] = useState(() => {
     try { return sessionStorage.getItem('centralV2_modalAberto') === 'novaVenda'; } catch { return false; }
   });
@@ -207,8 +210,12 @@ const VendasPage = () => {
         page,
         perPage,
         codvend: user?.codusr,
-
+        status: statusFilter,
         codvendUsuario: user?.codusr || undefined,
+        sortBy: sortBy || undefined,
+        sortDir: sortDir || undefined,
+        search: searchTerm || undefined,
+        searchField: searchField || 'todos',
       });
 
       setVendas(data);
@@ -247,11 +254,8 @@ const VendasPage = () => {
         throw new Error(data?.error || 'Falha ao excluir.');
       }
 
-      refreshVendas();
       setDelStep('ok');
       setDelMsg('Excluída com sucesso.');
-
-      // recarrega a lista com seus próprios filtros atuais
       await refreshVendas();
     } catch (e: any) {
       setDelStep('erro');
@@ -323,7 +327,7 @@ const VendasPage = () => {
   // Atalhos de teclado
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (verItensOpen || compartilharPdfOpen || delOpen || modalNovaVenda) return;
+      if (verItensOpen || compartilharPdfOpen || delOpen || modalNovaVenda || modalDesbloqueio) return;
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
@@ -1141,24 +1145,55 @@ const VendasPage = () => {
   const handleEditarClick = (venda: Venda) => {
     try {
       if ((venda as any)?.tipoOrigem === 'SALVA' && (venda as any)?.draft) {
-        // 1) limpa tudo que a Nova Venda usa (evita resíduo/stale)
-        limparStoragesNovaVenda();
+        const draft = (venda as any).draft;
+        const payload = typeof draft.payload === 'string' ? JSON.parse(draft.payload) : draft.payload;
+        const header = payload?.header || {};
+        const itens = payload?.itens || [];
+        const prazos = payload?.prazos || [];
 
-        // 2) grava todos os storages que a novavenda precisa a partir do draft
-        setStoragesFromDraft((venda as any).draft);
+        // Salvar dados do draft no sessionStorage para a Nova Venda V2 carregar
+        const userKey = `novaVendaV2_draft_${user?.usuario || 'anon'}`;
+        const draftData = {
+          draftId: draft.draft_id || null,
+          clienteSelecionado: {
+            codcli: header.codcli || draft.codcli,
+            nome: header.nomecf || draft.cliente_nome || '',
+            nomefant: header.nomecf || draft.cliente_nome || '',
+            cpfcgc: '', tipo: '', tipoPreco: '',
+            limite: 0, debito: 0, saldo: 0,
+            codvend: header.vendedor || '',
+            diasAtrasado: 0, limiteAtraso: 0, kickback: false,
+          },
+          buscaCliente: `${header.codcli || draft.codcli} - ${header.nomecf || draft.cliente_nome || ''}`,
+          vendedorSel: { codigo: header.vendedor || '', nome: header.vendedorNome || '' },
+          buscaVendedor: header.vendedor ? `${header.vendedor} - ${header.vendedorNome || ''}` : '',
+          operadorSel: { codigo: header.operador || '', nome: header.operadorNome || '' },
+          buscaOperador: header.operador ? `${header.operador} - ${header.operadorNome || ''}` : '',
+          itensGrid: itens.map((it: any) => ({
+            codprod: it.codprod || it.codigo, ref: it.ref || '', descr: it.descr || it.descricao || '',
+            qtd: Number(it.qtd || it.quantidade || 0), prunit: Number(it.prunit || it.precoItemEditado || 0),
+            prvenda_original: Number(it.prvenda_original || it.prunit || 0),
+            desconto_percentual: Number(it.desconto || 0), total_item: Number(it.total_item || 0),
+            prcompra: Number(it.prcompra || 0), codmarca: it.codmarca || '', marca_nome: it.marca_nome || '',
+            origem: it.origem || 'N', estoque: Number(it.estoque || 0),
+          })),
+          documento: { COD_OPERACAO: String(header.operacao || '1'), DESCR: '' },
+          prazo: header.prazo || '',
+          prazosArray: prazos.map((p: any, i: number) => ({ id: i + 1, dataVencimento: p.data, dias: Number(p.dia || p.dias || 0) })),
+          fPagamento: header.formaPagamento || '',
+          transporteSel: { CODTPTRANSP: header.codtptransp ? String(header.codtptransp) : '002', DESCR: header.transp || 'CARRO (MELO)' },
+          valTransp: Number(header.vlrfrete || 0).toLocaleString('pt-br', { style: 'currency', currency: 'BRL' }),
+          valTranspDec: Number(header.vlrfrete || 0),
+          obsFat: header.obsfat || '', pedido: header.pedido || '',
+          obs: header.obs || '', requisicao: header.requisicao || '',
+        };
 
-        // 3) indica ao roteador raiz qual tela abrir
-        sessionStorage.setItem(
-          'telaAtualMelo',
-          JSON.stringify(NOVA_VENDA_PATH),
-        );
-
-        // 4) navega via index (como o menu faz)
-        router.replace('/'); // não use push('/vendas/novaVenda')
+        sessionStorage.setItem(userKey, JSON.stringify(draftData));
+        sessionStorage.setItem('centralV2_modalAberto', 'novaVenda');
+        setModalNovaVenda(true);
         return;
       }
 
-      // Se não veio draft, bloqueia edição
       toast({
         title: 'Não é possível editar',
         description: 'Esta venda não possui rascunho para reabrir.',
@@ -1279,6 +1314,7 @@ const VendasPage = () => {
       ? parseFloat(vendaItem.total as any)
       : 0;
     const isEditable = vendaItem.tipoOrigem === 'SALVA';
+    const isBloqueada = (vendaItem as any).status === 'B';
 
     // ID exibido:
     // - drafts (SALVA/SALVA2): usa draft.draft_id (fallback para codvenda já que no SELECT codvenda recebe o draft_id)
@@ -1474,6 +1510,23 @@ const VendasPage = () => {
                       Excluir
                     </button>
                   )}
+
+                  {isBloqueada && user?.funcoes?.some(function(f: any) { return (typeof f === 'string' ? f : f?.sigla) === 'DBV'; }) && (
+                    <button
+                      key={`desbloq-${vendaItem.codvenda}`}
+                      onClick={() => {
+                        setCodvendaDesbloqueio(vendaItem.codvenda);
+                        setModalDesbloqueio(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 w-full"
+                      role="menuitem"
+                      title="Analisar e desbloquear venda"
+                    >
+                      <Lock className="mr-2 text-amber-500" size={16} />
+                      Desbloquear Venda
+                    </button>
+                  )}
                 </div>
               </div>,
               document.body,
@@ -1660,21 +1713,31 @@ const VendasPage = () => {
         </div>
       )}
 
+      {/* Modal Desbloqueio de Venda */}
+      {modalDesbloqueio && codvendaDesbloqueio ? (
+        <ModalAnaliseLiberacao
+          isOpen={modalDesbloqueio}
+          onClose={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); }}
+          codvenda={codvendaDesbloqueio}
+          onLiberar={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); refreshVendas(); }}
+        />
+      ) : null}
+
       {/* Modal Nova Venda V2 */}
       {modalNovaVenda ? (
         <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800">
-            <h2 className="text-lg font-bold text-[#347AB6] dark:text-gray-100">Nova Venda</h2>
+          <div className="flex items-center justify-between px-5 py-2.5 border-b-2 border-[#347AB6]/20 dark:border-zinc-700 bg-gradient-to-r from-[#347AB6]/5 to-transparent dark:from-zinc-800 dark:to-zinc-900">
+            <h2 className="text-xl font-bold text-[#347AB6] dark:text-gray-100 tracking-tight">Nova Venda</h2>
             <button
               onClick={fecharModalNovaVenda}
-              className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-700"
+              className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-700 transition-colors"
               title="Fechar (Esc)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <NovaVendaV2 />
+            <NovaVendaV2 onSaved={() => { fecharModalNovaVenda(); refreshVendas(); }} />
           </div>
         </div>
       ) : null}

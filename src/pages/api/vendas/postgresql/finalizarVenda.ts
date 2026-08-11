@@ -267,7 +267,7 @@ function initialStatus(
 ): string {
   const t = (tipo ?? '').toUpperCase();
   const blq = sn(bloqueada);
-  if (blq === 'S' || bloqueada === '1') return 'R';
+  if (blq === 'S' || bloqueada === '1') return 'B';
   if (uf === 'AM') {
     if (t === 'P' || t === '1' || t === '2' || t === '3') return 'N';
     return 'N';

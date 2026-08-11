@@ -23,7 +23,7 @@ import ModalAdicionarItemRapido from '../bloqueadas/ModalAdicionarItemRapido';
 import ModalEquivalentes from '../bloqueadas/ModalEquivalentes';
 import ModalHistoricoProduto from '../bloqueadas/ModalHistoricoProduto';
 import ModalPrazoParcelas from '../novaVenda/prazo';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { calcImposto } from '@/lib/calcImposto';
 import api from '@/components/services/api';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -54,17 +54,73 @@ interface AuthContextProps {
 // ===================== Helpers =====================
 const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+// Classes Material Input (label flutuante)
+const MI_INPUT = 'peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 !pr-9 font-sans text-sm font-normal text-gray-900 dark:text-white outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400';
+const MI_LABEL = 'text-gray-900 dark:text-white before:content-[" "] after:content-[" "] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-bold leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-600 dark:peer-placeholder-shown:text-gray-300 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-900 dark:peer-focus:text-white peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200';
+const MI_BTN = 'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-900 z-10';
+
+// ===================== Editor de Moeda (AG Grid v36 — reactiveCustomComponents) =====================
+const CurrencyEditor = ({ value, onValueChange, stopEditing }: any) => {
+  const [digits, setDigits] = React.useState('');
+  const pristineRef = React.useRef(true);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!pristineRef.current) {
+      onValueChange(parseInt(digits || '0', 10) / 100);
+    }
+  }, [digits, onValueChange]);
+
+  React.useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+
+  const numVal = pristineRef.current ? (Number(value) || 0) : parseInt(digits || '0', 10) / 100;
+  const display = numVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  return (
+    <input ref={inputRef} value={display}
+      onChange={() => {}}
+      onKeyDown={(e) => {
+        if (e.key >= '0' && e.key <= '9') {
+          e.preventDefault(); e.stopPropagation();
+          if (pristineRef.current) { pristineRef.current = false; setDigits(e.key); }
+          else { setDigits(prev => (prev + e.key).replace(/^0+/, '') || '0'); }
+        } else if (e.key === 'Backspace') {
+          e.preventDefault(); e.stopPropagation();
+          if (pristineRef.current) { pristineRef.current = false; setDigits('0'); }
+          else { setDigits(prev => prev.length > 1 ? prev.slice(0, -1) : '0'); }
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault(); e.stopPropagation();
+          stopEditing();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          stopEditing(true);
+        } else {
+          e.preventDefault();
+        }
+      }}
+      style={{ width: '100%', height: '100%', textAlign: 'center', fontSize: 13, fontWeight: 600, border: 0, outline: 'none', background: 'transparent' }}
+    />
+  );
+};
+
 // ===================== Componente Principal =====================
-const NovaVendaV2 = () => {
+const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const { toast } = useToast();
   const { user } = useContext(AuthContext) as AuthContextProps;
 
   // ---------- Persistência sessionStorage ----------
-  const SS_KEY = 'novaVendaV2_draft';
+  const draftIdRef = useRef<string | null>(null);
+  const SS_KEY = `novaVendaV2_draft_${user?.usuario || 'anon'}`;
   const saveDraftRef = useRef<any>(null);
   const draft = useRef<any>(null);
   if (draft.current === null) {
-    try { const raw = sessionStorage.getItem(SS_KEY); draft.current = raw ? JSON.parse(raw) : {}; } catch { draft.current = {}; }
+    try {
+      sessionStorage.removeItem('novaVendaV2_draft');
+      const raw = sessionStorage.getItem(SS_KEY);
+      draft.current = raw ? JSON.parse(raw) : {};
+      // Restaurar draftId se veio de um orçamento existente
+      if (draft.current?.draftId) draftIdRef.current = draft.current.draftId;
+    } catch { draft.current = {}; }
   }
 
   // ---------- Estados do cliente ----------
@@ -99,6 +155,15 @@ const NovaVendaV2 = () => {
   const transpInputRef = useRef<HTMLInputElement>(null);
   const resultadosOperadorRef = useRef<HTMLDivElement>(null);
 
+  // ---------- Armazém ----------
+  const armazens = useMemo(() => (user?.armazens || []).map((a: any) => ({ value: String(a.id_armazem ?? a.value ?? ''), label: String(a.nome ?? a.label ?? 'Sem armazém') })), [user]);
+  const [selectedArmazem, setSelectedArmazem] = useState<{ value: string; label: string } | null>(() => draft.current?.selectedArmazem || null);
+
+  // Auto-selecionar primeiro armazém
+  useEffect(() => {
+    if (!selectedArmazem && armazens.length > 0) setSelectedArmazem(armazens[0]);
+  }, [armazens, selectedArmazem]);
+
   // ---------- Estados do grid ----------
   const [itensGrid, setItensGrid] = useState<any[]>(() => draft.current?.itensGrid || []);
   const [addItemOpen, setAddItemOpen] = useState(false);
@@ -118,6 +183,10 @@ const NovaVendaV2 = () => {
   const [buscaTransp, setBuscaTransp] = useState('');
   const [showTransp, setShowTransp] = useState(false);
   const [transpIdx, setTranspIdx] = useState(0);
+  const [buscaFP, setBuscaFP] = useState('');
+  const [showFP, setShowFP] = useState(false);
+  const [fpIdx, setFpIdx] = useState(0);
+  const fpInputRef = useRef<HTMLInputElement>(null);
   const [prazo, setPrazo] = useState(() => draft.current?.prazo || '');
   const [prazosArray, setPrazosArray] = useState<{ id: number; dataVencimento: Date; dias: number }[]>(() => {
     const saved = draft.current?.prazosArray;
@@ -193,8 +262,9 @@ const NovaVendaV2 = () => {
     if (e.finished) salvarPrefsGrid();
   }, [salvarPrefsGrid]);
 
-  const onGridReady = useCallback(() => {
-    if (!user?.usuario) return;
+  const prefsCarregadasRef = useRef(false);
+  const restaurarPrefsGrid = useCallback(() => {
+    if (!user?.usuario || prefsCarregadasRef.current) return;
     fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=${encodeURIComponent(SCREEN_KEY)}`)
       .then(r => r.json())
       .then(data => {
@@ -202,25 +272,41 @@ const NovaVendaV2 = () => {
         if (!prefs) return;
         const a = gridRef.current?.api;
         if (!a) return;
+        prefsCarregadasRef.current = true;
 
         // Restaurar ordem das colunas
         if (Array.isArray(prefs.colOrder) && prefs.colOrder.length > 0) {
-          a.moveColumns(prefs.colOrder, 0);
+          try { a.moveColumns(prefs.colOrder, 0); } catch {}
         }
 
         // Restaurar larguras
         if (prefs.colWidths && typeof prefs.colWidths === 'object') {
           Object.entries(prefs.colWidths).forEach(([colId, width]) => {
-            const col = a.getColumn(colId);
-            if (col) a.setColumnWidths([{ key: colId, newWidth: width as number }]);
+            try { a.setColumnWidths([{ key: colId, newWidth: width as number }]); } catch {}
           });
         }
       })
       .catch(() => {});
   }, [user]);
 
+  const onGridReady = useCallback(() => {
+    setTimeout(() => restaurarPrefsGrid(), 300);
+  }, [restaurarPrefsGrid]);
+
+  // Reaplicar larguras quando columnDefs mudam (ex: troca de cliente muda header)
+  useEffect(() => {
+    if (prefsCarregadasRef.current) {
+      prefsCarregadasRef.current = false;
+      setTimeout(() => restaurarPrefsGrid(), 300);
+    }
+  }, [clienteSelecionado?.tipoPreco, restaurarPrefsGrid]);
+
   // ---------- Carregar dados de finalização ----------
   useEffect(() => {
+    // Parâmetros
+    api.get('/api/parametros/get?chave=prazo_validade_orcamento').then(r => {
+      if (r.data?.valor) setPrazoValidadeMax(Number(r.data.valor) || 10);
+    }).catch(() => {});
     // Transportadoras (com dedupe)
     api.post('/api/dbOracle/buscarTransporte').then(r => {
       const rows = Array.isArray(r.data) ? r.data : [];
@@ -261,15 +347,18 @@ const NovaVendaV2 = () => {
     return dadosTransporte.filter(t => (t.DESCR || '').toUpperCase().includes(v) || String(t.CODTPTRANSP || '').includes(v));
   }, [dadosTransporte, buscaTransp]);
 
-  // (isAvista, opcoesFPFiltradas movidos para depois de totalVenda)
+  // (isAvista, opcoesFPFiltradas, fpFiltradosPorBusca movidos para depois de totalVenda)
 
   // ---------- Persistir draft no sessionStorage ----------
+  const vendaSalvaRef = useRef(false);
   useEffect(() => {
+    if (vendaSalvaRef.current) return; // Não persistir após salvar/finalizar
     if (saveDraftRef.current) clearTimeout(saveDraftRef.current);
     saveDraftRef.current = setTimeout(() => {
+      if (vendaSalvaRef.current) return;
       try {
         sessionStorage.setItem(SS_KEY, JSON.stringify({
-          clienteSelecionado, buscaCliente,
+          selectedArmazem, clienteSelecionado, buscaCliente,
           vendedorSel, buscaVendedor,
           operadorSel, buscaOperador,
           itensGrid,
@@ -279,7 +368,35 @@ const NovaVendaV2 = () => {
         }));
       } catch {}
     }, 500);
-  }, [clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao]);
+  }, [selectedArmazem, clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao]);
+
+  // ---------- Completar dados do cliente se veio do draft ----------
+  useEffect(() => {
+    if (clienteSelecionado?.codcli && !clienteSelecionado.cpfcgc) {
+      // Cliente veio do draft sem dados completos — buscar
+      api.post('/api/vendas/postgresql/buscarCliente', { descricao: clienteSelecionado.codcli, pagina: 0, tamanhoPagina: 1 })
+        .then(res => {
+          const data = res.data?.data || [];
+          if (data.length > 0) {
+            const cli = data[0];
+            setClienteSelecionado((prev: any) => ({
+              ...prev,
+              cpfcgc: cli.CPFCGC || cli.cpfcgc || '',
+              tipo: cli.TIPO || cli.tipo || '',
+              limite: Number(cli.LIMITE_TOTAL || cli.LIMITE || cli.limite || 0),
+              debito: Number(cli.DEBITO_ATUAL || cli.DEBITO || cli.debito || 0),
+              saldo: Number(cli.LIMITE_DISPONIVEL || cli.limite_disponivel || 0),
+              tipoPreco: (['BALCÃO','ZFM','INTERIOR','ALC','AMAZ. OCIDENTAL','FORA ESTADO','FORA ESTADO VAREJO','RORAIMA'][Number(cli.PRVENDA || cli.prvenda || 0)] || ''),
+              codvend: cli.CODVEND || cli.codvend || prev?.codvend || '',
+              diasAtrasado: 0,
+              limiteAtraso: Number(cli.ATRASO || cli.atraso || 0),
+              kickback: cli.KICKBACK || cli.kickback || false,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   // ---------- Foco inicial no input cliente ----------
   useEffect(() => {
@@ -287,6 +404,12 @@ const NovaVendaV2 = () => {
   }, []);
 
   // ---------- Permissão EV (trocar vendedor) ----------
+  const temPVO = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'PVO');
+  }, [user]);
+  const [prazoValidadeMax, setPrazoValidadeMax] = useState(10);
+
   const temEV = useMemo(() => {
     if (!user?.funcoes) return false;
     return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'EV');
@@ -360,7 +483,7 @@ const NovaVendaV2 = () => {
 
   // Refs para dropdowns (evitar stale closures no handler global)
   const dropdownAbertoRef = useRef(false);
-  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown;
+  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown || showFP;
 
   // ---------- Navegação por teclado (Tab + Setas) ----------
   const cabecalhoRef = useRef<HTMLDivElement>(null);
@@ -588,7 +711,7 @@ const NovaVendaV2 = () => {
       debito: Number(cli.DEBITO_ATUAL || cli.DEBITO || cli.debito || 0),
       saldo,
       tipo: cli.TIPO || cli.tipo || '',
-      tipoPreco: cli.TIPOPRECO || cli.tipopreco || '',
+      tipoPreco: (['BALCÃO','ZFM','INTERIOR','ALC','AMAZ. OCIDENTAL','FORA ESTADO','FORA ESTADO VAREJO','RORAIMA'][Number(cli.PRVENDA || cli.prvenda || 0)] || ''),
       codvend: cli.CODVEND || cli.codvend || '',
       claspgto: cli.CLASPGTO || cli.claspgto || '',
       diasAtrasado,
@@ -609,6 +732,10 @@ const NovaVendaV2 = () => {
         }
       } catch {}
     }
+
+    // Atualizar preços dos itens do carrinho para o tipo de preço do novo cliente
+    const prvenda = cli.PRVENDA || cli.prvenda || '0';
+    atualizarPrecosCarrinho(prvenda);
 
     toast({ title: `Cliente ${nome} selecionado` });
     setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
@@ -688,6 +815,226 @@ const NovaVendaV2 = () => {
     }, 100);
   }, [itensGrid]);
 
+  // ---------- Salvar Orçamento ----------
+  const [salvarOpen, setSalvarOpen] = useState(false);
+  const [salvarStep, setSalvarStep] = useState<'validade' | 'montando' | 'enviando' | 'ok' | 'erro'>('validade');
+  const [salvarMsg, setSalvarMsg] = useState('');
+  const [salvarResp, setSalvarResp] = useState<any>(null);
+  const [diasValidade, setDiasValidade] = useState('10');
+
+  const handleSalvarOrcamento = useCallback(async () => {
+    if (temPVO) {
+      // Com permissão PVO: mostra modal para definir prazo
+      setSalvarOpen(true);
+      setSalvarStep('validade');
+      setDiasValidade(String(prazoValidadeMax));
+      setSalvarMsg('');
+    } else {
+      // Sem PVO: salva direto com prazo padrão da tabela
+      setDiasValidade(String(prazoValidadeMax));
+      setSalvarOpen(true);
+      executarSalvarOrcamento();
+    }
+  }, [temPVO, prazoValidadeMax]);
+
+  const executarSalvarOrcamento = useCallback(async () => {
+    setSalvarStep('montando');
+    setSalvarMsg('Preparando os dados do orçamento...');
+
+    if (!clienteSelecionado?.codcli) { setSalvarStep('erro'); setSalvarMsg('Selecione um cliente.'); return; }
+    if (itensGrid.length === 0) { setSalvarStep('erro'); setSalvarMsg('Carrinho vazio.'); return; }
+
+    try {
+      const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
+      const armId = Number(selectedArmazem?.value) || 1;
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + Math.min(Math.max(parseInt(diasValidade) || prazoValidadeMax, 1), prazoValidadeMax));
+
+      const payload = {
+        draft_id: draftIdRef.current || undefined,
+        expires_at: expiresAt.toISOString(),
+        header: {
+          operacao: Number(documento?.COD_OPERACAO) || 1,
+          codcli: String(clienteSelecionado.codcli),
+          codusr: Number(user?.codusr) || 0,
+          pedido: pedido || '',
+          tipo: 'P',
+          tele: operadorSel?.nome ? 'S' : 'N',
+          transp: transporteSel?.DESCR || '',
+          codtptransp: transporteSel?.CODTPTRANSP ? Number(transporteSel.CODTPTRANSP) : null,
+          vlrfrete: valTranspDec || 0,
+          prazo: prazo || '',
+          obs: obs || '',
+          obsfat: obsFat || '',
+          bloqueada: '0',
+          estoque_virtual: 'N',
+          uName: user?.usuario || '',
+          nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
+          vendedor: vendedorSel?.codigo || null,
+          vendedorNome: vendedorSel?.nome || null,
+          operador: operadorSel?.codigo || null,
+          operadorNome: operadorSel?.nome || null,
+          arm_id: armId,
+          formaPagamento: fPagamento || null,
+          avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
+          requisicao: requisicao || '',
+          statusVenda: 'VENDA LIBERADA',
+          draft_id: draftIdRef.current || undefined,
+        },
+        itens: itensGrid.map((it: any) => ({
+          codprod: it.codprod, ref: it.ref, descr: it.descr,
+          qtd: it.qtd, quantidade: it.qtd, prunit: it.prunit, precoItemEditado: it.prunit,
+          prvenda_original: it.prvenda_original, desconto: it.desconto_percentual || 0,
+          total_item: it.total_item, prcompra: it.prcompra || 0,
+          codmarca: it.codmarca || '', marca_nome: it.marca_nome || '', origem: it.origem || 'N',
+          estoque: it.estoque || 0, arm_id: armId, ...(it.campos_fiscais || {}),
+        })),
+        prazos: prazosPayload,
+      };
+
+      setSalvarStep('enviando');
+      setSalvarMsg('Salvando orçamento...');
+
+      const resp = await fetch('/api/vendas/salvar-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) { setSalvarStep('erro'); setSalvarMsg(data?.error || 'Falha ao salvar.'); return; }
+
+      if (data?.draft_id) draftIdRef.current = data.draft_id;
+      setSalvarResp(data);
+      setSalvarStep('ok');
+      setSalvarMsg('');
+    } catch (err: any) {
+      setSalvarStep('erro');
+      setSalvarMsg(err?.message || 'Erro ao salvar orçamento');
+    }
+  }, [clienteSelecionado, itensGrid, prazosArray, documento, user, pedido, transporteSel, valTranspDec, prazo, obs, obsFat, vendedorSel, operadorSel, fPagamento, requisicao, diasValidade]);
+
+  // ---------- Finalizar Venda ----------
+  const [envioOpen, setEnvioOpen] = useState(false);
+  const [envioStep, setEnvioStep] = useState<'montando' | 'enviando' | 'ok' | 'erro'>('montando');
+  const [envioMsg, setEnvioMsg] = useState('');
+  const [envioResp, setEnvioResp] = useState<any>(null);
+
+  const handleFinalizarVenda = useCallback(async () => {
+    setEnvioOpen(true);
+    setEnvioStep('montando');
+    setEnvioMsg('Preparando os dados para envio...');
+
+    if (!clienteSelecionado?.codcli) { setEnvioStep('erro'); setEnvioMsg('Selecione um cliente.'); return; }
+    if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('Carrinho vazio.'); return; }
+
+    try {
+      const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
+      const armId = Number(selectedArmazem?.value) || 1;
+      const temPrecoAbaixo = !temBPV && !temMPV && itensGrid.some(i => { const p = Number(i.prunit) || 0; const o = Number(i.prvenda_original) || 0; return o > 0 && p < o - 0.01; });
+      const bloqueada = temPrecoAbaixo ? 'S' : '0';
+
+      const payload = {
+        header: {
+          operacao: Number(documento?.COD_OPERACAO) || 1,
+          codcli: String(clienteSelecionado.codcli),
+          codusr: Number(user?.codusr) || 0,
+          pedido: pedido || '',
+          tipo: 'P',
+          tele: operadorSel?.nome ? 'S' : 'N',
+          transp: transporteSel?.DESCR || '',
+          codtptransp: transporteSel?.CODTPTRANSP ? Number(transporteSel.CODTPTRANSP) : null,
+          vlrfrete: valTranspDec || 0,
+          prazo: prazo || '',
+          obs: obs || '',
+          obsfat: obsFat || '',
+          bloqueada,
+          estoque_virtual: 'N',
+          uName: user?.usuario || '',
+          nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
+          vendedor: vendedorSel?.codigo || null,
+          operador: operadorSel?.codigo || null,
+          formaPagamento: fPagamento || null,
+          avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
+          requisicao: requisicao || '',
+          tipo_movimentacao: 'SAIDA',
+          tipo_operacao: 'VENDA',
+        },
+        itens: itensGrid.map((it: any, idx: number) => ({
+          codprod: it.codprod,
+          qtd: it.qtd,
+          prunit: it.prunit,
+          arm_id: armId,
+          ref: it.ref || '',
+          descr: it.descr || '',
+          desconto: it.desconto_percentual || 0,
+          codvend: vendedorSel?.codigo || null,
+          codoperador: operadorSel?.codigo || null,
+          nritem: String(idx + 1),
+          ...(it.campos_fiscais || {}),
+        })),
+        prazos: prazosPayload,
+      };
+
+      // Validações
+      if (payload.itens.some((i: any) => !i.arm_id || i.arm_id <= 0)) {
+        setEnvioStep('erro'); setEnvioMsg('Defina o armazém de todos os itens.'); return;
+      }
+      if (payload.itens.some((i: any) => i.qtd <= 0 || i.prunit <= 0)) {
+        setEnvioStep('erro'); setEnvioMsg('Quantidade e preço unitário devem ser > 0.'); return;
+      }
+
+      setEnvioStep('enviando');
+      setEnvioMsg('Enviando venda para o servidor...');
+
+      const resp = await api.post('/api/vendas/postgresql/finalizarVenda', payload);
+      const data = resp.data;
+
+      if (data?.ok) {
+        setEnvioStep('ok');
+        setEnvioResp(data);
+        setEnvioMsg(`Venda salva: Nº ${data.nrovenda} (status ${data.status}).`);
+        // Limpar draft
+        try { Object.keys(sessionStorage).forEach(k => { if (k.startsWith('novaVendaV2_draft')) sessionStorage.removeItem(k); }); } catch {}
+        if (draftIdRef.current) draftIdRef.current = null;
+      } else {
+        setEnvioStep('erro');
+        setEnvioMsg(data?.error || 'Falha ao finalizar venda.');
+      }
+    } catch (err: any) {
+      setEnvioStep('erro');
+      setEnvioMsg(err?.response?.data?.error || err?.message || 'Erro ao finalizar venda');
+    }
+  }, [clienteSelecionado, itensGrid, prazosArray, documento, user, pedido, transporteSel, valTranspDec, prazo, obs, obsFat, vendedorSel, operadorSel, fPagamento, requisicao, temBPV, temMPV]);
+
+  // ---------- Calcular impostos de um item ----------
+  const calcularImpostoItem = useCallback(async (item: any) => {
+    const codcli = clienteSelecionado?.codcli || '';
+    if (!codcli || !item.codprod) return item;
+    try {
+      const result = await calcImposto({
+        codProd: item.codprod,
+        codCli: codcli,
+        quantidade: item.qtd,
+        valorUnitario: item.prunit,
+        tipoMovimentacao: 'SAIDA',
+        tipoOperacao: 'VENDA',
+        tipoFatura: 'NOTA_FISCAL',
+        zerarSubstituicao: 'N',
+        usarAuto: true,
+      });
+      return {
+        ...item,
+        impostos: result.impostosRs,
+        total_com_impostos: result.impostosRs?.totalComImpostos || item.total_item,
+        campos_fiscais: result.raw?.campos || {},
+      };
+    } catch {
+      return item;
+    }
+  }, [clienteSelecionado]);
+
   // ---------- Handlers de itens ----------
   const handleAdicionarItens = useCallback((itensNovos: any[]) => {
     itensNovos.forEach((item) => {
@@ -698,7 +1045,7 @@ const NovaVendaV2 = () => {
           const idx = prev.findIndex((r) => r.codprod === item.codprod);
           if (idx >= 0) {
             const novos = [...prev];
-            const descAtVista = novos[idx].desconto_percentual || 0; // preserva desc à vista existente
+            const descAtVista = novos[idx].desconto_percentual || 0;
             novos[idx] = {
               ...novos[idx],
               qtd: item.qtd,
@@ -711,9 +1058,46 @@ const NovaVendaV2 = () => {
           }
           return [{ ...item, _novo: true, desconto_percentual: 0 }, ...prev];
         });
+        // Calcular impostos em background
+        if (clienteSelecionado?.codcli) {
+          calcularImpostoItem(item).then(itemComImposto => {
+            setItensGrid((prev) => prev.map(r => r.codprod === item.codprod ? { ...r, impostos: itemComImposto.impostos, total_com_impostos: itemComImposto.total_com_impostos, campos_fiscais: itemComImposto.campos_fiscais } : r));
+          });
+        }
       }
     });
-  }, []);
+  }, [clienteSelecionado, calcularImpostoItem]);
+
+  // Atualizar preços dos itens do carrinho por tipo de preço + recalcular impostos
+  const atualizarPrecosCarrinho = useCallback((tipoPreco: string) => {
+    setItensGrid((prev) => {
+      if (prev.length === 0) return prev;
+      const codprods = prev.map(i => i.codprod);
+      api.post('/api/vendas/postgresql/atualizarPrecos', { codprods, tipoPreco })
+        .then(res => {
+          const precos = res.data?.precos || {};
+          setItensGrid(p => {
+            const atualizados = p.map(item => {
+              const novoPreco = Number(precos[item.codprod]) || 0;
+              if (novoPreco > 0) {
+                const desc = Number(item.desconto_percentual) || 0;
+                return { ...item, prvenda_original: novoPreco, prunit: novoPreco, total_item: item.qtd * novoPreco * (1 - desc / 100) };
+              }
+              return item;
+            });
+            // Recalcular impostos com os novos preços
+            atualizados.forEach(item => {
+              calcularImpostoItem(item).then(imp => {
+                setItensGrid(pr => pr.map(r => r.codprod === item.codprod ? { ...r, impostos: imp.impostos, total_com_impostos: imp.total_com_impostos, campos_fiscais: imp.campos_fiscais } : r));
+              });
+            });
+            return atualizados;
+          });
+        })
+        .catch(() => {});
+      return prev;
+    });
+  }, [calcularImpostoItem]);
 
   const handleRemoverItem = useCallback((codprod: string) => {
     setItensGrid((prev) => prev.filter((r) => r.codprod !== codprod));
@@ -735,7 +1119,20 @@ const NovaVendaV2 = () => {
       if (field === 'qtd') {
         row.qtd = Number(event.newValue) || 0;
       } else if (field === 'prunit') {
-        row.prunit = Number(event.newValue) || 0;
+        let novoPreco = Number(event.newValue) || 0;
+        // Nunca negativo
+        if (novoPreco < 0) novoPreco = 0;
+        // Regra de margem: sem MPV, corrige para o mínimo da margem
+        if (!temMPV) {
+          const prcompra = Number(row.prcompra) || 0;
+          const isImp = row.origem !== 'N';
+          const margemPerc = isImp ? 40 : 20;
+          const precoMinimo = prcompra > 0 ? prcompra * (1 + margemPerc / 100) : Number(row.prvenda_original) || 0;
+          if (precoMinimo > 0 && novoPreco < precoMinimo) {
+            novoPreco = precoMinimo;
+          }
+        }
+        row.prunit = novoPreco;
       } else if (field === 'desconto_percentual') {
         row.desconto_percentual = Math.min(Math.max(Number(event.newValue) || 0, 0), 2);
       }
@@ -764,7 +1161,18 @@ const NovaVendaV2 = () => {
       novos[rowIndex] = row;
       return novos;
     });
-  }, [temMPV]);
+    // Recalcular impostos em background após edição de qtd ou preço
+    if ((field === 'qtd' || field === 'prunit') && clienteSelecionado?.codcli) {
+      const rowData = event.data;
+      if (rowData) {
+        const qtd = field === 'qtd' ? (Number(event.newValue) || 0) : rowData.qtd;
+        const prunit = field === 'prunit' ? (Number(event.newValue) || 0) : rowData.prunit;
+        calcularImpostoItem({ ...rowData, qtd, prunit }).then(itemComImposto => {
+          setItensGrid(prev => prev.map(r => r.codprod === rowData.codprod ? { ...r, impostos: itemComImposto.impostos, total_com_impostos: itemComImposto.total_com_impostos, campos_fiscais: itemComImposto.campos_fiscais } : r));
+        });
+      }
+    }
+  }, [temMPV, clienteSelecionado, calcularImpostoItem]);
 
   const ProdutoCellRenderer = useCallback((props: any) => {
     const d = props.data;
@@ -818,10 +1226,10 @@ const NovaVendaV2 = () => {
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
       valueParser: (p: any) => parseInt(String(p.newValue)) || 0,
     },
-    { headerName: 'Preço Tabela', field: 'prvenda_original', width: 100, valueFormatter: (p: any) => fmtMoeda(p.value) },
+    { headerName: 'Preço Tabela', field: 'prvenda_original', width: 100, valueFormatter: (p: any) => (Number(p.value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
     { headerName: clienteSelecionado?.tipoPreco ? `Preço ${clienteSelecionado.tipoPreco}` : 'Preço Vendido', field: 'prunit', width: 110, editable: true,
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
-      valueParser: (p: any) => parseFloat(String(p.newValue).replace('R$', '').replace(',', '.').trim()) || 0,
+      cellEditor: CurrencyEditor,
       cellRenderer: (p: any) => {
         const prunit = Number(p.value) || 0;
         const original = Number(p.data?.prvenda_original) || 0;
@@ -829,7 +1237,7 @@ const NovaVendaV2 = () => {
         const abaixo = prunit < original;
         return (
           <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            {fmtMoeda(prunit)}
+            {prunit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             {editado ? (
               <span style={{ fontSize: 10, color: abaixo ? '#dc2626' : '#16a34a' }}>{abaixo ? '▼' : '▲'}</span>
             ) : null}
@@ -848,11 +1256,18 @@ const NovaVendaV2 = () => {
         if (!d) return 0;
         return Number(d.total_com_impostos || d.total_item || 0);
       },
-      valueFormatter: (p: any) => fmtMoeda(p.value),
+      cellRenderer: (p: any) => {
+        const d = p.data;
+        if (!d) return '-';
+        const imp = d.impostos;
+        const val = Number(d.total_com_impostos || d.total_item || 0);
+        const title = imp ? `ICMS: R$ ${(imp.valorICMS || 0).toFixed(2)}\nIPI: R$ ${(imp.valorIPI || 0).toFixed(2)}\nST: R$ ${(imp.valorICMS_Subst || 0).toFixed(2)}\nPIS: R$ ${(imp.valorPIS || 0).toFixed(2)}\nCOFINS: R$ ${(imp.valorCOFINS || 0).toFixed(2)}\nTotal Imp: R$ ${(imp.valorImpostos || 0).toFixed(2)}` : '';
+        return <span title={title} style={{ cursor: imp ? 'help' : 'default' }}>{fmtMoeda(val)}</span>;
+      },
     },
     { headerName: 'Subtotal', field: 'total_item', width: 100,
       cellStyle: { fontWeight: 700, color: '#16a34a' },
-      valueFormatter: (p: any) => fmtMoeda(p.value),
+      valueFormatter: (p: any) => (Number(p.value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
     },
   ], [clienteSelecionado?.tipoPreco]);
 
@@ -862,6 +1277,7 @@ const NovaVendaV2 = () => {
 
   // Desconto à vista ativo em algum item → força "À VISTA"
   const temDescontoAvista = useMemo(() => itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0), [itensGrid]);
+  const todosDescontoAvista = useMemo(() => itensGrid.length > 0 && itensGrid.every(i => (Number(i.desconto_percentual) || 0) > 0), [itensGrid]);
 
   // Buscar opções de prazo quando totalVenda muda
   const prazoFetchRef = useRef<any>(null);
@@ -876,13 +1292,25 @@ const NovaVendaV2 = () => {
   }, [totalVenda]);
 
   // Prazo efetivo: se tem desconto à vista ou saldo insuficiente → "À VISTA"
-  const isAvista = useMemo(() => {
+  // À vista forçado (desconto ativo ou sem cliente) — não pode mudar
+  const avistaForcado = useMemo(() => {
     if (!clienteSelecionado) return true;
     if (temDescontoAvista) return true;
-    if (totalVenda > 0 && (Number(clienteSelecionado.saldo || 0) - totalVenda <= 0)) return true;
+    return false;
+  }, [temDescontoAvista, clienteSelecionado]);
+
+  // À vista por escolha do vendedor — pode mudar
+  const isAvista = useMemo(() => {
+    if (avistaForcado) return true;
     const prazoStr = String(prazo).trim().toUpperCase();
     return prazoStr === 'À VISTA' || prazoStr === 'A VISTA' || prazoStr === '0';
-  }, [temDescontoAvista, clienteSelecionado, totalVenda, prazo]);
+  }, [avistaForcado, prazo]);
+
+  // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista)
+  const precisaCreditoExtra = useMemo(() => {
+    if (!clienteSelecionado || totalVenda <= 0) return false;
+    return Number(clienteSelecionado.saldo || 0) - totalVenda < 0 && !isAvista;
+  }, [clienteSelecionado, totalVenda, isAvista]);
 
   // Filtrar formas de pagamento por prazo
   const opcoesFPFiltradas = useMemo(() => {
@@ -892,6 +1320,34 @@ const NovaVendaV2 = () => {
     }
     return opcoesFP.filter(fp => !fp.descricao?.toUpperCase().includes('OUTROS'));
   }, [opcoesFP, isAvista]);
+
+  const fpFiltradosPorBusca = useMemo(() => {
+    if (!buscaFP.trim()) return opcoesFPFiltradas;
+    const v = buscaFP.toUpperCase();
+    return opcoesFPFiltradas.filter(fp => (fp.descricao || '').toUpperCase().includes(v));
+  }, [opcoesFPFiltradas, buscaFP]);
+
+  // ---------- Status da venda ----------
+  const statusVenda = useMemo(() => {
+    if (!clienteSelecionado || totalItens === 0) return 'RASCUNHO';
+
+    // Bloqueio financeiro: cliente com atraso ou sem crédito
+    const diasAtraso = Number(clienteSelecionado.diasAtrasado || 0);
+    const limAtraso = Number(clienteSelecionado.limiteAtraso || 0);
+    if (diasAtraso > 0 && diasAtraso > limAtraso) return 'BLOQUEIO_FINANCEIRO';
+
+    // Bloqueio por preço: sem BPV e sem MPV, algum item com preço abaixo da tabela
+    if (!temBPV && !temMPV) {
+      const temPrecoEditado = itensGrid.some(i => {
+        const prunit = Number(i.prunit) || 0;
+        const original = Number(i.prvenda_original) || 0;
+        return original > 0 && prunit < original - 0.01;
+      });
+      if (temPrecoEditado) return 'BLOQUEIO_PRECO';
+    }
+
+    return 'LIBERADA';
+  }, [clienteSelecionado, totalItens, itensGrid, temBPV, temMPV]);
 
   // ---------- Atalhos de teclado ----------
   useEffect(() => {
@@ -1022,59 +1478,81 @@ const NovaVendaV2 = () => {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="nova-venda-v2 h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
+          {/* Mensagem de status */}
+          {statusVenda === 'BLOQUEIO_PRECO' ? (
+            <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">Venda bloqueada por preço — O preço de um ou mais itens foi alterado abaixo da tabela. A venda será enviada para análise de desbloqueio.</span>
+            </div>
+          ) : statusVenda === 'BLOQUEIO_FINANCEIRO' ? (
+            <div className="px-4 py-2 bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-700 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-red-600 shrink-0" />
+              <span className="text-sm font-semibold text-red-800 dark:text-red-200">Cliente com restrição financeira — O cliente possui atraso acima do limite permitido. A venda será salva como orçamento com solicitação de crédito.</span>
+            </div>
+          ) : null}
+
           {/* Cabeçalho */}
-          <div className="px-5 py-3 border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-slate-900">
-            {/* Linha do cliente + vendedor + operador — 3 colunas iguais */}
-            <div ref={cabecalhoRef} className="flex items-start gap-3 mt-2">
-              {/* Busca cliente */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Cliente</label>
-                <div className="relative">
-                  {clienteSelecionado ? (
-                    <button onClick={() => {
-                      setClienteSelecionado(null);
-                      setBuscaCliente('');
-                      setVendedorSel({ codigo: '', nome: '' });
-                      setBuscaVendedor('');
-                      clienteInputRef.current?.focus();
-                    }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10" title="Limpar cliente (Enter)">
-                      <X size={14} />
-                    </button>
+          <div className="px-3 py-3 border-b border-gray-200 dark:border-zinc-700 bg-white dark:bg-slate-900">
+            {/* Linha do armazém + cliente + vendedor + operador */}
+            <div ref={cabecalhoRef} className="flex items-start gap-3">
+              {/* Armazém */}
+              <div className="w-[15%] relative min-w-[100px]">
+                  {selectedArmazem ? (
+                    <button onClick={() => setSelectedArmazem(null)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className={MI_BTN}><X size={14} /></button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   )}
-                  <input
-                    ref={clienteInputRef}
-                    tabIndex={clienteSelecionado ? -1 : 0}
-                    type="text"
-                    value={buscaCliente}
-                    readOnly={!!clienteSelecionado}
-                    onChange={(e) => { if (!clienteSelecionado) setBuscaCliente(e.target.value); }}
-                    onDoubleClick={() => { if (clienteSelecionado) { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
+                  <input type="text" readOnly tabIndex={selectedArmazem ? -1 : 0}
+                    value={selectedArmazem ? selectedArmazem.label : ''}
+                    onFocus={() => { if (!selectedArmazem && armazens.length === 1) { setSelectedArmazem(armazens[0]); } }}
+                    onDoubleClick={() => { if (selectedArmazem) setSelectedArmazem(null); }}
+                    onKeyDown={(e) => {
+                      if (selectedArmazem) { if (e.key === 'Enter') navegarFocavel('next'); return; }
+                      if (e.key === 'ArrowDown' && armazens.length > 0) {
+                        e.preventDefault();
+                        setSelectedArmazem(armazens[0]);
+                      }
+                      if (e.key === 'Enter' && armazens.length > 0) {
+                        e.preventDefault();
+                        setSelectedArmazem(armazens[0]);
+                        setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                      }
+                    }}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${selectedArmazem ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'cursor-pointer'}`}
+                  />
+                  <label className={MI_LABEL}>Armazém</label>
+              </div>
+
+              {/* Busca cliente */}
+              <div className="flex-1 relative min-w-[200px]">
+                  {clienteSelecionado ? (
+                    <button onClick={() => { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); clienteInputRef.current?.focus(); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className={MI_BTN} title="Limpar cliente"><X size={14} /></button>
+                  ) : (
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
+                  )}
+                  <input ref={clienteInputRef} tabIndex={clienteSelecionado ? -1 : 0} type="text"
+                    value={buscaCliente} readOnly={!!clienteSelecionado}
+                    onChange={(e) => { if (!clienteSelecionado) { setBuscaCliente(e.target.value); setShowResultadosCliente(false); setResultadosCliente([]); } }}
+                    onDoubleClick={() => { if (clienteSelecionado) { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); } }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
-                        if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) {
-                          e.preventDefault();
-                          selecionarCliente(resultadosCliente[clienteIdx]);
-                          return;
-                        }
+                        if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) { e.preventDefault(); selecionarCliente(resultadosCliente[clienteIdx]); return; }
                         if (buscaCliente.trim().length >= 1) buscarCliente(buscaCliente);
                         return;
                       }
-                      if (e.key === 'ArrowDown' && showResultadosCliente && resultadosCliente.length > 0) {
-                        e.preventDefault();
-                        setClienteIdx((prev) => Math.min(prev + 1, resultadosCliente.length - 1));
-                      }
-                      if (e.key === 'ArrowUp' && showResultadosCliente) {
-                        e.preventDefault();
-                        setClienteIdx((prev) => Math.max(prev - 1, 0));
-                      }
+                      if (e.key === 'ArrowDown' && showResultadosCliente && resultadosCliente.length > 0) { e.preventDefault(); setClienteIdx((prev) => Math.min(prev + 1, resultadosCliente.length - 1)); }
+                      if (e.key === 'ArrowUp' && showResultadosCliente) { e.preventDefault(); setClienteIdx((prev) => Math.max(prev - 1, 0)); }
                       if (e.key === 'Escape') setShowResultadosCliente(false);
                     }}
-                    placeholder="Nome, código, CNPJ ou UF"
-                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${clienteSelecionado ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${clienteSelecionado ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
+                  <label className={MI_LABEL}>Cliente</label>
                   {loadingCliente ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-blue-500" /> : null}
                   {showResultadosCliente && resultadosCliente.length > 0 ? (
                     <div ref={resultadosRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
@@ -1104,29 +1582,21 @@ const NovaVendaV2 = () => {
                       })}
                     </div>
                   ) : null}
-                </div>
               </div>
 
               {/* Busca vendedor */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Vendedor</label>
-                <div className="relative">
+              <div className="w-[22%] relative min-w-[150px]">
                   {vendedorSel.codigo && temEV ? (
                     <button onClick={() => {
                       setVendedorSel({ codigo: '', nome: '' });
                       setBuscaVendedor('');
                       vendedorInputRef.current?.focus();
                     }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10" title="Limpar vendedor (Enter)">
-                      <X size={14} />
-                    </button>
+                    className={MI_BTN} title="Limpar vendedor"><X size={14} /></button>
                   ) : !vendedorSel.codigo ? (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   ) : null}
-                  <input
-                    ref={vendedorInputRef}
-                    tabIndex={vendedorSel.codigo ? -1 : 0}
-                    type="text"
+                  <input ref={vendedorInputRef} tabIndex={vendedorSel.codigo ? -1 : 0} type="text"
                     value={buscaVendedor}
                     onChange={(e) => { if (temEV && !vendedorSel.codigo) { setBuscaVendedor(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'vendedor'); else { setResultadosVendedor([]); setShowResultadosVendedor(false); } } }}
                     readOnly={!temEV || !!vendedorSel.codigo}
@@ -1134,28 +1604,19 @@ const NovaVendaV2 = () => {
                     onKeyDown={(e) => {
                       if (!temEV || vendedorSel.codigo) return;
                       if (e.key === 'Enter') {
-                        if (showResultadosVendedor && vendedorIdx >= 0 && resultadosVendedor[vendedorIdx]) {
-                          e.preventDefault();
-                          selecionarVendedor(resultadosVendedor[vendedorIdx]);
-                          return;
-                        }
+                        if (showResultadosVendedor && vendedorIdx >= 0 && resultadosVendedor[vendedorIdx]) { e.preventDefault(); selecionarVendedor(resultadosVendedor[vendedorIdx]); return; }
                         if (buscaVendedor.trim().length >= 3) buscarVendedorOperador(buscaVendedor, 'vendedor');
                         return;
                       }
-                      if (e.key === 'ArrowDown' && showResultadosVendedor && resultadosVendedor.length > 0) {
-                        e.preventDefault();
-                        setVendedorIdx((prev) => Math.min(prev + 1, resultadosVendedor.length - 1));
-                      }
-                      if (e.key === 'ArrowUp' && showResultadosVendedor) {
-                        e.preventDefault();
-                        setVendedorIdx((prev) => Math.max(prev - 1, 0));
-                      }
+                      if (e.key === 'ArrowDown' && showResultadosVendedor) { e.preventDefault(); setVendedorIdx(p => Math.min(p + 1, resultadosVendedor.length - 1)); }
+                      if (e.key === 'ArrowUp' && showResultadosVendedor) { e.preventDefault(); setVendedorIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowResultadosVendedor(false);
                     }}
-                    placeholder={temEV ? 'Buscar vendedor' : 'Sem permissão'}
-                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${!temEV || vendedorSel.codigo ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 truncate`}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${!temEV || vendedorSel.codigo ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
-                  {loadingVendedor ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-indigo-500" /> : null}
+                  <label className={MI_LABEL}>Vendedor</label>
+                  {loadingVendedor ? <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-indigo-500 z-10" /> : null}
                   {showResultadosVendedor && resultadosVendedor.length > 0 ? (
                     <div ref={resultadosVendedorRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {resultadosVendedor.map((v, idx) => (
@@ -1170,58 +1631,37 @@ const NovaVendaV2 = () => {
                       ))}
                     </div>
                   ) : null}
-                </div>
               </div>
 
               {/* Busca operador */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Operador</label>
-                <div className="relative">
+              <div className="w-[22%] relative min-w-[150px]">
                   {operadorSel.codigo ? (
-                    <button onClick={() => {
-                      setOperadorSel({ codigo: '', nome: '' });
-                      setBuscaOperador('');
-                      operadorInputRef.current?.focus();
-                    }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10" title="Limpar operador (Enter)">
-                      <X size={14} />
-                    </button>
+                    <button onClick={() => { setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); operadorInputRef.current?.focus(); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
+                      className={MI_BTN} title="Limpar operador"><X size={14} /></button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   )}
-                  <input
-                    ref={operadorInputRef}
-                    tabIndex={operadorSel.codigo ? -1 : 0}
-                    type="text"
-                    value={buscaOperador}
-                    readOnly={!!operadorSel.codigo}
+                  <input ref={operadorInputRef} tabIndex={operadorSel.codigo ? -1 : 0} type="text"
+                    value={buscaOperador} readOnly={!!operadorSel.codigo}
                     onDoubleClick={() => { if (operadorSel.codigo) { setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } }}
                     onChange={(e) => { if (!operadorSel.codigo) { setBuscaOperador(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'operador'); else { setResultadosOperador([]); setShowResultadosOperador(false); } } }}
                     onKeyDown={(e) => {
                       if (operadorSel.codigo) return;
                       if (e.key === 'Enter') {
-                        if (showResultadosOperador && operadorIdx >= 0 && resultadosOperador[operadorIdx]) {
-                          e.preventDefault();
-                          selecionarOperador(resultadosOperador[operadorIdx]);
-                          return;
-                        }
+                        if (showResultadosOperador && operadorIdx >= 0 && resultadosOperador[operadorIdx]) { e.preventDefault(); selecionarOperador(resultadosOperador[operadorIdx]); return; }
                         if (buscaOperador.trim().length >= 3) buscarVendedorOperador(buscaOperador, 'operador');
                         return;
                       }
-                      if (e.key === 'ArrowDown' && showResultadosOperador && resultadosOperador.length > 0) {
-                        e.preventDefault();
-                        setOperadorIdx((prev) => Math.min(prev + 1, resultadosOperador.length - 1));
-                      }
-                      if (e.key === 'ArrowUp' && showResultadosOperador) {
-                        e.preventDefault();
-                        setOperadorIdx((prev) => Math.max(prev - 1, 0));
-                      }
+                      if (e.key === 'ArrowDown' && showResultadosOperador) { e.preventDefault(); setOperadorIdx(p => Math.min(p + 1, resultadosOperador.length - 1)); }
+                      if (e.key === 'ArrowUp' && showResultadosOperador) { e.preventDefault(); setOperadorIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowResultadosOperador(false);
                     }}
-                    placeholder="Buscar operador"
-                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${operadorSel.codigo ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-lime-400 truncate`}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${operadorSel.codigo ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
-                  {loadingOperador ? <Loader2 size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-lime-500" /> : null}
+                  <label className={MI_LABEL}>Operador</label>
+                  {loadingOperador ? <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-lime-500 z-10" /> : null}
                   {showResultadosOperador && resultadosOperador.length > 0 ? (
                     <div ref={resultadosOperadorRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {resultadosOperador.map((v, idx) => (
@@ -1236,17 +1676,33 @@ const NovaVendaV2 = () => {
                       ))}
                     </div>
                   ) : null}
-                </div>
               </div>
             </div>
 
-            {/* Info do cliente selecionado */}
+            {/* Info do cliente selecionado + alerta financeiro */}
             {clienteSelecionado ? (
-              <div className="flex items-center gap-4 mt-2 text-xs text-gray-600 dark:text-gray-200">
-                <span><b>Saldo:</b> <span className={Number(clienteSelecionado.saldo || clienteSelecionado.limite || 0) > 0 ? 'text-green-600' : 'text-red-600'}>{formatCurrency(Number(clienteSelecionado.saldo || clienteSelecionado.limite || 0))}</span></span>
-                <span><b>Limite:</b> {formatCurrency(Number(clienteSelecionado.limite || 0))}</span>
-                <span><b>CNPJ/CPF:</b> {clienteSelecionado.cpfcgc || '-'}</span>
-                <span><b>Tipo:</b> {clienteSelecionado.tipo || '-'}</span>
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-4 text-xs text-gray-800 dark:text-gray-200">
+                  <span><span className="font-semibold">Saldo:</span> <span className={`font-bold ${Number(clienteSelecionado.saldo || 0) > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(Number(clienteSelecionado.saldo || 0))}</span></span>
+                  <span className="text-gray-300 dark:text-zinc-600">|</span>
+                  <span><span className="font-semibold">Limite:</span> <span className="font-medium">{formatCurrency(Number(clienteSelecionado.limite || 0))}</span></span>
+                  <span className="text-gray-300 dark:text-zinc-600">|</span>
+                  <span><span className="font-semibold">CNPJ/CPF:</span> <span className="font-medium">{clienteSelecionado.cpfcgc || '-'}</span></span>
+                  <span className="text-gray-300 dark:text-zinc-600">|</span>
+                  <span><span className="font-semibold">Tipo:</span> <span className="font-medium">{clienteSelecionado.tipo || '-'}</span></span>
+                </div>
+                {/* Alerta financeiro */}
+                {Number(clienteSelecionado.saldo || 0) <= 0 || (totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs">
+                    <AlertTriangle size={13} className="text-red-500 shrink-0" />
+                    <span className="font-semibold text-red-700 dark:text-red-300">
+                      {Number(clienteSelecionado.saldo || 0) <= 0
+                        ? 'Cliente sem limite disponível'
+                        : 'Saldo insuficiente'}
+                      {totalVenda > 0 ? ` \u2022 Pós-venda: ${formatCurrency(Number(clienteSelecionado.saldo || 0) - totalVenda)} \u2022 Solicite crédito temporário` : ''}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1254,10 +1710,10 @@ const NovaVendaV2 = () => {
           {/* Grid de itens */}
           <div className="flex-1 flex flex-col px-3 py-2 overflow-hidden">
             {/* Toolbar */}
-            <div ref={toolbarRef} className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-3">
+            <div ref={toolbarRef} className="flex items-center justify-between py-1.5">
+              <div className="flex items-center gap-2">
                 <button onClick={() => setAddItemOpen(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md">
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md shadow-sm transition-colors">
                   <Plus size={14} /> Adicionar Item
                 </button>
                 <button onClick={() => {
@@ -1270,18 +1726,18 @@ const NovaVendaV2 = () => {
                     });
                   });
                 }}
-                  className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-md ${temDescontoAvista ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:text-gray-300'}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${todosDescontoAvista ? 'bg-purple-600 hover:bg-purple-700 text-white' : temDescontoAvista ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 dark:text-gray-300 dark:border-zinc-600'}`}
                   title="Ativar/desativar 2% desc. à vista em todos (Ctrl+D)"
                 >
                   % Desc. à Vista
                 </button>
-                <span className="text-[11px] text-gray-700">
-                  {totalItens} itens | Duplo clique edita | Botão direito para mais opções
-                </span>
+                <span className="text-gray-300 dark:text-zinc-600 mx-0.5">|</span>
+                <span className="text-[11px] font-semibold text-gray-900 dark:text-white">{totalItens} itens</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">Duplo clique edita &middot; Botão direito para mais opções</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-gray-700 dark:text-gray-800 flex items-center gap-1">
-                  <Keyboard size={11} />
+              <div className="flex items-center">
+                <span className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <Keyboard size={10} />
                   Ctrl+Z Zoom | Ctrl+D Desc. | F3 Vend. | F4 Oper. | F9 Equiv. | F10 Hist. | Ctrl++ Adicionar
                 </span>
               </div>
@@ -1397,24 +1853,15 @@ const NovaVendaV2 = () => {
             {/* Linha 1: Documento, Prazo, Forma Pagamento */}
             <div className="grid grid-cols-3 gap-3">
               {/* Documento */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Documento</label>
-                <div className="relative">
+              <div className="flex-1 relative min-w-[200px]">
                   {documento.COD_OPERACAO ? (
-                    <button onClick={() => {
-                        setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc('');
-                        setTimeout(() => docInputRef.current?.focus(), 50);
-                      }}
+                    <button onClick={() => { setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc(''); setTimeout(() => docInputRef.current?.focus(), 50); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
-                      <X size={14} />
-                    </button>
+                      className={MI_BTN}><X size={14} /></button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   )}
-                  <input type="text"
-                    ref={docInputRef}
-                    tabIndex={documento.COD_OPERACAO ? -1 : 0}
+                  <input type="text" ref={docInputRef} tabIndex={documento.COD_OPERACAO ? -1 : 0}
                     readOnly={!!documento.COD_OPERACAO}
                     onDoubleClick={() => { if (documento.COD_OPERACAO) { setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc(''); setShowDoc(true); setTimeout(() => docInputRef.current?.focus(), 50); } }}
                     value={documento.COD_OPERACAO ? `${documento.COD_OPERACAO} - ${documento.DESCR}` : buscaDoc}
@@ -1422,100 +1869,75 @@ const NovaVendaV2 = () => {
                     onFocus={() => { if (!documento.COD_OPERACAO) setShowDoc(true); }}
                     onBlur={() => setTimeout(() => setShowDoc(false), 150)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && showDoc && docsFiltrados.length > 0) {
-                        e.preventDefault();
-                        setDocumento(docsFiltrados[docIdx]);
-                        setBuscaDoc('');
-                        setShowDoc(false);
-                        setTimeout(() => navegarFocavel('next'), 50);
-                      } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                      if (e.key === 'Enter' && showDoc && docsFiltrados.length > 0) { e.preventDefault(); setDocumento(docsFiltrados[docIdx]); setBuscaDoc(''); setShowDoc(false); setTimeout(() => navegarFocavel('next'), 50); }
+                      else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
                       if (e.key === 'ArrowDown' && showDoc) { e.preventDefault(); setDocIdx(p => Math.min(p + 1, docsFiltrados.length - 1)); }
                       if (e.key === 'ArrowUp' && showDoc) { e.preventDefault(); setDocIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowDoc(false);
                     }}
-                    placeholder="Documento"
-                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${documento.COD_OPERACAO ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${documento.COD_OPERACAO ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
+                  <label className={MI_LABEL}>Documento</label>
                   {showDoc && !documento.COD_OPERACAO && docsFiltrados.length > 0 ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {docsFiltrados.map((d, idx) => (
-                        <div key={String(d.COD_OPERACAO)}
-                          className={`px-3 py-1.5 cursor-pointer text-sm ${idx === docIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        <div key={String(d.COD_OPERACAO)} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === docIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onMouseDown={(ev) => { ev.preventDefault(); setDocumento(d); setBuscaDoc(''); setShowDoc(false); setTimeout(() => navegarFocavel('next'), 50); }}
                         >{String(d.COD_OPERACAO)} - {d.DESCR}</div>
                       ))}
                     </div>
                   ) : null}
-                </div>
               </div>
 
               {/* Prazo */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Prazo</label>
-                <div className="relative">
-                  {prazo && !isAvista ? (
+              <div className="flex-1 relative min-w-[200px]">
+                  {prazo && !avistaForcado ? (
                     <>
                       <button onClick={() => { setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(false); }}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
-                        <X size={14} />
-                      </button>
-                      <button onClick={() => { setOpenModalPrazo(true); }}
-                        className="absolute right-8 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-blue-600 z-10" title="Editar prazo">
-                        <Keyboard size={12} />
-                      </button>
+                        className={MI_BTN}><X size={14} /></button>
+                      {!isAvista ? (
+                        <button onClick={() => setOpenModalPrazo(true)}
+                          className="absolute right-7 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-blue-600 z-10" title="Editar prazo">
+                          <Keyboard size={12} /></button>
+                      ) : null}
                     </>
-                  ) : !isAvista ? (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                  ) : !avistaForcado ? (
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   ) : null}
-                  <input type="text" readOnly
-                    tabIndex={prazo ? -1 : 0}
+                  <input type="text" readOnly tabIndex={avistaForcado ? -1 : prazo ? -1 : 0}
                     value={isAvista ? 'À VISTA' : prazo || ''}
-                    onFocus={() => { if (!isAvista && !prazo) { if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
-                    onDoubleClick={() => { if (prazo && !isAvista) { setPrazo(''); setPrazosArray([]); if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
+                    onFocus={() => { if (!avistaForcado && !prazo && totalItens > 0) { if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
+                    onDoubleClick={() => { if (!avistaForcado && prazo && totalItens > 0) { setPrazo(''); setPrazosArray([]); if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
                     onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
                     onKeyDown={(e) => {
-                      if (isAvista || prazo) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (avistaForcado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (prazo) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
                       if (e.key === 'Enter' && showPrazoDropdown && opcoesPrazo[prazoIdx]) {
-                        e.preventDefault();
-                        const op = opcoesPrazo[prazoIdx];
-                        setPrazo(op.prazo.replace(/\//g, ' '));
-                        const hoje = new Date();
-                        setPrazosArray(op.dias.map((d, i) => {
-                          const dt = new Date(hoje); dt.setDate(dt.getDate() + d);
-                          return { id: i + 1, dataVencimento: dt, dias: d };
-                        }));
-                        setShowPrazoDropdown(false);
-                        setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                      } else if (e.key === 'Enter' && !showPrazoDropdown) {
-                        e.preventDefault();
-                        if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); }
-                        else setOpenModalPrazo(true);
-                      }
+                        e.preventDefault(); const op = opcoesPrazo[prazoIdx]; setPrazo(op.prazo.replace(/\//g, ' '));
+                        const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
+                        setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else setOpenModalPrazo(true); }
                       if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, opcoesPrazo.length)); }
                       if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowPrazoDropdown(false);
                     }}
-                    placeholder="Definir prazo"
-                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg cursor-pointer ${prazo || isAvista ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} ${isAvista ? 'text-orange-600 font-semibold' : ''} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                    placeholder=" "
+                    className={`${MI_INPUT} cursor-pointer ${avistaForcado ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : prazo ? 'bg-gray-100 dark:bg-zinc-900' : ''} ${isAvista ? 'text-orange-600 font-semibold' : ''}`}
                   />
-                  {/* Dropdown de opções de prazo */}
-                  {showPrazoDropdown && !isAvista && opcoesPrazo.length > 0 ? (
+                  <label className={MI_LABEL}>Prazo</label>
+                  {showPrazoDropdown && !avistaForcado && opcoesPrazo.length > 0 ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {/* Opção À VISTA */}
+                      <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === -1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('À VISTA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
+                      >
+                        <span className="font-bold text-orange-600">À VISTA</span>
+                      </div>
                       {opcoesPrazo.map((op, idx) => (
-                        <div key={op.prazo}
-                          className={`px-3 py-2 cursor-pointer text-sm ${idx === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                          onMouseDown={(ev) => {
-                            ev.preventDefault();
-                            setPrazo(op.prazo.replace(/\//g, ' '));
-                            const hoje = new Date();
-                            setPrazosArray(op.dias.map((d, i) => {
-                              const dt = new Date(hoje); dt.setDate(dt.getDate() + d);
-                              return { id: i + 1, dataVencimento: dt, dias: d };
-                            }));
-                            setShowPrazoDropdown(false);
-                            setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                          }}
+                        <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${idx === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-gray-900 dark:text-white">{op.prazo.replace(/\//g, ' / ')}</span>
@@ -1523,66 +1945,68 @@ const NovaVendaV2 = () => {
                           </div>
                         </div>
                       ))}
-                      {/* Opção personalizar */}
-                      <div
-                        className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}
-                      >
+                      <div className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}>
                         <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
                       </div>
                     </div>
                   ) : null}
-                </div>
               </div>
 
               {/* Forma de Pagamento */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Forma Pagamento</label>
-                <div className="relative">
+              <div className="flex-1 relative min-w-[200px]">
                   {fPagamento ? (
-                    <button onClick={() => setFPagamento('')}
+                    <button onClick={() => { setFPagamento(''); setBuscaFP(''); setTimeout(() => fpInputRef.current?.focus(), 50); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
-                      <X size={14} />
-                    </button>
+                      className={MI_BTN}><X size={14} /></button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   )}
-                  <Select value={fPagamento} onValueChange={(v) => setFPagamento(v)}>
-                    <SelectTrigger tabIndex={fPagamento ? -1 : 0} className={`h-9 text-sm border-gray-200 dark:border-zinc-600 rounded-lg pr-8 ${fPagamento ? 'bg-gray-100 dark:bg-zinc-900' : ''}`}>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent side="top">
-                      {opcoesFPFiltradas.map((fp) => (
-                        <SelectItem key={fp.id} value={fp.id}>{fp.descricao}</SelectItem>
+                  <input type="text" ref={fpInputRef} tabIndex={fPagamento ? -1 : 0}
+                    readOnly={!!fPagamento}
+                    value={fPagamento ? (opcoesFPFiltradas.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
+                    onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
+                    onFocus={() => { if (!fPagamento) setShowFP(true); }}
+                    onBlur={() => setTimeout(() => setShowFP(false), 150)}
+                    onDoubleClick={() => { if (fPagamento) { setFPagamento(''); setBuscaFP(''); setShowFP(true); setTimeout(() => fpInputRef.current?.focus(), 50); } }}
+                    onKeyDown={(e) => {
+                      if (fPagamento) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (e.key === 'Enter' && showFP && fpFiltradosPorBusca[fpIdx]) {
+                        e.preventDefault(); setFPagamento(fpFiltradosPorBusca[fpIdx].id); setBuscaFP(''); setShowFP(false);
+                        setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                      } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                      if (e.key === 'ArrowDown' && showFP) { e.preventDefault(); setFpIdx(p => Math.min(p + 1, fpFiltradosPorBusca.length - 1)); }
+                      if (e.key === 'ArrowUp' && showFP) { e.preventDefault(); setFpIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'Escape') setShowFP(false);
+                    }}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${fPagamento ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
+                  />
+                  <label className={MI_LABEL}>Forma Pagamento</label>
+                  {showFP && !fPagamento && fpFiltradosPorBusca.length > 0 ? (
+                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {fpFiltradosPorBusca.map((fp, idx) => (
+                        <div key={fp.id} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === fpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onMouseDown={(ev) => { ev.preventDefault(); setFPagamento(fp.id); setBuscaFP(''); setShowFP(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
+                        >{fp.descricao}</div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    </div>
+                  ) : null}
               </div>
             </div>
 
             {/* Linha 2: Transportadora, Valor Transporte, Obs Fat, Pedido */}
             <div className="grid grid-cols-4 gap-3 mt-2">
               {/* Transportadora */}
-              <div className="flex-1 relative">
-                <label className="text-xs font-bold text-gray-900 dark:text-white mb-0.5 block">Transportadora</label>
-                <div className="relative">
+              <div className="flex-1 relative min-w-[200px]">
                   {transporteSel.CODTPTRANSP ? (
-                    <button onClick={() => {
-                        setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp('');
-                        setTimeout(() => transpInputRef.current?.focus(), 50);
-                      }}
+                    <button onClick={() => { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setTimeout(() => transpInputRef.current?.focus(), 50); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-600 z-10">
-                      <X size={14} />
-                    </button>
+                      className={MI_BTN}><X size={14} /></button>
                   ) : (
-                    <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-700" />
+                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   )}
-                  <input type="text"
-                    ref={transpInputRef}
-                    tabIndex={transporteSel.CODTPTRANSP ? -1 : 0}
+                  <input type="text" ref={transpInputRef} tabIndex={transporteSel.CODTPTRANSP ? -1 : 0}
                     readOnly={!!transporteSel.CODTPTRANSP}
                     onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTimeout(() => transpInputRef.current?.focus(), 50); } }}
                     value={transporteSel.CODTPTRANSP ? `${transporteSel.CODTPTRANSP} - ${transporteSel.DESCR}` : buscaTransp}
@@ -1590,31 +2014,25 @@ const NovaVendaV2 = () => {
                     onFocus={() => { if (!transporteSel.CODTPTRANSP) setShowTransp(true); }}
                     onBlur={() => setTimeout(() => setShowTransp(false), 150)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && showTransp && transpFiltrados.length > 0) {
-                        e.preventDefault();
-                        setTransporteSel(transpFiltrados[transpIdx]);
-                        setBuscaTransp('');
-                        setShowTransp(false);
-                        setTimeout(() => navegarFocavel('next'), 50);
-                      } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                      if (e.key === 'Enter' && showTransp && transpFiltrados.length > 0) { e.preventDefault(); setTransporteSel(transpFiltrados[transpIdx]); setBuscaTransp(''); setShowTransp(false); setTimeout(() => navegarFocavel('next'), 50); }
+                      else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
                       if (e.key === 'ArrowDown' && showTransp) { e.preventDefault(); setTranspIdx(p => Math.min(p + 1, transpFiltrados.length - 1)); }
                       if (e.key === 'ArrowUp' && showTransp) { e.preventDefault(); setTranspIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowTransp(false);
                     }}
-                    placeholder="Transportadora"
-                    className={`w-full h-9 pl-3 pr-8 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg ${transporteSel.CODTPTRANSP ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : 'bg-white dark:bg-zinc-800'} dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 truncate`}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${transporteSel.CODTPTRANSP ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
+                  <label className={MI_LABEL}>Transportadora</label>
                   {showTransp && !transporteSel.CODTPTRANSP && transpFiltrados.length > 0 ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {transpFiltrados.map((t, idx) => (
-                        <div key={t.CODTPTRANSP}
-                          className={`px-3 py-1.5 cursor-pointer text-sm ${idx === transpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        <div key={t.CODTPTRANSP} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === transpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onMouseDown={(ev) => { ev.preventDefault(); setTransporteSel(t); setBuscaTransp(''); setShowTransp(false); setTimeout(() => navegarFocavel('next'), 50); }}
                         >{t.CODTPTRANSP} - {t.DESCR}</div>
                       ))}
                     </div>
                   ) : null}
-                </div>
               </div>
 
               {/* Valor Transporte */}
@@ -1702,16 +2120,87 @@ const NovaVendaV2 = () => {
               <div className="flex items-center gap-2">
                 <button
                   disabled={totalItens === 0 || !clienteSelecionado}
+                  onClick={handleSalvarOrcamento}
                   className="px-4 py-1.5 text-xs font-bold rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Salvar Orçamento
                 </button>
-                <button
-                  disabled={totalItens === 0 || !clienteSelecionado}
-                  className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Finalizar Venda
-                </button>
+                {statusVenda === 'BLOQUEIO_PRECO' ? (
+                  <button
+                    disabled={totalItens === 0 || !clienteSelecionado || totalVenda < 30}
+                    onClick={async () => {
+                      setEnvioOpen(true);
+                      setEnvioStep('montando');
+                      setEnvioMsg('Esta venda possui itens com preço abaixo da tabela.\nEla será salva como BLOQUEADA e enviada para análise do setor responsável.');
+
+                      try {
+                        const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
+                        const armId = Number(selectedArmazem?.value) || 1;
+
+                        const payload = {
+                          header: {
+                            operacao: Number(documento?.COD_OPERACAO) || 1,
+                            codcli: String(clienteSelecionado.codcli),
+                            codusr: Number(user?.codusr) || 0,
+                            pedido: pedido || '', tipo: 'P',
+                            tele: operadorSel?.nome ? 'S' : 'N',
+                            transp: transporteSel?.DESCR || '',
+                            codtptransp: transporteSel?.CODTPTRANSP ? Number(transporteSel.CODTPTRANSP) : null,
+                            vlrfrete: valTranspDec || 0, prazo: prazo || '',
+                            obs: obs || '', obsfat: obsFat || '',
+                            bloqueada: 'S',
+                            estoque_virtual: 'N', uName: user?.usuario || '',
+                            nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
+                            vendedor: vendedorSel?.codigo || null, operador: operadorSel?.codigo || null,
+                            formaPagamento: fPagamento || null,
+                            avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
+                            requisicao: requisicao || '',
+                            tipo_movimentacao: 'SAIDA', tipo_operacao: 'VENDA',
+                          },
+                          itens: itensGrid.map((it: any, idx: number) => ({
+                            codprod: it.codprod, qtd: it.qtd, prunit: it.prunit, arm_id: armId,
+                            ref: it.ref || '', descr: it.descr || '', desconto: it.desconto_percentual || 0,
+                            codvend: vendedorSel?.codigo || null, codoperador: operadorSel?.codigo || null,
+                            nritem: String(idx + 1), ...(it.campos_fiscais || {}),
+                          })),
+                          prazos: prazosPayload,
+                        };
+
+                        setEnvioStep('enviando');
+                        setEnvioMsg('Salvando venda bloqueada...');
+
+                        const resp = await api.post('/api/vendas/postgresql/finalizarVenda', payload);
+                        const data = resp.data;
+
+                        if (data?.ok) {
+                          setEnvioStep('ok');
+                          setEnvioResp(data);
+                          setEnvioMsg(`Venda Nº ${data.nrovenda} salva como BLOQUEADA.\nO setor de análise irá avaliar os preços e liberar ou ajustar a venda.`);
+                          vendaSalvaRef.current = true; try { Object.keys(sessionStorage).forEach(k => { if (k.startsWith('novaVendaV2_draft')) sessionStorage.removeItem(k); }); } catch {}
+                          if (draftIdRef.current) draftIdRef.current = null;
+                        } else {
+                          setEnvioStep('erro');
+                          setEnvioMsg(data?.error || 'Falha ao salvar venda bloqueada.');
+                        }
+                      } catch (err: any) {
+                        setEnvioStep('erro');
+                        setEnvioMsg(err?.response?.data?.error || err?.message || 'Erro ao salvar');
+                      }
+                    }}
+                    className="px-4 py-1.5 text-xs font-bold rounded-md bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Solicitar Desbloqueio
+                  </button>
+                ) : (
+                  <button
+                    disabled={totalItens === 0 || !clienteSelecionado || totalVenda < 30 || statusVenda === 'BLOQUEIO_FINANCEIRO' || (!isAvista && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
+                    title={totalVenda < 30 && totalVenda > 0 ? 'Venda mínima de R$ 30,00' : statusVenda === 'BLOQUEIO_FINANCEIRO' ? 'Cliente com restrição financeira' : (clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) ? 'Cliente sem crédito suficiente' : ''}
+                    onClick={handleFinalizarVenda}
+                    className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Finalizar Venda
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1756,6 +2245,133 @@ const NovaVendaV2 = () => {
           <span className="ml-auto text-[10px] text-gray-700">F10</span>
         </ContextMenuItem>
       </ContextMenuContent>
+
+      {/* Modal Salvar Orçamento */}
+      {salvarOpen ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { if (salvarStep === 'validade' || salvarStep === 'ok' || salvarStep === 'erro') { setSalvarOpen(false); setSalvarResp(null); setSalvarMsg(''); setSalvarStep('validade'); } }} />
+          <div className="relative z-10 w-[92%] max-w-md rounded-xl bg-white dark:bg-zinc-800 p-5 shadow-xl border border-slate-200 dark:border-zinc-700">
+
+            {salvarStep === 'validade' ? (
+              <>
+                <div className="font-semibold text-gray-900 dark:text-white text-lg mb-3">Salvar Orçamento</div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 mb-4">Defina o prazo de validade do orçamento (máximo {prazoValidadeMax} dias):</div>
+                <div className="flex items-center gap-3 mb-4">
+                  <input type="number" min="1" max={prazoValidadeMax} value={diasValidade}
+                    onChange={(e) => { const v = Math.min(Math.max(parseInt(e.target.value) || 1, 1), prazoValidadeMax); setDiasValidade(String(v)); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); executarSalvarOrcamento(); } }}
+                    className="w-20 h-10 text-center text-lg font-bold border border-gray-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">dias</span>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button className="px-4 py-2 rounded-md bg-gray-200 dark:bg-zinc-700 text-gray-800 dark:text-gray-200 text-sm font-semibold hover:bg-gray-300"
+                    onClick={() => { setSalvarOpen(false); }}>
+                    Cancelar
+                  </button>
+                  <button className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+                    onClick={executarSalvarOrcamento}>
+                    Salvar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  {salvarStep === 'enviando' || salvarStep === 'montando' ? (
+                    <div className="h-6 w-6 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" />
+                  ) : salvarStep === 'ok' ? (
+                    <div className="h-6 w-6 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">✓</div>
+                  ) : (
+                    <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center text-white text-sm font-bold">!</div>
+                  )}
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900 dark:text-white">
+                      {salvarStep === 'montando' ? 'Montando dados' : salvarStep === 'enviando' ? 'Salvando orçamento' : salvarStep === 'ok' ? 'Orçamento salvo' : 'Falha ao salvar'}
+                    </div>
+                    {salvarStep === 'erro' ? <div className="text-sm text-red-600 mt-0.5">{salvarMsg}</div> : null}
+                  </div>
+                </div>
+
+                {salvarStep === 'ok' && salvarResp ? (
+                  <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 text-center">
+                    <div><span className="text-gray-500">ID:</span> {salvarResp?.draft_id || salvarResp?.id || '-'}</div>
+                    <div className="text-xs mt-1 text-gray-500">Válido por {diasValidade} dia(s)</div>
+                  </div>
+                ) : null}
+
+                <div className="mt-6 flex justify-end gap-2">
+                  {salvarStep === 'ok' ? (
+                    <button className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+                      onClick={() => {
+                        setSalvarOpen(false); setSalvarResp(null); setSalvarStep('validade');
+                        vendaSalvaRef.current = true; try { Object.keys(sessionStorage).forEach(k => { if (k.startsWith('novaVendaV2_draft')) sessionStorage.removeItem(k); }); } catch {}
+                        sessionStorage.removeItem('centralV2_modalAberto');
+                        if (onSaved) onSaved();
+                      }}>
+                      OK
+                    </button>
+                  ) : salvarStep === 'erro' ? (
+                    <button className="px-4 py-2 rounded-md bg-gray-200 dark:bg-zinc-700 text-gray-800 dark:text-gray-200 text-sm font-semibold hover:bg-gray-300"
+                      onClick={() => { setSalvarOpen(false); setSalvarResp(null); setSalvarMsg(''); setSalvarStep('validade'); }}>
+                      Fechar
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal Finalizar Venda */}
+      {envioOpen ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { if (envioStep === 'ok' || envioStep === 'erro') { setEnvioOpen(false); setEnvioResp(null); setEnvioMsg(''); } }} />
+          <div className="relative z-10 w-[92%] max-w-md rounded-xl bg-white dark:bg-zinc-800 p-5 shadow-xl border border-slate-200 dark:border-zinc-700">
+            <div className="flex items-center gap-3">
+              {envioStep === 'enviando' || envioStep === 'montando' ? (
+                <div className="h-6 w-6 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" />
+              ) : envioStep === 'ok' ? (
+                <div className="h-6 w-6 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">✓</div>
+              ) : (
+                <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center text-white text-sm font-bold">!</div>
+              )}
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900 dark:text-white">
+                  {envioStep === 'montando' ? 'Montando dados' : envioStep === 'enviando' ? 'Finalizando venda' : envioStep === 'ok' ? 'Venda finalizada' : 'Falha ao finalizar'}
+                </div>
+                {envioMsg ? <div className={`text-sm mt-0.5 ${envioStep === 'erro' ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'}`}>{envioMsg}</div> : null}
+              </div>
+            </div>
+
+            {envioStep === 'ok' && envioResp ? (
+              <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 text-center">
+                <div className="text-lg font-bold text-green-600">Nº {envioResp.nrovenda}</div>
+                <div className="text-xs mt-1 text-gray-500">Status: {envioResp.status}</div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex justify-end gap-2">
+              {envioStep === 'ok' ? (
+                <button className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-semibold hover:bg-green-700"
+                  onClick={() => {
+                    setEnvioOpen(false); setEnvioResp(null); setEnvioMsg('');
+                    sessionStorage.removeItem('centralV2_modalAberto');
+                    if (onSaved) onSaved();
+                  }}>
+                  OK
+                </button>
+              ) : envioStep === 'erro' ? (
+                <button className="px-4 py-2 rounded-md bg-gray-200 dark:bg-zinc-700 text-gray-800 dark:text-gray-200 text-sm font-semibold hover:bg-gray-300"
+                  onClick={() => { setEnvioOpen(false); setEnvioResp(null); setEnvioMsg(''); }}>
+                  Fechar
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Confirmação deletar todos */}
       <AlertDialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>

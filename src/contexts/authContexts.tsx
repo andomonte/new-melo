@@ -203,6 +203,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.removeItem('paginaAtualMelo');
       sessionStorage.removeItem('telaAtualMelo');
       sessionStorage.removeItem('newPerfilMelo');
+      sessionStorage.removeItem('centralV2_modalAberto');
+      // Limpar drafts de nova venda de todos os usuários
+      Object.keys(sessionStorage).forEach(k => { if (k.startsWith('novaVendaV2_draft')) sessionStorage.removeItem(k); });
     }
 
     if (pagina) {
@@ -329,6 +332,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signIn({ usuario, perfil, obs, codusr, filial }: User) {
     setCookie('token_melo', `${usuario}-cookiesmelo`);
     setIsLoading(true); // Ativa o loading durante o signIn
+    // Limpar drafts de venda de outros usuários
+    sessionStorage.removeItem('centralV2_modalAberto');
+    Object.keys(sessionStorage).forEach(k => { if (k.startsWith('novaVendaV2_draft')) sessionStorage.removeItem(k); });
 
     try {
       // Busca todas as informações necessárias em paralelo
