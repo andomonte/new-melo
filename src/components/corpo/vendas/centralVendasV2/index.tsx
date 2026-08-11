@@ -107,6 +107,8 @@ const VendasPage = () => {
   const [modalNovaVenda, setModalNovaVenda] = useState(() => {
     try { return sessionStorage.getItem('centralV2_modalAberto') === 'novaVenda'; } catch { return false; }
   });
+  const [confirmarLimparVenda, setConfirmarLimparVenda] = useState(false);
+  const [novaVendaKey, setNovaVendaKey] = useState(0);
   const [vendas, setVendas] = useState<Vendas>({
     data: [],
     meta: { total: 0, lastPage: 1, currentPage: 1, perPage: 10 },
@@ -1759,17 +1761,61 @@ const VendasPage = () => {
         <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
           <div className="flex items-center justify-between px-5 py-2.5 border-b-2 border-[#347AB6]/20 dark:border-zinc-700 bg-gradient-to-r from-[#347AB6]/5 to-transparent dark:from-zinc-800 dark:to-zinc-900">
             <h2 className="text-xl font-bold text-[#347AB6] dark:text-gray-100 tracking-tight">Nova Venda</h2>
-            <button
-              onClick={fecharModalNovaVenda}
-              className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-700 transition-colors"
-              title="Fechar (Esc)"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setConfirmarLimparVenda(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 hover:text-white hover:bg-red-600 border border-red-300 dark:border-red-700 rounded-lg transition-colors"
+                title="Limpar venda e começar nova"
+              >
+                <Trash2 size={14} />
+                Limpar Venda
+              </button>
+              <button
+                onClick={fecharModalNovaVenda}
+                className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-500 hover:text-gray-700 transition-colors"
+                title="Fechar (Esc)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-hidden">
-            <NovaVendaV2 onSaved={() => { fecharModalNovaVenda(); refreshVendas(); }} />
+            <NovaVendaV2 key={novaVendaKey} onSaved={() => { fecharModalNovaVenda(); refreshVendas(); }} />
           </div>
+
+          {/* Confirmação Limpar Venda */}
+          {confirmarLimparVenda ? (
+            <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center" onClick={() => setConfirmarLimparVenda(false)}>
+              <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Limpar venda?</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
+                  Todos os dados da venda atual serão apagados (itens, cliente, prazo, etc). Deseja realmente começar uma nova venda do zero?
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setConfirmarLimparVenda(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-zinc-700 hover:bg-gray-200 dark:hover:bg-zinc-600 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Limpar draft do sessionStorage
+                      const userKey = `novaVendaV2_draft_${user?.usuario || 'anon'}`;
+                      try { sessionStorage.removeItem(userKey); } catch {}
+                      // Forçar remontagem da NovaVendaV2 com nova key
+                      setNovaVendaKey((k) => k + 1);
+                      setConfirmarLimparVenda(false);
+                      toast({ title: 'Venda limpa', description: 'Todos os dados foram removidos. Comece uma nova venda.' });
+                    }}
+                    className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                  >
+                    Sim, limpar tudo
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -175,7 +175,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [produtoHist, setProdutoHist] = useState<any>(null);
 
   // ---------- Estados da finalização ----------
-  const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>(() => draft.current?.documento || { COD_OPERACAO: '', DESCR: '' });
+  const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>(() => draft.current?.documento || { COD_OPERACAO: '1', DESCR: 'VENDA' });
   const [dadosDocumento, setDadosDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }[]>([]);
   const [buscaDoc, setBuscaDoc] = useState('');
   const [showDoc, setShowDoc] = useState(false);
