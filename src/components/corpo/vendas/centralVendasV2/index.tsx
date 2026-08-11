@@ -1095,41 +1095,72 @@ const VendasPage = () => {
 
   const handleCopiarClick = (vendaItem: any) => {
     try {
-      // 1) limpa storages da nova venda (mesmo que o Editar faz)
-      limparStoragesNovaVenda();
+      const userKey = `novaVendaV2_draft_${user?.usuario || 'anon'}`;
+
+      // Montar dados para o modal NovaVendaV2 (mesmo padrão do Editar)
+      let itens: any[] = [];
+      let header: any = {};
 
       if (vendaItem?.tipoOrigem === 'SALVA2') {
-        // Orçada Excluída: usa o mesmo draft do Editar, mas com draft_id = 'atualizar'
+        // Orçada Excluída: usar dados do draft se disponível
         const draftOriginal = (vendaItem as any)?.draft;
         if (draftOriginal) {
-          const draftAtualizar = {
-            ...draftOriginal,
-            draft_id: 'atualizar',
-          };
-          setStoragesFromDraft(draftAtualizar);
+          const payload = typeof draftOriginal.payload === 'string' ? JSON.parse(draftOriginal.payload) : draftOriginal.payload;
+          header = payload?.header || {};
+          itens = payload?.itens || [];
         } else {
-          // fallback: se não vier o draft acoplado, tente aproveitar os dados da linha
-          const draftLike = buildDraftFromVendaForCopy(vendaItem);
-          setStoragesFromDraft(draftLike as any);
+          header = { codcli: vendaItem?.codcli, nomecf: vendaItem?.dbclien?.nomefant || vendaItem?.dbclien?.nome || '' };
+          itens = Array.isArray(vendaItem?.dbitvenda) ? vendaItem.dbitvenda : [];
         }
       } else if (vendaItem?.tipoOrigem === 'VENDA') {
-        // Vendas F/N/B/C: usa os itens que já vêm na lista (dbitvenda) e monta um draft-like
-        const draftLike = buildDraftFromVendaForCopy(vendaItem);
-        setStoragesFromDraft(draftLike as any);
+        // Vendas F/N/B/C: usar itens da venda
+        header = { codcli: vendaItem?.codcli, nomecf: vendaItem?.dbclien?.nomefant || vendaItem?.dbclien?.nome || '' };
+        itens = Array.isArray(vendaItem?.dbitvenda) ? vendaItem.dbitvenda : [];
       } else {
-        // Para SALVA mantemos o Editar; este botão Copiar nem aparece para SALVA
         toast({
           title: 'Ação não disponível',
-          description:
-            'Copiar só aparece para vendas finalizadas ou orçadas vencidas.',
+          description: 'Copiar só aparece para vendas finalizadas ou orçadas vencidas.',
           variant: 'destructive',
         });
         return;
       }
 
-      // 3) mesma navegação do Editar
-      sessionStorage.setItem('telaAtualMelo', JSON.stringify(NOVA_VENDA_PATH));
-      router.replace('/');
+      // Montar draft no formato V2 (SEM draft_id — é cópia, não edição)
+      const draftData = {
+        draftId: null, // cópia = nova venda, sem vínculo ao original
+        clienteSelecionado: {
+          codcli: header.codcli || vendaItem?.codcli || null,
+          nome: header.nomecf || '',
+          nomefant: header.nomecf || '',
+          cpfcgc: '', tipo: '', tipoPreco: '',
+          limite: 0, debito: 0, saldo: 0,
+          codvend: header.vendedor || vendaItem?.codvend || '',
+          diasAtrasado: 0, limiteAtraso: 0, kickback: false,
+        },
+        buscaCliente: `${header.codcli || vendaItem?.codcli || ''} - ${header.nomecf || ''}`,
+        vendedorSel: { codigo: header.vendedor || vendaItem?.codvend || '', nome: header.vendedorNome || '' },
+        buscaVendedor: header.vendedor ? `${header.vendedor} - ${header.vendedorNome || ''}` : '',
+        operadorSel: { codigo: header.operador || '', nome: header.operadorNome || '' },
+        buscaOperador: header.operador ? `${header.operador} - ${header.operadorNome || ''}` : '',
+        itensGrid: itens.map((it: any) => ({
+          codprod: it.codprod || it.codigo, ref: it.ref || '', descr: it.descr || it.descricao || it['descrição'] || '',
+          qtd: Number(it.qtd || it.quantidade || 0), prunit: Number(it.prunit || it.precoItemEditado || it['preço'] || 0),
+          prvenda_original: Number(it.prvenda_original || it.prunit || 0),
+          desconto_percentual: Number(it.desconto || it.desconto_percentual || 0), total_item: Number(it.total_item || 0),
+          prcompra: Number(it.prcompra || 0), codmarca: it.codmarca || '', marca_nome: it.marca_nome || it.marca || '',
+          origem: it.origem || 'N', estoque: Number(it.estoque || 0),
+        })),
+        documento: { COD_OPERACAO: '1', DESCR: '' },
+        prazo: '', prazosArray: [],
+        fPagamento: '',
+        transporteSel: { CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' },
+        valTransp: 'R$ 0,00', valTranspDec: 0,
+        obsFat: '', pedido: '', obs: '', requisicao: '',
+      };
+
+      sessionStorage.setItem(userKey, JSON.stringify(draftData));
+      sessionStorage.setItem('centralV2_modalAberto', 'novaVenda');
+      setModalNovaVenda(true);
     } catch (err) {
       console.error('Erro ao copiar venda:', err);
       toast({

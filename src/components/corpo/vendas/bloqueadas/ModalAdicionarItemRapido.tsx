@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useContext, useMemo } from 'react';
-import { X, Loader2, Search, ArrowLeftRight, History } from 'lucide-react';
+import { X, Loader2, Search, ArrowLeftRight, History, Filter } from 'lucide-react';
 import {
   ContextMenu, ContextMenuTrigger, ContextMenuContent,
   ContextMenuItem, ContextMenuSeparator, ContextMenuLabel,
 } from '@/components/ui/context-menu';
-import { getProdutos } from '@/data/produtos/produtos';
+import { getProdutos, buscaProdutosComFiltro } from '@/data/produtos/produtos';
 import { AuthContext } from '@/contexts/authContexts';
+import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { useToast } from '@/hooks/use-toast';
 import api from '@/components/services/api';
 import ModalEquivalentes from './ModalEquivalentes';
@@ -77,6 +78,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const [produtoEquiv, setProdutoEquiv] = useState<any>(null);
   const [modalHist, setModalHist] = useState(false);
   const [produtoHist, setProdutoHist] = useState<any>(null);
+  const [mostrarFiltroAvancado, setMostrarFiltroAvancado] = useState(false);
+  const [filtrosAvancados, setFiltrosAvancados] = useState<{ campo: string; tipo: string; valor: string }[]>([]);
   const [equivalentes, setEquivalentes] = useState<any[]>([]);
   const [loadingEquiv, setLoadingEquiv] = useState(false);
   const ultimoCodgpeRef = useRef('');
@@ -134,6 +137,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       setPedindoQtd(-1);
       setQtdInput('1');
       setPageLoaded(0);
+      setFiltrosAvancados([]);
+      setMostrarFiltroAvancado(false);
       setTimeout(() => {
         const input = modalRef.current?.querySelector('input[type="text"]') as HTMLInputElement;
         input?.focus();
@@ -203,14 +208,29 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     return () => { if (equivTimeoutRef.current) clearTimeout(equivTimeoutRef.current); };
   }, [linhaSelecionada, listaProd]);
 
+  // Ref dos filtros avançados para uso dentro de callbacks sem stale closure
+  const filtrosAvancadosRef = useRef(filtrosAvancados);
+  filtrosAvancadosRef.current = filtrosAvancados;
+
   // Buscar produtos (primeira página ou próxima)
-  const fetchProdutos = useCallback(async (search: string, page: number, append: boolean) => {
+  const fetchProdutos = useCallback(async (search: string, page: number, append: boolean, filtrosOverride?: { campo: string; tipo: string; valor: string }[]) => {
     if (buscandoRef.current) return;
-    if (search.trim().length < 2) { setListaProd([]); setTotalProd(0); return; }
+    const filtrosAtivos = filtrosOverride ?? filtrosAvancadosRef.current;
+    const temFiltros = filtrosAtivos.length > 0;
+    if (!temFiltros && search.trim().length < 2) { setListaProd([]); setTotalProd(0); return; }
     buscandoRef.current = true;
     append ? setLoadingMore(true) : setLoading(true);
     try {
-      const data = await getProdutos({ page, perPage: BATCH_SIZE, search: search.trim(), sortBy, sortDir });
+      let data: any;
+      if (temFiltros) {
+        data = await buscaProdutosComFiltro({
+          page, perPage: BATCH_SIZE,
+          productSearch: search.trim(),
+          filtros: filtrosAtivos,
+        });
+      } else {
+        data = await getProdutos({ page, perPage: BATCH_SIZE, search: search.trim(), sortBy, sortDir });
+      }
       if (data?.data?.length > 0) {
         setListaProd((prev) => append ? [...prev, ...data.data] : data.data);
         setTotalProd(data.meta?.total || 0);
@@ -411,6 +431,15 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      // Se o filtro avançado está aberto, só responder Escape e F8
+      if (mostrarFiltroAvancado) {
+        if (e.key === 'Escape') {
+          e.preventDefault(); e.stopImmediatePropagation();
+          setMostrarFiltroAvancado(false);
+        }
+        return;
+      }
+
       // Quando pedindoQtd ativo
       if (pedindoQtd >= 0) {
         if (e.key === 'Escape') {
@@ -489,6 +518,13 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         return;
       }
 
+      // F8: filtro avançado
+      if (e.key === 'F8') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        setMostrarFiltroAvancado((prev) => !prev);
+        return;
+      }
+
       // F10: histórico do item selecionado
       if (e.key === 'F10' && !emInput) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -513,7 +549,22 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, pedindoQtd]);
+  }, [isOpen, pedindoQtd, mostrarFiltroAvancado]);
+
+  // Handler do filtro avançado
+  const handleFiltroAvancado = useCallback((filtros: { campo: string; tipo: string; valor: string }[]) => {
+    setFiltrosAvancados(filtros);
+    setMostrarFiltroAvancado(false);
+    setPedindoQtd(-1);
+    setLinhaSelecionada(-1);
+    setListaProd([]);
+    setPageLoaded(0);
+    // Re-buscar com filtros (passando os filtros diretamente pois o state ainda não atualizou)
+    buscandoRef.current = false;
+    if (filtros.length > 0 || currentSearch.trim().length >= 2) {
+      setTimeout(() => fetchProdutos(currentSearch, 1, false, filtros), 0);
+    }
+  }, [currentSearch, fetchProdutos]);
 
   // Ordenação
   const handleSort = useCallback((col: string) => {
@@ -524,14 +575,18 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     setPedindoQtd(-1);
     salvarPreferencias(col, newDir);
     // Re-buscar com nova ordenação
-    if (currentSearch.trim().length >= 2) {
-      buscandoRef.current = false; // permitir nova busca
+    const temFiltros = filtrosAvancadosRef.current.length > 0;
+    if (temFiltros || currentSearch.trim().length >= 2) {
+      buscandoRef.current = false;
       setListaProd([]);
       setPageLoaded(0);
-      // Buscar direto passando os novos valores (não depender do state)
       setTimeout(() => {
-        getProdutos({ page: 1, perPage: BATCH_SIZE, search: currentSearch.trim(), sortBy: col, sortDir: newDir })
-          .then((data) => {
+        if (temFiltros) {
+          buscaProdutosComFiltro({
+            page: 1, perPage: BATCH_SIZE,
+            productSearch: currentSearch.trim(),
+            filtros: filtrosAvancadosRef.current,
+          }).then((data) => {
             if (data?.data?.length > 0) {
               setListaProd(data.data);
               setTotalProd(data.meta?.total || 0);
@@ -541,8 +596,22 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               setListaProd([]);
               setTotalProd(0);
             }
-          })
-          .catch(() => setListaProd([]));
+          }).catch(() => setListaProd([]));
+        } else {
+          getProdutos({ page: 1, perPage: BATCH_SIZE, search: currentSearch.trim(), sortBy: col, sortDir: newDir })
+            .then((data) => {
+              if (data?.data?.length > 0) {
+                setListaProd(data.data);
+                setTotalProd(data.meta?.total || 0);
+                setPageLoaded(1);
+                setLinhaSelecionada(0);
+              } else {
+                setListaProd([]);
+                setTotalProd(0);
+              }
+            })
+            .catch(() => setListaProd([]));
+        }
       }, 0);
     }
   }, [sortBy, sortDir, currentSearch, salvarPreferencias]);
@@ -585,7 +654,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-gray-700 dark:text-gray-200">
-              Enter buscar | ↑↓ navegar | Enter selecionar | F9 Equiv. | F10 Hist. | Esc voltar/fechar
+              Enter buscar | ↑↓ navegar | Enter selecionar | F8 Filtros | F9 Equiv. | F10 Hist. | Esc voltar/fechar
             </span>
             <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-500">
               <X className="h-5 w-5" />
@@ -593,19 +662,63 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           </div>
         </div>
 
-        {/* Busca */}
+        {/* Busca + Filtro Avançado */}
         <div className="px-4 py-2 border-b border-gray-100 dark:border-zinc-700">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') executarBusca(searchInput); }}
-              placeholder="Digite e pressione Enter para buscar..."
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') executarBusca(searchInput); }}
+                placeholder="Digite e pressione Enter para buscar..."
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <button
+              onClick={() => setMostrarFiltroAvancado(!mostrarFiltroAvancado)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                filtrosAvancados.length > 0
+                  ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-700 dark:text-blue-300'
+                  : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700'
+              }`}
+              title="Filtros avançados (F8)"
+            >
+              <Filter size={14} />
+              <span>Filtros</span>
+              {filtrosAvancados.length > 0 ? (
+                <span className="ml-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {filtrosAvancados.length}
+                </span>
+              ) : null}
+            </button>
+            {filtrosAvancados.length > 0 ? (
+              <button
+                onClick={() => handleFiltroAvancado([])}
+                className="px-2 py-2 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Limpar filtros"
+              >
+                <X size={14} />
+              </button>
+            ) : null}
           </div>
+          {/* Chips dos filtros ativos */}
+          {filtrosAvancados.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {filtrosAvancados.map((f, i) => (
+                <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] font-medium rounded-full border border-blue-200 dark:border-blue-700">
+                  <strong>{f.campo}</strong> {f.tipo} {f.valor || 'NULO'}
+                  <button onClick={() => {
+                    const novosFiltros = filtrosAvancados.filter((_, idx) => idx !== i);
+                    handleFiltroAvancado(novosFiltros);
+                  }} className="ml-0.5 hover:text-red-500">
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {/* Tabela com scroll */}
@@ -884,6 +997,45 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         itensExistentes={itensExistentes}
         produto={produtoEquiv}
       />
+
+      {/* Modal Filtro Avançado */}
+      {mostrarFiltroAvancado ? (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex justify-center items-center p-4" onClick={(ev) => { if (ev.target === ev.currentTarget) setMostrarFiltroAvancado(false); }}>
+          <div className="w-full max-w-3xl" onClick={(ev) => ev.stopPropagation()}>
+            <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b dark:border-zinc-700">
+                <h3 className="text-sm font-bold text-[#347AB6]">FILTROS AVANÇADOS</h3>
+                <button onClick={() => setMostrarFiltroAvancado(false)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-500">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <FiltroDinamicoDeClientes
+                colunas={['ref', 'descr', 'codmarca', 'codgpp', 'codgpf', 'qtest', 'prcompra', 'prvenda', 'prfabr', 'ipi', 'codprod', 'dolar', 'curva', 'tipo', 'prcustoatual', 'trib', 'clasfiscal']}
+                rotulos={{
+                  ref: 'Referência',
+                  descr: 'Aplicação',
+                  codmarca: 'Marca',
+                  codgpp: 'Grupo de Produto',
+                  codgpf: 'Grupo de Função',
+                  qtest: 'Quant. Estoque',
+                  prcompra: 'Preço de Compra',
+                  prvenda: 'Preço de Venda',
+                  prfabr: 'Preço de Fábrica',
+                  ipi: 'IPI',
+                  codprod: 'Código',
+                  dolar: 'Origem (S=Imp/N=Nac)',
+                  curva: 'Curva ABC',
+                  tipo: 'Tipo (ME/MC)',
+                  prcustoatual: 'Custo Atual',
+                  trib: 'Tributação',
+                  clasfiscal: 'Class. Fiscal (NCM)',
+                }}
+                onChange={handleFiltroAvancado}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
