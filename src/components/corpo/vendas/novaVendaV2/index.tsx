@@ -55,8 +55,8 @@ interface AuthContextProps {
 const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 // Classes Material Input (label flutuante)
-const MI_INPUT = 'peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 !pr-9 font-sans text-sm font-normal text-gray-900 dark:text-white outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400';
-const MI_LABEL = 'text-gray-900 dark:text-white before:content-[" "] after:content-[" "] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-bold leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-600 dark:peer-placeholder-shown:text-gray-300 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-900 dark:peer-focus:text-white peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200';
+const MI_INPUT = 'peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 !pr-9 font-sans text-sm font-normal text-gray-900 dark:text-white outline outline-0 transition-all focus:border-blue-500 focus:border-2 dark:focus:border-blue-400 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400';
+const MI_LABEL = 'text-gray-900 dark:text-white before:content-[" "] after:content-[" "] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-bold leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-600 dark:peer-placeholder-shown:text-gray-300 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-blue-600 dark:peer-focus:text-blue-400 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-blue-500 dark:peer-focus:before:border-blue-400 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-blue-500 dark:peer-focus:after:border-blue-400';
 const MI_BTN = 'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-gray-700 hover:text-gray-900 z-10';
 
 // ===================== Editor de Moeda (AG Grid v36 — reactiveCustomComponents) =====================
@@ -176,6 +176,20 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   // ---------- Estados da finalização ----------
   const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>(() => draft.current?.documento || { COD_OPERACAO: '1', DESCR: 'VENDA' });
+  const [tipoMovimentacao, setTipoMovimentacao] = useState(() => draft.current?.tipoMovimentacao || 'SAIDA');
+  const [tipoOperacao, setTipoOperacao] = useState(() => draft.current?.tipoOperacao || 'VENDA');
+
+  // Mapear tipoOperacao → COD_OPERACAO do documento automaticamente
+  const TIPO_OP_TO_DOC: Record<string, { COD_OPERACAO: string; DESCR: string }> = {
+    VENDA: { COD_OPERACAO: '1', DESCR: 'VENDA' },
+    TRANSFERENCIA: { COD_OPERACAO: 'T', DESCR: 'TRANSFERÊNCIA' },
+    DEVOLUCAO_COMPRA: { COD_OPERACAO: 'D', DESCR: 'DEVOLUÇÃO COMPRA' },
+    REMESSA_BONIFICACAO: { COD_OPERACAO: 'B', DESCR: 'BONIFICAÇÃO' },
+  };
+  useEffect(() => {
+    const doc = TIPO_OP_TO_DOC[tipoOperacao] || TIPO_OP_TO_DOC.VENDA;
+    setDocumento(doc);
+  }, [tipoOperacao]);
   const [dadosDocumento, setDadosDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }[]>([]);
   const [buscaDoc, setBuscaDoc] = useState('');
   const [showDoc, setShowDoc] = useState(false);
@@ -365,10 +379,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           documento, prazo, prazosArray, fPagamento,
           transporteSel, valTransp, valTranspDec,
           obsFat, pedido, obs, requisicao,
+          tipoMovimentacao, tipoOperacao,
         }));
       } catch {}
     }, 500);
-  }, [selectedArmazem, clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao]);
+  }, [selectedArmazem, clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao, tipoMovimentacao, tipoOperacao]);
 
   // ---------- Completar dados do cliente se veio do draft ----------
   useEffect(() => {
@@ -421,6 +436,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const temMPV = useMemo(() => {
     if (!user?.funcoes) return false;
     return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'MPV');
+  }, [user]);
+  const temTMO = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'TMO');
   }, [user]);
 
   // ---------- Auto-set operador do usuário logado ----------
@@ -958,8 +977,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           formaPagamento: fPagamento || null,
           avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
           requisicao: requisicao || '',
-          tipo_movimentacao: 'SAIDA',
-          tipo_operacao: 'VENDA',
+          tipo_movimentacao: tipoMovimentacao,
+          tipo_operacao: tipoOperacao,
         },
         itens: itensGrid.map((it: any, idx: number) => ({
           codprod: it.codprod,
@@ -1018,8 +1037,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         codCli: codcli,
         quantidade: item.qtd,
         valorUnitario: item.prunit,
-        tipoMovimentacao: 'SAIDA',
-        tipoOperacao: 'VENDA',
+        tipoMovimentacao: tipoMovimentacao,
+        tipoOperacao: tipoOperacao,
         tipoFatura: 'NOTA_FISCAL',
         zerarSubstituicao: 'N',
         usarAuto: true,
@@ -1294,7 +1313,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   // Prazo efetivo: se tem desconto à vista ou saldo insuficiente → "À VISTA"
   // À vista forçado (desconto ativo ou sem cliente) — não pode mudar
   const avistaForcado = useMemo(() => {
-    if (!clienteSelecionado) return true;
+    if (!clienteSelecionado) return false;
     if (temDescontoAvista) return true;
     return false;
   }, [temDescontoAvista, clienteSelecionado]);
@@ -1497,19 +1516,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
             <div ref={cabecalhoRef} className="flex items-start gap-3">
               {/* Armazém */}
               <div className="w-[15%] relative min-w-[100px]">
-                  {selectedArmazem ? (
-                    <button onClick={() => setSelectedArmazem(null)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className={MI_BTN}><X size={14} /></button>
-                  ) : (
+                  {!selectedArmazem ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  )}
-                  <input type="text" readOnly tabIndex={selectedArmazem ? -1 : 0}
+                  ) : null}
+                  <input type="text" readOnly tabIndex={0}
                     value={selectedArmazem ? selectedArmazem.label : ''}
                     onFocus={() => { if (!selectedArmazem && armazens.length === 1) { setSelectedArmazem(armazens[0]); } }}
                     onDoubleClick={() => { if (selectedArmazem) setSelectedArmazem(null); }}
                     onKeyDown={(e) => {
-                      if (selectedArmazem) { if (e.key === 'Enter') navegarFocavel('next'); return; }
+                      if (selectedArmazem) { if (e.key === 'Enter') { e.preventDefault(); setSelectedArmazem(null); } else navegarFocavel('next'); return; }
                       if (e.key === 'ArrowDown' && armazens.length > 0) {
                         e.preventDefault();
                         setSelectedArmazem(armazens[0]);
@@ -1528,19 +1543,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {/* Busca cliente */}
               <div className="flex-1 relative min-w-[200px]">
-                  {clienteSelecionado ? (
-                    <button onClick={() => { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); clienteInputRef.current?.focus(); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className={MI_BTN} title="Limpar cliente"><X size={14} /></button>
-                  ) : (
+                  {!clienteSelecionado ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  )}
-                  <input ref={clienteInputRef} tabIndex={clienteSelecionado ? -1 : 0} type="text"
+                  ) : null}
+                  <input ref={clienteInputRef} tabIndex={0} type="text"
                     value={buscaCliente} readOnly={!!clienteSelecionado}
                     onChange={(e) => { if (!clienteSelecionado) { setBuscaCliente(e.target.value); setShowResultadosCliente(false); setResultadosCliente([]); } }}
                     onDoubleClick={() => { if (clienteSelecionado) { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); } }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        if (clienteSelecionado) { e.preventDefault(); setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); return; }
                         if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) { e.preventDefault(); selecionarCliente(resultadosCliente[clienteIdx]); return; }
                         if (buscaCliente.trim().length >= 1) buscarCliente(buscaCliente);
                         return;
@@ -1586,23 +1598,17 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {/* Busca vendedor */}
               <div className="w-[22%] relative min-w-[150px]">
-                  {vendedorSel.codigo && temEV ? (
-                    <button onClick={() => {
-                      setVendedorSel({ codigo: '', nome: '' });
-                      setBuscaVendedor('');
-                      vendedorInputRef.current?.focus();
-                    }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                    className={MI_BTN} title="Limpar vendedor"><X size={14} /></button>
-                  ) : !vendedorSel.codigo ? (
+                  {!vendedorSel.codigo ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   ) : null}
-                  <input ref={vendedorInputRef} tabIndex={vendedorSel.codigo ? -1 : 0} type="text"
+                  <input ref={vendedorInputRef} tabIndex={0} type="text"
                     value={buscaVendedor}
                     onChange={(e) => { if (temEV && !vendedorSel.codigo) { setBuscaVendedor(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'vendedor'); else { setResultadosVendedor([]); setShowResultadosVendedor(false); } } }}
                     readOnly={!temEV || !!vendedorSel.codigo}
                     onDoubleClick={() => { if (temEV && vendedorSel.codigo) { setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
                     onKeyDown={(e) => {
-                      if (!temEV || vendedorSel.codigo) return;
+                      if (vendedorSel.codigo) { if (e.key === 'Enter' && temEV) { e.preventDefault(); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } return; }
+                      if (!temEV) return;
                       if (e.key === 'Enter') {
                         if (showResultadosVendedor && vendedorIdx >= 0 && resultadosVendedor[vendedorIdx]) { e.preventDefault(); selecionarVendedor(resultadosVendedor[vendedorIdx]); return; }
                         if (buscaVendedor.trim().length >= 3) buscarVendedorOperador(buscaVendedor, 'vendedor');
@@ -1635,19 +1641,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {/* Busca operador */}
               <div className="w-[22%] relative min-w-[150px]">
-                  {operadorSel.codigo ? (
-                    <button onClick={() => { setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); operadorInputRef.current?.focus(); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className={MI_BTN} title="Limpar operador"><X size={14} /></button>
-                  ) : (
+                  {!operadorSel.codigo ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  )}
-                  <input ref={operadorInputRef} tabIndex={operadorSel.codigo ? -1 : 0} type="text"
+                  ) : null}
+                  <input ref={operadorInputRef} tabIndex={0} type="text"
                     value={buscaOperador} readOnly={!!operadorSel.codigo}
                     onDoubleClick={() => { if (operadorSel.codigo) { setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } }}
                     onChange={(e) => { if (!operadorSel.codigo) { setBuscaOperador(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'operador'); else { setResultadosOperador([]); setShowResultadosOperador(false); } } }}
                     onKeyDown={(e) => {
-                      if (operadorSel.codigo) return;
+                      if (operadorSel.codigo) { if (e.key === 'Enter') { e.preventDefault(); setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } return; }
                       if (e.key === 'Enter') {
                         if (showResultadosOperador && operadorIdx >= 0 && resultadosOperador[operadorIdx]) { e.preventDefault(); selecionarOperador(resultadosOperador[operadorIdx]); return; }
                         if (buscaOperador.trim().length >= 3) buscarVendedorOperador(buscaOperador, 'operador');
@@ -1850,84 +1852,41 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
           {/* Painel de finalização */}
           <div ref={painelFinRef} className="shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-4 py-3">
-            {/* Linha 1: Documento, Prazo, Forma Pagamento */}
-            <div className="grid grid-cols-3 gap-3">
-              {/* Documento */}
-              <div className="flex-1 relative min-w-[200px]">
-                  {documento.COD_OPERACAO ? (
-                    <button onClick={() => { setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc(''); setTimeout(() => docInputRef.current?.focus(), 50); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className={MI_BTN}><X size={14} /></button>
-                  ) : (
-                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  )}
-                  <input type="text" ref={docInputRef} tabIndex={documento.COD_OPERACAO ? -1 : 0}
-                    readOnly={!!documento.COD_OPERACAO}
-                    onDoubleClick={() => { if (documento.COD_OPERACAO) { setDocumento({ COD_OPERACAO: '', DESCR: '' }); setBuscaDoc(''); setShowDoc(true); setTimeout(() => docInputRef.current?.focus(), 50); } }}
-                    value={documento.COD_OPERACAO ? `${documento.COD_OPERACAO} - ${documento.DESCR}` : buscaDoc}
-                    onChange={(e) => { setBuscaDoc(e.target.value); setShowDoc(true); setDocIdx(0); }}
-                    onFocus={() => { if (!documento.COD_OPERACAO) setShowDoc(true); }}
-                    onBlur={() => setTimeout(() => setShowDoc(false), 150)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && showDoc && docsFiltrados.length > 0) { e.preventDefault(); setDocumento(docsFiltrados[docIdx]); setBuscaDoc(''); setShowDoc(false); setTimeout(() => navegarFocavel('next'), 50); }
-                      else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
-                      if (e.key === 'ArrowDown' && showDoc) { e.preventDefault(); setDocIdx(p => Math.min(p + 1, docsFiltrados.length - 1)); }
-                      if (e.key === 'ArrowUp' && showDoc) { e.preventDefault(); setDocIdx(p => Math.max(p - 1, 0)); }
-                      if (e.key === 'Escape') setShowDoc(false);
-                    }}
-                    placeholder=" "
-                    className={`${MI_INPUT} ${documento.COD_OPERACAO ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
-                  />
-                  <label className={MI_LABEL}>Documento</label>
-                  {showDoc && !documento.COD_OPERACAO && docsFiltrados.length > 0 ? (
-                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
-                      {docsFiltrados.map((d, idx) => (
-                        <div key={String(d.COD_OPERACAO)} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === docIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                          onMouseDown={(ev) => { ev.preventDefault(); setDocumento(d); setBuscaDoc(''); setShowDoc(false); setTimeout(() => navegarFocavel('next'), 50); }}
-                        >{String(d.COD_OPERACAO)} - {d.DESCR}</div>
-                      ))}
-                    </div>
-                  ) : null}
-              </div>
+            {/* Linha 1: Prazo, Forma Pagamento */}
+            <div className="grid grid-cols-2 gap-3">
 
               {/* Prazo */}
               <div className="flex-1 relative min-w-[200px]">
-                  {prazo && !avistaForcado ? (
-                    <>
-                      <button onClick={() => { setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(false); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                        className={MI_BTN}><X size={14} /></button>
-                      {!isAvista ? (
-                        <button onClick={() => setOpenModalPrazo(true)}
-                          className="absolute right-7 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-zinc-600 text-blue-600 z-10" title="Editar prazo">
-                          <Keyboard size={12} /></button>
-                      ) : null}
-                    </>
-                  ) : !avistaForcado ? (
-                    <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  ) : null}
-                  <input type="text" readOnly tabIndex={avistaForcado ? -1 : prazo ? -1 : 0}
+                  <input type="text" readOnly tabIndex={avistaForcado ? -1 : 0}
                     value={isAvista ? 'À VISTA' : prazo || ''}
-                    onFocus={() => { if (!avistaForcado && !prazo && totalItens > 0) { if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
-                    onDoubleClick={() => { if (!avistaForcado && prazo && totalItens > 0) { setPrazo(''); setPrazosArray([]); if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else { setOpenModalPrazo(true); } } }}
+                    onFocus={() => { if (!avistaForcado && !prazo) { setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
+                    onDoubleClick={() => { if (!avistaForcado && prazo) { setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
                     onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
                     onKeyDown={(e) => {
                       if (avistaForcado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      if (prazo) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      if (e.key === 'Enter' && showPrazoDropdown && opcoesPrazo[prazoIdx]) {
-                        e.preventDefault(); const op = opcoesPrazo[prazoIdx]; setPrazo(op.prazo.replace(/\//g, ' '));
-                        const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
-                        setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); if (opcoesPrazo.length > 0) { setShowPrazoDropdown(true); setPrazoIdx(0); } else setOpenModalPrazo(true); }
+                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } return; }
+                      // Índices: -1=À VISTA, 0..N-1=opções tabela, N=Personalizar
+                      if (e.key === 'Enter' && showPrazoDropdown) {
+                        e.preventDefault();
+                        if (prazoIdx === -1) {
+                          setPrazo('À VISTA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                        } else if (prazoIdx === opcoesPrazo.length) {
+                          setShowPrazoDropdown(false); setOpenModalPrazo(true);
+                        } else if (opcoesPrazo[prazoIdx]) {
+                          const op = opcoesPrazo[prazoIdx]; setPrazo(op.prazo.replace(/\//g, ' '));
+                          const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
+                          setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                        }
+                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); setShowPrazoDropdown(true); setPrazoIdx(-1); }
                       if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, opcoesPrazo.length)); }
-                      if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, -1)); }
                       if (e.key === 'Escape') setShowPrazoDropdown(false);
                     }}
                     placeholder=" "
                     className={`${MI_INPUT} cursor-pointer ${avistaForcado ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : prazo ? 'bg-gray-100 dark:bg-zinc-900' : ''} ${isAvista ? 'text-orange-600 font-semibold' : ''}`}
                   />
                   <label className={MI_LABEL}>Prazo</label>
-                  {showPrazoDropdown && !avistaForcado && opcoesPrazo.length > 0 ? (
+                  {showPrazoDropdown && !avistaForcado ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {/* Opção À VISTA */}
                       <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === -1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
@@ -1955,27 +1914,27 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {/* Forma de Pagamento */}
               <div className="flex-1 relative min-w-[200px]">
-                  {fPagamento ? (
-                    <button onClick={() => { setFPagamento(''); setBuscaFP(''); setTimeout(() => fpInputRef.current?.focus(), 50); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className={MI_BTN}><X size={14} /></button>
-                  ) : (
+                  {!fPagamento ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  )}
-                  <input type="text" ref={fpInputRef} tabIndex={fPagamento ? -1 : 0}
+                  ) : null}
+                  <input type="text" ref={fpInputRef} tabIndex={0}
                     readOnly={!!fPagamento}
                     value={fPagamento ? (opcoesFPFiltradas.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
                     onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
                     onFocus={() => { if (!fPagamento) setShowFP(true); }}
                     onBlur={() => setTimeout(() => setShowFP(false), 150)}
-                    onDoubleClick={() => { if (fPagamento) { setFPagamento(''); setBuscaFP(''); setShowFP(true); setTimeout(() => fpInputRef.current?.focus(), 50); } }}
+                    onDoubleClick={() => { if (fPagamento) { setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
-                      if (fPagamento) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (fPagamento) {
+                        if (e.key === 'Enter') { e.preventDefault(); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); }
+                        return;
+                      }
                       if (e.key === 'Enter' && showFP && fpFiltradosPorBusca[fpIdx]) {
                         e.preventDefault(); setFPagamento(fpFiltradosPorBusca[fpIdx].id); setBuscaFP(''); setShowFP(false);
                         setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                      } else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
-                      if (e.key === 'ArrowDown' && showFP) { e.preventDefault(); setFpIdx(p => Math.min(p + 1, fpFiltradosPorBusca.length - 1)); }
+                      } else if (e.key === 'Enter' && !showFP) { e.preventDefault(); setShowFP(true); setFpIdx(0); }
+                      else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); if (!showFP) { setShowFP(true); setFpIdx(0); } else { setFpIdx(p => Math.min(p + 1, fpFiltradosPorBusca.length - 1)); } }
                       if (e.key === 'ArrowUp' && showFP) { e.preventDefault(); setFpIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowFP(false);
                     }}
@@ -1999,24 +1958,25 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
             <div className="grid grid-cols-4 gap-3 mt-2">
               {/* Transportadora */}
               <div className="flex-1 relative min-w-[200px]">
-                  {transporteSel.CODTPTRANSP ? (
-                    <button onClick={() => { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setTimeout(() => transpInputRef.current?.focus(), 50); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLElement).click(); } }}
-                      className={MI_BTN}><X size={14} /></button>
-                  ) : (
+                  {!transporteSel.CODTPTRANSP ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
-                  )}
-                  <input type="text" ref={transpInputRef} tabIndex={transporteSel.CODTPTRANSP ? -1 : 0}
+                  ) : null}
+                  <input type="text" ref={transpInputRef} tabIndex={0}
                     readOnly={!!transporteSel.CODTPTRANSP}
-                    onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTimeout(() => transpInputRef.current?.focus(), 50); } }}
+                    onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); } }}
                     value={transporteSel.CODTPTRANSP ? `${transporteSel.CODTPTRANSP} - ${transporteSel.DESCR}` : buscaTransp}
                     onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
                     onFocus={() => { if (!transporteSel.CODTPTRANSP) setShowTransp(true); }}
                     onBlur={() => setTimeout(() => setShowTransp(false), 150)}
                     onKeyDown={(e) => {
+                      if (transporteSel.CODTPTRANSP) {
+                        if (e.key === 'Enter') { e.preventDefault(); setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTranspIdx(0); }
+                        return;
+                      }
                       if (e.key === 'Enter' && showTransp && transpFiltrados.length > 0) { e.preventDefault(); setTransporteSel(transpFiltrados[transpIdx]); setBuscaTransp(''); setShowTransp(false); setTimeout(() => navegarFocavel('next'), 50); }
+                      else if (e.key === 'Enter' && !showTransp) { e.preventDefault(); setShowTransp(true); setTranspIdx(0); }
                       else if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
-                      if (e.key === 'ArrowDown' && showTransp) { e.preventDefault(); setTranspIdx(p => Math.min(p + 1, transpFiltrados.length - 1)); }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTransp) { setShowTransp(true); setTranspIdx(0); } else { setTranspIdx(p => Math.min(p + 1, transpFiltrados.length - 1)); } }
                       if (e.key === 'ArrowUp' && showTransp) { e.preventDefault(); setTranspIdx(p => Math.max(p - 1, 0)); }
                       if (e.key === 'Escape') setShowTransp(false);
                     }}
@@ -2045,7 +2005,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     setValTranspDec(dec);
                     setValTransp(dec.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' }));
                   }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                    const el = e.target as HTMLInputElement;
+                    if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) { e.preventDefault(); navegarFocavel('next'); }
+                    if (e.key === 'ArrowLeft' && el.selectionStart === 0) { e.preventDefault(); navegarFocavel('prev'); }
+                  }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Valor Transporte</label>
@@ -2054,7 +2019,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               {/* Obs Fat */}
               <div className="relative h-full min-w-[200px]">
                 <input type="text" value={obsFat} onChange={(e) => setObsFat(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                    const el = e.target as HTMLInputElement;
+                    if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) { e.preventDefault(); navegarFocavel('next'); }
+                    if (e.key === 'ArrowLeft' && el.selectionStart === 0) { e.preventDefault(); navegarFocavel('prev'); }
+                  }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Obs. Faturamento</label>
@@ -2063,7 +2033,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               {/* Pedido */}
               <div className="relative h-full min-w-[200px]">
                 <input type="text" value={pedido} onChange={(e) => setPedido(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                    const el = e.target as HTMLInputElement;
+                    if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) { e.preventDefault(); navegarFocavel('next'); }
+                    if (e.key === 'ArrowLeft' && el.selectionStart === 0) { e.preventDefault(); navegarFocavel('prev'); }
+                  }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Pedido</label>
@@ -2074,19 +2049,59 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
             <div className="grid grid-cols-2 gap-3 mt-2">
               <div className="relative h-full min-w-[200px]">
                 <input type="text" value={obs} onChange={(e) => setObs(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                    const el = e.target as HTMLInputElement;
+                    if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) { e.preventDefault(); navegarFocavel('next'); }
+                    if (e.key === 'ArrowLeft' && el.selectionStart === 0) { e.preventDefault(); navegarFocavel('prev'); }
+                  }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Observação</label>
               </div>
               <div className="relative h-full min-w-[200px]">
                 <input type="text" value={requisicao} onChange={(e) => setRequisicao(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
+                    const el = e.target as HTMLInputElement;
+                    if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) { e.preventDefault(); navegarFocavel('next'); }
+                    if (e.key === 'ArrowLeft' && el.selectionStart === 0) { e.preventDefault(); navegarFocavel('prev'); }
+                  }}
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Requisição</label>
               </div>
             </div>
+
+            {/* Linha 4: Tipo Movimentação + Tipo Operação (só com permissão TMO) */}
+            {temTMO ? (
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="relative min-w-[200px]">
+                  <select value={tipoMovimentacao}
+                    onChange={(e) => setTipoMovimentacao(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                    className={`${MI_INPUT} cursor-pointer appearance-none`}
+                  >
+                    <option value="SAIDA">SAÍDA</option>
+                    <option value="ENTRADA">ENTRADA</option>
+                  </select>
+                  <label className={MI_LABEL}>Tipo Movimentação</label>
+                </div>
+                <div className="relative min-w-[200px]">
+                  <select value={tipoOperacao}
+                    onChange={(e) => setTipoOperacao(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
+                    className={`${MI_INPUT} cursor-pointer appearance-none`}
+                  >
+                    <option value="VENDA">VENDA</option>
+                    <option value="TRANSFERENCIA">TRANSFERÊNCIA</option>
+                    <option value="DEVOLUCAO_COMPRA">DEVOLUÇÃO COMPRA</option>
+                    <option value="REMESSA_BONIFICACAO">BONIFICAÇÃO</option>
+                  </select>
+                  <label className={MI_LABEL}>Tipo Operação</label>
+                </div>
+              </div>
+            ) : null}
 
             {/* Modal Prazo */}
             {openModalPrazo ? (
