@@ -1355,7 +1355,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   // Classe de pagamento do cliente (V, D, Z = forçar à vista)
   const claspgto = useMemo(() => String(clienteSelecionado?.claspgto || '').trim().toUpperCase(), [clienteSelecionado]);
-  const clienteBloqueado = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '2', [clienteSelecionado]);
+  // Status_Cli no Delphi era calculado por stored procedure, não é o campo status da dbclien
+  // O campo status='2' na dbclien do PG tem outro significado (33k de 35k clientes são '2')
+  // TODO: implementar verificação financeira via API quando necessário
+  const clienteBloqueado = false;
   const clienteTempAvista = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '4', [clienteSelecionado]);
   const isClienteBalcao = useMemo(() => String(clienteSelecionado?.codcli || '').trim() === '99999', [clienteSelecionado]);
 
