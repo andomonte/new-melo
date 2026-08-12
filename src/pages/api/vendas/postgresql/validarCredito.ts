@@ -126,7 +126,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } else {
         return res.status(200).json({
           passou: 'NOK',
-          mensagem: `CLIENTE COM TITULO(S) ATRASADO(S) — ${diasAtraso} dia(s)`,
+          mensagem: `CLIENTE COM TÍTULO(S) EM ATRASO HÁ ${diasAtraso} DIA(S). Solicite regularização ao setor de cobrança ou crédito temporário.`,
           status: 'Títulos Atrasados',
           diasAtraso,
         });
@@ -137,10 +137,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Só verifica se NÃO é à vista, cartão ou depósito
     const saldoDisponivel = (limite - debito) + creditoTemp;
 
+    // Crédito insuficiente para venda a prazo
     if (!isentaCredito && valor > 0 && saldoDisponivel < valor) {
+      const falta = valor - saldoDisponivel;
       return res.status(200).json({
         passou: 'NOK',
-        mensagem: `CLIENTE COM CREDITO INSUFICIENTE. DISPONÍVEL: R$ ${saldoDisponivel.toFixed(2)}`,
+        mensagem: `CRÉDITO INSUFICIENTE PARA VENDA A PRAZO. Limite disponível: R$ ${saldoDisponivel.toFixed(2)} | Total da venda: R$ ${valor.toFixed(2)} | Faltam: R$ ${falta.toFixed(2)}. Opções: escolha À VISTA, CARTÃO DE CRÉDITO ou solicite aumento de crédito.`,
         status: 'Sem Crédito',
         saldoDisponivel,
         creditoTemp,
@@ -150,9 +152,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ========================================
     // 4. TUDO OK — montar status como Delphi (LbStatus.Caption)
     // ========================================
-    let statusLabel = 'Liberado';
+    let statusLabel = `Liberado — Disponível: R$ ${saldoDisponivel.toFixed(2)}`;
     if (claspgto === 'V' || claspgto === 'D') statusLabel = 'Liberado (À Vista)';
-    if (saldoDisponivel <= 0 && !isentaCredito) statusLabel = 'Liberado (Sem Saldo)';
+    else if (isentaCredito) statusLabel = 'Liberado';
+    else if (saldoDisponivel <= 0) statusLabel = 'Sem saldo — somente À Vista ou Cartão';
 
     return res.status(200).json({
       passou: 'OK',
