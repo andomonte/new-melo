@@ -1883,26 +1883,21 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <span className="text-gray-300 dark:text-zinc-600">|</span>
                   <span><span className="font-semibold">Tipo:</span> <span className="font-medium">{clienteSelecionado.tipo || '-'}</span></span>
                 </div>
-                {/* Status financeiro (validarCredito API) */}
-                {clienteBloqueado ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs">
-                    <AlertTriangle size={13} className="text-red-500 shrink-0" />
-                    <span className="font-semibold text-red-700 dark:text-red-300">{restricaoFinanceira?.mensagem || 'RESTRIÇÃO FINANCEIRA'}</span>
-                  </div>
-                ) : avistaForcado ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md text-xs">
-                    <AlertTriangle size={13} className="text-amber-500 shrink-0" />
-                    <span className="font-semibold text-amber-700 dark:text-amber-300">À Vista Obrigatório ({claspgto})</span>
-                  </div>
-                ) : Number(clienteSelecionado.saldo || 0) <= 0 ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs">
-                    <AlertTriangle size={13} className="text-red-500 shrink-0" />
-                    <span className="font-semibold text-red-700 dark:text-red-300">Sem limite disponível</span>
-                  </div>
-                ) : totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0 ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md text-xs">
-                    <AlertTriangle size={13} className="text-amber-500 shrink-0" />
-                    <span className="font-semibold text-amber-700 dark:text-amber-300">Pós-venda: {formatCurrency(Number(clienteSelecionado.saldo || 0) - totalVenda)}</span>
+                {/* Status financeiro — só da API validarCredito */}
+                {restricaoFinanceira ? (
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs border ${
+                    restricaoFinanceira.passou === 'NOK'
+                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                  }`}>
+                    {restricaoFinanceira.passou === 'NOK'
+                      ? <AlertTriangle size={13} className="text-red-500 shrink-0" />
+                      : null}
+                    <span className={`font-semibold ${
+                      restricaoFinanceira.passou === 'NOK'
+                        ? 'text-red-700 dark:text-red-300'
+                        : 'text-blue-700 dark:text-blue-300'
+                    }`}>{restricaoFinanceira.passou === 'NOK' ? restricaoFinanceira.mensagem : restricaoFinanceira.status}</span>
                   </div>
                 ) : null}
               </div>

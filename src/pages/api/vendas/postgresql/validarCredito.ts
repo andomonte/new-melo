@@ -148,11 +148,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // ========================================
-    // 4. TUDO OK
+    // 4. TUDO OK — montar status como Delphi (LbStatus.Caption)
     // ========================================
-    const statusLabel = claspgto === 'V' || claspgto === 'D'
-      ? 'À Vista Obrigatório'
-      : 'Liberado';
+    let statusLabel = 'Liberado';
+    if (claspgto === 'V' || claspgto === 'D') statusLabel = 'Liberado (À Vista)';
+    if (saldoDisponivel <= 0 && !isentaCredito) statusLabel = 'Liberado (Sem Saldo)';
 
     return res.status(200).json({
       passou: 'OK',
