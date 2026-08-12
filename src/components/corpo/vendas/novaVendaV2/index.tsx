@@ -2474,8 +2474,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   </button>
                 ) : (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30 || statusVenda === 'BLOQUEIO_FINANCEIRO' || (isClienteBalcao && totalVenda > 10000) || (isClienteBalcao && !isAvista && !isCartaoCredito) || (isCartaoCredito && parcelasCartao <= 0) || (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
-                    title=""
+                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30 || (isClienteBalcao && totalVenda > 10000) || (isClienteBalcao && !isAvista && !isCartaoCredito) || (isCartaoCredito && parcelasCartao <= 0) || (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
+                    title={!clienteSelecionado ? 'INFORME O CLIENTE' : totalItens === 0 ? 'ESCOLHA PRODUTOS!' : clienteBloqueado ? (restricaoFinanceira?.mensagem || '') : totalVenda < 30 && totalVenda > 0 ? 'VENDA MÍNIMA DE R$ 30,00' : isClienteBalcao && totalVenda > 10000 ? 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.' : isClienteBalcao && !isAvista && !isCartaoCredito ? 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.' : isCartaoCredito && parcelasCartao <= 0 ? 'INFORME O PARCELAMENTO DO CARTÃO' : !isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0 ? 'O SALDO DO CLIENTE É INSUFICIENTE, CONSULTE O SETOR DE COBRANÇA.' : ''}
                     onClick={handleFinalizarVenda}
                     className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
