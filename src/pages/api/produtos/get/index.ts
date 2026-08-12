@@ -12,7 +12,7 @@ export default async function handle(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { page = '1', perPage = '10', search = '', status = 'ativo', sortBy = 'descr', sortDir = 'asc' } =
+  const { page = '1', perPage = '10', search = '', status = 'ativo', sortBy = 'descr', sortDir = 'asc', searchField = '' } =
     req.query;
   let client: PoolClient | undefined;
 
@@ -48,14 +48,24 @@ export default async function handle(
     let paramIndex = 1;
 
     // Busca geral com regras:
-    // Uma palavra = prefixo em aplic_extendida e ref
-    // Múltiplas palavras = primeira prefixo + demais contém em aplic_extendida
-    // % na frente = contém | ; ou , = OR | | = marca (não aplicável aqui) | "aspas" = frase exata
-    // Número puro = codprod e ref | Letras+números = ref e codprod
+    // searchField = 'ref' => busca só em p.ref (como Delphi RBtn7)
+    // searchField = 'aplicacao' => busca só em p.aplic_extendida (como Delphi RBtn5)
+    // searchField vazio/outro => busca em ambos (comportamento padrão)
+    // Uma palavra = prefixo | Múltiplas palavras = primeira prefixo + demais contém
+    // % na frente = contém | ; ou , = OR | "aspas" = frase exata
     if (search && typeof search === 'string' && search.trim()) {
       const searchTerm = search.trim();
       const isNumerico = /^\d+$/.test(searchTerm);
       const isRefMista = /^[A-Za-z]+\d+/.test(searchTerm) || /^\d+[A-Za-z]+/.test(searchTerm);
+
+      // Definir colunas de busca baseado no searchField
+      const sf = String(searchField).toLowerCase();
+      const colsGeral = sf === 'ref' ? ['p.ref']
+        : sf === 'aplicacao' ? ['p.aplic_extendida']
+        : ['p.aplic_extendida', 'p.ref'];
+      const colTexto = sf === 'ref' ? ['p.ref']
+        : sf === 'aplicacao' ? ['p.aplic_extendida']
+        : ['p.aplic_extendida'];
 
       // Extrair frases entre aspas
       const frases: string[] = [];
@@ -64,16 +74,16 @@ export default async function handle(
         return '';
       }).trim();
 
-      const grupos = semAspas
-        .split(/[;,]/)
-        .map((g: string) => g.trim().split(/[\s%]+/).filter(Boolean))
-        .filter((g: string[]) => g.length > 0);
+      const grupos = sf === 'ref'
+        ? (semAspas.trim() ? [[semAspas.trim()]] : [])
+        : semAspas
+          .split(/[;,]/)
+          .map((g: string) => g.trim().split(/[\s%]+/).filter(Boolean))
+          .filter((g: string[]) => g.length > 0);
 
       frases.forEach((f: string) => { if (f) grupos.push([f]); });
 
       if (grupos.length > 0) {
-        const colsGeral = ['p.aplic_extendida', 'p.ref'];
-
         const orConds = grupos.map((termos: string[]) => {
           if (termos.length === 1) {
             const t = termos[0];
@@ -86,7 +96,6 @@ export default async function handle(
             paramIndex++;
             return `(${colConds.join(' OR ')})`;
           } else {
-            const colTexto = ['p.aplic_extendida'];
             const andConds = termos.map((t: string, i: number) => {
               const temPercent = t.startsWith('%');
               const termoLimpo = t.replace(/^%+|%+$/g, '').trim();

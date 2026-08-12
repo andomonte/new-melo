@@ -111,6 +111,10 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   linhaSelecionadaRef.current = linhaSelecionada;
   const listaProdRef = useRef<any[]>([]);
   listaProdRef.current = listaProd;
+  const pedindoQtdRef = useRef(-1);
+  pedindoQtdRef.current = pedindoQtd;
+  const mostrarFiltroAvancadoRef = useRef(false);
+  mostrarFiltroAvancadoRef.current = mostrarFiltroAvancado;
   const buscandoRef = useRef(false);
   const confirmarAdicaoRef = useRef<() => void>(() => {});
   const abrirQtdRef = useRef<(idx: number) => void>(() => {});
@@ -480,7 +484,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       // Se o filtro avançado está aberto, só responder Escape e F8
-      if (mostrarFiltroAvancado) {
+      if (mostrarFiltroAvancadoRef.current) {
         if (e.key === 'Escape') {
           e.preventDefault(); e.stopImmediatePropagation();
           setMostrarFiltroAvancado(false);
@@ -489,7 +493,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       }
 
       // Quando pedindoQtd ativo — só tratar Escape, deixar o resto para os onKeyDown dos campos inline
-      if (pedindoQtd >= 0) {
+      if (pedindoQtdRef.current >= 0) {
         if (e.key === 'Escape') {
           e.preventDefault(); e.stopImmediatePropagation();
           setPedindoQtd(-1);
@@ -579,7 +583,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, pedindoQtd, mostrarFiltroAvancado]);
+  }, [isOpen]);
 
   // Handler do filtro avançado
   const handleFiltroAvancado = useCallback((filtros: { campo: string; tipo: string; valor: string }[]) => {
@@ -861,7 +865,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                   if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
                                   if (ev.key === 'ArrowRight') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); } }
                                   if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); }
-                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setPedindoQtd(-1); const prods = listaProdRef.current; const cur = linhaSelecionadaRef.current; const next = ev.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0); linhaSelecionadaRef.current = next; setLinhaSelecionada(next); modalRef.current?.focus(); }
                                 }}
                                 className="w-24 h-6 text-center text-xs border border-gray-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-500 uppercase" />
                               <span className="text-[10px] text-gray-500">Descr:</span>
@@ -875,7 +879,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                   if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); }
                                   if (ev.key === 'ArrowRight') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); } }
                                   if (ev.key === 'ArrowLeft') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === 0) { ev.preventDefault(); if (i > 0) all[i - 1].focus(); } }
-                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setPedindoQtd(-1); const prods = listaProdRef.current; const cur = linhaSelecionadaRef.current; const next = ev.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0); linhaSelecionadaRef.current = next; setLinhaSelecionada(next); modalRef.current?.focus(); }
                                 }}
                                 className="w-40 h-6 text-xs px-1 border border-gray-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-500" />
                               <span className="text-[10px] text-gray-500">Qtd:</span>
@@ -982,7 +986,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                           ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
                                           if (idx < all.length - 1) all[idx + 1].focus();
                                         } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-                                          ev.nativeEvent.stopImmediatePropagation();
+                                          ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setPedindoQtd(-1); const prods = listaProdRef.current; const cur = linhaSelecionadaRef.current; const next = ev.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0); linhaSelecionadaRef.current = next; setLinhaSelecionada(next); modalRef.current?.focus();
                                         }
                                       }}
                                       className={`w-24 h-6 text-center text-xs border rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 ${borderClassFinal}`} />
@@ -1032,7 +1036,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                   if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); confirmarAdicao(); }
                                   if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
                                   if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
-                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setPedindoQtd(-1); const prods = listaProdRef.current; const cur = linhaSelecionadaRef.current; const next = ev.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0); linhaSelecionadaRef.current = next; setLinhaSelecionada(next); modalRef.current?.focus(); }
                                 }}
                                 className="h-6 px-2 text-[10px] font-semibold bg-green-600 hover:bg-green-700 text-white rounded cursor-pointer select-none inline-flex items-center outline-none focus:ring-2 focus:ring-blue-400">OK</span>
                               {hasVDM ? (
@@ -1045,7 +1049,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                     if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setNaoGerarDemanda(!el.checked); }
                                     if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
                                     if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
-                                    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setPedindoQtd(-1); const prods = listaProdRef.current; const cur = linhaSelecionadaRef.current; const next = ev.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0); linhaSelecionadaRef.current = next; setLinhaSelecionada(next); modalRef.current?.focus(); }
                                   }}
                                   className="w-3 h-3 accent-blue-600" />
                                 <span className="text-[9px] text-gray-500 dark:text-gray-400 whitespace-nowrap">Não gerar demanda</span>

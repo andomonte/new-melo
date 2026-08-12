@@ -20,6 +20,10 @@ interface ItemAdicionado {
   codmarca: string;
   marca_nome: string;
   origem: string;
+  demanda: string;
+  qtdpnd: number;
+  nrequis: string;
+  nritem: string;
   _novo: boolean;
 }
 
@@ -177,6 +181,10 @@ const ModalEquivalentes: React.FC<ModalEquivalentesProps> = ({
       codmarca: item.MARCA || item.codmarca || '',
       marca_nome: item.MARCA || '',
       origem: item.dolar || 'N',
+      demanda: 'S',
+      qtdpnd: 0,
+      nrequis: '',
+      nritem: '',
       _novo: true,
     };
 
