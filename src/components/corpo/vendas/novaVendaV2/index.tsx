@@ -178,6 +178,21 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>(() => draft.current?.documento || { COD_OPERACAO: '1', DESCR: 'VENDA' });
   const [tipoMovimentacao, setTipoMovimentacao] = useState(() => draft.current?.tipoMovimentacao || 'SAIDA');
   const [tipoOperacao, setTipoOperacao] = useState(() => draft.current?.tipoOperacao || 'VENDA');
+  const [showTipoMov, setShowTipoMov] = useState(false);
+  const [tipoMovIdx, setTipoMovIdx] = useState(0);
+  const [showTipoOp, setShowTipoOp] = useState(false);
+  const [tipoOpIdx, setTipoOpIdx] = useState(0);
+
+  const OPCOES_TIPO_MOV = [
+    { value: 'SAIDA', label: 'SAÍDA' },
+    { value: 'ENTRADA', label: 'ENTRADA' },
+  ];
+  const OPCOES_TIPO_OP = [
+    { value: 'VENDA', label: 'VENDA' },
+    { value: 'TRANSFERENCIA', label: 'TRANSFERÊNCIA' },
+    { value: 'DEVOLUCAO_COMPRA', label: 'DEVOLUÇÃO COMPRA' },
+    { value: 'REMESSA_BONIFICACAO', label: 'BONIFICAÇÃO' },
+  ];
 
   // Mapear tipoOperacao → COD_OPERACAO do documento automaticamente
   const TIPO_OP_TO_DOC: Record<string, { COD_OPERACAO: string; DESCR: string }> = {
@@ -502,7 +517,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   // Refs para dropdowns (evitar stale closures no handler global)
   const dropdownAbertoRef = useRef(false);
-  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown || showFP;
+  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown || showFP || showTipoMov || showTipoOp;
 
   // ---------- Navegação por teclado (Tab + Setas) ----------
   const cabecalhoRef = useRef<HTMLDivElement>(null);
@@ -1853,8 +1868,69 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
           {/* Painel de finalização */}
           <div ref={painelFinRef} className="shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-4 py-3">
-            {/* Linha 1: Prazo, Forma Pagamento */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Linha 1: (TMO: Tipo Mov + Tipo Op) + Prazo + Forma Pagamento */}
+            <div className={`grid ${temTMO ? 'grid-cols-4' : 'grid-cols-2'} gap-3`}>
+
+              {temTMO ? (
+                <>
+                  {/* Tipo Movimentação */}
+                  <div className="relative min-w-[120px]">
+                    <input type="text" readOnly tabIndex={0}
+                      value={OPCOES_TIPO_MOV.find(o => o.value === tipoMovimentacao)?.label || tipoMovimentacao}
+                      onFocus={() => { setShowTipoMov(true); setTipoMovIdx(OPCOES_TIPO_MOV.findIndex(o => o.value === tipoMovimentacao)); }}
+                      onBlur={() => setTimeout(() => setShowTipoMov(false), 150)}
+                      onDoubleClick={() => { setShowTipoMov(true); setTipoMovIdx(0); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && showTipoMov) { e.preventDefault(); setTipoMovimentacao(OPCOES_TIPO_MOV[tipoMovIdx].value); setShowTipoMov(false); setTimeout(() => navegarFocavel('next'), 50); }
+                        else if (e.key === 'Enter') { e.preventDefault(); setShowTipoMov(true); setTipoMovIdx(0); }
+                        if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTipoMov) { setShowTipoMov(true); setTipoMovIdx(0); } else { setTipoMovIdx(p => Math.min(p + 1, OPCOES_TIPO_MOV.length - 1)); } }
+                        if (e.key === 'ArrowUp' && showTipoMov) { e.preventDefault(); setTipoMovIdx(p => Math.max(p - 1, 0)); }
+                        if (e.key === 'Escape') setShowTipoMov(false);
+                      }}
+                      placeholder=" "
+                      className={`${MI_INPUT} cursor-pointer bg-gray-100 dark:bg-zinc-900`}
+                    />
+                    <label className={MI_LABEL}>Tipo Movimentação</label>
+                    {showTipoMov ? (
+                      <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                        {OPCOES_TIPO_MOV.map((op, idx) => (
+                          <div key={op.value} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoMovIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                            onMouseDown={(ev) => { ev.preventDefault(); setTipoMovimentacao(op.value); setShowTipoMov(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                          >{op.label}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {/* Tipo Operação */}
+                  <div className="relative min-w-[120px]">
+                    <input type="text" readOnly tabIndex={0}
+                      value={OPCOES_TIPO_OP.find(o => o.value === tipoOperacao)?.label || tipoOperacao}
+                      onFocus={() => { setShowTipoOp(true); setTipoOpIdx(OPCOES_TIPO_OP.findIndex(o => o.value === tipoOperacao)); }}
+                      onBlur={() => setTimeout(() => setShowTipoOp(false), 150)}
+                      onDoubleClick={() => { setShowTipoOp(true); setTipoOpIdx(0); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && showTipoOp) { e.preventDefault(); setTipoOperacao(OPCOES_TIPO_OP[tipoOpIdx].value); setShowTipoOp(false); setTimeout(() => navegarFocavel('next'), 50); }
+                        else if (e.key === 'Enter') { e.preventDefault(); setShowTipoOp(true); setTipoOpIdx(0); }
+                        if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTipoOp) { setShowTipoOp(true); setTipoOpIdx(0); } else { setTipoOpIdx(p => Math.min(p + 1, OPCOES_TIPO_OP.length - 1)); } }
+                        if (e.key === 'ArrowUp' && showTipoOp) { e.preventDefault(); setTipoOpIdx(p => Math.max(p - 1, 0)); }
+                        if (e.key === 'Escape') setShowTipoOp(false);
+                      }}
+                      placeholder=" "
+                      className={`${MI_INPUT} cursor-pointer bg-gray-100 dark:bg-zinc-900`}
+                    />
+                    <label className={MI_LABEL}>Tipo Operação</label>
+                    {showTipoOp ? (
+                      <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                        {OPCOES_TIPO_OP.map((op, idx) => (
+                          <div key={op.value} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoOpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                            onMouseDown={(ev) => { ev.preventDefault(); setTipoOperacao(op.value); setShowTipoOp(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                          >{op.label}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
 
               {/* Prazo */}
               <div className="flex-1 relative min-w-[200px]">
@@ -2073,36 +2149,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Requisição</label>
               </div>
             </div>
-
-            {/* Linha 4: Tipo Movimentação + Tipo Operação (só com permissão TMO) */}
-            {temTMO ? (
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <div className="relative min-w-[200px]">
-                  <select value={tipoMovimentacao}
-                    onChange={(e) => setTipoMovimentacao(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
-                    className={`${MI_INPUT} cursor-pointer appearance-none`}
-                  >
-                    <option value="SAIDA">SAÍDA</option>
-                    <option value="ENTRADA">ENTRADA</option>
-                  </select>
-                  <label className={MI_LABEL}>Tipo Movimentação</label>
-                </div>
-                <div className="relative min-w-[200px]">
-                  <select value={tipoOperacao}
-                    onChange={(e) => setTipoOperacao(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } }}
-                    className={`${MI_INPUT} cursor-pointer appearance-none`}
-                  >
-                    <option value="VENDA">VENDA</option>
-                    <option value="TRANSFERENCIA">TRANSFERÊNCIA</option>
-                    <option value="DEVOLUCAO_COMPRA">DEVOLUÇÃO COMPRA</option>
-                    <option value="REMESSA_BONIFICACAO">BONIFICAÇÃO</option>
-                  </select>
-                  <label className={MI_LABEL}>Tipo Operação</label>
-                </div>
-              </div>
-            ) : null}
 
             {/* Modal Prazo */}
             {openModalPrazo ? (
