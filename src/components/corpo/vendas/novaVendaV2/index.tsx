@@ -1962,7 +1962,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <div className="relative min-w-[120px]">
                     <input type="text" readOnly tabIndex={0}
                       value={OPCOES_TIPO_MOV.find(o => o.value === tipoMovimentacao)?.label || tipoMovimentacao}
-                      onFocus={() => { setShowTipoMov(true); setTipoMovIdx(OPCOES_TIPO_MOV.findIndex(o => o.value === tipoMovimentacao)); }}
+                      onFocus={() => {}}
                       onBlur={() => setTimeout(() => setShowTipoMov(false), 150)}
                       onDoubleClick={() => { setShowTipoMov(true); setTipoMovIdx(0); }}
                       onKeyDown={(e) => {
@@ -1990,7 +1990,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <div className="relative min-w-[120px]">
                     <input type="text" readOnly tabIndex={0}
                       value={OPCOES_TIPO_OP.find(o => o.value === tipoOperacao)?.label || tipoOperacao}
-                      onFocus={() => { setShowTipoOp(true); setTipoOpIdx(OPCOES_TIPO_OP.findIndex(o => o.value === tipoOperacao)); }}
+                      onFocus={() => {}}
                       onBlur={() => setTimeout(() => setShowTipoOp(false), 150)}
                       onDoubleClick={() => { setShowTipoOp(true); setTipoOpIdx(0); }}
                       onKeyDown={(e) => {
@@ -2021,7 +2021,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               <div className="flex-1 relative min-w-[200px]">
                   <input type="text" readOnly tabIndex={avistaForcado ? -1 : 0}
                     value={isAvista ? 'À VISTA' : prazo || ''}
-                    onFocus={() => { if (!avistaForcado && !prazo) { setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
+                    onFocus={() => {}}
                     onDoubleClick={() => { if (!avistaForcado && prazo) { setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
                     onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
                     onKeyDown={(e) => {
@@ -2083,7 +2083,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     readOnly={!!fPagamento}
                     value={fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
                     onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
-                    onFocus={() => { if (!fPagamento) setShowFP(true); }}
+                    onFocus={() => {}}
                     onBlur={() => setTimeout(() => setShowFP(false), 150)}
                     onDoubleClick={() => { if (fPagamento) { setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
@@ -2120,7 +2120,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 <div className="relative min-w-[100px]">
                   <input type="text" readOnly tabIndex={0}
                     value={parcelasCartao > 0 ? `${parcelasCartao}x` : ''}
-                    onFocus={() => { setShowParcelasDropdown(true); setParcelasIdx(parcelasCartao > 0 ? parcelasCartao - 1 : 0); }}
+                    onFocus={() => {}}
                     onBlur={() => setTimeout(() => setShowParcelasDropdown(false), 150)}
                     onDoubleClick={() => { setShowParcelasDropdown(true); setParcelasIdx(0); }}
                     onKeyDown={(e) => {
@@ -2166,7 +2166,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); } }}
                     value={transporteSel.CODTPTRANSP ? `${transporteSel.CODTPTRANSP} - ${transporteSel.DESCR}` : buscaTransp}
                     onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
-                    onFocus={() => { if (!transporteSel.CODTPTRANSP) setShowTransp(true); }}
+                    onFocus={() => {}}
                     onBlur={() => setTimeout(() => setShowTransp(false), 150)}
                     onKeyDown={(e) => {
                       if (transporteSel.CODTPTRANSP) {
