@@ -1406,6 +1406,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   useEffect(() => {
     if (validarCreditoRef.current) clearTimeout(validarCreditoRef.current);
     if (!clienteSelecionado?.codcli && !clienteSelecionado?.CODCLI) { setRestricaoFinanceira(null); return; }
+    setRestricaoFinanceira(null); // limpar imediatamente ao mudar cliente/valor
     validarCreditoRef.current = setTimeout(() => {
       const codcli = clienteSelecionado.codcli || clienteSelecionado.CODCLI;
       api.post('/api/vendas/postgresql/validarCredito', {
