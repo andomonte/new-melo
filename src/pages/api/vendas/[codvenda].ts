@@ -45,8 +45,16 @@ export default async function handle(
     if (vlrfrete !== undefined) { setClauses.push(`vlrfrete = $${idx}`); params.push(Number(vlrfrete) || 0); idx++; }
     if (prazo !== undefined) { setClauses.push(`prazo = $${idx}`); params.push(prazo); idx++; }
     // Forma de pagamento vai prefixada no obsfat (como Delphi faz com pObsFat)
-    const obsfatFinal = formaPagamento
-      ? (obsfat ? `${formaPagamento} | ${obsfat}` : formaPagamento)
+    // Normalizar cartão: faturamento checa substr(obsfat,1,17) = 'CARTAO DE CREDITO'
+    let fpNorm = formaPagamento;
+    if (fpNorm) {
+      const fpUpper = fpNorm.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
+        fpNorm = `CARTAO DE CREDITO`;
+      }
+    }
+    const obsfatFinal = fpNorm
+      ? (obsfat ? `${fpNorm} | ${obsfat}` : fpNorm)
       : obsfat;
     if (obsfatFinal !== undefined) { setClauses.push(`obsfat = $${idx}`); params.push(obsfatFinal); idx++; }
     if (obs !== undefined) { setClauses.push(`obs = $${idx}`); params.push(obs); idx++; }

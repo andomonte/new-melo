@@ -132,6 +132,7 @@ type Body = {
     operador?: string | null;
     nomecf?: string | null;
     formaPagamento?: string | null;
+    parcelasCartao?: number | null;
     nroimp?: string | number;
     tipodoc?: string;
     draft_id?: string;
@@ -243,7 +244,16 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
   const oper = n(h.operacao) === 0 ? null : n(h.operacao);
 
   // Montar obsfat com forma de pagamento prefixada (como Delphi faz com pObsFat)
-  const fp = nul(h.formaPagamento);
+  // Normalizar cartão: faturamento checa substr(obsfat,1,17) = 'CARTAO DE CREDITO'
+  let fp = nul(h.formaPagamento);
+  if (fp) {
+    const fpUpper = fp.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
+      // Parcelas do cartão: concatenar ao prefixo canônico
+      const parcelas = Number(h.parcelasCartao) || 1;
+      fp = `CARTAO DE CREDITO ${parcelas}X`;
+    }
+  }
   const obsOriginal = nul(h.obsfat);
   const obsfatFinal = fp
     ? (obsOriginal ? `${fp} | ${obsOriginal}` : fp)
@@ -798,12 +808,22 @@ export default async function handler(
     // Transação
     await pgClient.query('BEGIN');
 
-    // IDs + status + total
+    // IDs + status + total (com acréscimo de cartão se aplicável)
+    const ACRESCIMO_CARTAO: Record<number, number> = {
+      1: 1.0270, 2: 1.0517, 3: 1.0694, 4: 1.0875, 5: 1.1057,
+      6: 1.1246, 7: 1.1434, 8: 1.1620, 9: 1.1800, 10: 1.2000,
+    };
     const ids = await nextPgIds(pgClient, h.tipo);
-    const total = body.itens.reduce(
+    let total = body.itens.reduce(
       (acc, it) => acc + Number(it.prunit) * Number(it.qtd),
       0,
     );
+    // Acréscimo cartão de crédito
+    const parcCartao = Number(h.parcelasCartao) || 0;
+    if (parcCartao > 0 && ACRESCIMO_CARTAO[parcCartao]) {
+      total = Math.round(total * ACRESCIMO_CARTAO[parcCartao] * 100) / 100;
+      log('acréscimo cartão', parcCartao, 'x — fator:', ACRESCIMO_CARTAO[parcCartao], '— total ajustado:', total);
+    }
 
     // Buscar UF da empresa no Postgres
     const qUF = await pgClient.query('SELECT uf FROM dadosempresa LIMIT 1');

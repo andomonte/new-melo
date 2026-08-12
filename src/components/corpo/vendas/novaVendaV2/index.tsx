@@ -242,6 +242,9 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [prazoIdx, setPrazoIdx] = useState(0);
   const [fPagamento, setFPagamento] = useState(() => draft.current?.fPagamento || '');
   const [opcoesFP, setOpcoesFP] = useState<{ id: string; descricao: string }[]>([]);
+  const [parcelasCartao, setParcelasCartao] = useState<number>(() => draft.current?.parcelasCartao || 0);
+  const [showParcelasDropdown, setShowParcelasDropdown] = useState(false);
+  const [parcelasIdx, setParcelasIdx] = useState(0);
   const [transporteSel, setTransporteSel] = useState<{ CODTPTRANSP: string; DESCR: string }>(() => draft.current?.transporteSel || { CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' });
   const [dadosTransporte, setDadosTransporte] = useState<{ CODTPTRANSP: string; DESCR: string }[]>([]);
   const [valTransp, setValTransp] = useState(() => draft.current?.valTransp || 'R$ 0,00');
@@ -408,11 +411,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           documento, prazo, prazosArray, fPagamento,
           transporteSel, valTransp, valTranspDec,
           obsFat, pedido, obs, requisicao,
-          tipoMovimentacao, tipoOperacao,
+          tipoMovimentacao, tipoOperacao, parcelasCartao,
         }));
       } catch {}
     }, 500);
-  }, [selectedArmazem, clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao, tipoMovimentacao, tipoOperacao]);
+  }, [selectedArmazem, clienteSelecionado, buscaCliente, vendedorSel, buscaVendedor, operadorSel, buscaOperador, itensGrid, documento, prazo, prazosArray, fPagamento, transporteSel, valTransp, valTranspDec, obsFat, pedido, obs, requisicao, tipoMovimentacao, tipoOperacao, parcelasCartao]);
 
   // ---------- Completar dados do cliente se veio do draft ----------
   useEffect(() => {
@@ -531,7 +534,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   // Refs para dropdowns (evitar stale closures no handler global)
   const dropdownAbertoRef = useRef(false);
-  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown || showFP || showTipoMov || showTipoOp;
+  dropdownAbertoRef.current = showResultadosCliente || showResultadosVendedor || showResultadosOperador || showDoc || showTransp || showPrazoDropdown || showFP || showTipoMov || showTipoOp || showParcelasDropdown;
 
   // ---------- Navegação por teclado (Tab + Setas) ----------
   const cabecalhoRef = useRef<HTMLDivElement>(null);
@@ -925,7 +928,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           operador: operadorSel?.codigo || null,
           operadorNome: operadorSel?.nome || null,
           arm_id: armId,
-          formaPagamento: fPagamento || null,
+          formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
+          parcelasCartao: isCartaoCredito ? parcelasCartao : null,
           avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
           requisicao: requisicao || '',
           statusVenda: 'VENDA LIBERADA',
@@ -977,6 +981,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
     if (!(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI)) { setEnvioStep('erro'); setEnvioMsg('Selecione um cliente.'); return; }
     if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('Carrinho vazio.'); return; }
+    if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { setEnvioStep('erro'); setEnvioMsg('Informe o parcelamento do cartão.'); return; }
 
     try {
       const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
@@ -1004,7 +1009,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
           vendedor: vendedorSel?.codigo || null,
           operador: operadorSel?.codigo || null,
-          formaPagamento: fPagamento || null,
+          formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
+          parcelasCartao: isCartaoCredito ? parcelasCartao : null,
           avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
           requisicao: requisicao || '',
           tipo_movimentacao: tipoMovimentacao,
@@ -1355,11 +1361,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return prazoStr === 'À VISTA' || prazoStr === 'A VISTA' || prazoStr === '0';
   }, [avistaForcado, prazo]);
 
-  // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista)
+  // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista + NÃO é cartão)
   const precisaCreditoExtra = useMemo(() => {
     if (!clienteSelecionado || totalVenda <= 0) return false;
+    if (isCartaoCredito) return false; // cartão não consome limite de crédito
     return Number(clienteSelecionado.saldo || 0) - totalVenda < 0 && !isAvista;
-  }, [clienteSelecionado, totalVenda, isAvista]);
+  }, [clienteSelecionado, totalVenda, isAvista, isCartaoCredito]);
 
   // Filtrar formas de pagamento por prazo
   const opcoesFPFiltradas = useMemo(() => {
@@ -1376,14 +1383,46 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return opcoesFPFiltradas.filter(fp => (fp.descricao || '').toUpperCase().includes(v));
   }, [opcoesFPFiltradas, buscaFP]);
 
+  // ---------- Cartão de crédito ----------
+  const ACRESCIMO_CARTAO: Record<number, number> = {
+    1: 1.0270, 2: 1.0517, 3: 1.0694, 4: 1.0875, 5: 1.1057,
+    6: 1.1246, 7: 1.1434, 8: 1.1620, 9: 1.1800, 10: 1.2000,
+  };
+
+  const isCartaoCredito = useMemo(() => {
+    if (!fPagamento) return false;
+    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
+    return desc.includes('CREDITO') || desc.includes('CRÉDITO');
+  }, [fPagamento, opcoesFP]);
+
+  const maxParcelasCartao = useMemo(() => {
+    if (!isCartaoCredito || totalVenda <= 0) return 1;
+    return Math.max(1, Math.min(10, Math.floor(totalVenda / 100)));
+  }, [isCartaoCredito, totalVenda]);
+
+  // Reset parcelas quando muda forma de pagamento ou excede max
+  useEffect(() => {
+    if (!isCartaoCredito) { setParcelasCartao(0); return; }
+    if (parcelasCartao === 0) setParcelasCartao(1);
+    if (parcelasCartao > maxParcelasCartao) setParcelasCartao(maxParcelasCartao);
+  }, [isCartaoCredito, maxParcelasCartao]);
+
+  const totalComAcrescimo = useMemo(() => {
+    if (!isCartaoCredito || parcelasCartao <= 0) return totalVenda;
+    const fator = ACRESCIMO_CARTAO[parcelasCartao] || 1;
+    return Math.round(totalVenda * fator * 100) / 100;
+  }, [isCartaoCredito, parcelasCartao, totalVenda]);
+
   // ---------- Status da venda ----------
   const statusVenda = useMemo(() => {
     if (!clienteSelecionado || totalItens === 0) return 'RASCUNHO';
 
-    // Bloqueio financeiro: cliente com atraso ou sem crédito
-    const diasAtraso = Number(clienteSelecionado.diasAtrasado || 0);
-    const limAtraso = Number(clienteSelecionado.limiteAtraso || 0);
-    if (diasAtraso > 0 && diasAtraso > limAtraso) return 'BLOQUEIO_FINANCEIRO';
+    // Bloqueio financeiro: cliente com atraso ou sem crédito (cartão isenta)
+    if (!isCartaoCredito) {
+      const diasAtraso = Number(clienteSelecionado.diasAtrasado || 0);
+      const limAtraso = Number(clienteSelecionado.limiteAtraso || 0);
+      if (diasAtraso > 0 && diasAtraso > limAtraso) return 'BLOQUEIO_FINANCEIRO';
+    }
 
     // Bloqueio por preço: sem BPV e sem MPV, algum item com preço abaixo da tabela
     if (!temBPV && !temMPV) {
@@ -1882,8 +1921,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
           {/* Painel de finalização */}
           <div ref={painelFinRef} className="shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-4 py-3">
-            {/* Linha 1: (TMO: Tipo Mov + Tipo Op) + Prazo + Forma Pagamento */}
-            <div className={`grid ${temTMO ? 'grid-cols-4' : 'grid-cols-2'} gap-3`}>
+            {/* Linha 1: (TMO: Tipo Mov + Tipo Op) + Prazo + Forma Pagamento + (Parcelas cartão) */}
+            <div className={`grid gap-3`} style={{ gridTemplateColumns: `${temTMO ? '1fr 1fr ' : ''}1fr 1fr${isCartaoCredito ? ' 120px' : ''}` }}>
 
               {temTMO ? (
                 <>
@@ -2043,6 +2082,44 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     </div>
                   ) : null}
               </div>
+
+              {/* Parcelas cartão */}
+              {isCartaoCredito ? (
+                <div className="relative min-w-[100px]">
+                  <input type="text" readOnly tabIndex={0}
+                    value={parcelasCartao > 0 ? `${parcelasCartao}x` : ''}
+                    onFocus={() => { setShowParcelasDropdown(true); setParcelasIdx(parcelasCartao > 0 ? parcelasCartao - 1 : 0); }}
+                    onBlur={() => setTimeout(() => setShowParcelasDropdown(false), 150)}
+                    onDoubleClick={() => { setShowParcelasDropdown(true); setParcelasIdx(0); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && showParcelasDropdown) { e.preventDefault(); setParcelasCartao(parcelasIdx + 1); setShowParcelasDropdown(false); setTimeout(() => navegarFocavel('next'), 50); }
+                      else if (e.key === 'Enter') { e.preventDefault(); setShowParcelasDropdown(true); setParcelasIdx(parcelasCartao > 0 ? parcelasCartao - 1 : 0); }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); if (!showParcelasDropdown) { setShowParcelasDropdown(true); setParcelasIdx(0); } else { setParcelasIdx(p => Math.min(p + 1, maxParcelasCartao - 1)); } }
+                      if (e.key === 'ArrowUp' && showParcelasDropdown) { e.preventDefault(); setParcelasIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'Escape') setShowParcelasDropdown(false);
+                    }}
+                    placeholder=" "
+                    className={`${MI_INPUT} cursor-pointer bg-gray-100 dark:bg-zinc-900`}
+                  />
+                  <label className={MI_LABEL}>Parcelas</label>
+                  {showParcelasDropdown ? (
+                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {Array.from({ length: maxParcelasCartao }, (_, i) => i + 1).map((n) => {
+                        const fator = ACRESCIMO_CARTAO[n] || 1;
+                        const perc = ((fator - 1) * 100).toFixed(2);
+                        return (
+                          <div key={n} className={`px-3 py-1.5 cursor-pointer text-sm flex justify-between ${n - 1 === parcelasIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                            onMouseDown={(ev) => { ev.preventDefault(); setParcelasCartao(n); setShowParcelasDropdown(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                          >
+                            <span className="font-bold">{n}x</span>
+                            <span className="text-xs text-gray-500">+{perc}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             {/* Linha 2: Transportadora, Valor Transporte, Obs Fat, Pedido */}
@@ -2186,6 +2263,9 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               <div className="flex items-center gap-4">
                 <span className="text-sm font-semibold text-gray-800">{totalItens} itens</span>
                 <span className="font-bold text-xl text-blue-600">Total: {formatCurrency(totalVenda)}</span>
+                {isCartaoCredito && parcelasCartao > 0 && totalComAcrescimo !== totalVenda ? (
+                  <span className="text-sm font-bold text-orange-600">Cartão {parcelasCartao}x: {formatCurrency(totalComAcrescimo)} (+{(((ACRESCIMO_CARTAO[parcelasCartao] || 1) - 1) * 100).toFixed(2)}%)</span>
+                ) : null}
                 {clienteSelecionado ? (
                   <>
                     <span className="text-xs text-gray-800">Saldo: <span className={Number(clienteSelecionado.saldo || 0) > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>{formatCurrency(Number(clienteSelecionado.saldo || 0))}</span></span>
@@ -2228,7 +2308,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             estoque_virtual: 'N', uName: user?.usuario || '',
                             nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
                             vendedor: vendedorSel?.codigo || null, operador: operadorSel?.codigo || null,
-                            formaPagamento: fPagamento || null,
+                            formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
+          parcelasCartao: isCartaoCredito ? parcelasCartao : null,
                             avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
                             requisicao: requisicao || '',
                             tipo_movimentacao: 'SAIDA', tipo_operacao: 'VENDA',
@@ -2269,7 +2350,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   </button>
                 ) : (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || totalVenda < 30 || statusVenda === 'BLOQUEIO_FINANCEIRO' || (!isAvista && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
+                    disabled={totalItens === 0 || !clienteSelecionado || totalVenda < 30 || statusVenda === 'BLOQUEIO_FINANCEIRO' || (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
                     title={totalVenda < 30 && totalVenda > 0 ? 'Venda mínima de R$ 30,00' : statusVenda === 'BLOQUEIO_FINANCEIRO' ? 'Cliente com restrição financeira' : (clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) ? 'Cliente sem crédito suficiente' : ''}
                     onClick={handleFinalizarVenda}
                     className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
