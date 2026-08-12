@@ -183,28 +183,42 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [showTipoOp, setShowTipoOp] = useState(false);
   const [tipoOpIdx, setTipoOpIdx] = useState(0);
 
+  // Opções de movimentação (fixas — só SAIDA e ENTRADA)
   const OPCOES_TIPO_MOV = [
     { value: 'SAIDA', label: 'SAÍDA' },
     { value: 'ENTRADA', label: 'ENTRADA' },
   ];
-  const OPCOES_TIPO_OP = [
-    { value: 'VENDA', label: 'VENDA' },
-    { value: 'TRANSFERENCIA', label: 'TRANSFERÊNCIA' },
-    { value: 'DEVOLUCAO_COMPRA', label: 'DEVOLUÇÃO COMPRA' },
-    { value: 'REMESSA_BONIFICACAO', label: 'BONIFICAÇÃO' },
-  ];
+
+  // Opções de operação carregadas do banco, filtradas por tipo de movimentação
+  const [todasOperacoes, setTodasOperacoes] = useState<{ value: string; label: string; tipo_movimentacao: string }[]>([]);
+  useEffect(() => {
+    api.get('/api/tipoOperacaoFiscal?perPage=100').then(r => {
+      const rows = r.data?.data || [];
+      setTodasOperacoes(rows.filter((o: any) => o.ativo).map((o: any) => ({
+        value: o.codigo,
+        label: o.descricao,
+        tipo_movimentacao: o.tipo_movimentacao,
+      })));
+    }).catch(() => {});
+  }, []);
+
+  const OPCOES_TIPO_OP = useMemo(() =>
+    todasOperacoes.filter(o => o.tipo_movimentacao === tipoMovimentacao),
+  [todasOperacoes, tipoMovimentacao]);
+
+  // Quando muda tipo de movimentação, resetar operação pro primeiro da lista
+  useEffect(() => {
+    if (OPCOES_TIPO_OP.length > 0 && !OPCOES_TIPO_OP.some(o => o.value === tipoOperacao)) {
+      setTipoOperacao(OPCOES_TIPO_OP[0].value);
+    }
+  }, [OPCOES_TIPO_OP, tipoOperacao]);
 
   // Mapear tipoOperacao → COD_OPERACAO do documento automaticamente
-  const TIPO_OP_TO_DOC: Record<string, { COD_OPERACAO: string; DESCR: string }> = {
-    VENDA: { COD_OPERACAO: '1', DESCR: 'VENDA' },
-    TRANSFERENCIA: { COD_OPERACAO: 'T', DESCR: 'TRANSFERÊNCIA' },
-    DEVOLUCAO_COMPRA: { COD_OPERACAO: 'D', DESCR: 'DEVOLUÇÃO COMPRA' },
-    REMESSA_BONIFICACAO: { COD_OPERACAO: 'B', DESCR: 'BONIFICAÇÃO' },
-  };
   useEffect(() => {
-    const doc = TIPO_OP_TO_DOC[tipoOperacao] || TIPO_OP_TO_DOC.VENDA;
-    setDocumento(doc);
-  }, [tipoOperacao]);
+    const cod = tipoOperacao === 'VENDA' ? '1' : tipoOperacao.charAt(0);
+    const label = OPCOES_TIPO_OP.find(o => o.value === tipoOperacao)?.label || tipoOperacao;
+    setDocumento({ COD_OPERACAO: cod, DESCR: label });
+  }, [tipoOperacao, OPCOES_TIPO_OP]);
   const [dadosDocumento, setDadosDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }[]>([]);
   const [buscaDoc, setBuscaDoc] = useState('');
   const [showDoc, setShowDoc] = useState(false);
