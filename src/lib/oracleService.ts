@@ -1,7 +1,27 @@
 // lib/oracleService.ts
 import oracledb from 'oracledb';
+import fs from 'fs';
 
-const instantClientPath = 'C:\\oracle\\instantclient_23_8';
+// Caminho do Oracle Instant Client (thick mode — obrigatório: o servidor é antigo
+// e o Thin dá NJS-138). Tenta, na ordem: override por env, depois locais conhecidos.
+// O 12_2 é o que existe nas máquinas (o antigo '23_8' apontava para pasta INEXISTENTE
+// — bug que quebrava a conexão Oracle do app).
+const CANDIDATOS_INSTANT_CLIENT = [
+  process.env.ORACLE_INSTANT_CLIENT,
+  'C:\\instantclient_12_2',
+  'C:\\oracle\\instantclient_23_8',
+  'C:\\oracle\\instantclient',
+].filter((p): p is string => !!p);
+
+function resolverInstantClient(): string | undefined {
+  return CANDIDATOS_INSTANT_CLIENT.find((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch {
+      return false;
+    }
+  });
+}
 
 // Inicializar Oracle Client em modo Thick
 let oracleInitialized = false;
@@ -11,13 +31,23 @@ function initializeOracleClient() {
     return;
   }
 
+  const instantClientPath = resolverInstantClient();
+  if (!instantClientPath) {
+    throw new Error(
+      'Oracle Instant Client não encontrado. Instale-o ou defina ORACLE_INSTANT_CLIENT. ' +
+        `Procurado em: ${CANDIDATOS_INSTANT_CLIENT.join(', ')}`,
+    );
+  }
+
   try {
     process.env.PATH = instantClientPath + ';' + process.env.PATH;
     oracledb.initOracleClient({
       libDir: instantClientPath,
     });
     oracleInitialized = true;
-    console.log('✅ Oracle Instant Client inicializado em modo Thick');
+    console.log(
+      `✅ Oracle Instant Client inicializado (Thick) em ${instantClientPath}`,
+    );
   } catch (err: any) {
     if (err.message.includes('already been initialized')) {
       oracleInitialized = true;

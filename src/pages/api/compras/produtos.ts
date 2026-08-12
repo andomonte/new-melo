@@ -70,32 +70,55 @@ export default async function handler(
     // quando "Somente referência" está ligado. Incluir a marca (m.descr)
     // permite "pneu original" = pneu E marca original.
     if (search && !codprod) {
-      const campos = somenteRef
-        ? ['p.ref']
-        : ['p.codprod', 'p.descr', 'p.ref', 'm.descr'];
-      const grupos = String(search)
-        .split(';')
-        .map((g) =>
-          g
-            .trim()
-            .split(/\s+/)
-            .map((t) => t.replace(/^%+|%+$/g, '').trim())
-            .filter(Boolean),
-        )
-        .filter((g) => g.length > 0);
+      if (somenteRef) {
+        // "Somente referência": match EXATO em p.ref (preserva espaços internos —
+        // ex.: "MB 482" é uma referência real, não um filtro fuzzy). O caractere
+        // "/" separa referência / marca:
+        //   "MB 482"          => p.ref = 'MB 482'
+        //   "MB 482 / bosch"  => p.ref = 'MB 482' E marca casa "bosch" (nome ou código)
+        const barra = String(search).indexOf('/');
+        const refParte = (barra >= 0 ? String(search).slice(0, barra) : String(search)).trim();
+        const marcaParte = (barra >= 0 ? String(search).slice(barra + 1) : '').trim();
 
-      if (grupos.length > 0) {
-        const orConds = grupos.map((termos) => {
-          const andConds = termos.map((t) => {
-            const idx = paramCounter;
-            params.push(`%${t}%`);
-            paramCounter++;
-            const campoConds = campos.map((c) => `${c} ILIKE $${idx}`);
-            return campoConds.length > 1 ? `(${campoConds.join(' OR ')})` : campoConds[0];
+        if (refParte) {
+          whereConditions.push(`UPPER(TRIM(p.ref)) = UPPER($${paramCounter})`);
+          params.push(refParte);
+          paramCounter++;
+        }
+        if (marcaParte) {
+          const idx = paramCounter;
+          whereConditions.push(`(m.descr ILIKE $${idx} OR p.codmarca ILIKE $${idx})`);
+          params.push(`%${marcaParte}%`);
+          paramCounter++;
+        }
+      } else {
+        // Fuzzy multi-termo: ESPAÇO = E (todas as palavras), ';' = OU (qualquer
+        // grupo). Cada termo casa em código/descrição/ref/MARCA (m.descr).
+        const campos = ['p.codprod', 'p.descr', 'p.ref', 'm.descr'];
+        const grupos = String(search)
+          .split(';')
+          .map((g) =>
+            g
+              .trim()
+              .split(/\s+/)
+              .map((t) => t.replace(/^%+|%+$/g, '').trim())
+              .filter(Boolean),
+          )
+          .filter((g) => g.length > 0);
+
+        if (grupos.length > 0) {
+          const orConds = grupos.map((termos) => {
+            const andConds = termos.map((t) => {
+              const idx = paramCounter;
+              params.push(`%${t}%`);
+              paramCounter++;
+              const campoConds = campos.map((c) => `${c} ILIKE $${idx}`);
+              return campoConds.length > 1 ? `(${campoConds.join(' OR ')})` : campoConds[0];
+            });
+            return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
           });
-          return andConds.length > 1 ? `(${andConds.join(' AND ')})` : andConds[0];
-        });
-        whereConditions.push(orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0]);
+          whereConditions.push(orConds.length > 1 ? `(${orConds.join(' OR ')})` : orConds[0]);
+        }
       }
     }
 

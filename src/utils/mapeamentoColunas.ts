@@ -10,7 +10,7 @@ export const NOMES_COLUNAS_AMIGAVEIS: Record<string, string> = {
   'codtransp': 'Código Transportadora',
   'cancel': 'Cancelada',
   'cobranca': 'Cobrança',
-  'nfs': 'Status NF-e',
+  'nfs': 'Nota de Serviço',
   'grupo_pagamento': 'Grupo de Pagamento',
   
   // Campos de venda

@@ -604,7 +604,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
                 <Input
                   ref={searchInputRef}
                   placeholder={somenteRef
-                    ? 'Buscar SOMENTE pela referência... (Enter seleciona)'
+                    ? 'Referência EXATA — ex.: MB 482  ·  ref / marca: MB 482 / bosch'
                     : 'Buscar produtos por código, descrição ou marca... (Enter seleciona)'}
                   value={busca}
                   onChange={(e) => handleBuscaChange(e.target.value)}
@@ -620,7 +620,7 @@ export const AdicionarProdutosModal: React.FC<AdicionarProdutosModalProps> = ({
               </div>
               <label
                 className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 whitespace-nowrap cursor-pointer select-none"
-                title="Filtrar a busca somente pela referência do produto"
+                title="Busca EXATA pela referência do produto (não fuzzy). Use / para filtrar a marca: ex. MB 482 / bosch"
               >
                 <input
                   type="checkbox"

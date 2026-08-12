@@ -166,7 +166,10 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido.' });
   }
-  const nfsnota = 'S'; // Definindo nfs como 'S' por padrão
+  // `nfs` = flag "Nota Fiscal de Serviço" (significado do Delphi). MELO vende
+  // mercadoria: o padrão é 'N'. Só vira 'S' quando a operação for de serviço.
+  // (NÃO é status de emissão — o estado real da NF-e vive em dbfat_nfe.)
+  const nfsnota = 'N';
   const {
     cliente,
     vendedor,
@@ -438,7 +441,7 @@ export default async function handler(
       cobranca,
       insc07,
       pedidoProcessado, // Usa o pedido processado (truncado se necessário)
-      nfs, // nfs = 'S'
+      nfs, // 'N' = mercadoria (padrão); 'S' só p/ nota de serviço
       novoSelo,       // Adiciona o selo incremental
       '2',            // ✅ série padrão para NFe
       natOpFatura.substring(0, 60), // descrcfop = Natureza da Operação

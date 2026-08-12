@@ -37,6 +37,9 @@ export default async function handler(
     });
   }
 
+  // Quando true, casa SOMENTE pela referência (p.ref) com match EXATO.
+  const somenteRef = String(req.query.somenteRef ?? '') === 'true';
+
   let client;
 
   try {
@@ -45,8 +48,46 @@ export default async function handler(
 
     console.log('Buscando produtos com termo:', search);
 
-    // Buscar produtos no banco de dados - priorizar busca exata por código de barras
+    // Buscar produtos no banco de dados
     let result;
+
+    if (somenteRef) {
+      // "Somente referência": match EXATO em p.ref, tolerante a espaço/vírgula
+      // (ex.: "MB 482" == "MB,482" == "mb  482"). "/" separa ref / marca:
+      //   "MB 482"          => ref exata
+      //   "MB 482 / bosch"  => ref exata E marca casa "bosch" (nome ou código)
+      const barra = search.indexOf('/');
+      const refParte = barra >= 0 ? search.slice(0, barra) : search;
+      const marcaParte = (barra >= 0 ? search.slice(barra + 1) : '').trim();
+      // normaliza: maiúsculo, trim, vírgula->espaço, colapsa espaços
+      const norm = (s: string) =>
+        s.toUpperCase().trim().replace(/,/g, ' ').replace(/\s+/g, ' ');
+      const cond = [
+        `REGEXP_REPLACE(REPLACE(UPPER(TRIM(p.ref)), ',', ' '), '\\s+', ' ', 'g') = $1`,
+      ];
+      const paramsRef: string[] = [norm(refParte)];
+      if (marcaParte) {
+        cond.push(`(m.descr ILIKE $2 OR p.codmarca ILIKE $2)`);
+        paramsRef.push(`%${marcaParte}%`);
+      }
+      result = await client.query(`
+        SELECT
+          p.codprod as id,
+          p.codprod as referencia,
+          p.ref as ref,
+          p.descr as descricao,
+          p.codbar as codigo_barras,
+          COALESCE(m.descr, 'SEM MARCA') as marca,
+          COALESCE(p.qtest, 0) - COALESCE(p.qtdreservada, 0) as estoque,
+          p.tipo as tipo,
+          COALESCE(p.local, 'MERCADORIA') as localizacao
+        FROM db_manaus.dbprod p
+        LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+        WHERE ${cond.join(' AND ')}
+        ORDER BY p.descr
+        LIMIT 20
+      `, paramsRef);
+    } else {
 
     // Primeira tentativa: busca exata por código de barras
     result = await client.query(`
@@ -111,6 +152,7 @@ export default async function handler(
           p.descr
         LIMIT 10
       `, [...searchParams, `%${search}%`, search]);
+    }
     }
 
     if (result.rows.length === 0) {

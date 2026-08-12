@@ -74,10 +74,24 @@ export default function DropdownFatura({
       >
         <DropdownMenuItem
           onClick={onEmitirNotaClick}
-          disabled={fatura.nfs === 'S'}
-          className="group flex items-center gap-2 px-2 py-2 hover:bg-green-700 hover:text-white transition"
+          disabled={
+            fatura.nfe_status === '100' ||
+            fatura.cancel === 'S' ||
+            fatura.nfe_status === 'C' ||
+            fatura.denegada === 'S'
+          }
+          title={
+            fatura.nfe_status === '100'
+              ? 'Nota já autorizada'
+              : fatura.cancel === 'S' || fatura.nfe_status === 'C'
+                ? 'Nota cancelada'
+                : fatura.denegada === 'S'
+                  ? 'Nota denegada'
+                  : 'Emitir a NF-e desta fatura'
+          }
+          className="group flex items-center gap-2 px-2 py-2 hover:bg-green-700 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
         >
-          <FileText className="size-4 text-green-700 group-hover:text-white transition" />
+          <FileText className="size-4 text-green-700 group-hover:text-white transition group-disabled:text-gray-400" />
           Emitir Nota Fiscal
         </DropdownMenuItem>
         <DropdownMenuItem

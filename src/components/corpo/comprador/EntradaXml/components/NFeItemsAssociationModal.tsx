@@ -2231,6 +2231,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [somenteRef, setSomenteRef] = useState(false);
 
   // Função para buscar produtos
   useEffect(() => {
@@ -2243,7 +2244,15 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     }
   }, [isOpen, searchTerm]);
 
-  const buscarProdutos = async (termo: string) => {
+  // Re-buscar quando alternar "Somente referência" (se já há termo digitado)
+  useEffect(() => {
+    if (isOpen && search.trim()) {
+      buscarProdutos(search, somenteRef);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [somenteRef]);
+
+  const buscarProdutos = async (termo: string, refOnly: boolean = somenteRef) => {
     if (!termo.trim()) {
       setProdutos([]);
       return;
@@ -2252,7 +2261,9 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     setLoading(true);
     try {
       // Usar API real do sistema
-      const response = await fetch(`/api/entrada-xml/produtos/search?search=${encodeURIComponent(termo)}`);
+      const response = await fetch(
+        `/api/entrada-xml/produtos/search?search=${encodeURIComponent(termo)}${refOnly ? '&somenteRef=true' : ''}`,
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -2319,12 +2330,26 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
             <Label className="text-gray-700 dark:text-gray-300">Termo de busca</Label>
             <Input
               type="text"
-              placeholder="Digite descrição ou referência do produto..."
+              placeholder={somenteRef
+                ? 'Referência EXATA — ex.: MB 482  ·  ref / marca: MB 482 / bosch'
+                : 'Digite descrição ou referência do produto...'}
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="mt-1"
               autoFocus
             />
+            <label
+              className="mt-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none w-fit"
+              title="Busca EXATA pela referência do produto (aceita espaço ou vírgula). Use / para filtrar a marca: ex. MB 482 / bosch"
+            >
+              <input
+                type="checkbox"
+                checked={somenteRef}
+                onChange={(e) => setSomenteRef(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Somente referência
+            </label>
           </div>
 
           {loading && (

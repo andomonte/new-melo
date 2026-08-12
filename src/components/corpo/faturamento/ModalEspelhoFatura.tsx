@@ -315,7 +315,7 @@ export default function EspelhoFaturaModal({
             type=""
           />
           <FormInput
-            label="NF-e?"
+            label="Nota de Serviço?"
             value={fatura.nfs === 'S' ? 'SIM' : 'NÃO'}
             readOnly
             name="nfs"
