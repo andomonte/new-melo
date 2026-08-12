@@ -2309,6 +2309,29 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               />
             ) : null}
 
+            {/* Mensagem de restrição (quando botão finalizar desativado) */}
+            {(() => {
+              let msg = '';
+              let cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700';
+              if (clienteBloqueado) { msg = 'Cliente bloqueado — consulte a cobrança antes de finalizar.'; cor = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700'; }
+              else if (!clienteSelecionado) { msg = 'Selecione um cliente para continuar.'; }
+              else if (totalItens === 0) { msg = 'Adicione pelo menos um item ao carrinho.'; }
+              else if (totalVenda > 0 && totalVenda < 30) { msg = 'Valor mínimo para venda é R$ 30,00.'; }
+              else if (isClienteBalcao && totalVenda > 10000) { msg = 'Cliente balcão: limite de R$ 10.000,00 por venda.'; }
+              else if (isClienteBalcao && !isAvista && !isCartaoCredito) { msg = 'Cliente balcão: somente à vista ou cartão de crédito.'; }
+              else if (statusVenda === 'BLOQUEIO_FINANCEIRO') { msg = 'Cliente com restrição financeira — atraso acima do limite permitido.'; cor = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700'; }
+              else if (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) { msg = 'Cliente sem crédito suficiente para venda a prazo.'; }
+              else if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { msg = 'Informe o número de parcelas do cartão.'; }
+              else if (statusVenda === 'BLOQUEIO_PRECO') { msg = 'Preço abaixo da tabela — a venda será enviada para análise de desbloqueio.'; cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700'; }
+              if (!msg) return null;
+              return (
+                <div className={`flex items-center gap-2 px-3 py-1.5 mt-2 rounded-lg border text-xs font-semibold ${cor}`}>
+                  <AlertTriangle size={14} className="shrink-0" />
+                  {msg}
+                </div>
+              );
+            })()}
+
             {/* Linha final: Totais + Saldo + Botões */}
             <div className="flex items-center justify-between mt-3">
               <div className="flex items-center gap-4">
@@ -2402,8 +2425,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   </button>
                 ) : (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || totalVenda < 30 || statusVenda === 'BLOQUEIO_FINANCEIRO' || (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
-                    title={totalVenda < 30 && totalVenda > 0 ? 'Venda mínima de R$ 30,00' : statusVenda === 'BLOQUEIO_FINANCEIRO' ? 'Cliente com restrição financeira' : (clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) ? 'Cliente sem crédito suficiente' : ''}
+                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30 || statusVenda === 'BLOQUEIO_FINANCEIRO' || (isClienteBalcao && totalVenda > 10000) || (isClienteBalcao && !isAvista && !isCartaoCredito) || (isCartaoCredito && parcelasCartao <= 0) || (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0)}
+                    title=""
                     onClick={handleFinalizarVenda}
                     className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
