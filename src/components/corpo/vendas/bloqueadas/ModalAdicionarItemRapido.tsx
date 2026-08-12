@@ -34,6 +34,8 @@ interface ItemAdicionado {
   estoque?: number;
   demanda: string;
   qtdpnd: number;
+  nrequis: string;
+  nritem: string;
   _novo: boolean;
 }
 
@@ -81,6 +83,11 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const [naoGerarDemanda, setNaoGerarDemanda] = useState(false);
   const [qtdPendInput, setQtdPendInput] = useState('0');
   const [refInput, setRefInput] = useState('');
+  const [descrInput, setDescrInput] = useState('');
+  const [chkRequisicao, setChkRequisicao] = useState(false);
+  const [nrequisInput, setNrequisInput] = useState('');
+  const [nritemInput, setNritemInput] = useState('');
+  const [historicoRequisicoes, setHistoricoRequisicoes] = useState<string[]>([]);
   const [precoDigits, setPrecoDigits] = useState('');
   const precoPristineRef = useRef(true);
   const [searchField, setSearchField] = useState<'ref' | 'aplicacao'>('aplicacao');
@@ -319,6 +326,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     setAvisoInline('');
     setQtdPendInput('0');
     setRefInput(produto.ref || produto.codprod || '');
+    setDescrInput(produto.aplic_extendida || produto.descr || '');
     // Pré-preencher com qtd já adicionada ou 1
     const qtdAtual = adicionados.get(produto.codprod);
     setQtdInput(String(qtdAtual || 1));
@@ -349,6 +357,18 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       return;
     }
 
+    // Validação requisição (como Delphi chkNroReq)
+    if (chkRequisicao) {
+      if (!nrequisInput.trim()) {
+        setAvisoInline('INFORME O Nº DA REQUISIÇÃO DO CLIENTE.');
+        return;
+      }
+      if (!nritemInput.trim()) {
+        setAvisoInline('INFORME O Nº DO ITEM NA REQUISIÇÃO DO CLIENTE.');
+        return;
+      }
+    }
+
     const precoTabela = Number(produto.prvenda) || 0;
     let precoDigitado = precoPristineRef.current ? precoTabela : (parseInt(precoDigits || '0', 10) / 100) || precoTabela;
     const prcompraVal = Number(produto.prcompra) || 0;
@@ -369,7 +389,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     const item: ItemAdicionado = {
       codprod: produto.codprod,
       ref: refInput || produto.ref || '',
-      descr: produto.aplic_extendida || produto.descr || '',
+      descr: descrInput || produto.aplic_extendida || produto.descr || '',
       qtd,
       prunit,
       prvenda_original: precoTabela,
@@ -385,11 +405,20 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       estoque: Number(produto.estoque_disponivel) || 0,
       demanda: naoGerarDemanda ? 'N' : 'S',
       qtdpnd,
+      nrequis: chkRequisicao ? nrequisInput.trim().padStart(15, '0') : '',
+      nritem: chkRequisicao ? nritemInput.trim().padStart(6, '0') : '',
       _novo: true,
     };
 
     onAdicionarItens([item]);
     setAdicionados((prev) => { const m = new Map(prev); m.set(produto.codprod, qtd + qtdpnd); return m; });
+    // Guardar requisição no histórico pra reusar
+    if (chkRequisicao && nrequisInput.trim()) {
+      setHistoricoRequisicoes(prev => {
+        const nr = nrequisInput.trim().padStart(15, '0');
+        return prev.includes(nr) ? prev : [...prev, nr];
+      });
+    }
     const nextIdx = pedindoQtd + 1;
     setPedindoQtd(-1);
     const pendLabel = qtdpnd > 0 ? `, pend: ${qtdpnd}` : '';
@@ -459,25 +488,12 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         return;
       }
 
-      // Quando pedindoQtd ativo
+      // Quando pedindoQtd ativo — só tratar Escape, deixar o resto para os onKeyDown dos campos inline
       if (pedindoQtd >= 0) {
         if (e.key === 'Escape') {
           e.preventDefault(); e.stopImmediatePropagation();
           setPedindoQtd(-1);
           modalRef.current?.focus();
-          return;
-        }
-        // Setas ↑↓: fechar input e mover linha
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          e.preventDefault(); e.stopImmediatePropagation();
-          setPedindoQtd(-1);
-          const prods = listaProdRef.current;
-          const cur = linhaSelecionadaRef.current;
-          const next = e.key === 'ArrowDown' ? Math.min(cur + 1, prods.length - 1) : Math.max(cur - 1, 0);
-          linhaSelecionadaRef.current = next;
-          setLinhaSelecionada(next);
-          modalRef.current?.focus();
-          return;
         }
         return;
       }
@@ -738,6 +754,11 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                 <X size={14} />
               </button>
             ) : null}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none ml-2">
+              <input type="checkbox" checked={chkRequisicao} onChange={(e) => setChkRequisicao(e.target.checked)}
+                className="w-3.5 h-3.5 accent-blue-600" />
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Nº Requisição</span>
+            </label>
           </div>
           {/* Chips dos filtros ativos */}
           {filtrosAvancados.length > 0 ? (
@@ -828,14 +849,14 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                           {jaExistente ? <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded ml-2">Na venda</span> : null}
                           {semEstoque && !jaAdicionado ? <span className="text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded ml-2">S/ EST.</span> : null}
                           {idx === pedindoQtd ? (
-                            <div className="flex items-center gap-1 ml-3 flex-wrap" onClick={(ev) => ev.stopPropagation()}>
+                            <div data-inline-fields className="flex items-center gap-1 ml-3 flex-wrap" onClick={(ev) => ev.stopPropagation()}>
                               <span className="text-[10px] text-gray-500">Ref:</span>
                               <input type="text" data-field="ref" value={refInput} onChange={(ev) => setRefInput(ev.target.value.toUpperCase())}
                                 tabIndex={-1}
                                 onFocus={(ev) => ev.target.select()}
                                 onKeyDown={(ev) => {
                                   const el = ev.target as HTMLInputElement;
-                                  const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
                                   const i = all.indexOf(el);
                                   if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
                                   if (ev.key === 'ArrowRight') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); } }
@@ -843,6 +864,20 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                   if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
                                 }}
                                 className="w-24 h-6 text-center text-xs border border-gray-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-500 uppercase" />
+                              <span className="text-[10px] text-gray-500">Descr:</span>
+                              <input type="text" data-field="descr" value={descrInput} onChange={(ev) => setDescrInput(ev.target.value)}
+                                tabIndex={-1}
+                                onFocus={(ev) => ev.target.select()}
+                                onKeyDown={(ev) => {
+                                  const el = ev.target as HTMLInputElement;
+                                  const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const i = all.indexOf(el);
+                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); }
+                                  if (ev.key === 'ArrowRight') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); } }
+                                  if (ev.key === 'ArrowLeft') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === 0) { ev.preventDefault(); if (i > 0) all[i - 1].focus(); } }
+                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                }}
+                                className="w-40 h-6 text-xs px-1 border border-gray-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-500" />
                               <span className="text-[10px] text-gray-500">Qtd:</span>
                               <input ref={qtdInputRef} type="number" min="0" value={qtdInput} data-field="qtd"
                                 onFocus={(ev) => (ev.target as HTMLInputElement).select()}
@@ -861,11 +896,11 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                 }}
                                 onKeyDown={(ev) => {
                                   const el = ev.target as HTMLInputElement;
-                                  const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
                                   const i = all.indexOf(el);
-                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setTimeout(() => { const a2 = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []); const i2 = a2.indexOf(el); if (i2 < a2.length - 1) a2[i2 + 1].focus(); }, 50); }
+                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setTimeout(() => { const a2 = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []); const i2 = a2.indexOf(el); if (i2 < a2.length - 1) a2[i2 + 1].focus(); }, 50); }
                                   if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
-                                  if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); const refEl = el.closest('div')?.querySelector<HTMLElement>('[data-field="ref"]'); if (refEl) refEl.focus(); }
+                                  if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
                                 }}
                                 className="w-14 h-6 text-center text-xs border border-blue-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500" />
                               {((Number(produto.estoque_disponivel) || 0) <= 0 || parseInt(qtdPendInput) > 0) ? (
@@ -876,7 +911,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                     onChange={(ev) => setQtdPendInput(ev.target.value)}
                                     onKeyDown={(ev) => {
                                       const el = ev.target as HTMLInputElement;
-                                      const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                      const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
                                       const i = all.indexOf(el);
                                       if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
                                       if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
@@ -925,9 +960,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                       }}
                                       onKeyDown={(ev) => {
                                         const el = ev.target as HTMLInputElement;
-                                        const focaveis = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('input:not([type="checkbox"]):not([tabindex="-1"]), button') || []);
-                                        const i = focaveis.indexOf(el);
-                                        const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                        const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
                                         const idx = all.indexOf(el);
                                         if (ev.key >= '0' && ev.key <= '9') {
                                           ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
@@ -956,23 +989,58 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                   </>
                                 );
                               })()}
-                              <button data-field="ok" onClick={() => confirmarAdicao()}
+                              {chkRequisicao ? (
+                                <>
+                                  <span className="text-[10px] text-gray-500">Req:</span>
+                                  <input type="text" data-field="nrequis" value={nrequisInput}
+                                    onChange={(ev) => setNrequisInput(ev.target.value)}
+                                    onFocus={(ev) => ev.target.select()}
+                                    list="hist-requisicoes"
+                                    onKeyDown={(ev) => {
+                                      const el = ev.target as HTMLInputElement;
+                                      const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                      const i = all.indexOf(el);
+                                      if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                      if (ev.key === 'ArrowRight' && el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); }
+                                      if (ev.key === 'ArrowLeft' && el.selectionStart === 0) { ev.preventDefault(); if (i > 0) all[i - 1].focus(); }
+                                    }}
+                                    className="w-20 h-6 text-center text-xs border border-blue-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                  <datalist id="hist-requisicoes">
+                                    {historicoRequisicoes.map(nr => <option key={nr} value={nr} />)}
+                                  </datalist>
+                                  <span className="text-[10px] text-gray-500">Item:</span>
+                                  <input type="text" data-field="nritem" value={nritemInput}
+                                    onChange={(ev) => setNritemInput(ev.target.value)}
+                                    onFocus={(ev) => ev.target.select()}
+                                    onKeyDown={(ev) => {
+                                      const el = ev.target as HTMLInputElement;
+                                      const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                      const i = all.indexOf(el);
+                                      if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                      if (ev.key === 'ArrowRight' && el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); }
+                                      if (ev.key === 'ArrowLeft' && el.selectionStart === 0) { ev.preventDefault(); if (i > 0) all[i - 1].focus(); }
+                                    }}
+                                    className="w-14 h-6 text-center text-xs border border-blue-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                                </>
+                              ) : null}
+                              <span data-field="ok" tabIndex={0} role="button"
+                                onClick={() => confirmarAdicao()}
                                 onKeyDown={(ev) => {
                                   const el = ev.target as HTMLElement;
-                                  const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
                                   const i = all.indexOf(el);
-                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); confirmarAdicao(); }
+                                  if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); confirmarAdicao(); }
                                   if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
                                   if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
                                   if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
                                 }}
-                                className="h-6 px-2 text-[10px] font-semibold bg-green-600 hover:bg-green-700 text-white rounded">OK</button>
+                                className="h-6 px-2 text-[10px] font-semibold bg-green-600 hover:bg-green-700 text-white rounded cursor-pointer select-none inline-flex items-center outline-none focus:ring-2 focus:ring-blue-400">OK</span>
                               {hasVDM ? (
                               <label className="flex items-center gap-1 ml-1 cursor-pointer select-none" title="NÃO gerar demanda para este item">
                                 <input type="checkbox" data-field="demanda" checked={naoGerarDemanda} onChange={(ev) => setNaoGerarDemanda(ev.target.checked)}
                                   onKeyDown={(ev) => {
                                     const el = ev.target as HTMLInputElement;
-                                    const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                    const all = Array.from(el.closest('[data-inline-fields]')?.querySelectorAll<HTMLElement>('[data-field]') || []);
                                     const i = all.indexOf(el);
                                     if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setNaoGerarDemanda(!el.checked); }
                                     if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }

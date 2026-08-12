@@ -35,7 +35,10 @@ type ItemPayload = {
   desconto?: number;
   codvend?: string | null;
   codoperador?: string | null;
+  nrequis?: string | null;
   nritem?: string | null;
+  demanda?: string;
+  qtdpnd?: number;
   icms?: number | null;
   ipi?: number | null;
   totalipi?: number | null;
@@ -612,36 +615,38 @@ async function insertPgItensAndStock(
          codint, cfop, tipocfop, ncm, cstipi, cstpis, cstcofins, csticms,
          aliquota_ibs, aliquota_cbs, valor_ibs, valor_cbs, ibs_e, ibs_m
        ) VALUES (
-         $1,$2,$3,$4,'S',$5,NULL,NULL,
-         $6,$7,$8,$9,$10,NULL,$11,$12,$13,
-         $14,$15,$16,$17,$18,$19,$20,$21,$22,$23,
-         $24,$25,$26,$27,$28,
-         $29,$30,$31,$32,$33,$34,
-         $35,$36,$37,
-         $38,$39,$40,$41,$42,$43,
-         $44,$45,$46,$47,
-         $48,$49,$50,$51,$52,$53,$54,$55,
-         $56,$57,$58,$59,$60,$61
+         $1,$2,$3,$4,$5,$6,NULL,NULL,
+         $7,$8,$9,$10,$11,$12,$13,$14,$15,
+         $16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
+         $26,$27,$28,$29,$30,
+         $31,$32,$33,$34,$35,$36,
+         $37,$38,$39,
+         $40,$41,$42,$43,$44,$45,
+         $46,$47,$48,$49,
+         $50,$51,$52,$53,$54,$55,$56,$57,
+         $58,$59,$60,$61,$62,$63
        )`,
       [
         ids.codvenda,
         it.codprod,
         it.prunit,
         it.qtd,
+        it.demanda || 'S',
         descr,
         it.codvend ?? null,
         it.codoperador ?? null,
         prcompra,
         prmedio,
         n(it.desconto),
+        it.nrequis ?? null,
         it.nritem ?? null,
         it.arm_id,
         ref,
-        n(it.icms),              // $14 aliquota_icms = alíquota do ICMS (%)
-        n(it.ipi),               // $15 aliquota_ipi = alíquota do IPI (%)
-        n(it.totalicms),         // $16 icms = VALOR do ICMS (R$)
-        n(it.totalipi),          // $17 ipi = VALOR do IPI (R$)
-        n(it.totalipi),          // $18 totalipi (mantido para compatibilidade)
+        n(it.icms),              // $15 aliquota_icms = alíquota do ICMS (%)
+        n(it.ipi),               // $16 aliquota_ipi = alíquota do IPI (%)
+        n(it.totalicms),         // $17 icms = VALOR do ICMS (R$)
+        n(it.totalipi),          // $18 ipi = VALOR do IPI (R$)
+        n(it.totalipi),          // $19 totalipi (mantido para compatibilidade)
         n(it.baseicms),
         n(it.totalicms),         // totalicms (mantido para compatibilidade)
         n(it.mva),
@@ -687,10 +692,19 @@ async function insertPgItensAndStock(
         n(it.aliquota_cbs),
         n(it.valor_ibs),
         n(it.valor_cbs),
-        n(it.ibs_e),   // $60 IBS Estadual (substitui ICMS)
-        n(it.ibs_m),   // $61 IBS Municipal (substitui ISS)
+        n(it.ibs_e),   // $61 IBS Estadual (substitui ICMS)
+        n(it.ibs_m),   // $62 IBS Municipal (substitui ISS)
       ],
     );
+
+    // INSERT pendência se qtdpnd > 0 (como VENDAS.SALVAR_VENDA do Oracle)
+    const qtdpnd = Number(it.qtdpnd) || 0;
+    if (qtdpnd > 0) {
+      await client.query(
+        `INSERT INTO dbpend (codvenda, codprod, qtd) VALUES ($1, $2, $3)`,
+        [ids.codvenda, it.codprod, qtdpnd],
+      );
+    }
   }
 }
 

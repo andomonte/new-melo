@@ -514,6 +514,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     if (!user?.funcoes) return false;
     return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'TMO');
   }, [user]);
+  const temRIV = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'RIV');
+  }, [user]);
 
   // ---------- Auto-set operador do usuário logado ----------
   useEffect(() => {
@@ -1074,7 +1078,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           desconto: it.desconto_percentual || 0,
           codvend: vendedorSel?.codigo || null,
           codoperador: operadorSel?.codigo || null,
-          nritem: String(idx + 1),
+          nritem: it.nritem || String(idx + 1),
+          nrequis: it.nrequis || '',
           demanda: it.demanda || 'S',
           qtdpnd: it.qtdpnd || 0,
           ...(it.campos_fiscais || {}),
@@ -1315,9 +1320,14 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         </button>
       ),
     },
-    { headerName: 'Ref', field: 'ref', width: 100, editable: true, cellStyle: { backgroundColor: '#dbeafe', fontWeight: 500 } },
+    { headerName: 'Ref', field: 'ref', width: 100, editable: true,
+      cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
+    },
     { headerName: 'Produto', field: 'descr', flex: 2, minWidth: 150, autoHeight: true,
-      cellStyle: { textAlign: 'left', justifyContent: 'flex-start', alignItems: 'flex-start', padding: 0 },
+      editable: temRIV,
+      cellStyle: temRIV
+        ? { textAlign: 'left', justifyContent: 'flex-start', alignItems: 'flex-start', padding: 0, backgroundColor: '#dbeafe' }
+        : { textAlign: 'left', justifyContent: 'flex-start', alignItems: 'flex-start', padding: 0 },
       cellRendererSelector: () => ({ component: ProdutoCellRenderer }),
     },
     { headerName: 'Marca', field: 'marca_nome', flex: 1, minWidth: 80, autoHeight: true,
@@ -1376,7 +1386,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       cellStyle: { fontWeight: 700, color: '#16a34a' },
       valueFormatter: (p: any) => (Number(p.value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
     },
-  ], [clienteSelecionado?.tipoPreco]);
+  ], [clienteSelecionado?.tipoPreco, temRIV]);
 
   // ---------- Cálculos ----------
   const totalVenda = itensGrid.reduce((acc, i) => acc + (Number(i.total_item) || 0), 0);
@@ -1955,6 +1965,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               .venda-grid .ag-row-hover,
               .venda-grid .ag-row-selected { background-color: white !important; }
               .venda-grid .ag-row .ag-cell { background-color: white !important; }
+              .venda-grid .ag-row .ag-cell[col-id="ref"],
+              .venda-grid .ag-row .ag-cell[col-id="descr"],
               .venda-grid .ag-row .ag-cell[col-id="qtd"],
               .venda-grid .ag-row .ag-cell[col-id="prunit"] { background-color: #eff6ff !important; }
               .venda-grid .ag-row .ag-cell[col-id="desconto_percentual"] { background-color: #f5f3ff !important; }
@@ -1976,6 +1988,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               .dark .venda-grid .ag-header-cell { border-color: #3f3f46 !important; color: #a1a1aa !important; }
               .dark .venda-grid .ag-row, .dark .venda-grid .ag-row-hover, .dark .venda-grid .ag-row-selected { background-color: #18181b !important; }
               .dark .venda-grid .ag-row .ag-cell { background-color: #18181b !important; color: #e4e4e7 !important; border-color: #3f3f46 !important; }
+              .dark .venda-grid .ag-row .ag-cell[col-id="ref"],
+              .dark .venda-grid .ag-row .ag-cell[col-id="descr"],
               .dark .venda-grid .ag-row .ag-cell[col-id="qtd"],
               .dark .venda-grid .ag-row .ag-cell[col-id="prunit"] { background-color: #1e2a3a !important; }
               .dark .venda-grid .ag-row .ag-cell[col-id="desconto_percentual"] { background-color: #1e1e2e !important; }
@@ -2348,7 +2362,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               </div>
             </div>
 
-            {/* Linha 3: Obs + Requisição + Alerta operação */}
+            {/* Linha 3: Obs + Alerta operação */}
             <div className={`grid gap-3 mt-2`} style={{ gridTemplateColumns: (() => {
               let msg = '';
               if (!clienteSelecionado) msg = 'INFORME O CLIENTE';
@@ -2358,7 +2372,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               else if (isClienteBalcao && !isAvista && !isCartaoCredito) msg = 'x';
               else if (isCartaoCredito && parcelasCartao <= 0) msg = 'x';
               else if (statusVenda === 'BLOQUEIO_PRECO') msg = 'x';
-              return msg ? '1fr 1fr 1fr' : '1fr 1fr';
+              return msg ? '1fr 1fr' : '1fr';
             })() }}>
               <div className="relative h-full min-w-[200px]">
                 <input type="text" value={obs} onChange={(e) => setObs(e.target.value)}
@@ -2371,18 +2385,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   placeholder=" "
                   className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Observação</label>
-              </div>
-              <div className="relative h-full min-w-[200px]">
-                <input type="text" value={requisicao} onChange={(e) => setRequisicao(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); }
-                    const el = e.target as HTMLInputElement;
-                    if (e.key === 'ArrowRight' && el.selectionStart === el.value.length) { e.preventDefault(); navegarFocavel('next'); }
-                    if (e.key === 'ArrowLeft' && el.selectionStart === 0) { e.preventDefault(); navegarFocavel('prev'); }
-                  }}
-                  placeholder=" "
-                  className="peer h-full w-full rounded-[7px] border border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 font-sans text-sm font-normal outline outline-0 transition-all focus:border-gray-600 dark:focus:border-gray-200 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400" />
-                <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Requisição</label>
               </div>
               {/* Alerta de operação */}
               {(() => {
@@ -2476,7 +2478,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             codprod: it.codprod, qtd: it.qtd, prunit: it.prunit, arm_id: armId,
                             ref: it.ref || '', descr: it.descr || '', desconto: it.desconto_percentual || 0,
                             codvend: vendedorSel?.codigo || null, codoperador: operadorSel?.codigo || null,
-                            nritem: String(idx + 1), demanda: it.demanda || 'S', qtdpnd: it.qtdpnd || 0,
+                            nritem: it.nritem || String(idx + 1), nrequis: it.nrequis || '', demanda: it.demanda || 'S', qtdpnd: it.qtdpnd || 0,
                             ...(it.campos_fiscais || {}),
                           })),
                           prazos: prazosPayload,
