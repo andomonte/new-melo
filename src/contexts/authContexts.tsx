@@ -328,6 +328,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  /** Recarrega permissões, funções e armazéns sem logout */
+  async function refreshPermissoes() {
+    const currentUser = user.usuario
+      ? user
+      : JSON.parse(localStorage.getItem('perfilUserMelo') || '{}');
+    if (!currentUser.usuario || !currentUser.perfil) return;
+    try {
+      const [funcoes, permissoes, armazens] = await Promise.all([
+        fetchFuncoes(currentUser.usuario, currentUser.perfil),
+        fetchPermissoes(currentUser.perfil),
+        currentUser.filial
+          ? fetchArmazens(currentUser.usuario, currentUser.perfil, currentUser.filial)
+          : Promise.resolve<ArmazemInfo[]>([]),
+      ]);
+      const updatedUser = { ...currentUser, permissoes, funcoes, armazens };
+      setUser(updatedUser);
+      localStorage.setItem('perfilUserMelo', JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Erro ao recarregar permissões:', error);
+    }
+  }
+
   /** Autenticação do usuário */
   async function signIn({ usuario, perfil, obs, codusr, filial }: User) {
     setCookie('token_melo', `${usuario}-cookiesmelo`);
@@ -369,7 +391,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, signIn, filialSet, paginaAtual, ultimaPagina, isLoading }}
+      value={{ user, signIn, filialSet, paginaAtual, ultimaPagina, isLoading, refreshPermissoes }}
     >
       {children}
     </AuthContext.Provider>
