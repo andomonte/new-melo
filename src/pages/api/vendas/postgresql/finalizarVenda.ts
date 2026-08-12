@@ -131,6 +131,7 @@ type Body = {
     vendedor?: string | null;
     operador?: string | null;
     nomecf?: string | null;
+    formaPagamento?: string | null;
     nroimp?: string | number;
     tipodoc?: string;
     draft_id?: string;
@@ -240,6 +241,14 @@ function pad2(v: any): string {
 function normalizeHeaderPg(h: NonNullable<Body['header']>) {
   const codtp = n(h.codtptransp) === 0 ? null : n(h.codtptransp);
   const oper = n(h.operacao) === 0 ? null : n(h.operacao);
+
+  // Montar obsfat com forma de pagamento prefixada (como Delphi faz com pObsFat)
+  const fp = nul(h.formaPagamento);
+  const obsOriginal = nul(h.obsfat);
+  const obsfatFinal = fp
+    ? (obsOriginal ? `${fp} | ${obsOriginal}` : fp)
+    : obsOriginal;
+
   return {
     ...h,
     tele: String(h.tele ?? '').toUpperCase() === 'S' ? 'S' : 'N',
@@ -252,7 +261,7 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
     operacao: oper ?? 1,
     numeroserie: 'SO PRENOTA TEM NUMERO DE SERIE',
     obs: nul(h.obs),
-    obsfat: nul(h.obsfat),
+    obsfat: obsfatFinal,
     localentregacliente: h.localentregacliente ?? null,
   };
 }

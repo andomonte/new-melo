@@ -43,9 +43,12 @@ export default async function handle(
     if (transportadora !== undefined) { setClauses.push(`transp = $${idx}`); params.push(transportadora); idx++; }
     if (codtptransp !== undefined) { setClauses.push(`codtptransp = $${idx}`); params.push(codtptransp); idx++; }
     if (vlrfrete !== undefined) { setClauses.push(`vlrfrete = $${idx}`); params.push(Number(vlrfrete) || 0); idx++; }
-    // forma de pagamento não é salva em dbvenda (só no frontend para validação)
     if (prazo !== undefined) { setClauses.push(`prazo = $${idx}`); params.push(prazo); idx++; }
-    if (obsfat !== undefined) { setClauses.push(`obsfat = $${idx}`); params.push(obsfat); idx++; }
+    // Forma de pagamento vai prefixada no obsfat (como Delphi faz com pObsFat)
+    const obsfatFinal = formaPagamento
+      ? (obsfat ? `${formaPagamento} | ${obsfat}` : formaPagamento)
+      : obsfat;
+    if (obsfatFinal !== undefined) { setClauses.push(`obsfat = $${idx}`); params.push(obsfatFinal); idx++; }
     if (obs !== undefined) { setClauses.push(`obs = $${idx}`); params.push(obs); idx++; }
     if (pedido !== undefined) { setClauses.push(`pedido = $${idx}`); params.push(pedido); idx++; }
 
