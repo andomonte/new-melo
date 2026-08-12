@@ -1422,11 +1422,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const clienteTempAvista = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '4', [clienteSelecionado]);
   const isClienteBalcao = useMemo(() => String(clienteSelecionado?.codcli || '').trim() === '99999', [clienteSelecionado]);
 
-  // À vista forçado: classe V/D/Z, status 4 (temp à vista), desconto à vista
+  // À vista forçado: classe V/D, desconto à vista
+  // Z = cobrança judicial (bloqueia, não força à vista)
+  // I = inativo (bloqueia, não força à vista)
   const avistaForcado = useMemo(() => {
     if (!clienteSelecionado) return false;
     if (temDescontoAvista) return true;
-    if (['V', 'D', 'Z'].includes(claspgto)) return true;
+    if (['V', 'D'].includes(claspgto)) return true;
     if (clienteTempAvista) return true;
     return false;
   }, [temDescontoAvista, clienteSelecionado, claspgto, clienteTempAvista]);
