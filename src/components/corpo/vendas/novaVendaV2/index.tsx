@@ -1883,16 +1883,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <span className="text-gray-300 dark:text-zinc-600">|</span>
                   <span><span className="font-semibold">Tipo:</span> <span className="font-medium">{clienteSelecionado.tipo || '-'}</span></span>
                 </div>
-                {/* Alerta financeiro */}
-                {Number(clienteSelecionado.saldo || 0) <= 0 || (totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) ? (
+                {/* Restrição financeira (validarCredito API) */}
+                {clienteBloqueado ? (
                   <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs">
                     <AlertTriangle size={13} className="text-red-500 shrink-0" />
-                    <span className="font-semibold text-red-700 dark:text-red-300">
-                      {Number(clienteSelecionado.saldo || 0) <= 0
-                        ? 'Cliente sem limite disponível'
-                        : 'Saldo insuficiente'}
-                      {totalVenda > 0 ? ` \u2022 Pós-venda: ${formatCurrency(Number(clienteSelecionado.saldo || 0) - totalVenda)} \u2022 Solicite crédito temporário` : ''}
-                    </span>
+                    <span className="font-semibold text-red-700 dark:text-red-300">{restricaoFinanceira?.mensagem || 'RESTRIÇÃO FINANCEIRA'}</span>
+                  </div>
+                ) : restricaoFinanceira?.status ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md text-xs">
+                    <CheckCircle size={13} className="text-green-500 shrink-0" />
+                    <span className="font-semibold text-green-700 dark:text-green-300">{restricaoFinanceira.status}</span>
                   </div>
                 ) : null}
               </div>
@@ -2381,18 +2381,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               />
             ) : null}
 
-            {/* Mensagem de restrição — mesmas mensagens do Delphi */}
+            {/* Mensagem de operação (sem financeira — essa fica no cabeçalho) */}
             {(() => {
               let msg = '';
-              let cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700';
-              const corErro = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700';
-              if (clienteBloqueado) { msg = restricaoFinanceira?.mensagem || 'VENDA NÃO PODE SER LIBERADA. PROCURE O DEPARTAMENTO FINANCEIRO!'; cor = corErro; }
-              else if (!clienteSelecionado) { msg = 'INFORME O CLIENTE'; }
+              const cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700';
+              if (!clienteSelecionado) { msg = 'INFORME O CLIENTE'; }
               else if (totalItens === 0) { msg = 'ESCOLHA PRODUTOS!'; }
               else if (totalVenda > 0 && totalVenda < 30) { msg = 'VENDA MÍNIMA DE R$ 30,00'; }
               else if (isClienteBalcao && totalVenda > 10000) { msg = 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.'; }
               else if (isClienteBalcao && !isAvista && !isCartaoCredito) { msg = 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.'; }
-              else if (statusVenda === 'BLOQUEIO_FINANCEIRO' && !clienteBloqueado) { msg = 'VENDA NÃO PODE SER LIBERADA. PROCURE O DEPARTAMENTO FINANCEIRO!'; cor = corErro; }
               else if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { msg = 'INFORME O PARCELAMENTO DO CARTÃO'; }
               else if (statusVenda === 'BLOQUEIO_PRECO') { msg = 'ESSA VENDA ESTÁ BLOQUEADA — preço abaixo da tabela, será enviada para análise.'; }
               if (!msg) return null;
