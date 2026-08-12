@@ -1392,6 +1392,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     }
   }, [claspgto, clienteTempAvista]);
 
+  // ---------- Cartão de crédito ----------
+  const isCartaoCredito = useMemo(() => {
+    if (!fPagamento) return false;
+    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
+    return desc.includes('CREDITO') || desc.includes('CRÉDITO');
+  }, [fPagamento, opcoesFP]);
+
   // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista + NÃO é cartão)
   const precisaCreditoExtra = useMemo(() => {
     if (!clienteSelecionado || totalVenda <= 0) return false;
@@ -1419,12 +1426,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     1: 1.0270, 2: 1.0517, 3: 1.0694, 4: 1.0875, 5: 1.1057,
     6: 1.1246, 7: 1.1434, 8: 1.1620, 9: 1.1800, 10: 1.2000,
   };
-
-  const isCartaoCredito = useMemo(() => {
-    if (!fPagamento) return false;
-    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
-    return desc.includes('CREDITO') || desc.includes('CRÉDITO');
-  }, [fPagamento, opcoesFP]);
 
   const maxParcelasCartao = useMemo(() => {
     if (!isCartaoCredito || totalVenda <= 0) return 1;
