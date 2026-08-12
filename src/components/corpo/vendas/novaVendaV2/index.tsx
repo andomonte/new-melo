@@ -1034,6 +1034,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           codvend: vendedorSel?.codigo || null,
           codoperador: operadorSel?.codigo || null,
           nritem: String(idx + 1),
+          demanda: it.demanda || 'S',
+          qtdpnd: it.qtdpnd || 0,
           ...(it.campos_fiscais || {}),
         })),
         prazos: prazosPayload,
@@ -1115,10 +1117,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               prvenda_original: item.prvenda_original ?? novos[idx].prvenda_original,
               desconto_percentual: descAtVista,
               total_item: item.qtd * item.prunit * (1 - descAtVista / 100),
+              demanda: item.demanda ?? novos[idx].demanda ?? 'S',
+              qtdpnd: item.qtdpnd ?? novos[idx].qtdpnd ?? 0,
             };
             return novos;
           }
-          return [{ ...item, _novo: true, desconto_percentual: 0 }, ...prev];
+          return [{ ...item, _novo: true, desconto_percentual: 0, demanda: item.demanda ?? 'S', qtdpnd: item.qtdpnd ?? 0 }, ...prev];
         });
         // Calcular impostos em background
         if (clienteSelecionado?.codcli) {
@@ -1355,10 +1359,25 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   // Classe de pagamento do cliente (V, D, Z = forçar à vista)
   const claspgto = useMemo(() => String(clienteSelecionado?.claspgto || '').trim().toUpperCase(), [clienteSelecionado]);
-  // Status_Cli no Delphi era calculado por stored procedure, não é o campo status da dbclien
-  // O campo status='2' na dbclien do PG tem outro significado (33k de 35k clientes são '2')
-  // TODO: implementar verificação financeira via API quando necessário
-  const clienteBloqueado = false;
+  // Validação financeira via API (equivalente REGRAS_VENDAS.SUBMETER_REGRA do Oracle)
+  const [restricaoFinanceira, setRestricaoFinanceira] = useState<{ passou: string; mensagem: string; status?: string } | null>(null);
+  const validarCreditoRef = useRef<any>(null);
+  useEffect(() => {
+    if (validarCreditoRef.current) clearTimeout(validarCreditoRef.current);
+    if (!clienteSelecionado?.codcli && !clienteSelecionado?.CODCLI) { setRestricaoFinanceira(null); return; }
+    validarCreditoRef.current = setTimeout(() => {
+      const codcli = clienteSelecionado.codcli || clienteSelecionado.CODCLI;
+      api.post('/api/vendas/postgresql/validarCredito', {
+        codcli,
+        valorSolicitado: totalVenda,
+        formaPagamento: obsfatTexto || '',
+      }).then(r => {
+        setRestricaoFinanceira(r.data);
+      }).catch(() => setRestricaoFinanceira(null));
+    }, 300);
+  }, [clienteSelecionado, totalVenda, obsfatTexto]);
+
+  const clienteBloqueado = restricaoFinanceira?.passou === 'NOK';
   const clienteTempAvista = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '4', [clienteSelecionado]);
   const isClienteBalcao = useMemo(() => String(clienteSelecionado?.codcli || '').trim() === '99999', [clienteSelecionado]);
 
@@ -2317,14 +2336,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               let msg = '';
               let cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700';
               const corErro = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700';
-              if (clienteBloqueado) { msg = 'O CLIENTE ESTÁ BLOQUEADO, CONSULTE O SETOR DE COBRANÇA.'; cor = corErro; }
+              if (clienteBloqueado) { msg = restricaoFinanceira?.mensagem || 'VENDA NÃO PODE SER LIBERADA. PROCURE O DEPARTAMENTO FINANCEIRO!'; cor = corErro; }
               else if (!clienteSelecionado) { msg = 'INFORME O CLIENTE'; }
               else if (totalItens === 0) { msg = 'ESCOLHA PRODUTOS!'; }
               else if (totalVenda > 0 && totalVenda < 30) { msg = 'VENDA MÍNIMA DE R$ 30,00'; }
               else if (isClienteBalcao && totalVenda > 10000) { msg = 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.'; }
               else if (isClienteBalcao && !isAvista && !isCartaoCredito) { msg = 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.'; }
-              else if (statusVenda === 'BLOQUEIO_FINANCEIRO') { msg = 'VENDA NÃO PODE SER LIBERADA. PROCURE O DEPARTAMENTO FINANCEIRO!'; cor = corErro; }
-              else if (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) { msg = 'O SALDO DO CLIENTE É INSUFICIENTE, CONSULTE O SETOR DE COBRANÇA.'; cor = corErro; }
+              else if (statusVenda === 'BLOQUEIO_FINANCEIRO' && !clienteBloqueado) { msg = 'VENDA NÃO PODE SER LIBERADA. PROCURE O DEPARTAMENTO FINANCEIRO!'; cor = corErro; }
               else if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { msg = 'INFORME O PARCELAMENTO DO CARTÃO'; }
               else if (statusVenda === 'BLOQUEIO_PRECO') { msg = 'ESSA VENDA ESTÁ BLOQUEADA — preço abaixo da tabela, será enviada para análise.'; }
               if (!msg) return null;
@@ -2397,7 +2415,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             codprod: it.codprod, qtd: it.qtd, prunit: it.prunit, arm_id: armId,
                             ref: it.ref || '', descr: it.descr || '', desconto: it.desconto_percentual || 0,
                             codvend: vendedorSel?.codigo || null, codoperador: operadorSel?.codigo || null,
-                            nritem: String(idx + 1), ...(it.campos_fiscais || {}),
+                            nritem: String(idx + 1), demanda: it.demanda || 'S', qtdpnd: it.qtdpnd || 0,
+                            ...(it.campos_fiscais || {}),
                           })),
                           prazos: prazosPayload,
                         };
