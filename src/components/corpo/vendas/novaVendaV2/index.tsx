@@ -1370,12 +1370,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       api.post('/api/vendas/postgresql/validarCredito', {
         codcli,
         valorSolicitado: totalVenda,
-        formaPagamento: obsfatTexto || '',
+        formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : '',
       }).then(r => {
         setRestricaoFinanceira(r.data);
       }).catch(() => setRestricaoFinanceira(null));
     }, 300);
-  }, [clienteSelecionado, totalVenda, obsfatTexto]);
+  }, [clienteSelecionado, totalVenda, fPagamento]);
 
   const clienteBloqueado = restricaoFinanceira?.passou === 'NOK';
   const clienteTempAvista = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '4', [clienteSelecionado]);
