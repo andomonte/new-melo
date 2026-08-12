@@ -215,15 +215,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUltimaPagina(paginaStr);
     }
 
-    // Apenas busca dados se o usuário estiver presente na sessão
-    // e se algum dos arrays de permissões, funções ou armazéns não estiver populado.
-    if (
-      userData.usuario &&
-      (!userData.permissoes?.length ||
-        !userData.funcoes?.length ||
-        !userData.armazens?.length)
-    ) {
-      setIsLoading(true); // Manter isLoading true enquanto busca
+    // Sempre recarrega permissões/funções/armazéns do banco ao montar (F5 / troca de página)
+    if (userData.usuario) {
+      setIsLoading(true);
       Promise.all([
         fetchFuncoes(userData.usuario, userData.perfil),
         fetchPermissoes(userData.perfil),
@@ -247,7 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
         });
     } else {
-      // Se não há usuário ou se todos os dados já estão na sessão, apenas seta o estado
+      // Sem usuário logado — seta vazio
       setUser(userData);
       setIsLoading(false);
     }
