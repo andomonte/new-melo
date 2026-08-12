@@ -1708,7 +1708,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onFocus={() => { if (!selectedArmazem && armazens.length === 1) { setSelectedArmazem(armazens[0]); } }}
                     onDoubleClick={() => { if (selectedArmazem) { startEdit('armazem', { armazem: selectedArmazem }); setSelectedArmazem(null); } }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape' && editingField === 'armazem') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (e.key === 'Escape' && editingField === 'armazem') { e.preventDefault(); cancelEdit(); return; }
                       if (selectedArmazem) { if (e.key === 'Enter') { e.preventDefault(); startEdit('armazem', { armazem: selectedArmazem }); setSelectedArmazem(null); } else navegarFocavel('next'); return; }
                       if (e.key === 'ArrowDown' && armazens.length > 0) {
                         e.preventDefault();
@@ -1736,7 +1736,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onChange={(e) => { if (!clienteSelecionado) { setBuscaCliente(e.target.value); setShowResultadosCliente(false); setResultadosCliente([]); } }}
                     onDoubleClick={() => { if (clienteSelecionado) { startEdit('cliente', { cliente: clienteSelecionado, buscaCliente, vendedor: vendedorSel, buscaVendedor }); setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); } }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape' && editingField === 'cliente') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (e.key === 'Escape' && editingField === 'cliente') { e.preventDefault(); cancelEdit(); return; }
                       if (e.key === 'Enter') {
                         if (clienteSelecionado) { e.preventDefault(); startEdit('cliente', { cliente: clienteSelecionado, buscaCliente, vendedor: vendedorSel, buscaVendedor }); setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); return; }
                         if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) { e.preventDefault(); selecionarCliente(resultadosCliente[clienteIdx]); return; }
@@ -1793,7 +1793,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     readOnly={!temEV || !!vendedorSel.codigo}
                     onDoubleClick={() => { if (temEV && vendedorSel.codigo) { startEdit('vendedor', { vendedor: vendedorSel, buscaVendedor }); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape' && editingField === 'vendedor') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (e.key === 'Escape' && editingField === 'vendedor') { e.preventDefault(); cancelEdit(); return; }
                       if (vendedorSel.codigo) { if (e.key === 'Enter' && temEV) { e.preventDefault(); startEdit('vendedor', { vendedor: vendedorSel, buscaVendedor }); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } return; }
                       if (!temEV) return;
                       if (e.key === 'Enter') {
@@ -1836,7 +1836,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onDoubleClick={() => { if (operadorSel.codigo) { startEdit('operador', { operador: operadorSel, buscaOperador }); setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } }}
                     onChange={(e) => { if (!operadorSel.codigo) { setBuscaOperador(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'operador'); else { setResultadosOperador([]); setShowResultadosOperador(false); } } }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape' && editingField === 'operador') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (e.key === 'Escape' && editingField === 'operador') { e.preventDefault(); cancelEdit(); return; }
                       if (operadorSel.codigo) { if (e.key === 'Enter') { e.preventDefault(); startEdit('operador', { operador: operadorSel, buscaOperador }); setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } return; }
                       if (e.key === 'Enter') {
                         if (showResultadosOperador && operadorIdx >= 0 && resultadosOperador[operadorIdx]) { e.preventDefault(); selecionarOperador(resultadosOperador[operadorIdx]); return; }
@@ -2113,7 +2113,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
                     onKeyDown={(e) => {
                       if (avistaForcado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); setShowPrazoDropdown(false); return; }
+                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); return; }
                       if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } return; }
                       // Índices: -1=À VISTA, 0..N-1=opções tabela, N=Personalizar
                       if (e.key === 'Enter' && showPrazoDropdown) {
@@ -2175,7 +2175,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onBlur={() => setTimeout(() => setShowFP(false), 150)}
                     onDoubleClick={() => { if (fPagamento) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); setShowFP(false); return; }
+                      if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); cancelEdit(); setShowFP(false); return; }
                       if (fPagamento) {
                         if (e.key === 'Enter') { e.preventDefault(); startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); }
                         return;
@@ -2258,7 +2258,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onFocus={() => {}}
                     onBlur={() => setTimeout(() => setShowTransp(false), 150)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape' && editingField === 'transportadora') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); setShowTransp(false); return; }
+                      if (e.key === 'Escape' && editingField === 'transportadora') { e.preventDefault(); cancelEdit(); setShowTransp(false); return; }
                       if (transporteSel.CODTPTRANSP) {
                         if (e.key === 'Enter') { e.preventDefault(); startEdit('transportadora', { transporteSel }); setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTranspIdx(0); }
                         return;
