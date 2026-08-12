@@ -155,6 +155,47 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const transpInputRef = useRef<HTMLInputElement>(null);
   const resultadosOperadorRef = useRef<HTMLDivElement>(null);
 
+  // ---------- Backup para restaurar no Escape após double-click ----------
+  const prevInputRef = useRef<{
+    armazem?: any; cliente?: any; buscaCliente?: string;
+    vendedor?: any; buscaVendedor?: string;
+    operador?: any; buscaOperador?: string;
+    prazo?: string; prazosArray?: any[];
+    fPagamento?: string;
+    transporteSel?: any;
+  }>({});
+  const [editingField, setEditingField] = useState<string | null>(null);
+
+  const startEdit = useCallback((field: string, backup: Record<string, any>) => {
+    prevInputRef.current = { ...prevInputRef.current, ...backup };
+    setEditingField(field);
+  }, []);
+
+  // Limpar editingField quando o valor é selecionado novamente
+  useEffect(() => {
+    if (!editingField) return;
+    if (editingField === 'armazem' && selectedArmazem) setEditingField(null);
+    if (editingField === 'cliente' && clienteSelecionado) setEditingField(null);
+    if (editingField === 'vendedor' && vendedorSel.codigo) setEditingField(null);
+    if (editingField === 'operador' && operadorSel.codigo) setEditingField(null);
+    if (editingField === 'prazo' && prazo) setEditingField(null);
+    if (editingField === 'fPagamento' && fPagamento) setEditingField(null);
+    if (editingField === 'transportadora' && transporteSel.CODTPTRANSP) setEditingField(null);
+  });
+
+  const cancelEdit = useCallback(() => {
+    const prev = prevInputRef.current;
+    if (!editingField) return;
+    if (editingField === 'armazem' && prev.armazem !== undefined) setSelectedArmazem(prev.armazem);
+    if (editingField === 'cliente' && prev.cliente !== undefined) { setClienteSelecionado(prev.cliente); setBuscaCliente(prev.buscaCliente || ''); }
+    if (editingField === 'vendedor' && prev.vendedor !== undefined) { setVendedorSel(prev.vendedor); setBuscaVendedor(prev.buscaVendedor || ''); }
+    if (editingField === 'operador' && prev.operador !== undefined) { setOperadorSel(prev.operador); setBuscaOperador(prev.buscaOperador || ''); }
+    if (editingField === 'prazo' && prev.prazo !== undefined) { setPrazo(prev.prazo); setPrazosArray(prev.prazosArray || []); }
+    if (editingField === 'fPagamento' && prev.fPagamento !== undefined) setFPagamento(prev.fPagamento);
+    if (editingField === 'transportadora' && prev.transporteSel !== undefined) setTransporteSel(prev.transporteSel);
+    setEditingField(null);
+  }, [editingField]);
+
   // ---------- Armazém ----------
   const armazens = useMemo(() => (user?.armazens || []).map((a: any) => ({ value: String(a.id_armazem ?? a.value ?? ''), label: String(a.nome ?? a.label ?? 'Sem armazém') })), [user]);
   const [selectedArmazem, setSelectedArmazem] = useState<{ value: string; label: string } | null>(() => draft.current?.selectedArmazem || null);
@@ -1665,9 +1706,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <input type="text" readOnly tabIndex={0}
                     value={selectedArmazem ? selectedArmazem.label : ''}
                     onFocus={() => { if (!selectedArmazem && armazens.length === 1) { setSelectedArmazem(armazens[0]); } }}
-                    onDoubleClick={() => { if (selectedArmazem) setSelectedArmazem(null); }}
+                    onDoubleClick={() => { if (selectedArmazem) { startEdit('armazem', { armazem: selectedArmazem }); setSelectedArmazem(null); } }}
                     onKeyDown={(e) => {
-                      if (selectedArmazem) { if (e.key === 'Enter') { e.preventDefault(); setSelectedArmazem(null); } else navegarFocavel('next'); return; }
+                      if (e.key === 'Escape' && editingField === 'armazem') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (selectedArmazem) { if (e.key === 'Enter') { e.preventDefault(); startEdit('armazem', { armazem: selectedArmazem }); setSelectedArmazem(null); } else navegarFocavel('next'); return; }
                       if (e.key === 'ArrowDown' && armazens.length > 0) {
                         e.preventDefault();
                         setSelectedArmazem(armazens[0]);
@@ -1692,10 +1734,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <input ref={clienteInputRef} tabIndex={0} type="text"
                     value={buscaCliente} readOnly={!!clienteSelecionado}
                     onChange={(e) => { if (!clienteSelecionado) { setBuscaCliente(e.target.value); setShowResultadosCliente(false); setResultadosCliente([]); } }}
-                    onDoubleClick={() => { if (clienteSelecionado) { setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); } }}
+                    onDoubleClick={() => { if (clienteSelecionado) { startEdit('cliente', { cliente: clienteSelecionado, buscaCliente, vendedor: vendedorSel, buscaVendedor }); setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); } }}
                     onKeyDown={(e) => {
+                      if (e.key === 'Escape' && editingField === 'cliente') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
                       if (e.key === 'Enter') {
-                        if (clienteSelecionado) { e.preventDefault(); setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); return; }
+                        if (clienteSelecionado) { e.preventDefault(); startEdit('cliente', { cliente: clienteSelecionado, buscaCliente, vendedor: vendedorSel, buscaVendedor }); setClienteSelecionado(null); setBuscaCliente(''); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); atualizarPrecosCarrinho('0'); return; }
                         if (showResultadosCliente && clienteIdx >= 0 && resultadosCliente[clienteIdx]) { e.preventDefault(); selecionarCliente(resultadosCliente[clienteIdx]); return; }
                         if (buscaCliente.trim().length >= 1) buscarCliente(buscaCliente);
                         return;
@@ -1748,9 +1791,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     value={buscaVendedor}
                     onChange={(e) => { if (temEV && !vendedorSel.codigo) { setBuscaVendedor(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'vendedor'); else { setResultadosVendedor([]); setShowResultadosVendedor(false); } } }}
                     readOnly={!temEV || !!vendedorSel.codigo}
-                    onDoubleClick={() => { if (temEV && vendedorSel.codigo) { setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
+                    onDoubleClick={() => { if (temEV && vendedorSel.codigo) { startEdit('vendedor', { vendedor: vendedorSel, buscaVendedor }); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } }}
                     onKeyDown={(e) => {
-                      if (vendedorSel.codigo) { if (e.key === 'Enter' && temEV) { e.preventDefault(); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } return; }
+                      if (e.key === 'Escape' && editingField === 'vendedor') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (vendedorSel.codigo) { if (e.key === 'Enter' && temEV) { e.preventDefault(); startEdit('vendedor', { vendedor: vendedorSel, buscaVendedor }); setVendedorSel({ codigo: '', nome: '' }); setBuscaVendedor(''); } return; }
                       if (!temEV) return;
                       if (e.key === 'Enter') {
                         if (showResultadosVendedor && vendedorIdx >= 0 && resultadosVendedor[vendedorIdx]) { e.preventDefault(); selecionarVendedor(resultadosVendedor[vendedorIdx]); return; }
@@ -1789,10 +1833,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   ) : null}
                   <input ref={operadorInputRef} tabIndex={0} type="text"
                     value={buscaOperador} readOnly={!!operadorSel.codigo}
-                    onDoubleClick={() => { if (operadorSel.codigo) { setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } }}
+                    onDoubleClick={() => { if (operadorSel.codigo) { startEdit('operador', { operador: operadorSel, buscaOperador }); setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } }}
                     onChange={(e) => { if (!operadorSel.codigo) { setBuscaOperador(e.target.value); if (e.target.value.trim().length >= 3) buscarVendedorOperador(e.target.value, 'operador'); else { setResultadosOperador([]); setShowResultadosOperador(false); } } }}
                     onKeyDown={(e) => {
-                      if (operadorSel.codigo) { if (e.key === 'Enter') { e.preventDefault(); setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } return; }
+                      if (e.key === 'Escape' && editingField === 'operador') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); return; }
+                      if (operadorSel.codigo) { if (e.key === 'Enter') { e.preventDefault(); startEdit('operador', { operador: operadorSel, buscaOperador }); setOperadorSel({ codigo: '', nome: '' }); setBuscaOperador(''); } return; }
                       if (e.key === 'Enter') {
                         if (showResultadosOperador && operadorIdx >= 0 && resultadosOperador[operadorIdx]) { e.preventDefault(); selecionarOperador(resultadosOperador[operadorIdx]); return; }
                         if (buscaOperador.trim().length >= 3) buscarVendedorOperador(buscaOperador, 'operador');
@@ -2064,11 +2109,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <input type="text" readOnly tabIndex={avistaForcado ? -1 : 0}
                     value={isAvista ? 'À VISTA' : prazo || ''}
                     onFocus={() => {}}
-                    onDoubleClick={() => { if (!avistaForcado && prazo) { setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
+                    onDoubleClick={() => { if (!avistaForcado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
                     onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
                     onKeyDown={(e) => {
                       if (avistaForcado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } return; }
+                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); setShowPrazoDropdown(false); return; }
+                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } return; }
                       // Índices: -1=À VISTA, 0..N-1=opções tabela, N=Personalizar
                       if (e.key === 'Enter' && showPrazoDropdown) {
                         e.preventDefault();
@@ -2127,10 +2173,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
                     onFocus={() => {}}
                     onBlur={() => setTimeout(() => setShowFP(false), 150)}
-                    onDoubleClick={() => { if (fPagamento) { setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
+                    onDoubleClick={() => { if (fPagamento) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
+                      if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); setShowFP(false); return; }
                       if (fPagamento) {
-                        if (e.key === 'Enter') { e.preventDefault(); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); }
+                        if (e.key === 'Enter') { e.preventDefault(); startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); }
                         return;
                       }
                       if (e.key === 'Enter' && showFP && fpFiltradosPorBusca[fpIdx]) {
@@ -2205,14 +2252,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   ) : null}
                   <input type="text" ref={transpInputRef} tabIndex={0}
                     readOnly={!!transporteSel.CODTPTRANSP}
-                    onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); } }}
+                    onDoubleClick={() => { if (transporteSel.CODTPTRANSP) { startEdit('transportadora', { transporteSel }); setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); } }}
                     value={transporteSel.CODTPTRANSP ? `${transporteSel.CODTPTRANSP} - ${transporteSel.DESCR}` : buscaTransp}
                     onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
                     onFocus={() => {}}
                     onBlur={() => setTimeout(() => setShowTransp(false), 150)}
                     onKeyDown={(e) => {
+                      if (e.key === 'Escape' && editingField === 'transportadora') { e.preventDefault(); e.stopImmediatePropagation(); cancelEdit(); setShowTransp(false); return; }
                       if (transporteSel.CODTPTRANSP) {
-                        if (e.key === 'Enter') { e.preventDefault(); setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTranspIdx(0); }
+                        if (e.key === 'Enter') { e.preventDefault(); startEdit('transportadora', { transporteSel }); setTransporteSel({ CODTPTRANSP: '', DESCR: '' }); setBuscaTransp(''); setShowTransp(true); setTranspIdx(0); }
                         return;
                       }
                       if (e.key === 'Enter' && showTransp && transpFiltrados.length > 0) { e.preventDefault(); setTransporteSel(transpFiltrados[transpIdx]); setBuscaTransp(''); setShowTransp(false); setTimeout(() => navegarFocavel('next'), 50); }
