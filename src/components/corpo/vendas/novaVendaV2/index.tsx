@@ -981,13 +981,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     setEnvioStep('montando');
     setEnvioMsg('Preparando os dados para envio...');
 
-    if (!(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI)) { setEnvioStep('erro'); setEnvioMsg('Selecione um cliente.'); return; }
-    if (clienteBloqueado) { setEnvioStep('erro'); setEnvioMsg('Cliente bloqueado. Consulte a cobrança.'); return; }
-    if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('Carrinho vazio.'); return; }
-    if (itensGrid.length > 500) { setEnvioStep('erro'); setEnvioMsg('Máximo de 500 itens por venda.'); return; }
-    if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { setEnvioStep('erro'); setEnvioMsg('Informe o parcelamento do cartão.'); return; }
-    if (isClienteBalcao && totalVenda > 10000) { setEnvioStep('erro'); setEnvioMsg('Cliente balcão: limite de R$ 10.000,00 por venda.'); return; }
-    if (isClienteBalcao && !isAvista && !isCartaoCredito) { setEnvioStep('erro'); setEnvioMsg('Cliente balcão: somente à vista ou cartão de crédito.'); return; }
+    if (!(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI)) { setEnvioStep('erro'); setEnvioMsg('INFORME O CLIENTE'); return; }
+    if (clienteBloqueado) { setEnvioStep('erro'); setEnvioMsg('O CLIENTE ESTÁ BLOQUEADO, CONSULTE O SETOR DE COBRANÇA.'); return; }
+    if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('ESCOLHA PRODUTOS!'); return; }
+    if (itensGrid.length > 500) { setEnvioStep('erro'); setEnvioMsg('JÁ EXISTEM 500 ITENS SELECIONADOS PARA ESTA VENDA'); return; }
+    if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { setEnvioStep('erro'); setEnvioMsg('INFORME O PARCELAMENTO DO CARTÃO'); return; }
+    if (isClienteBalcao && totalVenda > 10000) { setEnvioStep('erro'); setEnvioMsg('CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.'); return; }
+    if (isClienteBalcao && !isAvista && !isCartaoCredito) { setEnvioStep('erro'); setEnvioMsg('CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.'); return; }
 
     try {
       const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
@@ -2309,20 +2309,21 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               />
             ) : null}
 
-            {/* Mensagem de restrição (quando botão finalizar desativado) */}
+            {/* Mensagem de restrição — mesmas mensagens do Delphi */}
             {(() => {
               let msg = '';
               let cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700';
-              if (clienteBloqueado) { msg = 'Cliente bloqueado — consulte a cobrança antes de finalizar.'; cor = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700'; }
-              else if (!clienteSelecionado) { msg = 'Selecione um cliente para continuar.'; }
-              else if (totalItens === 0) { msg = 'Adicione pelo menos um item ao carrinho.'; }
-              else if (totalVenda > 0 && totalVenda < 30) { msg = 'Valor mínimo para venda é R$ 30,00.'; }
-              else if (isClienteBalcao && totalVenda > 10000) { msg = 'Cliente balcão: limite de R$ 10.000,00 por venda.'; }
-              else if (isClienteBalcao && !isAvista && !isCartaoCredito) { msg = 'Cliente balcão: somente à vista ou cartão de crédito.'; }
-              else if (statusVenda === 'BLOQUEIO_FINANCEIRO') { msg = 'Cliente com restrição financeira — atraso acima do limite permitido.'; cor = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700'; }
-              else if (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) { msg = 'Cliente sem crédito suficiente para venda a prazo.'; }
-              else if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { msg = 'Informe o número de parcelas do cartão.'; }
-              else if (statusVenda === 'BLOQUEIO_PRECO') { msg = 'Preço abaixo da tabela — a venda será enviada para análise de desbloqueio.'; cor = 'text-amber-700 bg-amber-50 dark:text-amber-200 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700'; }
+              const corErro = 'text-red-700 bg-red-50 dark:text-red-200 dark:bg-red-900/30 border-red-200 dark:border-red-700';
+              if (clienteBloqueado) { msg = 'O CLIENTE ESTÁ BLOQUEADO, CONSULTE O SETOR DE COBRANÇA.'; cor = corErro; }
+              else if (!clienteSelecionado) { msg = 'INFORME O CLIENTE'; }
+              else if (totalItens === 0) { msg = 'ESCOLHA PRODUTOS!'; }
+              else if (totalVenda > 0 && totalVenda < 30) { msg = 'VENDA MÍNIMA DE R$ 30,00'; }
+              else if (isClienteBalcao && totalVenda > 10000) { msg = 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.'; }
+              else if (isClienteBalcao && !isAvista && !isCartaoCredito) { msg = 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.'; }
+              else if (statusVenda === 'BLOQUEIO_FINANCEIRO') { msg = 'VENDA NÃO PODE SER LIBERADA. PROCURE O DEPARTAMENTO FINANCEIRO!'; cor = corErro; }
+              else if (!isAvista && !isCartaoCredito && clienteSelecionado && totalVenda > 0 && Number(clienteSelecionado.saldo || 0) - totalVenda < 0) { msg = 'O SALDO DO CLIENTE É INSUFICIENTE, CONSULTE O SETOR DE COBRANÇA.'; cor = corErro; }
+              else if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { msg = 'INFORME O PARCELAMENTO DO CARTÃO'; }
+              else if (statusVenda === 'BLOQUEIO_PRECO') { msg = 'ESSA VENDA ESTÁ BLOQUEADA — preço abaixo da tabela, será enviada para análise.'; }
               if (!msg) return null;
               return (
                 <div className={`flex items-center gap-2 px-3 py-1.5 mt-2 rounded-lg border text-xs font-semibold ${cor}`}>
