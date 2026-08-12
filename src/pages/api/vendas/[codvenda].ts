@@ -44,17 +44,22 @@ export default async function handle(
     if (codtptransp !== undefined) { setClauses.push(`codtptransp = $${idx}`); params.push(codtptransp); idx++; }
     if (vlrfrete !== undefined) { setClauses.push(`vlrfrete = $${idx}`); params.push(Number(vlrfrete) || 0); idx++; }
     if (prazo !== undefined) { setClauses.push(`prazo = $${idx}`); params.push(prazo); idx++; }
-    // Forma de pagamento vai prefixada no obsfat (como Delphi faz com pObsFat)
-    // Normalizar cartão: faturamento checa substr(obsfat,1,17) = 'CARTAO DE CREDITO'
+    // Forma de pagamento prefixada no obsfat (padrão Delphi pObsFat)
     let fpNorm = formaPagamento;
     if (fpNorm) {
       const fpUpper = fpNorm.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
         fpNorm = `CARTAO DE CREDITO`;
+      } else if (fpUpper.includes('DINHEIRO') || fpUpper === 'PIX') {
+        fpNorm = `A VISTA ${fpNorm}`;
+      } else if (fpUpper.includes('DEPOSITO')) {
+        fpNorm = `DEPOSITO BANCARIO`;
+      } else if (fpUpper.includes('DEBITO')) {
+        fpNorm = `A VISTA CARTAO DEBITO`;
       }
     }
     const obsfatFinal = fpNorm
-      ? (obsfat ? `${fpNorm} | ${obsfat}` : fpNorm)
+      ? (obsfat ? `${fpNorm} ${obsfat}` : fpNorm)
       : obsfat;
     if (obsfatFinal !== undefined) { setClauses.push(`obsfat = $${idx}`); params.push(obsfatFinal); idx++; }
     if (obs !== undefined) { setClauses.push(`obs = $${idx}`); params.push(obs); idx++; }

@@ -243,20 +243,28 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
   const codtp = n(h.codtptransp) === 0 ? null : n(h.codtptransp);
   const oper = n(h.operacao) === 0 ? null : n(h.operacao);
 
-  // Montar obsfat com forma de pagamento prefixada (como Delphi faz com pObsFat)
-  // Normalizar cartão: faturamento checa substr(obsfat,1,17) = 'CARTAO DE CREDITO'
+  // Montar obsfat com forma de pagamento prefixada (mesmo padrão Delphi pObsFat)
+  // Delphi: "A VISTA...", "CARTAO DE CREDITO 02x...", "DEPOSITO BANCARIO..."
+  // Faturamento checa substr(obsfat,1,17) = 'CARTAO DE CREDITO' e substr(1,8) = 'A VISTA '
   let fp = nul(h.formaPagamento);
   if (fp) {
     const fpUpper = fp.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
-      // Parcelas do cartão: concatenar ao prefixo canônico
       const parcelas = Number(h.parcelasCartao) || 1;
-      fp = `CARTAO DE CREDITO ${parcelas}X`;
+      fp = `CARTAO DE CREDITO ${String(parcelas).padStart(2, '0')}x`;
+    } else if (fpUpper.includes('DINHEIRO') || fpUpper === 'PIX') {
+      fp = `A VISTA ${fp}`;
+    } else if (fpUpper.includes('DEPOSITO')) {
+      fp = `DEPOSITO BANCARIO`;
+    } else if (fpUpper.includes('DEBITO')) {
+      fp = `A VISTA CARTAO DEBITO`;
     }
+  } else if (h.avista) {
+    fp = 'A VISTA';
   }
   const obsOriginal = nul(h.obsfat);
   const obsfatFinal = fp
-    ? (obsOriginal ? `${fp} | ${obsOriginal}` : fp)
+    ? (obsOriginal ? `${fp} ${obsOriginal}` : fp)
     : obsOriginal;
 
   return {
