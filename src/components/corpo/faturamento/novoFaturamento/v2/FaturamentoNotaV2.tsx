@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import AutocompletePessoa from '@/components/common/AutoCompletePessoa';
-import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
+import { calcularTotaisFatura } from '@/lib/faturamento/calcularTotaisFatura';
 
 /**
- * FaturamentoNotaV2 — LAYOUT (apresentacional) reconstruído de faturamento-compacto.html.
- * FASE DE LAYOUT: só apresentação. Markup plano estilizado pelo CSS escopado `.densidade-compacta`.
+ * FaturamentoNotaV2 — LAYOUT (apresentacional) em 4 abas:
+ *   Natureza da Nota · Dados da Fatura · Produtos · Cobrança e valores
  *
  * Consome um `ctx` (valores + set + data + actions) fornecido pelo componente que detém a
- * LÓGICA (FaturamentoNota antigo) — assim reaproveita 100% do carregamento/salvamento testados,
- * sem duplicar regra/cálculo/API. Se `ctx` não vier, usa estado local (preview standalone).
+ * LÓGICA (FaturamentoNota) — reaproveita 100% do carregamento/salvamento testados, sem
+ * duplicar regra/cálculo/API. Se `ctx` não vier, usa estado local (preview standalone).
  */
 
-type Aba = 'dados' | 'cobranca' | 'produtos';
+type Aba = 'natureza' | 'dados' | 'produtos' | 'cobranca';
 
 export type FatV2Ctx = {
   f: Record<string, any>;                         // valores dos campos (nomes = estado do antigo)
@@ -29,6 +29,7 @@ export type FatV2Ctx = {
     totalParcelas?: string;
     mensagens?: { codigo: any; descricao: string }[];
     sugestoes?: { codigo: any; descricao: string }[];
+    recalculandoImposto?: boolean;
   };
   actions?: {
     onClose?: () => void;
@@ -41,15 +42,18 @@ export type FatV2Ctx = {
     removerMensagem?: (codigo: any) => void;
     buscaMensagem?: (texto: string) => void;
     selecionarMensagem?: (codigo: any) => void;
+    salvarComissao?: () => void;
+    recalcularImpostos?: () => void;
   };
 };
 
 const n = (v: any) => Number(v ?? 0);
 const money = (v: any) =>
   n(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const txt = (v: any) => (v === undefined || v === null || v === '' ? '—' : String(v));
 
 export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
-  const [aba, setAba] = useState<Aba>('dados');
+  const [aba, setAba] = useState<Aba>('natureza');
 
   // Vendedores (código → nome) para exibir "código - nome" no campo Vendedor.
   const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
@@ -80,6 +84,7 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
     observacoes: '', infoComplementares: '', informarNoCorpoNF: false,
     descRadio: 'N', percDesconto: '', desconto: '0,00', acresRadio: 'N', percAcrescimo: '', acrescimo: '0,00',
     frete: '0', quantidade: '', especie: '', marca: '', numero: '', pesoBruto: '', pesoLiquido: '',
+    comissaoExterno: '', comissaoInterno: '', diferenciada: false,
   });
 
   const f = ctx ? ctx.f : local;
@@ -89,15 +94,13 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const itens = data.itens ?? [];
   const resumo = data.resumo ?? {};
   const titulo = data.titulo ?? 'FATURA · VENDA · CLIENTE';
+  const cli: any = data.cliente ?? {};
 
   // Natureza da operação (cabeçalho) = derivada da OPERAÇÃO (tipo_operacao),
   // NÃO do CFOP dos itens (o CFOP fica POR ITEM). Em "Escolher Outros" o usuário
-  // informa a natureza manualmente.
+  // informa o CFOP e a natureza manualmente (CFOP/Natureza só aparecem nesse caso).
   const isOperacaoOutros =
     String(f.operacaoFiscal ?? '').toUpperCase() === 'OUTROS';
-  const naturezaDaOperacao = isOperacaoOutros
-    ? String(f.naturezaOperacao ?? '')
-    : naturezaPorOperacao(f.operacaoFiscal);
   // vencimento mínimo = amanhã (não permite data <= hoje)
   const minVenc = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
@@ -126,21 +129,43 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
     prod: s.prod + g.prod, icms: s.icms + g.icms, st: s.st + g.st, ipi: s.ipi + g.ipi,
   }), { prod: 0, icms: 0, st: 0, ipi: 0 });
 
+  // Espelho dos valores da fatura — porte de FATURAMENTOS.CALCULAR_TOTAIS (rateio de frete
+  // na base de ICMS + desconto/acréscimo %). IBS/CBS (Reforma) ficam numa faixa extra.
+  // % digitado pode vir com vírgula (pt-BR); frete já é ponto-decimal ("200.00").
+  const pct = (v: any) => (typeof v === 'number' ? v : Number(String(v ?? '0').replace(',', '.')) || 0);
+  const esp = calcularTotaisFatura(itens as any, {
+    descontoPerc: f.descRadio === 'S' ? pct(f.percDesconto) : 0,
+    acrescimoPerc: f.acresRadio === 'S' ? pct(f.percAcrescimo) : 0,
+    totalfrete: Number(f.frete) || 0,
+    freteNf: true,
+    descontoNf: true,
+    acrescimoNf: true,
+  });
+
   const TAB = (id: Aba, label: string) => (
-    <button type="button" role="tab" aria-selected={aba === id} className="fat-tab" onClick={() => setAba(id)}>{label}</button>
+    <button type="button" role="tab" aria-selected={aba === id} className="fat-tab"
+      onClick={() => { setAba(id); if (id === 'produtos') act.recalcularImpostos?.(); }}>{label}</button>
   );
   const chk = (k: string, label: string, cls = 'fat-c2') => (
     <label className={`fat-ck ${cls}`}><input type="checkbox" checked={!!f[k]} onChange={(e) => set(k, e.target.checked)} /> {label}</label>
   );
+  const two = { display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10 } as React.CSSProperties;
+  // Tile do espelho de valores (label pequeno + valor)
+  const rzt = (label: string, val: number, color: string = '#dc2626', big?: boolean) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--fat-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <b style={{ fontVariantNumeric: 'tabular-nums', color: color || 'inherit', fontSize: big ? 16 : 12, fontWeight: big ? 800 : 600 }}>R$ {money(val)}</b>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
-      <div className="densidade-compacta bg-white dark:bg-zinc-900 w-full h-full flex flex-col overflow-hidden text-gray-800 dark:text-gray-100">
+      <div className="densidade-compacta fat-v2 bg-white dark:bg-zinc-900 w-full h-full flex flex-col overflow-hidden text-gray-800 dark:text-gray-100">
 
         {/* CABEÇALHO */}
         <div className="flex-shrink-0 flex items-center gap-3 px-3 border-b border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800" style={{ height: 34 }}>
           <span className="text-[12px] font-semibold text-blue-600 dark:text-blue-300 whitespace-nowrap">{titulo}</span>
-          <div className="fat-tabs ml-1">{TAB('dados', 'Dados da fatura')}{TAB('cobranca', 'Cobrança e valores')}{TAB('produtos', 'Produtos')}</div>
+          <div className="fat-tabs ml-1">{TAB('natureza', 'Natureza da Nota')}{TAB('dados', 'Dados da Fatura')}{TAB('produtos', 'Produtos')}{TAB('cobranca', 'Cobrança e valores')}</div>
           <div className="ml-auto flex items-center gap-1.5">
             <button type="button" className="h-[22px] px-2.5 text-[11px] rounded border border-gray-300 dark:border-zinc-600" onClick={act.opcoes}>⚙️ Opções</button>
             <button type="button" className="h-[22px] px-2.5 text-[11px] rounded bg-green-600 text-white font-semibold" onClick={act.emitir}>Emitir e salvar</button>
@@ -151,51 +176,38 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
         {/* CONTEÚDO */}
         <div className="flex-1 overflow-auto" style={{ padding: '10px 12px' }}>
 
-          {aba === 'dados' && (
+          {/* ===================== NATUREZA DA NOTA ===================== */}
+          {aba === 'natureza' && (
             <>
               <div className="fat-sec"><div className="fat-sec-header"><span>Faturamento e status</span></div>
                 <div className="fat-g">
                   <div className="fat-c3"><label>Tipo documentação</label>
                     <select value={f.tipodoc} onChange={(e) => set('tipodoc', e.target.value)} disabled>
                       <option value="N">Nota fiscal</option><option value="F">FAG</option></select></div>
-                  <div className="fat-c2"><label>Gerar cobrança</label>
-                    <select value={f.cobranca} onChange={(e) => set('cobranca', e.target.value)}>
-                      <option value="S">Sim</option><option value="N">Não</option></select></div>
                   <div className="fat-c3"><label>Insc. estadual (AM)</label>
-                    <select value={f.inscFat} onChange={(e) => set('inscFat', e.target.value)} disabled title="Definida pela venda/empresa — não editável">
+                    <select value={f.inscFat} onChange={(e) => set('inscFat', e.target.value)} disabled title="Definida pela venda/empresa">
                       <option value="04">Inscrição estadual 04</option><option value="07">Inscrição estadual 07</option></select></div>
-                  {/* NF-e · ambiente: removido da tela — o ambiente (homolog/produção)
-                      vem de um parâmetro central (dadosEmpresa.ambiente), não por fatura. */}
-                  <div className="fat-c2"><label>NF-e · finalidade</label>
-                    <select value={f.nfeFinalidade} onChange={(e) => set('nfeFinalidade', e.target.value)}>
-                      <option value="1">1 · Normal</option><option value="2">2 · Complementar</option>
-                      <option value="3">3 · Ajuste</option><option value="4">4 · Devolução</option></select></div>
-                </div>
-              </div>
-
-              <div className="fat-sec"><div className="fat-sec-header"><span>Operação fiscal</span></div>
-                <div className="fat-g">
-                  <div className="fat-c2"><label>Tipo de movimentação</label>
+                  <div className="fat-c3"><label>Tipo de movimentação</label>
                     <select value={f.tipoMovimentacao} onChange={(e) => set('tipoMovimentacao', e.target.value)}>
                       <option value="SAIDA">Saída</option><option value="ENTRADA">Entrada</option></select></div>
-                  <div className="fat-c2"><label>Operação ({f.tipoMovimentacao === 'ENTRADA' ? 'entrada' : 'saída'})</label>
+                  <div className="fat-c3"><label>Operação ({f.tipoMovimentacao === 'ENTRADA' ? 'entrada' : 'saída'})</label>
                     <select value={f.operacaoFiscal} onChange={(e) => set('operacaoFiscal', e.target.value)}>
                       {OPER.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
-                  <div className="fat-c3"><label>Natureza da operação</label>
-                    {isOperacaoOutros ? (
-                      <input type="text" placeholder="Informe a natureza da operação" value={f.naturezaOperacao ?? ''} onChange={(e) => set('naturezaOperacao', e.target.value)} />
-                    ) : (
-                      <input type="text" readOnly title="Definida pela operação selecionada" value={naturezaDaOperacao} />
-                    )}</div>
-                  <div className="fat-c2"><label>CFOP</label>
-                    <input type="text" placeholder="por item" title="O CFOP é definido por item (na venda). Em 'Escolher Outros' informe o CFOP manual." value={f.cfop ?? ''} onChange={(e) => set('cfop', e.target.value)} readOnly={!isOperacaoOutros} /></div>
-                  {/* Origem (canal da venda B/E/N) e NF-e · forma de emissão (sempre Normal=1,
-                      sem contingência) removidos da tela — mantêm os defaults no payload. */}
-                </div>
-              </div>
 
-              <div className="fat-sec"><div className="fat-sec-header"><span>Ajustes de imposto</span></div>
-                <div className="fat-g">
+                  {/* CFOP + Natureza só aparecem em "Escolher Outros" */}
+                  {isOperacaoOutros && (
+                    <>
+                      <div className="fat-c2"><label>CFOP</label>
+                        <input type="text" placeholder="Ex.: 5405" value={f.cfop ?? ''} onChange={(e) => set('cfop', e.target.value)} /></div>
+                      <div className="fat-c4"><label>Natureza da operação</label>
+                        <input type="text" placeholder="Informe a natureza da operação" value={f.naturezaOperacao ?? ''} onChange={(e) => set('naturezaOperacao', e.target.value)} /></div>
+                    </>
+                  )}
+                </div>
+
+                {/* Ajuste de imposto (sem cabeçalho próprio) */}
+                <div className="fat-g" style={{ marginTop: 6 }}>
+                  <span className="fat-c12" style={{ fontSize: 10, color: 'var(--fat-muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Ajuste de imposto</span>
                   {chk('zerarIpi', 'Zerar IPI')}{chk('zerarIcms', 'Zerar ICMS')}{chk('zerarSubstituicao', 'Zerar substituição')}
                   {chk('descontoSuframa', 'Desconto ICMS Suframa')}{chk('impostoAntecipado', 'Imposto antecipado')}
                   <div className="fat-c2"><label>MVA antecipado (%)</label>
@@ -204,165 +216,128 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                 <div className="fat-dica">Recalcula o imposto por item. Aplica-se à operação Venda; demais operações mantêm o cálculo da venda.</div>
               </div>
 
-              <div className="fat-sec"><div className="fat-sec-header"><span>Transporte e identificação</span></div>
-                <div className="fat-g">
-                  <div className="fat-c3"><label>Modalidade de transporte</label>
-                    <select value={f.modalidadeTransporte} onChange={(e) => set('modalidadeTransporte', e.target.value)}>
-                      {MODAIS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
-                  <div className="fat-c2"><label>Pedido</label><input type="text" value={f.pedido ?? ''} onChange={(e) => set('pedido', e.target.value)} /></div>
-                  <div className="fat-c3"><AutocompletePessoa label="Transportadora" tipo="transportadora" value={f.transportadora ?? ''} onChange={(cod) => set('transportadora', cod)} /></div>
-                  <div className="fat-c4"><label>Vendedor</label>
-                    <input
-                      type="text"
-                      readOnly
-                      title="Vendedor da venda"
-                      value={
-                        f.vendedor
-                          ? `${f.vendedor}${
-                              nomeVendedor(f.vendedor)
-                                ? ' - ' + nomeVendedor(f.vendedor)
-                                : ''
-                            }`
-                          : ''
-                      }
-                    /></div>
+              <div style={two}>
+                <div className="fat-sec"><div className="fat-sec-header"><span>Modalidade e transporte</span></div>
+                  <div className="fat-g">
+                    <div className="fat-c6"><label>Modalidade de transporte</label>
+                      <select value={f.modalidadeTransporte} onChange={(e) => set('modalidadeTransporte', e.target.value)}>
+                        {MODAIS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+                    <div className="fat-c6"><AutocompletePessoa label="Transportadora" tipo="transportadora" value={f.transportadora ?? ''} onChange={(cod) => set('transportadora', cod)} /></div>
+                    <div className="fat-c4"><label>Valor do frete</label>
+                      <input type="text" inputMode="numeric" value={`R$ ${money(f.frete)}`}
+                        onChange={(e) => { const d = e.target.value.replace(/\D/g, ''); set('frete', (Number(d) / 100).toFixed(2)); }} /></div>
+                    <div className="fat-c4"><label>Quantidade</label><input type="text" value={f.quantidade ?? ''} onChange={(e) => set('quantidade', e.target.value)} /></div>
+                    <div className="fat-c4"><label>Espécie</label><input type="text" value={f.especie ?? ''} onChange={(e) => set('especie', e.target.value)} /></div>
+                    <div className="fat-c4"><label>Marca</label><input type="text" value={f.marca ?? ''} onChange={(e) => set('marca', e.target.value)} /></div>
+                    <div className="fat-c4"><label>Número</label><input type="text" value={f.numero ?? ''} onChange={(e) => set('numero', e.target.value)} /></div>
+                    <div className="fat-c2"><label>Peso bruto</label><input type="text" value={f.pesoBruto ?? ''} onChange={(e) => set('pesoBruto', e.target.value)} /></div>
+                    <div className="fat-c2"><label>Peso líq.</label><input type="text" value={f.pesoLiquido ?? ''} onChange={(e) => set('pesoLiquido', e.target.value)} /></div>
+                  </div>
+                </div>
+
+                <div className="fat-sec"><div className="fat-sec-header"><span>Valores e ajustes</span></div>
+                  <div className="fat-g">
+                    <div className="fat-c12"><label>Desconto</label>
+                      <div className="fat-rd">
+                        <label><input type="radio" name="d" checked={(f.descRadio ?? 'N') === 'N'} onChange={() => set('descRadio', 'N')} /> Não</label>
+                        <label><input type="radio" name="d" checked={f.descRadio === 'S'} onChange={() => set('descRadio', 'S')} /> Sim</label></div></div>
+                    <div className="fat-c6"><label>Desconto %</label><input type="text" value={f.percDesconto ?? ''} onChange={(e) => set('percDesconto', e.target.value)} /></div>
+                    <div className="fat-c6"><label>Desconto R$</label><input type="text" value={typeof f.desconto === 'number' ? money(f.desconto) : (f.desconto ?? '0,00')} readOnly /></div>
+                    <div className="fat-c12"><label>Acréscimo</label>
+                      <div className="fat-rd">
+                        <label><input type="radio" name="a" checked={(f.acresRadio ?? 'N') === 'N'} onChange={() => set('acresRadio', 'N')} /> Não</label>
+                        <label><input type="radio" name="a" checked={f.acresRadio === 'S'} onChange={() => set('acresRadio', 'S')} /> Sim</label></div></div>
+                    <div className="fat-c6"><label>Acréscimo %</label><input type="text" value={f.percAcrescimo ?? ''} onChange={(e) => set('percAcrescimo', e.target.value)} /></div>
+                    <div className="fat-c6"><label>Acréscimo R$</label><input type="text" value={typeof f.acrescimo === 'number' ? money(f.acrescimo) : (f.acrescimo ?? '0,00')} readOnly /></div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ===================== DADOS DA FATURA ===================== */}
+          {aba === 'dados' && (
+            <>
+              <div style={two}>
+                <div className="fat-sec"><div className="fat-sec-header"><span>Dados do cliente</span></div>
+                  <div className="fat-g">
+                    <div className="fat-c3"><label>Código</label><input type="text" readOnly value={txt(cli.codcli)} /></div>
+                    <div className="fat-c9"><label>Nome</label><input type="text" readOnly value={txt(cli.nome)} /></div>
+                    <div className="fat-c5"><label>CPF/CNPJ</label><input type="text" readOnly value={txt(cli.cpfcgc ?? cli.cpf_cgc ?? cli.cnpj ?? cli.cpf)} /></div>
+                    <div className="fat-c2"><label>UF</label><input type="text" readOnly value={txt(cli.uf)} /></div>
+                    <div className="fat-c2"><label>Final</label><input type="text" readOnly value={txt(cli.final ?? cli.consumidor_final)} /></div>
+                    <div className="fat-c2"><label>Classe pgto</label><input type="text" readOnly value={txt(cli.claspgto ?? cli.classe_pgto)} /></div>
+                    <div className="fat-c6"><label>Suframa</label><input type="text" readOnly value={txt(cli.isuframa ?? cli.suframa)} /></div>
+                    <div className="fat-c6"><label>Vendedor</label>
+                      <input type="text" readOnly value={f.vendedor ? `${f.vendedor}${nomeVendedor(f.vendedor) ? ' - ' + nomeVendedor(f.vendedor) : ''}` : ''} /></div>
+                  </div>
+                </div>
+
+                <div className="fat-sec"><div className="fat-sec-header"><span>Comissão diferenciada</span></div>
+                  <div className="fat-g">
+                    <div className="fat-c6"><label>Vendedor externo</label><input type="text" value={f.comissaoExterno ?? ''} onChange={(e) => set('comissaoExterno', e.target.value)} /></div>
+                    <div className="fat-c6"><label>Vendedor interno</label><input type="text" value={f.comissaoInterno ?? ''} onChange={(e) => set('comissaoInterno', e.target.value)} /></div>
+                    <label className="fat-ck fat-c6"><input type="checkbox" checked={!!f.diferenciada} onChange={(e) => set('diferenciada', e.target.checked)} /> Diferenciada</label>
+                    {act.salvarComissao && (
+                      <div className="fat-c6" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.salvarComissao}>Salvar</button></div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="fat-sec"><div className="fat-sec-header"><span>Textos da NF</span></div>
-                <div className="fat-g">
-                  <div className="fat-c4"><label>Observações</label>
-                    <textarea value={f.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value)} /></div>
-                  <div className="fat-c5"><label>Informações complementares</label>
-                    <textarea placeholder="Informações complementares da NF…" value={f.infoComplementares ?? ''} onChange={(e) => set('infoComplementares', e.target.value)} /></div>
-                  <div className="fat-c3" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-                    <label className="fat-ck"><input type="checkbox" checked={!!f.informarNoCorpoNF} onChange={(e) => set('informarNoCorpoNF', e.target.checked)} /> Informar no corpo da NF</label></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 10 }}>
+                <div className="fat-sec"><div className="fat-sec-header"><span>Textos da NF</span></div>
+                  <div className="fat-g">
+                    <div className="fat-c4"><label>Pedido</label><input type="text" value={f.pedido ?? ''} onChange={(e) => set('pedido', e.target.value)} /></div>
+                    <div className="fat-c8" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
+                      <label className="fat-ck"><input type="checkbox" checked={!!f.informarNoCorpoNF} onChange={(e) => set('informarNoCorpoNF', e.target.checked)} /> Informar no corpo da NF</label></div>
+                    <div className="fat-c6"><label>Observações</label>
+                      <textarea value={f.observacoes ?? ''} onChange={(e) => set('observacoes', e.target.value)} /></div>
+                    <div className="fat-c6"><label>Informações complementares</label>
+                      <textarea placeholder="Informações complementares da NF…" value={f.infoComplementares ?? ''} onChange={(e) => set('infoComplementares', e.target.value)} /></div>
+                  </div>
                 </div>
-              </div>
 
-              <div className="fat-sec"><div className="fat-sec-header"><span>Mensagens NF</span></div>
-                <div className="fat-g">
-                  <div className="fat-c10"><input type="text" placeholder="Digite o código ou parte do texto da mensagem…"
-                    value={f.textoBuscaMensagem ?? ''} onChange={(e) => { set('textoBuscaMensagem', e.target.value); act.buscaMensagem?.(e.target.value); }} /></div>
-                  <div className="fat-c2" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                    <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.addMensagem}>+ Adicionar</button></div>
-                </div>
-                {SUGESTOES.length > 0 && (
-                  <div style={{ position: 'relative' }}>
-                    <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 2, maxHeight: 180, overflowY: 'auto', background: 'var(--fat-field)', border: '1px solid var(--fat-border-soft)', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,.18)' }}>
-                      {SUGESTOES.map((m) => (
-                        <div key={String(m.codigo)} onMouseDown={(e) => { e.preventDefault(); act.selecionarMensagem?.(m.codigo); }}
-                          style={{ padding: '4px 8px', fontSize: 11, cursor: 'pointer', borderBottom: '1px solid var(--fat-border-soft)' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(52,122,182,.12)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                          <b>{m.codigo}</b> {m.descricao}
-                        </div>
+                <div className="fat-sec"><div className="fat-sec-header"><span>Mensagens NF</span></div>
+                  <div className="fat-g">
+                    <div className="fat-c8"><input type="text" placeholder="Código ou parte do texto da mensagem…"
+                      value={f.textoBuscaMensagem ?? ''} onChange={(e) => { set('textoBuscaMensagem', e.target.value); act.buscaMensagem?.(e.target.value); }} /></div>
+                    <div className="fat-c4" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.addMensagem}>+ Adicionar</button></div>
+                  </div>
+                  {SUGESTOES.length > 0 && (
+                    <div style={{ position: 'relative' }}>
+                      <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 2, maxHeight: 180, overflowY: 'auto', background: 'var(--fat-field)', border: '1px solid var(--fat-border-soft)', borderRadius: 3, boxShadow: '0 4px 12px rgba(0,0,0,.18)' }}>
+                        {SUGESTOES.map((m) => (
+                          <div key={String(m.codigo)} onMouseDown={(e) => { e.preventDefault(); act.selecionarMensagem?.(m.codigo); }}
+                            style={{ padding: '4px 8px', fontSize: 11, cursor: 'pointer', borderBottom: '1px solid var(--fat-border-soft)' }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(52,122,182,.12)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                            <b>{m.codigo}</b> {m.descricao}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {MENSAGENS.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                      {MENSAGENS.map((m) => (
+                        <span key={String(m.codigo)} style={{ border: '1px solid var(--fat-border-soft)', borderRadius: 3, padding: '2px 6px', fontSize: 11 }}>
+                          <b>{m.codigo}</b> {m.descricao}{' '}
+                          <i style={{ color: '#ef4444', cursor: 'pointer', fontStyle: 'normal' }} onClick={() => act.removerMensagem?.(m.codigo)}>✕</i>
+                        </span>
                       ))}
                     </div>
-                  </div>
-                )}
-                {MENSAGENS.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                    {MENSAGENS.map((m) => (
-                      <span key={String(m.codigo)} style={{ border: '1px solid var(--fat-border-soft)', borderRadius: 3, padding: '2px 6px', fontSize: 11 }}>
-                        <b>{m.codigo}</b> {m.descricao}{' '}
-                        <i style={{ color: '#ef4444', cursor: 'pointer', fontStyle: 'normal' }} onClick={() => act.removerMensagem?.(m.codigo)}>✕</i>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {aba === 'cobranca' && (
-            <>
-              <div className="fat-sec"><div className="fat-sec-header"><span>Cobrança</span></div>
-                <div className="fat-g">
-                  <div className="fat-c3"><label>Banco</label>
-                    <select value={f.banco ?? ''} onChange={(e) => set('banco', e.target.value)}>
-                      {BANCOS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
-                  <div className="fat-c3"><label>Tipo de fatura/documento</label>
-                    <select value={f.tipoFatura ?? 'BOLETO'} onChange={(e) => set('tipoFatura', e.target.value)}>
-                      {TIPOS_FAT.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
-                  <div className="fat-c2"><label>Intervalo de dias</label>
-                    <input type="text" inputMode="numeric" placeholder="Ex: 30" value={f.intervaloDias ?? ''} onChange={(e) => set('intervaloDias', e.target.value.replace(/\D/g, ''))} /></div>
-                  <div className="fat-c2"><label>Quantidade (vezes)</label>
-                    <input type="text" inputMode="numeric" placeholder="Ex: 3" value={f.qtdParcelas ?? ''} onChange={(e) => set('qtdParcelas', e.target.value.replace(/\D/g, ''))} /></div>
-                  <div className="fat-c2" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                    <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.gerarParcelas}>+ Gerar parcelas</button></div>
-                  {chk('habilitarValor', 'Habilitar valor de entrada', 'fat-c3')}
-                  {chk('impostoNa1Parcela', 'Cobrar impostos na 1ª parcela', 'fat-c3')}
-                  {chk('freteNa1Parcela', 'Cobrar frete na 1ª parcela', 'fat-c3')}
-                  {chk('diferenciada', 'Comissão diferenciada', 'fat-c3')}
-                </div>
-                <div className="fat-sub">Parcelas</div>
-                <div className="fat-tbl-wrap"><table className="fat-tbl">
-                  <thead><tr><th className="l">Parcela</th><th>Dias</th><th className="l">Vencimento</th><th>Valor</th><th style={{ width: 28 }}></th></tr></thead>
-                  <tbody>
-                    {PARCELAS.map((p: any, i: number) => (
-                      <tr key={i}>
-                        <td className="l">{p.parcela}</td>
-                        <td className="n">{p.dias}</td>
-                        <td className="l">
-                          <input type="date" value={p.vencimento} min={minVenc} style={{ height: 20, width: 130 }}
-                            onChange={(e) => act.atualizarVencimento?.(p.idx ?? i, e.target.value)} />
-                        </td>
-                        <td className="n">{p.valor}</td>
-                        <td className="n"><i style={{ color: '#ef4444', cursor: 'pointer', fontStyle: 'normal' }}
-                          onClick={() => act.removerParcela?.(p.idx ?? i)}>✕</i></td>
-                      </tr>
-                    ))}
-                    {!PARCELAS.length && <tr><td className="l" colSpan={5}>Sem parcelas. Informe intervalo + quantidade e clique em “Gerar parcelas”.</td></tr>}
-                  </tbody>
-                  <tfoot><tr><td className="l">Total</td><td></td><td></td><td className="n">{data.totalParcelas ?? '0,00'}</td><td></td></tr></tfoot>
-                </table></div>
-              </div>
-
-              <div className="fat-sec"><div className="fat-sec-header"><span>Valores e ajustes</span></div>
-                <div className="fat-g">
-                  <div className="fat-c2"><label>Desconto</label>
-                    <div className="fat-rd">
-                      <label><input type="radio" name="d" checked={(f.descRadio ?? 'N') === 'N'} onChange={() => set('descRadio', 'N')} /> Não</label>
-                      <label><input type="radio" name="d" checked={f.descRadio === 'S'} onChange={() => set('descRadio', 'S')} /> Sim</label></div></div>
-                  <div className="fat-c2"><label>Desconto %</label><input type="text" value={f.percDesconto ?? ''} onChange={(e) => set('percDesconto', e.target.value)} /></div>
-                  <div className="fat-c2"><label>Desconto R$</label><input type="text" value={typeof f.desconto === 'number' ? money(f.desconto) : (f.desconto ?? '0,00')} readOnly /></div>
-                  <div className="fat-c2"><label>Acréscimo</label>
-                    <div className="fat-rd">
-                      <label><input type="radio" name="a" checked={(f.acresRadio ?? 'N') === 'N'} onChange={() => set('acresRadio', 'N')} /> Não</label>
-                      <label><input type="radio" name="a" checked={f.acresRadio === 'S'} onChange={() => set('acresRadio', 'S')} /> Sim</label></div></div>
-                  <div className="fat-c2"><label>Acréscimo %</label><input type="text" value={f.percAcrescimo ?? ''} onChange={(e) => set('percAcrescimo', e.target.value)} /></div>
-                  <div className="fat-c2"><label>Acréscimo R$</label><input type="text" value={typeof f.acrescimo === 'number' ? money(f.acrescimo) : (f.acrescimo ?? '0,00')} readOnly /></div>
-                </div>
-              </div>
-
-              <div className="fat-sec"><div className="fat-sec-header"><span>Volumes e frete</span></div>
-                <div className="fat-g">
-                  <div className="fat-c2"><label>Valor do frete</label><input
-                    type="text"
-                    inputMode="numeric"
-                    value={`R$ ${money(f.frete)}`}
-                    onChange={(e) => {
-                      // Máscara de moeda (acumula centavos). Armazena dot-decimal ("20.00")
-                      // para não quebrar os cálculos que usam Number(frete).
-                      const digits = e.target.value.replace(/\D/g, '');
-                      const valor = Number(digits) / 100;
-                      set('frete', valor.toFixed(2));
-                    }}
-                  /></div>
-                  <div className="fat-c2"><label>Quantidade</label><input type="text" value={f.quantidade ?? ''} onChange={(e) => set('quantidade', e.target.value)} /></div>
-                  <div className="fat-c2"><label>Espécie</label><input type="text" value={f.especie ?? ''} onChange={(e) => set('especie', e.target.value)} /></div>
-                  <div className="fat-c2"><label>Marca</label><input type="text" value={f.marca ?? ''} onChange={(e) => set('marca', e.target.value)} /></div>
-                  <div className="fat-c2"><label>Número</label><input type="text" value={f.numero ?? ''} onChange={(e) => set('numero', e.target.value)} /></div>
-                  <div className="fat-c1"><label>Peso bruto</label><input type="text" value={f.pesoBruto ?? ''} onChange={(e) => set('pesoBruto', e.target.value)} /></div>
-                  <div className="fat-c1"><label>Peso líq.</label><input type="text" value={f.pesoLiquido ?? ''} onChange={(e) => set('pesoLiquido', e.target.value)} /></div>
+                  )}
                 </div>
               </div>
             </>
           )}
 
+          {/* ===================== PRODUTOS ===================== */}
           {aba === 'produtos' && (
-            <div className="fat-sec"><div className="fat-sec-header"><span>Produtos ({itens.length})</span></div>
+            <div className="fat-sec"><div className="fat-sec-header"><span>Produtos ({itens.length})</span>{data.recalculandoImposto && <span style={{ fontSize: 10, color: '#2563eb', textTransform: 'none', letterSpacing: 0 }}>· recalculando impostos…</span>}</div>
               <div className="fat-tbl-wrap"><table className="fat-tbl">
                 <thead><tr>
                   <th className="l">Código</th><th className="l">Descrição</th><th>Qtde</th><th>Unitário</th><th>CFOP</th>
@@ -393,32 +368,76 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
               </table></div>
             </div>
           )}
+
+          {/* ===================== COBRANÇA E VALORES ===================== */}
+          {aba === 'cobranca' && (
+            <div className="fat-sec"><div className="fat-sec-header"><span>Cobrança</span></div>
+              <div className="fat-g">
+                <div className="fat-c3"><label>Gerar cobrança</label>
+                  <select value={f.cobranca} onChange={(e) => set('cobranca', e.target.value)}>
+                    <option value="S">Sim</option><option value="N">Não</option></select></div>
+                <div className="fat-c4"><label>Banco</label>
+                  <select value={f.banco ?? ''} onChange={(e) => set('banco', e.target.value)}>
+                    {BANCOS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+                <div className="fat-c5"><label>Tipo de fatura/documento</label>
+                  <select value={f.tipoFatura ?? 'BOLETO'} onChange={(e) => set('tipoFatura', e.target.value)}>
+                    {TIPOS_FAT.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
+                <div className="fat-c3"><label>Intervalo de dias</label>
+                  <input type="text" inputMode="numeric" placeholder="Ex: 30" value={f.intervaloDias ?? ''} onChange={(e) => set('intervaloDias', e.target.value.replace(/\D/g, ''))} /></div>
+                <div className="fat-c3"><label>Quantidade (vezes)</label>
+                  <input type="text" inputMode="numeric" placeholder="Ex: 3" value={f.qtdParcelas ?? ''} onChange={(e) => set('qtdParcelas', e.target.value.replace(/\D/g, ''))} /></div>
+                <div className="fat-c3" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.gerarParcelas}>+ Gerar parcelas</button></div>
+                {chk('habilitarValor', 'Habilitar valor de entrada', 'fat-c3')}
+                {chk('impostoNa1Parcela', 'Cobrar impostos na 1ª parcela', 'fat-c3')}
+                {chk('freteNa1Parcela', 'Cobrar frete na 1ª parcela', 'fat-c3')}
+                {chk('diferenciada', 'Comissão diferenciada', 'fat-c3')}
+              </div>
+              <div className="fat-sub">Parcelas</div>
+              <div className="fat-tbl-wrap"><table className="fat-tbl">
+                <thead><tr><th className="l">Parcela</th><th>Dias</th><th className="l">Vencimento</th><th>Valor</th><th style={{ width: 28 }}></th></tr></thead>
+                <tbody>
+                  {PARCELAS.map((p: any, i: number) => (
+                    <tr key={i}>
+                      <td className="l">{p.parcela}</td>
+                      <td className="n">{p.dias}</td>
+                      <td className="l">
+                        <input type="date" value={p.vencimento} min={minVenc} style={{ height: 20, width: 130 }}
+                          onChange={(e) => act.atualizarVencimento?.(p.idx ?? i, e.target.value)} />
+                      </td>
+                      <td className="n">{p.valor}</td>
+                      <td className="n"><i style={{ color: '#ef4444', cursor: 'pointer', fontStyle: 'normal' }}
+                        onClick={() => act.removerParcela?.(p.idx ?? i)}>✕</i></td>
+                    </tr>
+                  ))}
+                  {!PARCELAS.length && <tr><td className="l" colSpan={5}>Sem parcelas. Informe intervalo + quantidade e clique em “Gerar parcelas”.</td></tr>}
+                </tbody>
+                <tfoot><tr><td className="l">Total</td><td></td><td></td><td className="n">{data.totalParcelas ?? '0,00'}</td><td></td></tr></tfoot>
+              </table></div>
+            </div>
+          )}
         </div>
 
-        {/* RODAPÉ / RESUMO */}
-        <div className="flex-shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-100 dark:bg-zinc-800">
-          <div className="fat-rodape">
-            <div className="fat-rodape-t">Resumo financeiro</div>
-            <div className="fat-rz">
-              <div className="fat-rb"><h4 style={{ color: '#22d3ee' }}>IBS <span className="fat-prov">provisório</span></h4>
-                <div className="fat-rl"><span>Alíquota</span><b>{n(resumo.ibs_aliq ?? 0.1).toFixed(2)}%</b></div>
-                <div className="fat-rl"><span>Municipal / Estadual</span><b style={{ color: '#22d3ee' }}>{money(resumo.ibs_mun ?? 0)} / {money(resumo.ibs_est ?? 0)}</b></div>
-                <div className="fat-rl"><span>Valor</span><b style={{ color: '#22d3ee' }}>R$ {money(resumo.ibs_valor)}</b></div></div>
-              <div className="fat-rb"><h4 style={{ color: '#a78bfa' }}>CBS <span className="fat-prov">provisório</span></h4>
-                <div className="fat-rl"><span>Alíquota</span><b>{n(resumo.cbs_aliq ?? 0.9).toFixed(2)}%</b></div>
-                <div className="fat-rl"><span>Valor</span><b style={{ color: '#a78bfa' }}>R$ {money(resumo.cbs_valor)}</b></div></div>
-              <div className="fat-rb"><h4 style={{ color: '#f59e0b' }}>ICMS</h4>
-                <div className="fat-rl"><span>Alíquota</span><b>{n(resumo.icms_aliq).toFixed(2)}%</b></div>
-                <div className="fat-rl"><span>Base</span><b>R$ {money(resumo.icms_base)}</b></div>
-                <div className="fat-rl"><span>Valor</span><b style={{ color: '#f59e0b' }}>R$ {money(resumo.icms_valor)}</b></div></div>
-              <div className="fat-rb"><h4 style={{ color: '#ef4444' }}>IPI / ST</h4>
-                <div className="fat-rl"><span>IPI</span><b>R$ {money(resumo.ipi_valor)}</b></div>
-                <div className="fat-rl"><span>Substituição</span><b>R$ {money(resumo.st_valor)}</b></div></div>
-              <div className="fat-rb"><h4 style={{ color: '#16a34a' }}>Frete / produtos</h4>
-                <div className="fat-rl"><span>Frete</span><b style={{ color: '#16a34a' }}>R$ {money(resumo.frete)}</b></div>
-                <div className="fat-rl"><span>Produtos</span><b style={{ color: '#16a34a' }}>R$ {money(resumo.produtos)}</b></div></div>
-              <div className="fat-total"><span>Valor total da NF</span><strong>R$ {money(resumo.totalNf)}</strong></div>
-            </div>
+        {/* RODAPÉ · ESPELHO DOS VALORES DA FATURA (padrão Delphi) */}
+        <div className="flex-shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-100 dark:bg-zinc-800" style={{ padding: '8px 12px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--fat-muted)', marginBottom: 6 }}>Espelho dos valores da fatura</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: '8px 16px' }}>
+            {rzt('Base cálc. do ICMS', esp.baseIcms)}
+            {rzt('Valor do ICMS', esp.valorIcms)}
+            {rzt('Base cálc. ICMS subst.', esp.baseSt)}
+            {rzt('Valor do ICMS subst.', esp.valorSt)}
+            {rzt('Valor total dos produtos', esp.totalProd)}
+            {rzt('Total fatura', esp.totalFat)}
+            {rzt('Valor do frete', esp.totalFrete)}
+            {rzt('Valor do desconto', esp.valorDesconto)}
+            {rzt('Outras despesas acessórias', esp.despesa)}
+            {rzt('Valor total do IPI', esp.totalIpi)}
+            {rzt('Valor total da NF', esp.totalNf, '#dc2626', true)}
+            {rzt('Total produtos desc. ICMS', esp.totalProdSuframa)}
+          </div>
+          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--fat-border-soft)', display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 11, color: 'var(--fat-muted)', alignItems: 'center' }}>
+            <span>IBS <span className="fat-prov">provisório</span> · {n(resumo.ibs_aliq ?? 0.1).toFixed(2)}% · <b style={{ color: '#22d3ee' }}>R$ {money(resumo.ibs_valor)}</b></span>
+            <span>CBS <span className="fat-prov">provisório</span> · {n(resumo.cbs_aliq ?? 0.9).toFixed(2)}% · <b style={{ color: '#a78bfa' }}>R$ {money(resumo.cbs_valor)}</b></span>
           </div>
         </div>
 

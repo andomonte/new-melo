@@ -10,13 +10,6 @@ import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
  * FASE 4 P1: só SAÍDA/VENDA está portado; demais operações e ENTRADA retornam null
  * e o faturamento cai no snapshot (comportamento atual) até FASE 4 P2/P3.
  */
-function resolverTipoOperacaoFat(tipoMov?: string, tipoOp?: string): string | null {
-  const mov = String(tipoMov ?? 'SAIDA').toUpperCase();
-  const op = String(tipoOp ?? 'VENDA').toUpperCase();
-  if (mov === 'SAIDA' && op === 'VENDA') return 'VENDA';
-  return null; // SAÍDA especial / ENTRADA -> snapshot (P2/P3)
-}
-
 type FlagsFat = {
   tipofat: string;
   insc: string;
@@ -38,6 +31,7 @@ async function gravarItensFatRecalculado(
   codfat: number | string,
   codvenda: string,
   codcli: string,
+  movimento: string,
   tipoOp: string,
   f: FlagsFat,
 ): Promise<number> {
@@ -56,12 +50,13 @@ async function gravarItensFatRecalculado(
   let n = 0;
   for (const it of itens) {
     const { rows } = await client.query(
-      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,'SAIDA',$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         String(it.codprod).trim().padStart(6, '0'),
         String(codcli).trim(),
         num(it.qtd),
         num(it.prunit),
+        movimento,
         tipoOp,
         f.tipofat,
         f.insc,
@@ -473,54 +468,32 @@ export default async function handler(
       // (zerar IPI/ICMS/subst, desconto Suframa, MVA antecipado, Insc 04/07).
       // Para VENDA sem flags, o resultado é idêntico ao snapshot (idempotente) e ainda
       // preenche IBS/CBS. Operações não portadas (P2) mantêm o snapshot de dbitvenda.
-      const opFat = resolverTipoOperacaoFat(tipo_movimentacao, tipo_operacao);
-
-      if (opFat === 'VENDA') {
-        const cliRes = await client.query(
-          `SELECT codcli FROM dbvenda WHERE codvenda = $1`,
-          [codvenda],
-        );
-        const codcliVenda = cliRes.rows[0]?.codcli;
-        const flagsFat: FlagsFat = {
-          tipofat: String(tipodoc ?? '').toUpperCase().includes('FAG') ? 'FAG' : 'NOTA_FISCAL',
-          insc: insc07 === 'S' ? '07' : '04',
-          zerarIpi: zerar_ipi === 'S' ? 'S' : 'N',
-          zerarIcms: zerar_icms === 'S' ? 'S' : 'N',
-          zerarSubst: zerar_substituicao === 'S' ? 'S' : 'N',
-          suframa: desconto_suframa === 'S' ? 'S' : 'N',
-          mvaAnt: imposto_antecipado === 'S' ? Number(mva_antecipado) || 0 : 0,
-          cfopManual: cfopManual ? String(cfopManual).trim() : null,
-        };
-        const qtdItens = await gravarItensFatRecalculado(
-          client, novoCodfat, codvenda, codcliVenda, opFat, flagsFat,
-        );
-        console.log(
-          `🧾 DBPRODFAT (recalc PG): ${qtdItens} item(ns) da venda ${codvenda} na fatura ${novoCodfat}`,
-        );
-      } else {
-        // Operação não portada (FASE 4 P2) -> snapshot de dbitvenda (sem regressão).
-        const colsProdFat = [
-          'codprod', 'prunit', 'descr', 'codvenda', 'icms', 'ipi', 'codint',
-          'cfop', 'tipocfop', 'totalipi', 'baseicms', 'totalicms', 'mva',
-          'basesubst_trib', 'totalsubst_trib', 'ref', 'ncm', 'baseipi',
-          'icmsinterno_dest', 'icmsexterno_orig', 'totalproduto',
-          'totalicmsdesconto', 'cstipi', 'cstpis', 'pis', 'cstcofins', 'cofins',
-          'basepis', 'valorpis', 'basecofins', 'valorcofins', 'csticms',
-          'fretebase', 'acrescimo', 'freteicms', 'desconto', 'nrequis', 'nritem',
-          'fcp', 'base_fcp', 'valor_fcp', 'fcp_subst', 'basefcp_subst',
-          'valorfcp_subst', 'ftp_st', 'fcp_substret', 'basefcp_substret',
-          'valorfcp_substret',
-        ];
-        const insProdFat = await client.query(
-          `INSERT INTO dbprodfat (codfat, qtde, ${colsProdFat.join(', ')})
-           SELECT $1, qtd, ${colsProdFat.join(', ')}
-           FROM dbitvenda WHERE codvenda = $2`,
-          [novoCodfat, codvenda],
-        );
-        console.log(
-          `🧾 DBPRODFAT (snapshot, ${tipo_movimentacao}/${tipo_operacao ?? 'VENDA'} não portada): ${insProdFat.rowCount} item(ns) da venda ${codvenda}`,
-        );
-      }
+      // Portão removido (homolog): recalcula TODAS as operações via calcular_imposto_item,
+      // passando tipo_movimentacao/tipo_operacao reais. Se alguma operação precisar de
+      // ajuste, corrige-se a função PG / os flags — sem cair pro snapshot cego da venda.
+      const movFat = String(tipo_movimentacao ?? 'SAIDA').toUpperCase();
+      const opFat = String(tipo_operacao ?? 'VENDA').toUpperCase();
+      const cliRes = await client.query(
+        `SELECT codcli FROM dbvenda WHERE codvenda = $1`,
+        [codvenda],
+      );
+      const codcliVenda = cliRes.rows[0]?.codcli;
+      const flagsFat: FlagsFat = {
+        tipofat: String(tipodoc ?? '').toUpperCase().includes('FAG') ? 'FAG' : 'NOTA_FISCAL',
+        insc: insc07 === 'S' ? '07' : '04',
+        zerarIpi: zerar_ipi === 'S' ? 'S' : 'N',
+        zerarIcms: zerar_icms === 'S' ? 'S' : 'N',
+        zerarSubst: zerar_substituicao === 'S' ? 'S' : 'N',
+        suframa: desconto_suframa === 'S' ? 'S' : 'N',
+        mvaAnt: imposto_antecipado === 'S' ? Number(mva_antecipado) || 0 : 0,
+        cfopManual: cfopManual ? String(cfopManual).trim() : null,
+      };
+      const qtdItens = await gravarItensFatRecalculado(
+        client, novoCodfat, codvenda, codcliVenda, movFat, opFat, flagsFat,
+      );
+      console.log(
+        `🧾 DBPRODFAT (recalc PG ${movFat}/${opFat}): ${qtdItens} item(ns) da venda ${codvenda} na fatura ${novoCodfat}`,
+      );
 
       // ===== BAIXA DE ESTOQUE =====
       // Buscar itens da venda para fazer a baixa de estoque

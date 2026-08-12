@@ -3,6 +3,7 @@ import React, {
   SetStateAction,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import axios from 'axios';
@@ -362,6 +363,13 @@ export default function FaturamentoNota({
   const [vendedorExterno, setVendedorExterno] = useState('0.00');
   const [vendedorInterno, setVendedorInterno] = useState('0.00');
   const [diferenciada, setDiferenciada] = useState(false);
+  // Comissão diferenciada (Delphi): vendedor externo/interno. Capturados no form;
+  // a persistência definitiva (onde grava) é o próximo passo.
+  const [comissaoExterno, setComissaoExterno] = useState('');
+  const [comissaoInterno, setComissaoInterno] = useState('');
+  // Recálculo de imposto (preview) na aba Produtos: só recalcula se mudou algo fiscal.
+  const impostoDirtyRef = useRef(false);
+  const [recalculandoImposto, setRecalculandoImposto] = useState(false);
   const [modalcliente, setModalcliente] = useState(false);
   const [especie, setEspecie] = useState('');
   const [marca, setMarca] = useState('');
@@ -2843,28 +2851,22 @@ O problema está na Inscrição Estadual (IE), não na série!
   // --- useEffects ---
   // Normaliza e pré-seleciona o banco do cliente sempre que bancos ou cliente mudarem
   useEffect(() => {
-    if (cliente?.banco && bancos.length > 0) {
-      const bancoCliente = bancos.find(
-        (b) =>
-          b.banco.toString().trim().toLowerCase() ===
-          cliente.banco.toString().trim().toLowerCase(),
-      );
-      if (bancoCliente) {
-        setFormCobranca((prev: any) => ({
-          ...prev,
-          banco: bancoCliente.banco,
-        }));
-        console.log('🏦 Banco pré-selecionado:', bancoCliente.banco);
-      } else {
-        setFormCobranca((prev: any) => ({
-          ...prev,
-          banco: '',
-        }));
-        console.log(
-          '⚠️ Banco do cliente não encontrado nos bancos disponíveis:',
-          cliente.banco,
-        );
-      }
+    if (bancos.length === 0) return;
+    // Banco = do cliente (se existir na lista); senão MELO (único outro permitido).
+    // GARANTE que formCobranca.banco fique setado — senão o Tipo de fatura fica vazio
+    // (opcoesTipoFatura retorna [] quando não há banco).
+    const bancoCliente = cliente?.banco
+      ? bancos.find(
+          (b) =>
+            b.banco.toString().trim().toLowerCase() ===
+            cliente.banco.toString().trim().toLowerCase(),
+        )
+      : null;
+    const melo = bancos.find((b) => b.nome === 'MELO');
+    const alvo = bancoCliente || melo;
+    if (alvo) {
+      setFormCobranca((prev: any) => ({ ...prev, banco: alvo.banco }));
+      console.log('🏦 Banco definido:', alvo.nome, alvo.banco);
     }
   }, [cliente, bancos]);
   useEffect(() => {
@@ -2904,7 +2906,7 @@ O problema está na Inscrição Estadual (IE), não na série!
               setNroformulario(primeiroItem.dbvenda.nrovenda ?? '');
               setPedido(primeiroItem.dbvenda.nrovenda ?? '');
               setVendedor(primeiroItem.dbvenda.codvend ?? '');
-              setObservacoes(primeiroItem.dbvenda.obs ?? '');
+              setObservacoes(''); // Observações da NF começam VAZIAS (não herda o obs da venda)
               setData(new Date().toISOString().substring(0, 10));
               setCliente(primeiroItem.dbclien || null);
 
@@ -3024,12 +3026,7 @@ O problema está na Inscrição Estadual (IE), não na série!
               vendasArray.map((v) => v.dbvenda?.nrovenda).join(', '),
             );
             setPedido(vendasArray.map((v) => v.dbvenda?.nrovenda).join(', '));
-            setObservacoes(
-              vendasArray
-                .map((v) => v.dbvenda?.obs)
-                .filter(Boolean)
-                .join(' | '),
-            );
+            setObservacoes(''); // Observações da NF começam VAZIAS (não herda o obs da venda)
             setVendedor(
               Array.from(
                 new Set(
@@ -3539,13 +3536,17 @@ O problema está na Inscrição Estadual (IE), não na série!
   const USAR_LAYOUT_V2 = true;
   const settersV2: Record<string, (v: any) => void> = {
     naturezaOperacao: setNaturezaOperacao,
-    cfop: setCfop,
-    tipoMovimentacao: (v) => { setTipoMovimentacao(v); setOperacaoFiscal(v === 'ENTRADA' ? 'COMPRA' : 'VENDA'); },
-    operacaoFiscal: setOperacaoFiscal,
+    cfop: (v) => { setCfop(v); impostoDirtyRef.current = true; },
+    tipoMovimentacao: (v) => { setTipoMovimentacao(v); setOperacaoFiscal(v === 'ENTRADA' ? 'COMPRA' : 'VENDA'); impostoDirtyRef.current = true; },
+    operacaoFiscal: (v) => { setOperacaoFiscal(v); impostoDirtyRef.current = true; },
     origem: setOrigem,
-    zerarIpi: setZerarIpi, zerarIcms: setZerarIcms, zerarSubstituicao: setZerarSubstituicao,
-    descontoSuframa: setDescontoSuframa, impostoAntecipado: setImpostoAntecipado, mvaAntecipado: setMvaAntecipado,
-    inscFat: (v) => setInscFat(v === '07' ? '07' : '04'),
+    zerarIpi: (v) => { setZerarIpi(v); impostoDirtyRef.current = true; },
+    zerarIcms: (v) => { setZerarIcms(v); impostoDirtyRef.current = true; },
+    zerarSubstituicao: (v) => { setZerarSubstituicao(v); impostoDirtyRef.current = true; },
+    descontoSuframa: (v) => { setDescontoSuframa(v); impostoDirtyRef.current = true; },
+    impostoAntecipado: (v) => { setImpostoAntecipado(v); impostoDirtyRef.current = true; },
+    mvaAntecipado: (v) => { setMvaAntecipado(v); impostoDirtyRef.current = true; },
+    inscFat: (v) => { setInscFat(v === '07' ? '07' : '04'); impostoDirtyRef.current = true; },
     nfeAmbiente: setNfeAmbiente, nfeFinalidade: setNfeFinalidade, nfeFormaEmissao: setNfeFormaEmissao,
     infoComplementares: setInfoComplementares, informarNoCorpoNF: setInformarNoCorpoNF,
     vendedor: setVendedor, transportadora: setTransportadora, pedido: setPedido, observacoes: setObservacoes,
@@ -3560,6 +3561,7 @@ O problema está na Inscrição Estadual (IE), não na série!
     impostoNa1Parcela: (v) => handleCobrancaChange('impostoNa1Parcela', v),
     freteNa1Parcela: (v) => handleCobrancaChange('freteNa1Parcela', v),
     diferenciada: setDiferenciada,
+    comissaoExterno: setComissaoExterno, comissaoInterno: setComissaoInterno,
     percDesconto: setPercDesconto, percAcrescimo: setPercAcrescimo,
     descRadio: (v) => setInformarDescontoCorpo(v === 'S'),
     acresRadio: (v) => setInformarAcrescimoCorpo(v === 'S'),
@@ -3567,6 +3569,44 @@ O problema está na Inscrição Estadual (IE), não na série!
     intervaloDias: (v) => setIntervaloDias(String(v)),
     qtdParcelas: (v) => setQtdParcelas(String(v)),
   };
+
+  // Recálculo de imposto (PREVIEW) — chamado ao abrir a aba Produtos. Só recalcula se houve
+  // mudança fiscal (impostoDirtyRef). NÃO salva: só troca os itens em memória p/ mostrar
+  // como o imposto vai ficar (o Emitir/Salvar refaz a mesma conta a partir do dbitvenda).
+  const recalcularImpostos = async () => {
+    if (!impostoDirtyRef.current) return;
+    const codvendas = Array.from(
+      new Set((itensVenda || []).map((it: any) => it.codvenda).filter(Boolean)),
+    );
+    const codcliRecalc = cliente?.codcli;
+    if (!codvendas.length || !codcliRecalc) return;
+    setRecalculandoImposto(true);
+    try {
+      const { data } = await axios.post('/api/faturamento/recalcular-preview', {
+        codvendas,
+        codcli: codcliRecalc,
+        tipoMovimentacao,
+        tipoOperacao: operacaoFiscal,
+        zerarIpi: zerarIpi ? 'S' : 'N',
+        zerarIcms: zerarIcms ? 'S' : 'N',
+        zerarSubst: zerarSubstituicao ? 'S' : 'N',
+        suframa: descontoSuframa ? 'S' : 'N',
+        mvaAnt: impostoAntecipado ? Number(mvaAntecipado) || 0 : 0,
+        cfopManual: cfop ? String(cfop).trim() : null,
+        tipofat: statusVenda?.tipodoc === 'F' ? 'FAG' : 'NOTA_FISCAL',
+        insc: inscFat === '07' ? '07' : '04',
+      });
+      if (Array.isArray(data?.itens) && data.itens.length) {
+        setItensVenda(data.itens);
+      }
+      impostoDirtyRef.current = false;
+    } catch (e) {
+      console.error('Erro ao recalcular impostos (preview):', e);
+    } finally {
+      setRecalculandoImposto(false);
+    }
+  };
+
   const ctxV2 = {
     f: {
       naturezaOperacao, cfop, tipoMovimentacao, operacaoFiscal, origem,
@@ -3577,7 +3617,7 @@ O problema está na Inscrição Estadual (IE), não na série!
       tipodoc: statusVenda.tipodoc, cobranca: statusVenda.cobranca,
       banco: formCobranca.banco, tipoFatura: formCobranca.tipoFatura, prazoSelecionado: formCobranca.prazoSelecionado,
       habilitarValor: formCobranca.habilitarValor, impostoNa1Parcela: formCobranca.impostoNa1Parcela, freteNa1Parcela: formCobranca.freteNa1Parcela,
-      diferenciada, percDesconto, percAcrescimo, desconto, acrescimo,
+      diferenciada, comissaoExterno, comissaoInterno, percDesconto, percAcrescimo, desconto, acrescimo,
       descRadio: informarDescontoCorpo ? 'S' : 'N', acresRadio: informarAcrescimoCorpo ? 'S' : 'N',
       textoBuscaMensagem, intervaloDias, qtdParcelas,
     },
@@ -3593,7 +3633,17 @@ O problema está na Inscrição Estadual (IE), não na série!
         cbs_valor: (itensVenda || []).reduce((s: number, it: any) => s + Number(it.valor_cbs || 0), 0),
       },
       operacoes: tipoMovimentacao === 'ENTRADA' ? OPERACOES_ENTRADA : OPERACOES_SAIDA,
-      bancos: (bancos || []).map((b: any) => ({ value: b.banco, label: b.nome })),
+      // Banco: só o do cliente (pré-selecionado) + MELO podem ser escolhidos.
+      // Ex.: cliente veio com BRADESCO -> dropdown mostra BRADESCO (default) e MELO.
+      bancos: (bancos || [])
+        .filter(
+          (b: any) =>
+            b.nome === 'MELO' ||
+            (cliente?.banco &&
+              String(b.banco).trim().toLowerCase() ===
+                String(cliente.banco).trim().toLowerCase()),
+        )
+        .map((b: any) => ({ value: b.banco, label: b.nome })),
       tiposFatura: opcoesTipoFatura,
       modalidades: [
         { value: '', label: 'Selecione…' },
@@ -3615,6 +3665,7 @@ O problema está na Inscrição Estadual (IE), não na série!
       totalParcelas: Number(totalNF).toFixed(2),
       mensagens: (mensagensNF || []).map((m: any) => ({ codigo: m.codigo, descricao: m.descricao || m.texto || m.mensagem || '' })),
       sugestoes: (sugestoes || []).map((m: any) => ({ codigo: m.codigo, descricao: m.mensagem })),
+      recalculandoImposto,
     },
     actions: {
       onClose,
@@ -3631,6 +3682,7 @@ O problema está na Inscrição Estadual (IE), não na série!
         if (m) handleSelecionarSugestao(m);
       },
       addMensagem: () => setIsMensagemModalOpen(true),
+      recalcularImpostos,
     },
   };
   if (USAR_LAYOUT_V2 && !agrupandoFaturas) {

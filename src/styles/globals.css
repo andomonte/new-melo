@@ -614,6 +614,33 @@ input[type="number"] {
   text-transform: uppercase; color: var(--fat-muted); margin: 8px 0 4px;
 }
 
+/* --- V2 (layout 4 abas): seções em "card" com barra de cabeçalho + fonte/alturas maiores.
+   Escopado em .fat-v2 para NÃO afetar as outras telas que usam .densidade-compacta. --- */
+.densidade-compacta.fat-v2 {
+  --fat-font: 13px;
+  --fat-label-size: 11px;
+  --fat-input-h: 30px;
+  --fat-textarea-h: 54px;
+  --fat-section-gap: 12px;
+  --fat-gap-y: 8px;
+}
+.densidade-compacta.fat-v2 .fat-sec {
+  border: 1px solid var(--fat-border-soft);
+  border-radius: 8px;
+  background: var(--fat-field);
+  margin-bottom: var(--fat-section-gap);
+  padding: 0 12px 10px;
+}
+.densidade-compacta.fat-v2 .fat-sec-header {
+  height: auto; margin: 0 -12px 10px; padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.035);
+  border-bottom: 1px solid var(--fat-border-soft);
+  border-radius: 7px 7px 0 0;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+}
+.dark .densidade-compacta.fat-v2 .fat-sec-header { background: rgba(255, 255, 255, 0.05); }
+.densidade-compacta.fat-v2 .fat-sec-header::after { display: none; }
+
 /* --- GRID 12 COLUNAS --- */
 .densidade-compacta .fat-g {
   display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));

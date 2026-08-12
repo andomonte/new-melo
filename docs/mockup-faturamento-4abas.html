@@ -1,0 +1,368 @@
+<title>Faturamento · 4 Abas</title>
+<meta charset="utf-8">
+<style>
+  :root{
+    --bg:#eef1f4; --panel:#ffffff; --ink:#1f2937; --muted:#6b7280;
+    --line:#d8dde3; --sec:#f6f8fa; --sec-line:#e6eaee;
+    --blue:#2563eb; --green:#16a34a; --green-d:#15803d;
+    --note:#b45309; --note-bg:#fff7ed; --note-line:#f3d9a6;
+    --chip:#eef2ff; --chip-ink:#3730a3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;font-size:13px}
+  .app{max-width:1500px;margin:14px auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;overflow:hidden;box-shadow:0 6px 24px rgba(15,23,42,.08)}
+
+  /* Header */
+  header{display:flex;align-items:center;gap:14px;padding:8px 12px;border-bottom:1px solid var(--line);
+    background:#0b1220;color:#fff;flex-wrap:wrap}
+  header .title{font-size:13px;font-weight:600;color:#cbd5e1}
+  header .title b{color:#fff}
+  header .grow{flex:1}
+  .actions{display:flex;gap:8px;align-items:center}
+  .btn{border:0;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer}
+  .btn-ghost{background:#1e293b;color:#e2e8f0}
+  .btn-green{background:var(--green);color:#fff;font-weight:600}
+  .btn-x{background:transparent;color:#94a3b8;font-size:16px;padding:4px 8px}
+
+  /* Tabs */
+  .tabs{display:flex;gap:2px;padding:0 12px;background:#f2f5f8;border-bottom:1px solid var(--line)}
+  .tab{appearance:none;border:0;background:transparent;padding:11px 16px;font-size:13px;font-weight:600;
+    color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+  .tab[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue)}
+  .tab .cnt{display:inline-block;margin-left:6px;background:#e2e8f0;color:#475569;border-radius:10px;
+    padding:0 7px;font-size:11px}
+
+  main{padding:14px 16px 92px}
+  .panel{display:none}.panel.on{display:block}
+
+  /* Section */
+  .sec{border:1px solid var(--sec-line);border-radius:8px;margin-bottom:14px;background:#fff}
+  .sec-h{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--sec-line);
+    background:var(--sec);border-radius:8px 8px 0 0}
+  .sec-h .lbl{font-size:11px;font-weight:700;letter-spacing:.06em;color:#64748b;text-transform:uppercase}
+  .from{font-size:10.5px;color:var(--note);background:var(--note-bg);border:1px dashed var(--note-line);
+    border-radius:20px;padding:1px 8px;font-weight:600}
+  .sec-b{padding:12px}
+
+  /* Grid */
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px 12px}
+  .c2{grid-column:span 2}.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+  .row2{display:grid;grid-template-columns:1.7fr 1fr;gap:14px;margin-bottom:14px}
+  .row2>.sec{margin-bottom:0}
+  .tagv{font-size:10px;color:#1d4ed8;background:#dbeafe;border-radius:20px;padding:1px 7px;font-weight:600;margin-left:6px}
+  .mini{display:block;font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .fld>label{font-size:11px;color:var(--muted)}
+  input[type=text],select,textarea,input[type=date]{width:100%;border:1px solid var(--line);border-radius:6px;
+    padding:6px 8px;font-size:13px;background:#fff;color:var(--ink);height:32px}
+  textarea{height:64px;resize:vertical;padding:6px 8px}
+  .chks{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center}
+  .chk{display:flex;gap:7px;align-items:center;font-size:13px;color:#334155}
+  .rd{display:flex;gap:14px;align-items:center;height:32px}
+  .rd label{display:flex;gap:6px;align-items:center;color:#334155}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+
+  /* Chips (mensagens) */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chip{background:var(--chip);color:var(--chip-ink);border-radius:6px;padding:4px 9px;font-size:12px;font-weight:600}
+  .chip x{color:#9aa2c9;cursor:pointer;font-style:normal;margin-left:6px}
+  .addrow{display:flex;gap:8px}
+  .addrow input{flex:1}
+  .btn-blue{background:var(--blue);color:#fff;border:0;border-radius:6px;padding:0 16px;font-weight:600;cursor:pointer}
+
+  /* Table */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{border-bottom:1px solid var(--sec-line);padding:7px 9px;text-align:right}
+  th.l,td.l{text-align:left}
+  thead th{background:#f8fafc;color:#475569;font-weight:600}
+  tfoot td{font-weight:700;background:#f8fafc}
+  .tblwrap{overflow-x:auto}
+  .prod{font-size:12px}
+  .prod th,.prod td{white-space:nowrap;text-align:right}
+  .prod th.l,.prod td.l{text-align:left}
+  .hintline{font-size:11px;color:#94a3b8;font-weight:400;text-transform:none;letter-spacing:0;margin-left:auto}
+  .subh{margin-top:10px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#64748b;text-transform:uppercase}
+
+  /* Approval notes */
+  .note{display:flex;gap:9px;align-items:flex-start;background:var(--note-bg);border:1px solid var(--note-line);
+    border-radius:8px;padding:9px 12px;margin-bottom:14px;color:#7c4a08;font-size:12.5px;line-height:1.45}
+  .note b{color:#7c2d12}
+  .note .ic{font-size:15px;line-height:1}
+
+  /* Footer resumo */
+  footer{position:sticky;bottom:0;background:#f8fafc;border-top:1px solid var(--line);
+    display:flex;gap:18px;align-items:stretch;padding:10px 16px;flex-wrap:wrap}
+  .rz{display:flex;flex-direction:column;gap:2px;min-width:120px}
+  .rz .cap{font-size:10px;letter-spacing:.05em;color:#94a3b8;text-transform:uppercase;display:flex;gap:6px;align-items:center}
+  .badge{font-size:9px;background:#fde68a;color:#92400e;border-radius:4px;padding:0 5px;font-weight:700;text-transform:none}
+  .rz .row{display:flex;justify-content:space-between;gap:16px;font-size:11.5px;color:#475569}
+  .rz .row b{font-variant-numeric:tabular-nums}
+  .teal{color:#0d9488}.violet{color:#7c3aed}.amber{color:#d97706}.grn{color:var(--green)}
+  .total{margin-left:auto;text-align:right}
+  .total .cap{justify-content:flex-end}
+  .total .val{font-size:22px;font-weight:800;color:#0b1220}
+
+  .legend{font-size:11.5px;color:var(--muted);margin:2px auto 12px;max-width:1500px;padding:0 4px;display:flex;gap:14px;flex-wrap:wrap}
+  .legend .from{cursor:default}
+</style>
+<div class="legend">
+  <span><b>Mockup para aprovação</b> — layout novo em 4 abas (dados da venda 002439927 · PMZ).</span>
+  <span class="from">tag laranja = de onde a seção veio hoje</span>
+</div>
+
+<div class="app">
+  <header>
+    <span class="title">FATURA · VENDA Nº <b>002439927</b> · PMZ DISTRIBUIDORA S/A (04546)</span>
+    <span class="grow"></span>
+    <div class="actions">
+      <button class="btn btn-ghost">⚙ Opções</button>
+      <button class="btn btn-green">Emitir e salvar</button>
+      <button class="btn btn-x">✕</button>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-t="natureza">Natureza da Nota</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="dados">Dados da Fatura</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="produtos">Produtos <span class="cnt">2</span></button>
+    <button class="tab" role="tab" aria-selected="false" data-t="cobranca">Cobrança e valores</button>
+  </div>
+
+  <main>
+
+    <!-- ============ ABA 1 · NATUREZA DA NOTA ============ -->
+    <section class="panel on" id="natureza">
+
+      <div class="sec">
+        <div class="sec-h"><span class="lbl">Faturamento e Status</span><span class="from">← de: Dados da Fatura · fatur. + operação + imposto</span></div>
+        <div class="sec-b">
+          <div class="grid">
+            <div class="fld c3"><label>Tipo documentação</label><select><option>NOTA FISCAL</option></select></div>
+            <div class="fld c3"><label>Insc. estadual (AM) <span class="tagv">da venda</span></label>
+              <select><option>053374665</option><option>000000000</option><option>111111111</option></select></div>
+            <div class="fld c3"><label>Tipo de movimentação</label><select><option>SAÍDA</option></select></div>
+            <div class="fld c3"><label>Operação (saída)</label><select id="opSel"><option>VENDA</option><option>ESCOLHER OUTROS…</option></select></div>
+
+            <div class="fld c2 cfopnat" style="display:none"><label>CFOP</label><input type="text" placeholder="Ex.: 5405"></div>
+            <div class="fld c4 cfopnat" style="display:none"><label>Natureza da operação</label><input type="text" placeholder="Preenchida pela tabela de CFOP" readonly></div>
+
+            <div class="c9"><span class="mini">Ajuste de imposto</span><div class="chks" style="height:30px">
+              <label class="chk"><input type="checkbox"> Zerar IPI</label>
+              <label class="chk"><input type="checkbox"> Zerar ICMS</label>
+              <label class="chk"><input type="checkbox"> Zerar substituição</label>
+              <label class="chk"><input type="checkbox"> Desconto ICMS Suframa</label>
+              <label class="chk"><input type="checkbox"> Imposto antecipado</label>
+            </div></div>
+            <div class="fld c3"><label>MVA antecipado (%)</label><input type="text"></div>
+          </div>
+          <div class="hint"><b>IE:</b> mostra só a <b>numeração</b> vinda da venda; alterar busca em <b>Dados da Empresa</b> (sub-tabela de IEs) e atualiza a empresa · <b>⚠ validar se muda o imposto</b>. &nbsp;•&nbsp; <b>NF-e Finalidade:</b> sempre NORMAL (sem campo). &nbsp;•&nbsp; <b>Gerar cobrança</b> só na aba Cobrança e valores.</div>
+          <div class="hint"><b>CFOP e Natureza</b> só aparecem quando <b>Operação = “Escolher Outros”</b> — ao digitar o CFOP, a Natureza é preenchida pela tabela de CFOP. Nas demais operações ficam <b>ocultos</b> (CFOP por item; Natureza vem da operação). <i>Selecione “Escolher Outros” acima para ver.</i></div>
+          <div class="hint"><b>Ajuste de imposto:</b> recalcula por item (operação Venda); demais operações mantêm o cálculo da venda.</div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="sec">
+          <div class="sec-h"><span class="lbl">Modalidade e Transporte</span><span class="from">← de: Cobrança e Valores / Transporte</span></div>
+          <div class="sec-b"><div class="grid">
+            <div class="fld c6"><label>Modalidade de transporte</label><select><option>9 - SEM OCORRÊNCIA DE TRANSPORTE</option></select></div>
+            <div class="fld c6"><label>Transportadora</label><input type="text" value="00051 - CLIENTE RETIRA - MELO DISTRIBUIDORA"></div>
+            <div class="fld c4"><label>Valor do frete</label><input type="text" value="R$ 0,00"></div>
+            <div class="fld c4"><label>Quantidade</label><input type="text"></div>
+            <div class="fld c4"><label>Espécie</label><input type="text"></div>
+            <div class="fld c4"><label>Marca</label><input type="text"></div>
+            <div class="fld c4"><label>Número</label><input type="text"></div>
+            <div class="fld c2"><label>Peso bruto</label><input type="text"></div>
+            <div class="fld c2"><label>Peso líq.</label><input type="text"></div>
+          </div></div>
+        </div>
+        <div class="sec">
+          <div class="sec-h"><span class="lbl">Valores e Ajustes</span><span class="from">← de: Cobrança e Valores</span></div>
+          <div class="sec-b"><div class="grid">
+            <div class="fld c12"><label>Desconto</label><div class="rd"><label><input type="radio" name="d" checked> Não</label><label><input type="radio" name="d"> Sim</label></div></div>
+            <div class="fld c6"><label>Desconto %</label><input type="text"></div>
+            <div class="fld c6"><label>Desconto R$</label><input type="text" value="0,00" readonly></div>
+            <div class="fld c12"><label>Acréscimo</label><div class="rd"><label><input type="radio" name="a" checked> Não</label><label><input type="radio" name="a"> Sim</label></div></div>
+            <div class="fld c6"><label>Acréscimo %</label><input type="text"></div>
+            <div class="fld c6"><label>Acréscimo R$</label><input type="text" value="0,00" readonly></div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ABA 2 · DADOS DA FATURA ============ -->
+    <section class="panel" id="dados">
+      <div class="row2">
+        <div class="sec">
+          <div class="sec-h"><span class="lbl">Dados Cliente</span><span class="from">← Delphi</span></div>
+          <div class="sec-b"><div class="grid">
+            <div class="fld c3"><label>Código</label><input value="04546" readonly></div>
+            <div class="fld c9"><label>Nome</label><input value="PMZ DISTRIBUIDORA S/A" readonly></div>
+            <div class="fld c5"><label>CPF/CNPJ</label><input value="22.763.502/0007-00" readonly></div>
+            <div class="fld c2"><label>UF</label><input value="AM" readonly></div>
+            <div class="fld c2"><label>Final</label><input value="NÃO" readonly></div>
+            <div class="fld c3"><label>Classe pgto</label><input value="—" readonly></div>
+            <div class="fld c6"><label>Suframa</label><input value="—" readonly></div>
+            <div class="fld c6"><label>Vendedor</label><input value="00201 - MELO PESADO" readonly></div>
+          </div></div>
+        </div>
+        <div class="sec">
+          <div class="sec-h"><span class="lbl">Comissão Diferenciada</span><span class="from">← Delphi</span></div>
+          <div class="sec-b"><div class="grid">
+            <div class="fld c6"><label>Vendedor externo</label><input value="0,00"></div>
+            <div class="fld c6"><label>Vendedor interno</label><input value="0,00"></div>
+            <div class="c12" style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+              <label class="chk"><input type="checkbox"> Diferenciada</label>
+              <button class="btn-blue" style="height:30px">Salvar</button>
+            </div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="sec">
+          <div class="sec-h"><span class="lbl">Textos da NF</span></div>
+          <div class="sec-b"><div class="grid">
+            <div class="fld c4"><label>Pedido</label><input value="002439927"></div>
+            <div class="c8" style="display:flex;align-items:flex-end"><label class="chk"><input type="checkbox"> Informar no corpo da NF</label></div>
+            <div class="fld c6"><label>Observações</label><textarea style="height:46px">BOLETO NF</textarea></div>
+            <div class="fld c6"><label>Informações complementares</label><textarea style="height:46px" placeholder="Informações complementares da NF..."></textarea></div>
+          </div></div>
+        </div>
+        <div class="sec">
+          <div class="sec-h"><span class="lbl">Mensagens NF</span></div>
+          <div class="sec-b">
+            <div class="addrow"><input type="text" placeholder="Código ou texto da mensagem..."><button class="btn-blue">+ Add</button></div>
+            <div class="chips">
+              <span class="chip">737 CANCELAMENTO NFE 24H… <x>✕</x></span>
+              <span class="chip">693 DEVOLUCAO 7 DIAS… <x>✕</x></span>
+              <span class="chip">224 PROT 41/2008… <x>✕</x></span>
+              <span class="chip">223 MERC. JÁ TRIB… <x>✕</x></span>
+              <span class="chip">020 MERC.RETIRADA ST… <x>✕</x></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ABA 3 · PRODUTOS ============ -->
+    <section class="panel" id="produtos">
+      <div class="sec">
+        <div class="sec-h"><span class="lbl">Produtos (2)</span><span class="hintline">Ao abrir, recalcula o imposto conforme a Natureza da Nota (se mudou algo vs. a venda).</span></div>
+        <div class="sec-b">
+          <div class="tblwrap"><table class="prod">
+            <thead><tr>
+              <th class="l">Código</th><th class="l">Descrição</th><th>Qtde</th><th>Unitário</th><th>CFOP</th>
+              <th>Base ICMS</th><th>Alíq</th><th>ICMS</th><th>Base ST</th><th>MVA</th><th>ST</th>
+              <th>Base IPI</th><th>Alíq</th><th>IPI</th><th>Total</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="l">414070</td><td class="l">BATERIA MOTO BIZ125…</td><td>2</td><td>119,25</td><td>5405</td><td>0,00</td><td>0%</td><td>0,00</td><td>0,00</td><td>0</td><td>0,00</td><td>0,00</td><td>0%</td><td>0,00</td><td>238,50</td></tr>
+              <tr><td class="l">179521</td><td class="l">BATERIAS USADAS INSERVÍVEIS</td><td>2</td><td>1,04</td><td>5102</td><td>2,08</td><td>20%</td><td>0,42</td><td>0,00</td><td>0</td><td>0,00</td><td>0,00</td><td>0%</td><td>0,00</td><td>2,08</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-h"><span class="lbl">Totalizador por CFOP</span></div>
+        <div class="sec-b">
+          <table>
+            <thead><tr><th class="l">CFOP</th><th>Itens</th><th>Produtos</th><th>ICMS</th><th>ST</th><th>IPI</th></tr></thead>
+            <tbody>
+              <tr><td class="l">5405</td><td>1</td><td>238,50</td><td>0,00</td><td>0,00</td><td>0,00</td></tr>
+              <tr><td class="l">5102</td><td>1</td><td>2,08</td><td>0,42</td><td>0,00</td><td>0,00</td></tr>
+            </tbody>
+            <tfoot><tr><td class="l">Total</td><td>2</td><td>240,58</td><td>0,42</td><td>0,00</td><td>0,00</td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ABA 4 · COBRANÇA E VALORES ============ -->
+    <section class="panel" id="cobranca">
+      <div class="sec">
+        <div class="sec-h"><span class="lbl">Cobrança</span></div>
+        <div class="sec-b">
+          <div class="grid">
+            <div class="fld c3"><label>Gerar cobrança</label><select><option>SIM</option><option>NÃO</option></select></div>
+            <div class="fld c4"><label>Banco</label><select><option>MELO</option><option>BRADESCO — CLIENTE</option></select></div>
+            <div class="fld c5"><label>Tipo de fatura/documento</label><select><option>BOLETO</option></select></div>
+            <div class="fld c3"><label>Intervalo de dias</label><input type="text" value="30"></div>
+            <div class="fld c3"><label>Quantidade (vezes)</label><input type="text" placeholder="Ex: 3"></div>
+            <div class="fld c3" style="justify-content:flex-end"><button class="btn-blue" style="height:32px">+ Gerar parcelas</button></div>
+            <div class="c12"><div class="chks">
+              <label class="chk"><input type="checkbox"> Habilitar valor de entrada</label>
+              <label class="chk"><input type="checkbox"> Cobrar impostos na 1ª parcela</label>
+              <label class="chk"><input type="checkbox"> Cobrar frete na 1ª parcela</label>
+              <label class="chk"><input type="checkbox"> Comissão diferenciada</label>
+            </div></div>
+          </div>
+          <div class="subh">Parcelas</div>
+          <table style="margin-top:6px">
+            <thead><tr><th class="l">Parcela</th><th>Dias</th><th class="l">Vencimento</th><th>Valor</th><th style="width:28px"></th></tr></thead>
+            <tbody>
+              <tr><td class="l">1/1</td><td>15</td><td class="l">26/08/2026</td><td>R$ 240,58</td><td><span style="color:#ef4444;cursor:pointer">✕</span></td></tr>
+            </tbody>
+            <tfoot><tr><td class="l">Total</td><td></td><td></td><td>R$ 240,58</td><td></td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="rz">
+      <div class="cap">IBS <span class="badge">provisório</span></div>
+      <div class="row"><span>Alíquota</span><b>0,10%</b></div>
+      <div class="row"><span>Munic./Estadual</span><b>0,00 / 0,00</b></div>
+      <div class="row"><span>Valor</span><b class="teal">R$ 0,24</b></div>
+    </div>
+    <div class="rz">
+      <div class="cap">CBS <span class="badge">provisório</span></div>
+      <div class="row"><span>Alíquota</span><b>0,90%</b></div>
+      <div class="row"><span>Valor</span><b class="violet">R$ 2,16</b></div>
+    </div>
+    <div class="rz">
+      <div class="cap">ICMS</div>
+      <div class="row"><span>Alíquota</span><b>0,00%</b></div>
+      <div class="row"><span>Base</span><b>R$ 2,08</b></div>
+      <div class="row"><span>Valor</span><b class="amber">R$ 0,42</b></div>
+    </div>
+    <div class="rz">
+      <div class="cap">IPI / ST</div>
+      <div class="row"><span>IPI</span><b>R$ 0,00</b></div>
+      <div class="row"><span>Substituição</span><b>R$ 0,00</b></div>
+    </div>
+    <div class="rz">
+      <div class="cap">Frete / Produtos</div>
+      <div class="row"><span>Frete</span><b class="grn">R$ 0,00</b></div>
+      <div class="row"><span>Produtos</span><b class="grn">R$ 240,58</b></div>
+    </div>
+    <div class="rz total">
+      <div class="cap">Valor total da NF</div>
+      <div class="val">R$ 240,58</div>
+    </div>
+  </footer>
+</div>
+
+<script>
+  function toggleCfop(){
+    var sel=document.getElementById('opSel'); if(!sel) return;
+    var show=/OUTROS/i.test(sel.value);
+    document.querySelectorAll('.cfopnat').forEach(function(el){ el.style.display = show ? 'flex' : 'none'; });
+  }
+  (function(){ var s=document.getElementById('opSel'); if(s){ s.addEventListener('change',toggleCfop); toggleCfop(); } })();
+
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click',function(){
+      document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected','false'));
+      t.setAttribute('aria-selected','true');
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+      document.getElementById(t.dataset.t).classList.add('on');
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+  });
+</script>
