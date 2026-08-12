@@ -32,6 +32,8 @@ interface ItemAdicionado {
   marca_nome: string;
   origem: string;
   estoque?: number;
+  demanda: string;
+  qtdpnd: number;
   _novo: boolean;
 }
 
@@ -60,6 +62,10 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     if (!user?.funcoes) return false;
     return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'BPV');
   }, [user]);
+  const hasVDM = useMemo(() => {
+    if (!user?.funcoes) return false;
+    return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'VDM');
+  }, [user]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [listaProd, setListaProd] = useState<any[]>([]);
@@ -72,6 +78,12 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const [qtdInput, setQtdInput] = useState('1');
   const [precoInput, setPrecoInput] = useState('');
   const [avisoInline, setAvisoInline] = useState('');
+  const [naoGerarDemanda, setNaoGerarDemanda] = useState(false);
+  const [qtdPendInput, setQtdPendInput] = useState('0');
+  const [refInput, setRefInput] = useState('');
+  const [precoDigits, setPrecoDigits] = useState('');
+  const precoPristineRef = useRef(true);
+  const [searchField, setSearchField] = useState<'ref' | 'aplicacao'>('aplicacao');
   const [sortBy, setSortBy] = useState('descr');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [modalEquiv, setModalEquiv] = useState(false);
@@ -109,6 +121,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           const prefs = res.data?.preferences;
           if (prefs?.sortBy) setSortBy(prefs.sortBy);
           if (prefs?.sortDir) setSortDir(prefs.sortDir);
+          if (prefs?.searchField === 'ref' || prefs?.searchField === 'aplicacao') setSearchField(prefs.searchField);
         })
         .catch(() => {});
     }
@@ -116,12 +129,14 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   }, [isOpen, user?.usuario]);
 
   // Salvar preferências no banco
-  const salvarPreferencias = useCallback((sBy: string, sDir: string) => {
+  const salvarPreferencias = useCallback((sBy: string, sDir: string, sField?: string) => {
     if (!user?.usuario) return;
+    const prefs: any = { sortBy: sBy, sortDir: sDir };
+    if (sField) prefs.searchField = sField;
     api.put('/api/userPreferences', {
       user: user.usuario,
       screen: SCREEN_KEY,
-      preferences: { sortBy: sBy, sortDir: sDir },
+      preferences: prefs,
     }).catch(() => {});
   }, [user?.usuario]);
 
@@ -229,7 +244,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           filtros: filtrosAtivos,
         });
       } else {
-        data = await getProdutos({ page, perPage: BATCH_SIZE, search: search.trim(), sortBy, sortDir });
+        data = await getProdutos({ page, perPage: BATCH_SIZE, search: search.trim(), sortBy, sortDir, searchField });
       }
       if (data?.data?.length > 0) {
         setListaProd((prev) => append ? [...prev, ...data.data] : data.data);
@@ -252,7 +267,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       setLoadingMore(false);
       buscandoRef.current = false;
     }
-  }, [sortBy, sortDir]);
+  }, [sortBy, sortDir, searchField]);
 
   // Executar busca
   const executarBusca = useCallback((value: string) => {
@@ -295,51 +310,52 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     }, 20);
   }, [linhaSelecionada]);
 
-  // Verificar se pode adicionar/editar
-  const podeAdicionar = useCallback((produto: any) => {
-    if (!produto) return false;
-    if ((Number(produto.estoque_disponivel) || 0) <= 0) return false;
-    return true;
-  }, []);
-
   // Abrir input de quantidade
   const abrirQtd = useCallback((idx: number) => {
     const produto = listaProd[idx];
-    if (!podeAdicionar(produto)) {
-      toast({ title: 'Produto sem estoque disponível' });
-      return;
-    }
+    if (!produto) return;
     setLinhaSelecionada(idx);
     setPedindoQtd(idx);
     setAvisoInline('');
+    setQtdPendInput('0');
+    setRefInput(produto.ref || produto.codprod || '');
     // Pré-preencher com qtd já adicionada ou 1
     const qtdAtual = adicionados.get(produto.codprod);
     setQtdInput(String(qtdAtual || 1));
     // Pré-preencher preço da tabela (ou preço já editado)
-    setPrecoInput(String(Number(produto.prvenda) || 0));
-  }, [listaProd, podeAdicionar, adicionados, toast]);
+    const prv = Number(produto.prvenda) || 0;
+    setPrecoInput(String(prv));
+    setPrecoDigits(String(Math.round(prv * 100)));
+    precoPristineRef.current = true;
+  }, [listaProd, adicionados]);
 
   // Confirmar adição
   const confirmarAdicao = useCallback(() => {
     const produto = listaProd[pedindoQtd];
     if (!produto) return;
     const estoque = Number(produto.estoque_disponivel) || 0;
-    let qtd = parseInt(qtdInput) || 1;
-    if (qtd > estoque) {
+    let qtd = parseInt(qtdInput) || 0;
+    let qtdpnd = parseInt(qtdPendInput) || 0;
+
+    // Se qtd > estoque, ajustar: vende o que tem, resto vai pra pendência
+    if (qtd > estoque && estoque > 0) {
+      qtdpnd = qtd - estoque;
       qtd = estoque;
-      setQtdInput(String(qtd));
-      setAvisoInline(`Qtd ajustada para estoque: ${estoque}`);
+    }
+
+    // Se não tem estoque e não tem pendência, bloquear
+    if (qtd === 0 && qtdpnd === 0) {
+      setAvisoInline('INFORME A QUANTIDADE OU A QUANTIDADE DE PENDÊNCIA DO PRODUTO.');
+      return;
     }
 
     const precoTabela = Number(produto.prvenda) || 0;
-    let precoDigitado = parseFloat(String(precoInput).replace(',', '.')) || precoTabela;
+    let precoDigitado = precoPristineRef.current ? precoTabela : (parseInt(precoDigits || '0', 10) / 100) || precoTabela;
     const prcompraVal = Number(produto.prcompra) || 0;
     const isImportado = (produto.dolar || 'N') !== 'N';
-    const margemMinPerc = isImportado ? 40 : 20; // 20% nacional, 40% importado
-    // Preço mínimo = custo × (1 + margem/100)
+    const margemMinPerc = isImportado ? 40 : 20;
     const precoMinimo = prcompraVal > 0 ? prcompraVal * (1 + margemMinPerc / 100) : 0;
 
-    // Sem MPV: corrige para o mínimo se abaixo
     if (!hasMPV && precoMinimo > 0 && precoDigitado < precoMinimo) {
       precoDigitado = precoMinimo;
       setAvisoInline(`Preço ajustado p/ margem ${margemMinPerc}%: R$ ${precoMinimo.toFixed(2)}`);
@@ -352,7 +368,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
 
     const item: ItemAdicionado = {
       codprod: produto.codprod,
-      ref: produto.ref || '',
+      ref: refInput || produto.ref || '',
       descr: produto.aplic_extendida || produto.descr || '',
       qtd,
       prunit,
@@ -367,20 +383,23 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       marca_nome: produto.marca_nome || produto.codmarca || '',
       origem: produto.dolar || 'N',
       estoque: Number(produto.estoque_disponivel) || 0,
+      demanda: naoGerarDemanda ? 'N' : 'S',
+      qtdpnd,
       _novo: true,
     };
 
     onAdicionarItens([item]);
-    setAdicionados((prev) => { const m = new Map(prev); m.set(produto.codprod, qtd); return m; });
+    setAdicionados((prev) => { const m = new Map(prev); m.set(produto.codprod, qtd + qtdpnd); return m; });
     const nextIdx = pedindoQtd + 1;
     setPedindoQtd(-1);
-    toast({ title: `${produto.ref || produto.codprod} ${adicionados.has(produto.codprod) ? 'atualizado' : 'adicionado'} (qtd: ${qtd})` });
+    const pendLabel = qtdpnd > 0 ? `, pend: ${qtdpnd}` : '';
+    toast({ title: `${produto.ref || produto.codprod} ${adicionados.has(produto.codprod) ? 'atualizado' : 'adicionado'} (qtd: ${qtd}${pendLabel})` });
     // Mover para próxima linha e focar no modal
     if (nextIdx < listaProd.length) {
       setLinhaSelecionada(nextIdx);
     }
     setTimeout(() => modalRef.current?.focus(), 100);
-  }, [listaProd, pedindoQtd, qtdInput, precoInput, hasMPV, onAdicionarItens, toast]);
+  }, [listaProd, pedindoQtd, qtdInput, qtdPendInput, precoInput, hasMPV, naoGerarDemanda, onAdicionarItens, toast]);
 
   // Abrir equivalentes do item selecionado
   const abrirEquivalentes = useCallback(() => {
@@ -518,8 +537,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         return;
       }
 
-      // F8: filtro avançado
-      if (e.key === 'F8') {
+      // Ctrl+F: filtro avançado (mesmo atalho do Delphi)
+      if (e.key === 'f' && e.ctrlKey) {
         e.preventDefault(); e.stopImmediatePropagation();
         setMostrarFiltroAvancado((prev) => !prev);
         return;
@@ -532,12 +551,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         return;
       }
 
-      // F9: equivalentes do item selecionado
-      if (e.key === 'F9' && !emInput) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        abrirEquivalentesRef.current();
-        return;
-      }
+      // F9 desabilitado — equivalentes já aparecem inline na parte inferior da tela
 
       // Enter fora do input: abrir qtd
       if (e.key === 'Enter' && !emInput && linhaSelecionadaRef.current >= 0) {
@@ -598,7 +612,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
             }
           }).catch(() => setListaProd([]));
         } else {
-          getProdutos({ page: 1, perPage: BATCH_SIZE, search: currentSearch.trim(), sortBy: col, sortDir: newDir })
+          getProdutos({ page: 1, perPage: BATCH_SIZE, search: currentSearch.trim(), sortBy: col, sortDir: newDir, searchField })
             .then((data) => {
               if (data?.data?.length > 0) {
                 setListaProd(data.data);
@@ -614,7 +628,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         }
       }, 0);
     }
-  }, [sortBy, sortDir, currentSearch, salvarPreferencias]);
+  }, [sortBy, sortDir, currentSearch, salvarPreferencias, searchField]);
 
   if (!isOpen) return null;
 
@@ -654,7 +668,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-gray-700 dark:text-gray-200">
-              Enter buscar | ↑↓ navegar | Enter selecionar | F8 Filtros | F9 Equiv. | F10 Hist. | Esc voltar/fechar
+              Enter buscar | ↑↓ navegar | Enter selecionar | Ctrl+F Filtros | F10 Hist. | Esc voltar/fechar
             </span>
             <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 text-gray-500">
               <X className="h-5 w-5" />
@@ -672,9 +686,31 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') executarBusca(searchInput); }}
-                placeholder="Digite e pressione Enter para buscar..."
+                placeholder={searchField === 'ref' ? 'Buscar por referência...' : 'Buscar por aplicação...'}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
+            </div>
+            <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="searchField"
+                  checked={searchField === 'ref'}
+                  onChange={() => { setSearchField('ref'); salvarPreferencias(sortBy, sortDir, 'ref'); }}
+                  className="w-3.5 h-3.5 text-blue-600 accent-blue-600"
+                />
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Referência</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="searchField"
+                  checked={searchField === 'aplicacao'}
+                  onChange={() => { setSearchField('aplicacao'); salvarPreferencias(sortBy, sortDir, 'aplicacao'); }}
+                  className="w-3.5 h-3.5 text-blue-600 accent-blue-600"
+                />
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Aplicação</span>
+              </label>
             </div>
             <button
               onClick={() => setMostrarFiltroAvancado(!mostrarFiltroAvancado)}
@@ -683,7 +719,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                   ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 text-blue-700 dark:text-blue-300'
                   : 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700'
               }`}
-              title="Filtros avançados (F8)"
+              title="Filtros avançados (Ctrl+F)"
             >
               <Filter size={14} />
               <span>Filtros</span>
@@ -792,19 +828,63 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                           {jaExistente ? <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 rounded ml-2">Na venda</span> : null}
                           {semEstoque && !jaAdicionado ? <span className="text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-900/30 px-1.5 py-0.5 rounded ml-2">S/ EST.</span> : null}
                           {idx === pedindoQtd ? (
-                            <div className="flex items-center gap-1 ml-3" onClick={(ev) => ev.stopPropagation()}>
+                            <div className="flex items-center gap-1 ml-3 flex-wrap" onClick={(ev) => ev.stopPropagation()}>
+                              <span className="text-[10px] text-gray-500">Ref:</span>
+                              <input type="text" data-field="ref" value={refInput} onChange={(ev) => setRefInput(ev.target.value.toUpperCase())}
+                                tabIndex={-1}
+                                onFocus={(ev) => ev.target.select()}
+                                onKeyDown={(ev) => {
+                                  const el = ev.target as HTMLInputElement;
+                                  const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const i = all.indexOf(el);
+                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                  if (ev.key === 'ArrowRight') { ev.nativeEvent.stopImmediatePropagation(); if (el.selectionStart === el.value.length) { ev.preventDefault(); if (i < all.length - 1) all[i + 1].focus(); } }
+                                  if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); }
+                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                }}
+                                className="w-24 h-6 text-center text-xs border border-gray-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-500 uppercase" />
                               <span className="text-[10px] text-gray-500">Qtd:</span>
-                              <input ref={qtdInputRef} type="number" min="1" max={Number(produto.estoque_disponivel) || 999} value={qtdInput} onChange={(ev) => setQtdInput(ev.target.value)}
-                                onBlur={() => {
+                              <input ref={qtdInputRef} type="number" min="0" value={qtdInput} data-field="qtd"
+                                onFocus={(ev) => (ev.target as HTMLInputElement).select()}
+                                onChange={(ev) => {
+                                  const val = ev.target.value;
+                                  setQtdInput(val);
+                                  const dig = parseInt(val) || 0;
                                   const est = Number(produto.estoque_disponivel) || 0;
-                                  const dig = parseInt(qtdInput) || 1;
-                                  if (dig > est) {
-                                    setQtdInput(String(est));
-                                    setAvisoInline(`Qtd ajustada para estoque: ${est}`);
+                                  if (dig > est && est > 0) {
+                                    setQtdPendInput(String(dig - est));
+                                    setAvisoInline(`QUANTIDADE SUPERIOR AO ESTOQUE (${est}). Pendência: ${dig - est}`);
+                                  } else if (parseInt(qtdPendInput) > 0 && dig <= est) {
+                                    setQtdPendInput('0');
+                                    setAvisoInline('');
                                   }
                                 }}
-                                onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); const precoEl = (ev.target as HTMLElement).parentElement?.querySelector<HTMLInputElement>('input[type="text"]'); if (precoEl) precoEl.focus(); } }}
+                                onKeyDown={(ev) => {
+                                  const el = ev.target as HTMLInputElement;
+                                  const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const i = all.indexOf(el);
+                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setTimeout(() => { const a2 = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []); const i2 = a2.indexOf(el); if (i2 < a2.length - 1) a2[i2 + 1].focus(); }, 50); }
+                                  if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                  if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); const refEl = el.closest('div')?.querySelector<HTMLElement>('[data-field="ref"]'); if (refEl) refEl.focus(); }
+                                }}
                                 className="w-14 h-6 text-center text-xs border border-blue-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                              {((Number(produto.estoque_disponivel) || 0) <= 0 || parseInt(qtdPendInput) > 0) ? (
+                                <>
+                                  <span className="text-[10px] text-gray-500">Pend:</span>
+                                  <input type="number" min="0" value={qtdPendInput} data-field="pend"
+                                    onFocus={(ev) => (ev.target as HTMLInputElement).select()}
+                                    onChange={(ev) => setQtdPendInput(ev.target.value)}
+                                    onKeyDown={(ev) => {
+                                      const el = ev.target as HTMLInputElement;
+                                      const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                      const i = all.indexOf(el);
+                                      if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                      if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                      if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
+                                    }}
+                                    className="w-14 h-6 text-center text-xs border border-orange-400 rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+                                </>
+                              ) : null}
                               <span className="text-[10px] text-gray-500">R$:</span>
                               {(() => {
                                 const pt = Number(produto.prvenda) || 0;
@@ -819,25 +899,90 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                                   ? (hasMPV ? 'border-emerald-400 focus:ring-emerald-500' : 'border-red-400 focus:ring-red-500')
                                   : abaixoTabela ? 'border-amber-400 focus:ring-amber-500'
                                   : 'border-blue-400 focus:ring-blue-500';
+                                const precoNum = precoPristineRef.current ? pt : parseInt(precoDigits || '0', 10) / 100;
+                                const precoDisplay = precoNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                                const precoAbaixoMin = pm > 0 && precoNum < pm;
+                                const precoAbaixoTabela = precoNum < pt;
+                                const borderClassFinal = precoAbaixoMin
+                                  ? (hasMPV ? 'border-emerald-400 focus:ring-emerald-500' : 'border-red-400 focus:ring-red-500')
+                                  : precoAbaixoTabela ? 'border-amber-400 focus:ring-amber-500'
+                                  : 'border-blue-400 focus:ring-blue-500';
                                 return (
                                   <>
-                                    <input type="text" value={precoInput} onChange={(ev) => setPrecoInput(ev.target.value)}
+                                    <input type="text" data-field="preco" value={precoDisplay} onChange={() => {}}
+                                      onFocus={(ev) => ev.target.select()}
                                       onBlur={() => {
-                                        const digitado = parseFloat(String(precoInput).replace(',', '.')) || pt;
+                                        const digitado = precoPristineRef.current ? pt : parseInt(precoDigits || '0', 10) / 100;
                                         if (!hasMPV && pm > 0 && digitado < pm) {
-                                          setPrecoInput(pm.toFixed(2));
+                                          setPrecoDigits(String(Math.round(pm * 100)));
+                                          precoPristineRef.current = false;
+                                          setPrecoInput(String(pm));
                                           setAvisoInline(`Preço ajustado p/ margem ${mmPerc}%: R$ ${pm.toFixed(2)}`);
                                         } else {
-                                          setPrecoInput(digitado.toFixed(2));
+                                          setPrecoInput(String(digitado));
                                           setAvisoInline('');
                                         }
                                       }}
-                                      onKeyDown={(ev) => { if (ev.key === 'Enter') confirmarAdicao(); }}
-                                      className={`w-20 h-6 text-center text-xs border rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 ${borderClass}`} />
+                                      onKeyDown={(ev) => {
+                                        const el = ev.target as HTMLInputElement;
+                                        const focaveis = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('input:not([type="checkbox"]):not([tabindex="-1"]), button') || []);
+                                        const i = focaveis.indexOf(el);
+                                        const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                        const idx = all.indexOf(el);
+                                        if (ev.key >= '0' && ev.key <= '9') {
+                                          ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
+                                          if (precoPristineRef.current) { precoPristineRef.current = false; setPrecoDigits(ev.key); }
+                                          else { setPrecoDigits(prev => (prev + ev.key).replace(/^0+/, '') || '0'); }
+                                        } else if (ev.key === 'Backspace') {
+                                          ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
+                                          if (precoPristineRef.current) { precoPristineRef.current = false; setPrecoDigits('0'); }
+                                          else { setPrecoDigits(prev => prev.length > 1 ? prev.slice(0, -1) : '0'); }
+                                        } else if (ev.key === 'Enter') {
+                                          ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
+                                          const val = precoPristineRef.current ? pt : parseInt(precoDigits || '0', 10) / 100;
+                                          setPrecoInput(String(val));
+                                          if (idx < all.length - 1) all[idx + 1].focus();
+                                        } else if (ev.key === 'ArrowLeft') {
+                                          ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
+                                          if (idx > 0) all[idx - 1].focus();
+                                        } else if (ev.key === 'ArrowRight') {
+                                          ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation();
+                                          if (idx < all.length - 1) all[idx + 1].focus();
+                                        } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+                                          ev.nativeEvent.stopImmediatePropagation();
+                                        }
+                                      }}
+                                      className={`w-24 h-6 text-center text-xs border rounded bg-white dark:bg-zinc-800 dark:text-gray-200 focus:outline-none focus:ring-1 ${borderClassFinal}`} />
                                   </>
                                 );
                               })()}
-                              <button onClick={() => confirmarAdicao()} className="h-6 px-2 text-[10px] font-semibold bg-green-600 hover:bg-green-700 text-white rounded">OK</button>
+                              <button data-field="ok" onClick={() => confirmarAdicao()}
+                                onKeyDown={(ev) => {
+                                  const el = ev.target as HTMLElement;
+                                  const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                  const i = all.indexOf(el);
+                                  if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); confirmarAdicao(); }
+                                  if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                  if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
+                                  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                }}
+                                className="h-6 px-2 text-[10px] font-semibold bg-green-600 hover:bg-green-700 text-white rounded">OK</button>
+                              {hasVDM ? (
+                              <label className="flex items-center gap-1 ml-1 cursor-pointer select-none" title="NÃO gerar demanda para este item">
+                                <input type="checkbox" data-field="demanda" checked={naoGerarDemanda} onChange={(ev) => setNaoGerarDemanda(ev.target.checked)}
+                                  onKeyDown={(ev) => {
+                                    const el = ev.target as HTMLInputElement;
+                                    const all = Array.from(el.closest('div')?.querySelectorAll<HTMLElement>('[data-field]') || []);
+                                    const i = all.indexOf(el);
+                                    if (ev.key === 'Enter') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); setNaoGerarDemanda(!el.checked); }
+                                    if (ev.key === 'ArrowLeft') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i > 0) all[i - 1].focus(); }
+                                    if (ev.key === 'ArrowRight') { ev.preventDefault(); ev.nativeEvent.stopImmediatePropagation(); if (i < all.length - 1) all[i + 1].focus(); }
+                                    if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') { ev.nativeEvent.stopImmediatePropagation(); }
+                                  }}
+                                  className="w-3 h-3 accent-blue-600" />
+                                <span className="text-[9px] text-gray-500 dark:text-gray-400 whitespace-nowrap">Não gerar demanda</span>
+                              </label>
+                              ) : null}
                               {hasMPV && (() => { const pc = Number(produto.prcompra) || 0; const isImp = (produto.dolar || 'N') !== 'N'; const pm = pc > 0 ? pc * (1 + (isImp ? 40 : 20) / 100) : 0; const dig = parseFloat(String(precoInput).replace(',', '.')) || 0; return pm > 0 && dig < pm; })() ? <span className="text-[9px] text-emerald-600 font-bold">MPV</span> : null}
                               {avisoInline ? <span className="text-[9px] font-semibold text-amber-600 dark:text-amber-400 ml-1">{avisoInline}</span> : null}
                               {adicionados.has(produto.codprod) ? (
@@ -929,7 +1074,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                               codprod, ref, descr, qtd: 1, prunit: preco, prvenda_original: preco,
                               desconto_valor: 0, desconto_percentual: 0, total_item: preco,
                               prcompra: 0, prcustoatual: 0, margem: 0, codmarca: '', marca_nome: marca,
-                              origem: 'N', estoque: estq, _novo: true,
+                              origem: 'N', estoque: estq, demanda: 'S', qtdpnd: 0, _novo: true,
                             };
                             onAdicionarItens([item]);
                             setAdicionados((prev) => { const m = new Map(prev); m.set(codprod, 1); return m; });
@@ -965,10 +1110,6 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           <ContextMenuItem onClick={() => { if (linhaSelecionadaRef.current >= 0) abrirQtd(linhaSelecionadaRef.current); }}>
             Adicionar Item
             <span className="ml-auto text-[10px] text-gray-700 dark:text-gray-200">Enter</span>
-          </ContextMenuItem>
-          <ContextMenuItem onClick={abrirEquivalentes}>
-            <ArrowLeftRight size={14} className="mr-2" /> Equivalentes
-            <span className="ml-auto text-[10px] text-gray-700 dark:text-gray-200">F9</span>
           </ContextMenuItem>
           <ContextMenuItem onClick={abrirHistorico}>
             <History size={14} className="mr-2" /> Histórico Produto
