@@ -2010,7 +2010,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   ) : null}
                   <input type="text" ref={fpInputRef} tabIndex={0}
                     readOnly={!!fPagamento}
-                    value={fPagamento ? (opcoesFPFiltradas.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
+                    value={fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
                     onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
                     onFocus={() => { if (!fPagamento) setShowFP(true); }}
                     onBlur={() => setTimeout(() => setShowFP(false), 150)}
