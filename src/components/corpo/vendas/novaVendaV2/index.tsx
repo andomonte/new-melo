@@ -765,6 +765,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       tipoPreco: (['BALCÃO','ZFM','INTERIOR','ALC','AMAZ. OCIDENTAL','FORA ESTADO','FORA ESTADO VAREJO','RORAIMA'][Number(cli.PRVENDA || cli.prvenda || 0)] || ''),
       codvend: cli.CODVEND || cli.codvend || '',
       claspgto: cli.CLASPGTO || cli.claspgto || '',
+      statusCli: cli.STATUS || cli.status || '1',
       diasAtrasado,
       limiteAtraso: Number(cli.ATRASO || cli.atraso || 0),
       kickback: cli.KICKBACK || cli.kickback || false,
@@ -930,7 +931,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           arm_id: armId,
           formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
           parcelasCartao: isCartaoCredito ? parcelasCartao : null,
-          avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
+          avista: isAvista,
+          avistaMotivo: isAvista ? avistaMotivo : null,
           requisicao: requisicao || '',
           statusVenda: 'VENDA LIBERADA',
           draft_id: draftIdRef.current || undefined,
@@ -980,8 +982,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     setEnvioMsg('Preparando os dados para envio...');
 
     if (!(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI)) { setEnvioStep('erro'); setEnvioMsg('Selecione um cliente.'); return; }
+    if (clienteBloqueado) { setEnvioStep('erro'); setEnvioMsg('Cliente bloqueado. Consulte a cobrança.'); return; }
     if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('Carrinho vazio.'); return; }
+    if (itensGrid.length > 500) { setEnvioStep('erro'); setEnvioMsg('Máximo de 500 itens por venda.'); return; }
     if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { setEnvioStep('erro'); setEnvioMsg('Informe o parcelamento do cartão.'); return; }
+    if (isClienteBalcao && totalVenda > 10000) { setEnvioStep('erro'); setEnvioMsg('Cliente balcão: limite de R$ 10.000,00 por venda.'); return; }
+    if (isClienteBalcao && !isAvista && !isCartaoCredito) { setEnvioStep('erro'); setEnvioMsg('Cliente balcão: somente à vista ou cartão de crédito.'); return; }
 
     try {
       const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
@@ -1011,7 +1017,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           operador: operadorSel?.codigo || null,
           formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
           parcelasCartao: isCartaoCredito ? parcelasCartao : null,
-          avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
+          avista: isAvista,
+          avistaMotivo: isAvista ? avistaMotivo : null,
           requisicao: requisicao || '',
           tipo_movimentacao: tipoMovimentacao,
           tipo_operacao: tipoOperacao,
@@ -1346,13 +1353,30 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     }, 500);
   }, [totalVenda]);
 
-  // Prazo efetivo: se tem desconto à vista ou saldo insuficiente → "À VISTA"
-  // À vista forçado (desconto ativo ou sem cliente) — não pode mudar
+  // Classe de pagamento do cliente (V, D, Z = forçar à vista)
+  const claspgto = useMemo(() => String(clienteSelecionado?.claspgto || '').trim().toUpperCase(), [clienteSelecionado]);
+  const clienteBloqueado = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '2', [clienteSelecionado]);
+  const clienteTempAvista = useMemo(() => String(clienteSelecionado?.statusCli || '').trim() === '4', [clienteSelecionado]);
+  const isClienteBalcao = useMemo(() => String(clienteSelecionado?.codcli || '').trim() === '99999', [clienteSelecionado]);
+
+  // À vista forçado: classe V/D/Z, status 4 (temp à vista), desconto à vista
   const avistaForcado = useMemo(() => {
     if (!clienteSelecionado) return false;
     if (temDescontoAvista) return true;
+    if (['V', 'D', 'Z'].includes(claspgto)) return true;
+    if (clienteTempAvista) return true;
     return false;
-  }, [temDescontoAvista, clienteSelecionado]);
+  }, [temDescontoAvista, clienteSelecionado, claspgto, clienteTempAvista]);
+
+  // Motivo do à vista forçado (para montar obsfat no padrão Delphi)
+  const avistaMotivo = useMemo(() => {
+    if (!clienteSelecionado) return '';
+    if (claspgto === 'Z') return 'Z';
+    if (claspgto === 'V') return 'V';
+    if (claspgto === 'D') return 'D';
+    if (clienteTempAvista) return 'V'; // status 4 = temp à vista, usa (V)
+    return 'VE'; // vendedor escolheu
+  }, [clienteSelecionado, claspgto, clienteTempAvista]);
 
   // À vista por escolha do vendedor — pode mudar
   const isAvista = useMemo(() => {
@@ -1360,6 +1384,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     const prazoStr = String(prazo).trim().toUpperCase();
     return prazoStr === 'À VISTA' || prazoStr === 'A VISTA' || prazoStr === '0';
   }, [avistaForcado, prazo]);
+
+  // Auto-set transportadora "CLIENTE RETIRA" para classe V (sem status 4)
+  useEffect(() => {
+    if (claspgto === 'V' && !clienteTempAvista) {
+      setTransporteSel({ CODTPTRANSP: '001', DESCR: 'CLIENTE RETIRA' });
+    }
+  }, [claspgto, clienteTempAvista]);
 
   // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista + NÃO é cartão)
   const precisaCreditoExtra = useMemo(() => {
@@ -2310,7 +2341,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             vendedor: vendedorSel?.codigo || null, operador: operadorSel?.codigo || null,
                             formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
           parcelasCartao: isCartaoCredito ? parcelasCartao : null,
-                            avista: itensGrid.some(i => (Number(i.desconto_percentual) || 0) > 0) || String(prazo).trim().toUpperCase() === 'À VISTA',
+                            avista: isAvista,
+          avistaMotivo: isAvista ? avistaMotivo : null,
                             requisicao: requisicao || '',
                             tipo_movimentacao: 'SAIDA', tipo_operacao: 'VENDA',
                           },

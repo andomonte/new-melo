@@ -133,6 +133,8 @@ type Body = {
     nomecf?: string | null;
     formaPagamento?: string | null;
     parcelasCartao?: number | null;
+    avista?: boolean;
+    avistaMotivo?: string | null;
     nroimp?: string | number;
     tipodoc?: string;
     draft_id?: string;
@@ -252,15 +254,16 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
     if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
       const parcelas = Number(h.parcelasCartao) || 1;
       fp = `CARTAO DE CREDITO ${String(parcelas).padStart(2, '0')}x`;
-    } else if (fpUpper.includes('DINHEIRO') || fpUpper === 'PIX') {
-      fp = `A VISTA ${fp}`;
     } else if (fpUpper.includes('DEPOSITO')) {
       fp = `DEPOSITO BANCARIO`;
-    } else if (fpUpper.includes('DEBITO')) {
-      fp = `A VISTA CARTAO DEBITO`;
+    } else {
+      // Dinheiro, PIX, Débito, etc → prefixar com A VISTA (motivo)
+      const motivo = h.avistaMotivo || 'VE';
+      fp = motivo === 'Z' ? `A VISTA (Z) - DINHEIRO` : `A VISTA (${motivo})`;
     }
   } else if (h.avista) {
-    fp = 'A VISTA';
+    const motivo = h.avistaMotivo || 'VE';
+    fp = motivo === 'Z' ? `A VISTA (Z) - DINHEIRO` : `A VISTA (${motivo})`;
   }
   const obsOriginal = nul(h.obsfat);
   const obsfatFinal = fp

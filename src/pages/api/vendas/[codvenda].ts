@@ -50,12 +50,10 @@ export default async function handle(
       const fpUpper = fpNorm.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
         fpNorm = `CARTAO DE CREDITO`;
-      } else if (fpUpper.includes('DINHEIRO') || fpUpper === 'PIX') {
-        fpNorm = `A VISTA ${fpNorm}`;
       } else if (fpUpper.includes('DEPOSITO')) {
         fpNorm = `DEPOSITO BANCARIO`;
-      } else if (fpUpper.includes('DEBITO')) {
-        fpNorm = `A VISTA CARTAO DEBITO`;
+      } else {
+        fpNorm = `A VISTA (VE)`;
       }
     }
     const obsfatFinal = fpNorm
