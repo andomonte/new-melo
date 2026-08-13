@@ -107,7 +107,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         passou: 'OK',
         mensagem: '',
         status: 'Somente à vista',
-        saldoDisponivel,
         claspgto,
       });
     }
