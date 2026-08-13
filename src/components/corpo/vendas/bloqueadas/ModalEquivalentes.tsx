@@ -24,6 +24,8 @@ interface ItemAdicionado {
   qtdpnd: number;
   nrequis: string;
   nritem: string;
+  promocao?: any;
+  promoAtiva?: boolean;
   _novo: boolean;
 }
 

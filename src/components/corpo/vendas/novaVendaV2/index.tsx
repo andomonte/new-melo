@@ -220,8 +220,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [tipoMovimentacao, setTipoMovimentacao] = useState(() => draft.current?.tipoMovimentacao || 'SAIDA');
   const [tipoOperacao, setTipoOperacao] = useState(() => draft.current?.tipoOperacao || 'VENDA');
   const [showTipoMov, setShowTipoMov] = useState(false);
+  const [buscaTipoMov, setBuscaTipoMov] = useState('');
   const [tipoMovIdx, setTipoMovIdx] = useState(0);
   const [showTipoOp, setShowTipoOp] = useState(false);
+  const [buscaTipoOp, setBuscaTipoOp] = useState('');
   const [tipoOpIdx, setTipoOpIdx] = useState(0);
 
   // Opções de movimentação (fixas — só SAIDA e ENTRADA)
@@ -246,6 +248,18 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const OPCOES_TIPO_OP = useMemo(() =>
     todasOperacoes.filter(o => o.tipo_movimentacao === tipoMovimentacao),
   [todasOperacoes, tipoMovimentacao]);
+
+  const tipoMovFiltrados = useMemo(() => {
+    if (!buscaTipoMov.trim()) return OPCOES_TIPO_MOV;
+    const v = buscaTipoMov.toUpperCase();
+    return OPCOES_TIPO_MOV.filter(o => o.label.toUpperCase().includes(v));
+  }, [buscaTipoMov]);
+
+  const tipoOpFiltrados = useMemo(() => {
+    if (!buscaTipoOp.trim()) return OPCOES_TIPO_OP;
+    const v = buscaTipoOp.toUpperCase();
+    return OPCOES_TIPO_OP.filter(o => o.label.toUpperCase().includes(v) || o.value.toUpperCase().includes(v));
+  }, [buscaTipoOp, OPCOES_TIPO_OP]);
 
   // Quando muda tipo de movimentação, resetar operação pro primeiro da lista
   useEffect(() => {
@@ -279,6 +293,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   });
   const [openModalPrazo, setOpenModalPrazo] = useState(false);
   const [opcoesPrazo, setOpcoesPrazo] = useState<{ prazo: string; dias: number[]; qtdParcelas: number }[]>([]);
+  const [buscaPrazo, setBuscaPrazo] = useState('');
+  const prazoOpcoesFiltradas = useMemo(() => {
+    if (!buscaPrazo.trim()) return opcoesPrazo;
+    const v = buscaPrazo.toUpperCase();
+    return opcoesPrazo.filter(op => op.prazo.includes(v) || String(op.qtdParcelas).includes(v));
+  }, [buscaPrazo, opcoesPrazo]);
   const [showPrazoDropdown, setShowPrazoDropdown] = useState(false);
   const [prazoIdx, setPrazoIdx] = useState(0);
   const [fPagamento, setFPagamento] = useState(() => draft.current?.fPagamento || '');
@@ -1082,6 +1102,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           nrequis: it.nrequis || '',
           demanda: it.demanda || 'S',
           qtdpnd: it.qtdpnd || 0,
+          ...(it.promoAtiva && it.promocao ? {
+            id_promocao_item: it.promocao.id_promocao_item,
+            promocao_id: it.promocao.id_promocao,
+            promoQty: it.qtd,
+            quantidade_promocional: it.qtd,
+          } : {}),
           ...(it.campos_fiscais || {}),
         })),
         prazos: prazosPayload,
@@ -1165,10 +1191,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               total_item: item.qtd * item.prunit * (1 - descAtVista / 100),
               demanda: item.demanda ?? novos[idx].demanda ?? 'S',
               qtdpnd: item.qtdpnd ?? novos[idx].qtdpnd ?? 0,
+              promocao: item.promocao ?? novos[idx].promocao ?? null,
+              promoAtiva: item.promoAtiva ?? novos[idx].promoAtiva ?? false,
             };
             return novos;
           }
-          return [{ ...item, _novo: true, desconto_percentual: 0, demanda: item.demanda ?? 'S', qtdpnd: item.qtdpnd ?? 0 }, ...prev];
+          return [{ ...item, _novo: true, desconto_percentual: 0, demanda: item.demanda ?? 'S', qtdpnd: item.qtdpnd ?? 0, promocao: item.promocao ?? null, promoAtiva: item.promoAtiva ?? false }, ...prev];
         });
         // Calcular impostos em background
         if (clienteSelecionado?.codcli) {
@@ -1322,6 +1350,19 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     },
     { headerName: 'Ref', field: 'ref', width: 100, editable: true,
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
+    },
+    { headerName: 'P', field: 'promoAtiva', width: 40, maxWidth: 40, sortable: false,
+      cellStyle: { display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+      cellRenderer: (p: any) => {
+        if (!p.data?.promocao) return null;
+        const ativa = p.data?.promoAtiva;
+        return (
+          <span title={ativa ? `${p.data.promocao.nome_promocao || 'Promoção'} — clique para desativar` : 'Promoção desativada — clique para ativar'}
+            className={`inline-flex items-center justify-center w-5 h-5 text-[9px] font-bold rounded-full ${ativa ? 'text-white bg-green-500' : 'text-gray-400 bg-gray-200 dark:bg-zinc-700'}`}>
+            P
+          </span>
+        );
+      },
     },
     { headerName: 'Produto', field: 'descr', flex: 2, minWidth: 150, autoHeight: true,
       editable: temRIV,
@@ -1488,12 +1529,26 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return avistaForcado || isAvista || isCartaoCredito || isDeposito || prazo === 'FECHAMENTO NA SEMANA';
   }, [avistaForcado, isAvista, isCartaoCredito, isDeposito, prazo]);
 
-  // Limpar prazo quando forma desabilita
+  // Forma ↔ Prazo: excludentes
+  // Quando escolhe forma (à vista/cartão/depósito) → limpa prazo
   useEffect(() => {
-    if ((isAvista || isCartaoCredito || isDeposito) && prazo && prazo !== 'FECHAMENTO NA SEMANA') {
+    if ((isAvista || isCartaoCredito || isDeposito) && prazo) {
       setPrazo(''); setPrazosArray([]);
     }
   }, [isAvista, isCartaoCredito, isDeposito]);
+
+  // Quando escolhe prazo → auto-set forma como BOLETO
+  useEffect(() => {
+    if (prazo && prazo !== 'FECHAMENTO NA SEMANA') {
+      const boleto = opcoesFP.find(fp => (fp.descricao || '').toUpperCase().includes('BOLETO'));
+      if (boleto && fPagamento !== boleto.id) {
+        setFPagamento(boleto.id);
+      }
+    }
+    if (prazo === 'FECHAMENTO NA SEMANA' && fPagamento) {
+      setFPagamento('');
+    }
+  }, [prazo]);
 
   // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista + NÃO é cartão)
   const precisaCreditoExtra = useMemo(() => {
@@ -1503,13 +1558,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   }, [clienteSelecionado, totalVenda, isAvista, isCartaoCredito]);
 
   // Filtrar formas de pagamento por prazo
+  // Forma de pagamento: sem BOLETO (implícito pelo prazo) e sem OUTROS
   const opcoesFPFiltradas = useMemo(() => {
     if (!opcoesFP.length) return [];
-    if (isAvista) {
-      return opcoesFP.filter(fp => ['PIX', 'DINHEIRO', 'CARTAO DEBITO', 'CARTAO CREDITO', 'DEBITO', 'CREDITO'].some(t => fp.descricao?.toUpperCase().includes(t)));
-    }
-    return opcoesFP.filter(fp => !fp.descricao?.toUpperCase().includes('OUTROS'));
-  }, [opcoesFP, isAvista]);
+    return opcoesFP.filter(fp => {
+      const d = (fp.descricao || '').toUpperCase();
+      if (d.includes('BOLETO')) return false; // boleto é implícito pelo prazo
+      if (d.includes('OUTROS')) return false;
+      return true;
+    });
+  }, [opcoesFP]);
 
   const fpFiltradosPorBusca = useMemo(() => {
     if (!buscaFP.trim()) return opcoesFPFiltradas;
@@ -2029,6 +2087,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
                 onCellClicked={(e: any) => {
+                  if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao) {
+                    const novoEstado = !e.data.promoAtiva;
+                    e.node.setData({ ...e.data, promoAtiva: novoEstado });
+                    setItensGrid((prev) => prev.map((r, i) => i === e.rowIndex ? { ...r, promoAtiva: novoEstado } : r));
+                  }
                   if (e.column?.getColId() === 'desconto_percentual' && e.data) {
                     const descAtual = Number(e.data.desconto_percentual) || 0;
                     const novoDesc = descAtual === 0 ? 2 : 0;
@@ -2088,59 +2151,64 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {temTMO ? (
                 <>
-                  {/* Tipo Movimentação */}
+                  {/* Tipo Movimentação — mesmo padrão Forma Pagamento */}
                   <div className="relative min-w-[120px]">
-                    <input type="text" readOnly tabIndex={0}
-                      value={OPCOES_TIPO_MOV.find(o => o.value === tipoMovimentacao)?.label || tipoMovimentacao}
-                      onClick={() => { setShowTipoMov(true); setTipoMovIdx(OPCOES_TIPO_MOV.findIndex(o => o.value === tipoMovimentacao)); }}
+                    <input type="text" tabIndex={0}
+                      readOnly={!!tipoMovimentacao && !showTipoMov}
+                      value={tipoMovimentacao && !showTipoMov ? (OPCOES_TIPO_MOV.find(o => o.value === tipoMovimentacao)?.label || tipoMovimentacao) : buscaTipoMov}
+                      onChange={(e) => { setBuscaTipoMov(e.target.value); setShowTipoMov(true); setTipoMovIdx(0); }}
+                      onClick={() => { if (!showTipoMov) { setBuscaTipoMov(''); setShowTipoMov(true); setTipoMovIdx(0); } }}
                       onFocus={() => {}}
-                      onBlur={() => setTimeout(() => setShowTipoMov(false), 150)}
-                      onDoubleClick={() => { setShowTipoMov(true); setTipoMovIdx(0); }}
+                      onBlur={() => setTimeout(() => { setShowTipoMov(false); setBuscaTipoMov(''); }, 150)}
+
+                      onDoubleClick={() => { setBuscaTipoMov(''); setShowTipoMov(true); setTipoMovIdx(0); }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && showTipoMov) { e.preventDefault(); setTipoMovimentacao(OPCOES_TIPO_MOV[tipoMovIdx].value); setShowTipoMov(false); setTimeout(() => navegarFocavel('next'), 50); }
-                        else if (e.key === 'Enter') { e.preventDefault(); setShowTipoMov(true); setTipoMovIdx(0); }
-                        if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTipoMov) { setShowTipoMov(true); setTipoMovIdx(0); } else { setTipoMovIdx(p => Math.min(p + 1, OPCOES_TIPO_MOV.length - 1)); } }
+                        if (e.key === 'Enter' && showTipoMov && tipoMovFiltrados[tipoMovIdx]) { e.preventDefault(); setTipoMovimentacao(tipoMovFiltrados[tipoMovIdx].value); setShowTipoMov(false); setBuscaTipoMov(''); setTimeout(() => navegarFocavel('next'), 50); }
+                        else if (e.key === 'Enter' && !showTipoMov) { e.preventDefault(); setBuscaTipoMov(''); setShowTipoMov(true); setTipoMovIdx(0); }
+                        if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTipoMov) { setBuscaTipoMov(''); setShowTipoMov(true); setTipoMovIdx(0); } else { setTipoMovIdx(p => Math.min(p + 1, tipoMovFiltrados.length - 1)); } }
                         if (e.key === 'ArrowUp' && showTipoMov) { e.preventDefault(); setTipoMovIdx(p => Math.max(p - 1, 0)); }
-                        if (e.key === 'Escape') setShowTipoMov(false);
+                        if (e.key === 'Escape') { setShowTipoMov(false); setBuscaTipoMov(''); }
                       }}
                       placeholder=" "
-                      className={`${MI_INPUT} cursor-pointer bg-gray-100 dark:bg-zinc-900`}
+                      className={`${MI_INPUT} ${tipoMovimentacao && !showTipoMov ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                     />
                     <label className={MI_LABEL}>Tipo Movimentação</label>
-                    {showTipoMov ? (
+                    {showTipoMov && tipoMovFiltrados.length > 0 ? (
                       <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
-                        {OPCOES_TIPO_MOV.map((op, idx) => (
+                        {tipoMovFiltrados.map((op, idx) => (
                           <div key={op.value} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoMovIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                            onMouseDown={(ev) => { ev.preventDefault(); setTipoMovimentacao(op.value); setShowTipoMov(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                            onMouseDown={(ev) => { ev.preventDefault(); setTipoMovimentacao(op.value); setShowTipoMov(false); setBuscaTipoMov(''); setTimeout(() => navegarFocavel('next'), 50); }}
                           >{op.label}</div>
                         ))}
                       </div>
                     ) : null}
                   </div>
-                  {/* Tipo Operação */}
+                  {/* Tipo Operação — mesmo padrão Forma Pagamento */}
                   <div className="relative min-w-[120px]">
-                    <input type="text" readOnly tabIndex={0}
-                      value={OPCOES_TIPO_OP.find(o => o.value === tipoOperacao)?.label || tipoOperacao}
-                      onClick={() => { setShowTipoOp(true); setTipoOpIdx(OPCOES_TIPO_OP.findIndex(o => o.value === tipoOperacao)); }}
+                    <input type="text" tabIndex={0}
+                      readOnly={!!tipoOperacao && !showTipoOp}
+                      value={tipoOperacao && !showTipoOp ? (OPCOES_TIPO_OP.find(o => o.value === tipoOperacao)?.label || tipoOperacao) : buscaTipoOp}
+                      onChange={(e) => { setBuscaTipoOp(e.target.value); setShowTipoOp(true); setTipoOpIdx(0); }}
+                      onClick={() => { if (!showTipoOp) { setBuscaTipoOp(''); setShowTipoOp(true); setTipoOpIdx(0); } }}
                       onFocus={() => {}}
-                      onBlur={() => setTimeout(() => setShowTipoOp(false), 150)}
-                      onDoubleClick={() => { setShowTipoOp(true); setTipoOpIdx(0); }}
+                      onBlur={() => setTimeout(() => { setShowTipoOp(false); setBuscaTipoOp(''); }, 150)}
+                      onDoubleClick={() => { setBuscaTipoOp(''); setShowTipoOp(true); setTipoOpIdx(0); }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && showTipoOp) { e.preventDefault(); setTipoOperacao(OPCOES_TIPO_OP[tipoOpIdx].value); setShowTipoOp(false); setTimeout(() => navegarFocavel('next'), 50); }
-                        else if (e.key === 'Enter') { e.preventDefault(); setShowTipoOp(true); setTipoOpIdx(0); }
-                        if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTipoOp) { setShowTipoOp(true); setTipoOpIdx(0); } else { setTipoOpIdx(p => Math.min(p + 1, OPCOES_TIPO_OP.length - 1)); } }
+                        if (e.key === 'Enter' && showTipoOp && tipoOpFiltrados[tipoOpIdx]) { e.preventDefault(); setTipoOperacao(tipoOpFiltrados[tipoOpIdx].value); setShowTipoOp(false); setBuscaTipoOp(''); setTimeout(() => navegarFocavel('next'), 50); }
+                        else if (e.key === 'Enter' && !showTipoOp) { e.preventDefault(); setBuscaTipoOp(''); setShowTipoOp(true); setTipoOpIdx(0); }
+                        if (e.key === 'ArrowDown') { e.preventDefault(); if (!showTipoOp) { setBuscaTipoOp(''); setShowTipoOp(true); setTipoOpIdx(0); } else { setTipoOpIdx(p => Math.min(p + 1, tipoOpFiltrados.length - 1)); } }
                         if (e.key === 'ArrowUp' && showTipoOp) { e.preventDefault(); setTipoOpIdx(p => Math.max(p - 1, 0)); }
-                        if (e.key === 'Escape') setShowTipoOp(false);
+                        if (e.key === 'Escape') { setShowTipoOp(false); setBuscaTipoOp(''); }
                       }}
                       placeholder=" "
-                      className={`${MI_INPUT} cursor-pointer bg-gray-100 dark:bg-zinc-900`}
+                      className={`${MI_INPUT} ${tipoOperacao && !showTipoOp ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                     />
                     <label className={MI_LABEL}>Tipo Operação</label>
-                    {showTipoOp ? (
+                    {showTipoOp && tipoOpFiltrados.length > 0 ? (
                       <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
-                        {OPCOES_TIPO_OP.map((op, idx) => (
+                        {tipoOpFiltrados.map((op, idx) => (
                           <div key={op.value} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoOpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                            onMouseDown={(ev) => { ev.preventDefault(); setTipoOperacao(op.value); setShowTipoOp(false); setTimeout(() => navegarFocavel('next'), 50); }}
+                            onMouseDown={(ev) => { ev.preventDefault(); setTipoOperacao(op.value); setShowTipoOp(false); setBuscaTipoOp(''); setTimeout(() => navegarFocavel('next'), 50); }}
                           >{op.label}</div>
                         ))}
                       </div>
@@ -2160,7 +2228,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
                     onClick={() => { if (!fPagamento) { setShowFP(true); setFpIdx(0); } }}
                     onFocus={() => {}}
-                    onBlur={() => setTimeout(() => { setShowFP(false); if (!fPagamento) setBuscaFP(''); }, 150)}
+                    onBlur={() => setTimeout(() => { setShowFP(false); setBuscaFP(''); if (editingField === 'fPagamento') cancelEdit(); }, 150)}
                     onDoubleClick={() => { if (fPagamento) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); cancelEdit(); setShowFP(false); return; }
@@ -2231,54 +2299,56 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 </div>
               ) : null}
 
-              {/* Prazo (desabilitado quando à vista/cartão/depósito) */}
+              {/* Prazo — mesmo padrão Forma Pagamento */}
               <div className="flex-1 relative min-w-[200px]">
-                  <input type="text" readOnly tabIndex={prazoDesabilitado ? -1 : 0}
-                    value={prazo || ''}
-                    onClick={() => { if (!prazoDesabilitado && !prazo) { setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                  <input type="text" tabIndex={prazoDesabilitado ? -1 : 0}
+                    readOnly={prazoDesabilitado || (!!prazo && !showPrazoDropdown)}
+                    value={prazoDesabilitado ? '' : (prazo && !showPrazoDropdown ? prazo : buscaPrazo)}
+                    onChange={(e) => { setBuscaPrazo(e.target.value); setShowPrazoDropdown(true); setPrazoIdx(0); }}
+                    onClick={() => { if (!prazoDesabilitado && !showPrazoDropdown) { setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
                     onFocus={() => {}}
-                    onDoubleClick={() => { if (!prazoDesabilitado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
-                    onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
+                    onDoubleClick={() => { if (!prazoDesabilitado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                    onBlur={() => setTimeout(() => { setShowPrazoDropdown(false); setBuscaPrazo(''); if (editingField === 'prazo') cancelEdit(); }, 150)}
                     onKeyDown={(e) => {
                       if (prazoDesabilitado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); return; }
-                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
-                      // Índices: 0=Fechamento, 1=Personalizar, 2..N+1=opções tabela
+                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); setBuscaPrazo(''); return; }
+                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
+                      // Índices: 0=Fechamento, 1=Personalizar, 2..N+1=opções tabela filtradas
                       if (e.key === 'Enter' && showPrazoDropdown) {
                         e.preventDefault();
                         if (prazoIdx === 0) {
-                          setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                          setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setBuscaPrazo(''); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
                         } else if (prazoIdx === 1) {
-                          setShowPrazoDropdown(false); setOpenModalPrazo(true);
-                        } else if (opcoesPrazo[prazoIdx - 2]) {
-                          const op = opcoesPrazo[prazoIdx - 2]; setPrazo(op.prazo.replace(/\//g, ' '));
+                          setShowPrazoDropdown(false); setBuscaPrazo(''); setOpenModalPrazo(true);
+                        } else if (prazoOpcoesFiltradas[prazoIdx - 2]) {
+                          const op = prazoOpcoesFiltradas[prazoIdx - 2]; setPrazo(op.prazo.replace(/\//g, ' '));
                           const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
-                          setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                          setShowPrazoDropdown(false); setBuscaPrazo(''); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
                         }
-                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); setShowPrazoDropdown(true); setPrazoIdx(0); }
-                      if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, opcoesPrazo.length + 1)); }
+                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); }
+                      if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, prazoOpcoesFiltradas.length + 1)); }
                       if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, 0)); }
-                      if (e.key === 'Escape') setShowPrazoDropdown(false);
+                      if (e.key === 'Escape') { setShowPrazoDropdown(false); setBuscaPrazo(''); }
                     }}
                     placeholder=" "
-                    className={`${MI_INPUT} cursor-pointer ${prazoDesabilitado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50' : prazo ? 'bg-gray-100 dark:bg-zinc-900' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
+                    className={`${MI_INPUT} ${prazoDesabilitado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50' : prazo && !showPrazoDropdown ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
                   />
                   <label className={MI_LABEL}>Prazo</label>
                   {showPrazoDropdown && !prazoDesabilitado ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {/* Opções fixas no topo */}
                       <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 0 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}>
+                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setBuscaPrazo(''); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}>
                         <span className="font-semibold text-purple-600">Fechamento na Semana</span>
                       </div>
                       <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}>
+                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setBuscaPrazo(''); setOpenModalPrazo(true); }}>
                         <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
                       </div>
-                      {/* Opções da tabela de prazos */}
-                      {opcoesPrazo.map((op, idx) => (
+                      {/* Opções da tabela de prazos (filtradas) */}
+                      {prazoOpcoesFiltradas.map((op, idx) => (
                         <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${(idx + 2) === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                          onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
+                          onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setBuscaPrazo(''); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-gray-900 dark:text-white">{op.prazo.replace(/\//g, ' / ')}</span>
@@ -2305,7 +2375,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
                     onClick={() => { if (!transporteSel.CODTPTRANSP) { setShowTransp(true); setTranspIdx(0); } }}
                     onFocus={() => {}}
-                    onBlur={() => setTimeout(() => { setShowTransp(false); if (!transporteSel.CODTPTRANSP) setBuscaTransp(''); }, 150)}
+                    onBlur={() => setTimeout(() => { setShowTransp(false); setBuscaTransp(''); if (editingField === 'transportadora') cancelEdit(); }, 150)}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape' && editingField === 'transportadora') { e.preventDefault(); cancelEdit(); setShowTransp(false); return; }
                       if (transporteSel.CODTPTRANSP) {
@@ -2500,6 +2570,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             ref: it.ref || '', descr: it.descr || '', desconto: it.desconto_percentual || 0,
                             codvend: vendedorSel?.codigo || null, codoperador: operadorSel?.codigo || null,
                             nritem: it.nritem || String(idx + 1), nrequis: it.nrequis || '', demanda: it.demanda || 'S', qtdpnd: it.qtdpnd || 0,
+                            ...(it.promoAtiva && it.promocao ? { id_promocao_item: it.promocao.id_promocao_item, promocao_id: it.promocao.id_promocao, promoQty: it.qtd, quantidade_promocional: it.qtd } : {}),
                             ...(it.campos_fiscais || {}),
                           })),
                           prazos: prazosPayload,

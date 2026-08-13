@@ -36,6 +36,8 @@ interface ItemAdicionado {
   qtdpnd: number;
   nrequis: string;
   nritem: string;
+  promocao?: any;
+  promoAtiva?: boolean;
   _novo: boolean;
 }
 
@@ -258,7 +260,18 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         data = await getProdutos({ page, perPage: BATCH_SIZE, search: search.trim(), sortBy, sortDir, searchField });
       }
       if (data?.data?.length > 0) {
-        setListaProd((prev) => append ? [...prev, ...data.data] : data.data);
+        const produtos = data.data;
+        // Enriquecer com promoções ativas
+        const codprods = produtos.map((p: any) => p.codprod).filter(Boolean);
+        if (codprods.length > 0) {
+          api.post('/api/produtos/verificar-promocao-batch', { codprods })
+            .then((res) => {
+              const promoMap = res.data || {};
+              setListaProd((prev) => prev.map((p) => promoMap[p.codprod] ? { ...p, promocao: promoMap[p.codprod] } : p));
+            })
+            .catch(() => {});
+        }
+        setListaProd((prev) => append ? [...prev, ...produtos] : produtos);
         setTotalProd(data.meta?.total || 0);
         setPageLoaded(page);
         if (!append) {
@@ -411,6 +424,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       qtdpnd,
       nrequis: chkRequisicao ? nrequisInput.trim().padStart(15, '0') : '',
       nritem: chkRequisicao ? nritemInput.trim().padStart(6, '0') : '',
+      promocao: produto.promocao || null,
+      promoAtiva: !!produto.promocao,
       _novo: true,
     };
 
@@ -660,6 +675,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
 
   const columns = [
     { key: 'ref', label: 'Referência', w: 'w-[90px]', sortable: true },
+    { key: 'promo', label: 'P', w: 'w-[30px]', sortable: false },
     { key: 'descr', label: 'Produto', w: 'flex-1', sortable: true },
     { key: 'codmarca', label: 'Marca', w: 'w-[100px]', sortable: true },
     { key: 'estoque_disponivel', label: 'Estoque', w: 'w-[70px]', sortable: true },
@@ -836,6 +852,12 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                     {/* Referência */}
                     <td className="px-3 py-2 text-xs font-bold text-gray-900 dark:text-white w-[90px]">
                       {produto.ref || produto.codprod}
+                    </td>
+                    {/* Promo */}
+                    <td className="px-1 py-2 text-center w-[30px]">
+                      {produto.promocao ? (
+                        <span title={produto.promocao.nome_promocao || 'Promoção ativa'} className="inline-flex items-center justify-center w-5 h-5 text-[9px] font-bold text-white bg-green-500 rounded-full">P</span>
+                      ) : null}
                     </td>
                     {/* Produto */}
                     <td className="px-3 py-1">
