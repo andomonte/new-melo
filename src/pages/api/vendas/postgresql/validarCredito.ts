@@ -153,7 +153,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const falta = valor - saldoDisponivel;
       return res.status(200).json({
         passou: 'NOK',
-        mensagem: `Crédito insuficiente. Disponível: R$ ${saldoDisponivel.toFixed(2)} | Venda: R$ ${valor.toFixed(2)}`,
+        mensagem: `CRÉDITO INSUFICIENTE PARA VENDA A PRAZO. Limite disponível: R$ ${saldoDisponivel.toFixed(2)} | Total da venda: R$ ${valor.toFixed(2)} | Faltam: R$ ${falta.toFixed(2)}`,
         status: 'Sem Crédito',
         saldoDisponivel,
         creditoTemp,
