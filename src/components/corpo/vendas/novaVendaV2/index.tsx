@@ -1518,12 +1518,29 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   }, [fPagamento, opcoesFP]);
 
   // Prazo desabilitado quando: à vista, cartão, depósito, classe V/D, ou fechamento semanal
-  const prazoDesabilitado = useMemo(() => {
-    return avistaForcado || isAvista || isCartaoCredito || prazo === 'FECHAMENTO NA SEMANA';
-  }, [avistaForcado, isAvista, isCartaoCredito, prazo]);
+  // Prazo bloqueado por regra do cliente (não pode mudar)
+  const prazoBloqueado = useMemo(() => {
+    if (!clienteSelecionado) return false;
+    if (avistaForcado) return true; // classe V/D, desconto à vista
+    if (restricaoFinanceira?.passou === 'NOK') return true; // sem crédito
+    return false;
+  }, [clienteSelecionado, avistaForcado, restricaoFinanceira]);
 
-  // Forma ↔ Prazo: excludentes
-  // Quando escolhe forma (à vista/cartão/depósito) → limpa prazo
+  const prazoBloqueadoMsg = useMemo(() => {
+    if (!clienteSelecionado) return '';
+    if (['V', 'D'].includes(claspgto)) return `Cliente à vista obrigatório (${claspgto})`;
+    if (temDescontoAvista) return 'Desconto à vista aplicado';
+    if (restricaoFinanceira?.passou === 'NOK') return 'Sem crédito para prazo';
+    return '';
+  }, [clienteSelecionado, claspgto, temDescontoAvista, restricaoFinanceira]);
+
+  // Prazo desabilitado: por regra OU por escolha de forma à vista/cartão
+  const prazoDesabilitado = useMemo(() => {
+    return prazoBloqueado || prazo === 'FECHAMENTO NA SEMANA';
+  }, [prazoBloqueado, prazo]);
+
+  // Forma ↔ Prazo: quem clica por último ganha
+  // Quando escolhe forma à vista/cartão → limpa prazo
   useEffect(() => {
     if ((isAvista || isCartaoCredito) && prazo) {
       setPrazo(''); setPrazosArray([]);
@@ -2222,12 +2239,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     readOnly={!!fPagamento || fpTravadoBoleto}
                     value={fpTravadoBoleto ? 'BOLETO' : fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
                     onChange={(e) => { if (!fpTravadoBoleto) { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); } }}
-                    onClick={() => { if (!fPagamento && !fpTravadoBoleto) { setShowFP(true); setFpIdx(0); } }}
+                    onClick={() => {
+                      if (fpTravadoBoleto) { setPrazo(''); setPrazosArray([]); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); return; }
+                      if (!fPagamento) { setShowFP(true); setFpIdx(0); }
+                    }}
                     onFocus={() => {}}
                     onBlur={() => setTimeout(() => { setShowFP(false); setBuscaFP(''); if (editingField === 'fPagamento') cancelEdit(); }, 150)}
                     onDoubleClick={() => { if (fPagamento && !fpTravadoBoleto) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
-                      if (fpTravadoBoleto) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (fpTravadoBoleto) { if (e.key === 'Enter') { e.preventDefault(); setPrazo(''); setPrazosArray([]); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); } return; }
                       if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); cancelEdit(); setShowFP(false); return; }
                       if (fPagamento) {
                         if (e.key === 'Enter') { e.preventDefault(); startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); }
@@ -2296,18 +2316,25 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 </div>
               ) : null}
 
-              {/* Prazo — mesmo padrão Forma Pagamento */}
+              {/* Prazo */}
               <div className="flex-1 relative min-w-[200px]">
-                  <input type="text" tabIndex={prazoDesabilitado ? -1 : 0}
-                    readOnly={prazoDesabilitado || (!!prazo && !showPrazoDropdown)}
-                    value={prazoDesabilitado ? '' : (prazo && !showPrazoDropdown ? prazo : buscaPrazo)}
-                    onChange={(e) => { setBuscaPrazo(e.target.value); setShowPrazoDropdown(true); setPrazoIdx(0); }}
-                    onClick={() => { if (!prazoDesabilitado && !showPrazoDropdown) { setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                  <input type="text" tabIndex={prazoBloqueado ? -1 : 0}
+                    readOnly={prazoBloqueado || (!!prazo && !showPrazoDropdown)}
+                    value={prazoBloqueado ? prazoBloqueadoMsg : (prazo && !showPrazoDropdown ? prazo : buscaPrazo)}
+                    onChange={(e) => { if (!prazoBloqueado) { setBuscaPrazo(e.target.value); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                    onClick={() => {
+                      if (prazoBloqueado) return;
+                      // Se tem forma à vista/cartão selecionada, limpar pra liberar prazo
+                      if ((isAvista || isCartaoCredito) && !prazoBloqueado) { setFPagamento(''); setBuscaFP(''); }
+                      if (!showPrazoDropdown) { setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); }
+                    }}
                     onFocus={() => {}}
-                    onDoubleClick={() => { if (!prazoDesabilitado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                    onDoubleClick={() => { if (!prazoBloqueado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
                     onBlur={() => setTimeout(() => { setShowPrazoDropdown(false); setBuscaPrazo(''); if (editingField === 'prazo') cancelEdit(); }, 150)}
                     onKeyDown={(e) => {
-                      if (prazoDesabilitado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (prazoBloqueado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      // Se tem forma selecionada, Enter limpa forma e abre prazo
+                      if ((isAvista || isCartaoCredito) && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); setFPagamento(''); setBuscaFP(''); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
                       if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); setBuscaPrazo(''); return; }
                       if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
                       // Índices: 0=Fechamento, 1=Personalizar, 2..N+1=opções tabela filtradas
@@ -2328,7 +2355,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                       if (e.key === 'Escape') { setShowPrazoDropdown(false); setBuscaPrazo(''); }
                     }}
                     placeholder=" "
-                    className={`${MI_INPUT} ${prazoDesabilitado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50' : prazo && !showPrazoDropdown ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
+                    className={`${MI_INPUT} ${prazoBloqueado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50 text-red-500 text-xs italic' : prazo && !showPrazoDropdown ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
                   />
                   <label className={MI_LABEL}>Prazo</label>
                   {showPrazoDropdown && !prazoDesabilitado ? (
