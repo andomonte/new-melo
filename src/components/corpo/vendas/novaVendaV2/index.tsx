@@ -2243,17 +2243,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                       if (prazoDesabilitado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
                       if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); return; }
                       if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
+                      // Índices: 0=Fechamento, 1=Personalizar, 2..N+1=opções tabela
                       if (e.key === 'Enter' && showPrazoDropdown) {
                         e.preventDefault();
-                        const totalOpcoes = opcoesPrazo.length;
-                        if (prazoIdx === totalOpcoes) {
-                          // Fechamento na semana
+                        if (prazoIdx === 0) {
                           setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                        } else if (prazoIdx === totalOpcoes + 1) {
-                          // Personalizar
+                        } else if (prazoIdx === 1) {
                           setShowPrazoDropdown(false); setOpenModalPrazo(true);
-                        } else if (opcoesPrazo[prazoIdx]) {
-                          const op = opcoesPrazo[prazoIdx]; setPrazo(op.prazo.replace(/\//g, ' '));
+                        } else if (opcoesPrazo[prazoIdx - 2]) {
+                          const op = opcoesPrazo[prazoIdx - 2]; setPrazo(op.prazo.replace(/\//g, ' '));
                           const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
                           setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
                         }
@@ -2268,8 +2266,18 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <label className={MI_LABEL}>Prazo</label>
                   {showPrazoDropdown && !prazoDesabilitado ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {/* Opções fixas no topo */}
+                      <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 0 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}>
+                        <span className="font-semibold text-purple-600">Fechamento na Semana</span>
+                      </div>
+                      <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
+                      </div>
+                      {/* Opções da tabela de prazos */}
                       {opcoesPrazo.map((op, idx) => (
-                        <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${idx === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${(idx + 2) === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
                         >
                           <div className="flex items-center justify-between">
@@ -2278,16 +2286,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                           </div>
                         </div>
                       ))}
-                      {/* Fechamento na semana */}
-                      <div className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}>
-                        <span className="font-semibold text-purple-600">Fechamento na Semana</span>
-                      </div>
-                      {/* Personalizar */}
-                      <div className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length + 1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}>
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
-                      </div>
                     </div>
                   ) : null}
               </div>
