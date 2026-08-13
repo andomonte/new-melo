@@ -2160,7 +2160,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
                     onClick={() => { if (!fPagamento) { setShowFP(true); setFpIdx(0); } }}
                     onFocus={() => {}}
-                    onBlur={() => setTimeout(() => setShowFP(false), 150)}
+                    onBlur={() => setTimeout(() => { setShowFP(false); if (!fPagamento) setBuscaFP(''); }, 150)}
                     onDoubleClick={() => { if (fPagamento) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); cancelEdit(); setShowFP(false); return; }
@@ -2305,7 +2305,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onChange={(e) => { setBuscaTransp(e.target.value); setShowTransp(true); setTranspIdx(0); }}
                     onClick={() => { if (!transporteSel.CODTPTRANSP) { setShowTransp(true); setTranspIdx(0); } }}
                     onFocus={() => {}}
-                    onBlur={() => setTimeout(() => setShowTransp(false), 150)}
+                    onBlur={() => setTimeout(() => { setShowTransp(false); if (!transporteSel.CODTPTRANSP) setBuscaTransp(''); }, 150)}
                     onKeyDown={(e) => {
                       if (e.key === 'Escape' && editingField === 'transportadora') { e.preventDefault(); cancelEdit(); setShowTransp(false); return; }
                       if (transporteSel.CODTPTRANSP) {
