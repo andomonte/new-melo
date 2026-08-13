@@ -54,9 +54,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const creditoTemp = Number(credTmpRes.rows[0]?.credito_temp || 0);
 
     // Formas de pagamento que isentam verificação de crédito
-    const isCartao = fp.substring(0, 17) === 'CARTAO DE CREDITO';
-    const isAvista = fp.includes('A VISTA');
-    const isDeposito = fp.includes('DEPOSITO BANCARIO');
+    const fpNorm = fp.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isCartao = fpNorm.substring(0, 17) === 'CARTAO DE CREDITO' || fpNorm.includes('CARTAO') && fpNorm.includes('CREDITO');
+    const isAvista = fpNorm.includes('A VISTA') || fpNorm === 'PIX' || fpNorm.includes('DINHEIRO') || (fpNorm.includes('DEBITO') || fpNorm.includes('CARTAO DE DEBITO'));
+    const isDeposito = fpNorm.includes('DEPOSITO BANCARIO') || fpNorm.includes('DEPOSITO');
     const isentaCredito = isCartao || isAvista || isDeposito;
 
     // ========================================
