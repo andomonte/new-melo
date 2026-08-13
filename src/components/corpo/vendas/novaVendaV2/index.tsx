@@ -1454,12 +1454,20 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return 'VE'; // vendedor escolheu
   }, [clienteSelecionado, claspgto, clienteTempAvista]);
 
-  // À vista por escolha do vendedor — pode mudar
+  // À vista determinado pela FORMA DE PAGAMENTO (não pelo prazo)
   const isAvista = useMemo(() => {
     if (avistaForcado) return true;
-    const prazoStr = String(prazo).trim().toUpperCase();
-    return prazoStr === 'À VISTA' || prazoStr === 'A VISTA' || prazoStr === '0';
-  }, [avistaForcado, prazo]);
+    if (!fPagamento) return false;
+    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
+    return desc.includes('DINHEIRO') || desc.includes('PIX') || desc.includes('DEBITO') || desc.includes('DÉBITO');
+  }, [avistaForcado, fPagamento, opcoesFP]);
+
+  // Forma é depósito bancário
+  const isDeposito = useMemo(() => {
+    if (!fPagamento) return false;
+    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
+    return desc.includes('DEPOSITO') || desc.includes('DEPÓSITO');
+  }, [fPagamento, opcoesFP]);
 
   // Auto-set transportadora "CLIENTE RETIRA" para classe V (sem status 4)
   useEffect(() => {
@@ -1474,6 +1482,18 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
     return desc.includes('CREDITO') || desc.includes('CRÉDITO');
   }, [fPagamento, opcoesFP]);
+
+  // Prazo desabilitado quando: à vista, cartão, depósito, classe V/D, ou fechamento semanal
+  const prazoDesabilitado = useMemo(() => {
+    return avistaForcado || isAvista || isCartaoCredito || isDeposito || prazo === 'FECHAMENTO NA SEMANA';
+  }, [avistaForcado, isAvista, isCartaoCredito, isDeposito, prazo]);
+
+  // Limpar prazo quando forma desabilita
+  useEffect(() => {
+    if ((isAvista || isCartaoCredito || isDeposito) && prazo && prazo !== 'FECHAMENTO NA SEMANA') {
+      setPrazo(''); setPrazosArray([]);
+    }
+  }, [isAvista, isCartaoCredito, isDeposito]);
 
   // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista + NÃO é cartão)
   const precisaCreditoExtra = useMemo(() => {
@@ -1537,6 +1557,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       if (motivo === 'Z') return 'A VISTA (Z) - DINHEIRO';
       return `A VISTA (${motivo})`;
     }
+    if (prazo === 'FECHAMENTO NA SEMANA') return 'FECHAMENTO NA SEMANA';
     if (fpDesc) return fpDesc;
     return '';
   }, [fPagamento, opcoesFP, isCartaoCredito, parcelasCartao, isAvista, avistaMotivo]);
@@ -2062,8 +2083,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
           {/* Painel de finalização */}
           <div ref={painelFinRef} className="shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-4 py-3">
-            {/* Linha 1: (TMO: Tipo Mov + Tipo Op) + Prazo + Forma Pagamento + (Parcelas cartão) */}
-            <div className={`grid gap-3`} style={{ gridTemplateColumns: `${temTMO ? '1fr 1fr ' : ''}1fr 1fr${isCartaoCredito ? ' 120px' : ''}` }}>
+            {/* Linha 1: (TMO) + Forma Pagamento + (Parcelas cartão) + Prazo */}
+            <div className={`grid gap-3`} style={{ gridTemplateColumns: `${temTMO ? '1fr 1fr ' : ''}1fr${isCartaoCredito ? ' 120px' : ''} 1fr` }}>
 
               {temTMO ? (
                 <>
@@ -2128,66 +2149,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 </>
               ) : null}
 
-              {/* Prazo */}
-              <div className="flex-1 relative min-w-[200px]">
-                  <input type="text" readOnly tabIndex={avistaForcado ? -1 : 0}
-                    value={isAvista ? 'À VISTA' : prazo || ''}
-                    onClick={() => { if (!avistaForcado && !prazo) { setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
-                    onFocus={() => {}}
-                    onDoubleClick={() => { if (!avistaForcado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } }}
-                    onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
-                    onKeyDown={(e) => {
-                      if (avistaForcado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); return; }
-                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(-1); } return; }
-                      // Índices: -1=À VISTA, 0..N-1=opções tabela, N=Personalizar
-                      if (e.key === 'Enter' && showPrazoDropdown) {
-                        e.preventDefault();
-                        if (prazoIdx === -1) {
-                          setPrazo('À VISTA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                        } else if (prazoIdx === opcoesPrazo.length) {
-                          setShowPrazoDropdown(false); setOpenModalPrazo(true);
-                        } else if (opcoesPrazo[prazoIdx]) {
-                          const op = opcoesPrazo[prazoIdx]; setPrazo(op.prazo.replace(/\//g, ' '));
-                          const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
-                          setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
-                        }
-                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); setShowPrazoDropdown(true); setPrazoIdx(-1); }
-                      if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, opcoesPrazo.length)); }
-                      if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, -1)); }
-                      if (e.key === 'Escape') setShowPrazoDropdown(false);
-                    }}
-                    placeholder=" "
-                    className={`${MI_INPUT} cursor-pointer ${avistaForcado ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : prazo ? 'bg-gray-100 dark:bg-zinc-900' : ''} ${isAvista ? 'text-orange-600 font-semibold' : ''}`}
-                  />
-                  <label className={MI_LABEL}>Prazo</label>
-                  {showPrazoDropdown && !avistaForcado ? (
-                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
-                      {/* Opção À VISTA */}
-                      <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === -1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('À VISTA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
-                      >
-                        <span className="font-bold text-orange-600">À VISTA</span>
-                      </div>
-                      {opcoesPrazo.map((op, idx) => (
-                        <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${idx === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                          onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-gray-900 dark:text-white">{op.prazo.replace(/\//g, ' / ')}</span>
-                            <span className="text-xs text-gray-700 dark:text-gray-200">{op.qtdParcelas}x</span>
-                          </div>
-                        </div>
-                      ))}
-                      <div className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
-                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}>
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
-                      </div>
-                    </div>
-                  ) : null}
-              </div>
-
-              {/* Forma de Pagamento */}
+              {/* Forma de Pagamento (ANTES do prazo — como Delphi) */}
               <div className="flex-1 relative min-w-[200px]">
                   {!fPagamento ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
@@ -2268,6 +2230,67 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   ) : null}
                 </div>
               ) : null}
+
+              {/* Prazo (desabilitado quando à vista/cartão/depósito) */}
+              <div className="flex-1 relative min-w-[200px]">
+                  <input type="text" readOnly tabIndex={prazoDesabilitado ? -1 : 0}
+                    value={prazo || ''}
+                    onClick={() => { if (!prazoDesabilitado && !prazo) { setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                    onFocus={() => {}}
+                    onDoubleClick={() => { if (!prazoDesabilitado && prazo) { startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
+                    onBlur={() => setTimeout(() => setShowPrazoDropdown(false), 150)}
+                    onKeyDown={(e) => {
+                      if (prazoDesabilitado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
+                      if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); return; }
+                      if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
+                      if (e.key === 'Enter' && showPrazoDropdown) {
+                        e.preventDefault();
+                        const totalOpcoes = opcoesPrazo.length;
+                        if (prazoIdx === totalOpcoes) {
+                          // Fechamento na semana
+                          setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                        } else if (prazoIdx === totalOpcoes + 1) {
+                          // Personalizar
+                          setShowPrazoDropdown(false); setOpenModalPrazo(true);
+                        } else if (opcoesPrazo[prazoIdx]) {
+                          const op = opcoesPrazo[prazoIdx]; setPrazo(op.prazo.replace(/\//g, ' '));
+                          const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; }));
+                          setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50);
+                        }
+                      } else if (e.key === 'Enter' && !showPrazoDropdown) { e.preventDefault(); setShowPrazoDropdown(true); setPrazoIdx(0); }
+                      if (e.key === 'ArrowDown' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.min(p + 1, opcoesPrazo.length + 1)); }
+                      if (e.key === 'ArrowUp' && showPrazoDropdown) { e.preventDefault(); setPrazoIdx(p => Math.max(p - 1, 0)); }
+                      if (e.key === 'Escape') setShowPrazoDropdown(false);
+                    }}
+                    placeholder=" "
+                    className={`${MI_INPUT} cursor-pointer ${prazoDesabilitado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50' : prazo ? 'bg-gray-100 dark:bg-zinc-900' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
+                  />
+                  <label className={MI_LABEL}>Prazo</label>
+                  {showPrazoDropdown && !prazoDesabilitado ? (
+                    <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                      {opcoesPrazo.map((op, idx) => (
+                        <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${idx === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-gray-900 dark:text-white">{op.prazo.replace(/\//g, ' / ')}</span>
+                            <span className="text-xs text-gray-700 dark:text-gray-200">{op.qtdParcelas}x</span>
+                          </div>
+                        </div>
+                      ))}
+                      {/* Fechamento na semana */}
+                      <div className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}>
+                        <span className="font-semibold text-purple-600">Fechamento na Semana</span>
+                      </div>
+                      {/* Personalizar */}
+                      <div className={`px-3 py-2 cursor-pointer text-sm border-t border-gray-200 dark:border-zinc-600 ${prazoIdx === opcoesPrazo.length + 1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setOpenModalPrazo(true); }}>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
+                      </div>
+                    </div>
+                  ) : null}
+              </div>
             </div>
 
             {/* Linha 2: Transportadora, Valor Transporte, Obs Fat, Pedido */}
