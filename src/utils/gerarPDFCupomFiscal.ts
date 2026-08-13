@@ -113,24 +113,17 @@ function desenharCabecalhoCompletoCupom(
 
   // -- COLUNA 2: NFC-e (DENTRO DO QUADRADO) - Layout compacto igual DANFE
   doc.setFontSize(12).setFont('helvetica', 'bold');
-  doc.text('NFC-e', danfeX + danfeWidth / 2, mainBlockY + 12, { align: 'center' });
-  
+  doc.text('DANFE NFC-e', danfeX + danfeWidth / 2, mainBlockY + 12, { align: 'center' });
+
   doc.setFontSize(5).setFont('helvetica', 'normal');
   doc.text('DOCUMENTO AUXILIAR DA', danfeX + danfeWidth / 2, mainBlockY + 19, { align: 'center' });
-  doc.text('NOTA FISCAL DE CONSUMIDOR', danfeX + danfeWidth / 2, mainBlockY + 24, { align: 'center' });
-  doc.text('ELETRÔNICA', danfeX + danfeWidth / 2, mainBlockY + 29, { align: 'center' });
-  
-  doc.setFontSize(6);
-  doc.text('0 - ENTRADA', danfeX + 3, mainBlockY + 38);
-  doc.text('1 - SAÍDA', danfeX + 3, mainBlockY + 45);
-  
-  // Checkbox
-  const checkboxX = danfeX + danfeWidth - 18;
-  const checkboxY = mainBlockY + 34;
-  doc.rect(checkboxX, checkboxY, 14, 14);
-  doc.setFontSize(10).setFont('helvetica', 'bold');
-  doc.text('1', checkboxX + 4, checkboxY + 10);
-  
+  doc.text('NOTA FISCAL ELETRÔNICA PARA', danfeX + danfeWidth / 2, mainBlockY + 24, { align: 'center' });
+  doc.text('CONSUMIDOR FINAL', danfeX + danfeWidth / 2, mainBlockY + 29, { align: 'center' });
+
+  // NFC-e não usa indicador ENTRADA/SAÍDA. Frase obrigatória do DANFE NFC-e:
+  doc.setFontSize(4.5).setFont('helvetica', 'normal');
+  doc.text('Não permite aproveitamento de crédito de ICMS', danfeX + danfeWidth / 2, mainBlockY + 40, { align: 'center' });
+
   // Nº, SÉRIE, FOLHA
   const nNota = getValue(dadosNota.numeroNFe || fatura?.nroform || '000');
   const sNota = getValue(dadosNota.serieNFe || fatura?.serie || '1');
@@ -893,16 +886,25 @@ export const gerarPreviewCupomFiscal = async (
   // Usar valor calculado ou fallback para totalnf
   const valorTotalNota = valorTotalCalculado > 0 ? valorTotalCalculado : parseFloat(String(fatura.totalnf || 0));
   
-  drawField(
-    'VALOR TOTAL DA NOTA',
-    formatValue(valorTotalNota),
-    currentX,
-    y,
-    fieldWidth,
-    25,
-    'right',
-    12,
+  // TOTAIS (padrão DANFE NFC-e do MELO): forma de pagamento + tributos + desconto + valores
+  const descontoNota = parseFloat(String((fatura as any).desconto || (fatura as any).vlrdesc || 0));
+  const totalProdutosNota =
+    parseFloat(String((fatura as any).totalprod || 0)) || valorTotalNota;
+  const formaPagamento = getValue(
+    (fatura as any).forma_pagamento || (fatura as any).formapg || 'OUTROS',
   );
+  const tribAprox = getValue((fatura as any).vlr_trib_aprox || (fatura as any).tributos || '0,00');
+
+  // Linha 1: FORMA DE PAGAMENTO (largura total)
+  drawField('FORMA DE PAGAMENTO', formaPagamento, margin, y, contentWidth, 15);
+  y += 17;
+
+  // Linha 2: TRIBUTOS (Lei 12.741) · DESCONTO · VALOR PRODUTOS · VALOR DA NOTA
+  const totQ = contentWidth / 4;
+  drawField('TRIBUTOS TOTAIS INCIDENTES (Lei Federal 12.741/2012)', tribAprox, margin, y, totQ, 25, 'right');
+  drawField('DESCONTO', formatValue(descontoNota), margin + totQ, y, totQ, 25, 'right');
+  drawField('VALOR TOTAL DOS PRODUTOS', formatValue(totalProdutosNota), margin + 2 * totQ, y, totQ, 25, 'right');
+  drawField('VALOR DA NOTA', formatValue(valorTotalNota), margin + 3 * totQ, y, totQ, 25, 'right', 11);
 
   y += 40;
 
@@ -993,6 +995,7 @@ export const gerarPreviewCupomFiscal = async (
       halign: 'center',
     },
     columnStyles: {
+      // ---- CLÁSSICO (ordem do modelo MELO) ----
       0: { cellWidth: 40 }, // CÓD
       1: { halign: 'left' }, // DESCRIÇÃO
       2: { cellWidth: 30 }, // NCM
@@ -1000,8 +1003,16 @@ export const gerarPreviewCupomFiscal = async (
       4: { cellWidth: 18 }, // CFOP
       5: { cellWidth: 15 }, // UN
       6: { cellWidth: 20 }, // QTD
-      7: { cellWidth: 28 }, // V.UNIT
-      8: { cellWidth: 28 }, // V.TOTAL
+      7: { cellWidth: 28 }, // V.UN
+      8: { cellWidth: 28 }, // V.TOT
+      9: { cellWidth: 24 }, // BS.ICMS
+      10: { cellWidth: 22 }, // V.ICMS
+      11: { cellWidth: 20 }, // ALIQ.ICMS
+      // ---- REFORMA TRIBUTÁRIA (anexado ao fim) ----
+      12: { cellWidth: 16 }, // %IBS
+      13: { cellWidth: 16 }, // %CBS
+      14: { cellWidth: 20 }, // V.IBS
+      15: { cellWidth: 20 }, // V.CBS
     },
     headStyles: {
       halign: 'center',
@@ -1081,8 +1092,13 @@ export const gerarPreviewCupomFiscal = async (
       // ICMS (Usar valor já existente se houver, ou calcular pela alíquota)
       const aliqIcms = parseFloat(String((p as any).aliquota_icms || (p as any).aliq_icms || 0)); // Assumindo alíquota zero se não vier nada
       const valorIcms = (p as any).valor_icms && parseFloat((p as any).valor_icms) > 0
-        ? parseFloat((p as any).valor_icms) 
+        ? parseFloat((p as any).valor_icms)
         : (valorTotalItem * aliqIcms) / 100;
+
+      // Base de cálculo do ICMS (coluna BS.ICMS do modelo MELO)
+      const baseIcms = (p as any).baseicms && parseFloat(String((p as any).baseicms)) > 0
+        ? parseFloat(String((p as any).baseicms))
+        : (aliqIcms > 0 ? valorTotalItem : 0);
 
       // Garantir que todos os valores estão definidos - NOVA LEI TRIBUTÁRIA (igual NF-e)
       const produtoFormatado = [
@@ -1105,18 +1121,17 @@ export const gerarPreviewCupomFiscal = async (
         formatValue(p.qtd || 0),
         formatValue(p.prunit || 0),
         formatValue(valorTotalItem),
-        
-        // IBS
-        formatPercent(aliqIbs),
-        formatValue(valorIbs),
-        
-        // CBS
-        formatPercent(aliqCbs),
-        formatValue(valorCbs),
-        
-        // ICMS
-        formatPercent(aliqIcms),
+
+        // ---- CLÁSSICO (ordem do modelo MELO): BS.ICMS · V.ICMS · ALIQ.ICMS ----
+        formatValue(baseIcms),
         formatValue(valorIcms),
+        formatPercent(aliqIcms),
+
+        // ---- REFORMA TRIBUTÁRIA (anexado ao fim, conforme LC 214/2025) ----
+        formatPercent(aliqIbs),
+        formatPercent(aliqCbs),
+        formatValue(valorIbs),
+        formatValue(valorCbs),
       ];
       
       // if (index === 0) {
@@ -1136,12 +1151,13 @@ export const gerarPreviewCupomFiscal = async (
         'QTD',
         'V.UN', // Encurtei
         'V.TOT', // Encurtei
+        'BS.ICMS',
+        'V.ICMS',
+        'ALIQ. ICMS',
         '%IBS',
-        'V.IBS',
         '%CBS',
+        'V.IBS',
         'V.CBS',
-        '%ICM',
-        'V.ICM',
       ],
     ],
     // Nota: styles e columnStyles já definidos acima, removidas duplicatas
@@ -1166,58 +1182,14 @@ export const gerarPreviewCupomFiscal = async (
 
   y += 20;
 
-  // 8. CÁLCULO DO ISSQN
+  // 8. QUANTIDADE DE ITENS (NFC-e não tem ISSQN — venda a consumidor)
   if (y > 700) {
     doc.addPage();
     y = margin;
   }
-
-  doc.setFontSize(8).setFont('helvetica', 'bold');
-  doc.text('CÁLCULO DO ISSQN', margin, y);
-  y += 12;
-
-  const issqnY = y;
-  const issqnFieldWidth = contentWidth / 4;
-  doc.setLineWidth(0.5);
-  doc.rect(margin, issqnY, contentWidth, 25);
-
-  drawField(
-    'INSCRIÇÃO MUNICIPAL',
-    getValue(dadosEmpresa.inscricaomunicipal),
-    margin,
-    issqnY,
-    issqnFieldWidth,
-    25,
-  );
-  drawField(
-    'VALOR TOTAL DOS SERVIÇOS',
-    '0,00',
-    margin + issqnFieldWidth,
-    issqnY,
-    issqnFieldWidth,
-    25,
-    'right',
-  );
-  drawField(
-    'BASE DE CÁLCULO DO ISSQN',
-    '0,00',
-    margin + 2 * issqnFieldWidth,
-    issqnY,
-    issqnFieldWidth,
-    25,
-    'right',
-  );
-  drawField(
-    'VALOR DO ISSQN',
-    '0,00',
-    margin + 3 * issqnFieldWidth,
-    issqnY,
-    issqnFieldWidth,
-    25,
-    'right',
-  );
-
-  y = issqnY + 40;
+  const qtdItens = (produtosParaExibir && produtosParaExibir.length) || 0;
+  drawField('QUANTIDADE DE ITENS', String(qtdItens), margin, y, contentWidth, 18, 'right');
+  y += 30;
 
   // 9. ÁREA DE MENSAGEM FISCAL (substituindo DADOS ADICIONAIS para NFC-e)
   // Verificar se há espaço suficiente para o bloco de mensagem fiscal (110pt)

@@ -1415,6 +1415,7 @@ export const gerarPreviewNF = async (
       halign: 'center',
     },
     columnStyles: {
+      // ---- CLÁSSICO (ordem do modelo MELO) ----
       0: { cellWidth: 40 }, // CÓD - menor
       1: { halign: 'left' }, // DESCRIÇÃO - alinhado à esquerda
       2: { cellWidth: 30 }, // NCM
@@ -1424,16 +1425,16 @@ export const gerarPreviewNF = async (
       6: { cellWidth: 20 }, // QTD
       7: { cellWidth: 28 }, // V.UNIT
       8: { cellWidth: 28 }, // V.TOTAL
-      9: { cellWidth: 18 }, // %IBS
-      10: { cellWidth: 18 }, // %CBS
-      11: { cellWidth: 22 }, // V.IBS
-      12: { cellWidth: 22 }, // V.CBS
-      13: { cellWidth: 26 }, // BC.ICMS
-      14: { cellWidth: 22 }, // V.ICMS
-      15: { cellWidth: 20 }, // %ICMS
-      16: { cellWidth: 26 }, // BC.IPI
-      17: { cellWidth: 22 }, // V.IPI
-      18: { cellWidth: 18 }, // %IPI
+      9: { cellWidth: 26 }, // BS.ICMS
+      10: { cellWidth: 22 }, // V.ICMS
+      11: { cellWidth: 22 }, // V.IPI
+      12: { cellWidth: 20 }, // ALIQ.ICMS
+      13: { cellWidth: 18 }, // ALIQ.IPI
+      // ---- REFORMA TRIBUTÁRIA (anexado ao fim) ----
+      14: { cellWidth: 18 }, // %IBS
+      15: { cellWidth: 18 }, // %CBS
+      16: { cellWidth: 22 }, // V.IBS
+      17: { cellWidth: 22 }, // V.CBS
     },
     headStyles: {
       halign: 'center',
@@ -1493,30 +1494,31 @@ export const gerarPreviewNF = async (
         formatValue(p.qtd || 0),
         formatValue(p.prunit || 0),
         formatValue(valorTotalItem),
-        formatPercent(aliqIBS), // Alíquota IBS (%)
-        formatPercent(aliqCBS), // Alíquota CBS (%)
-        formatValue(valorIBS),  // Valor IBS calculado
-        formatValue(valorCBS),  // Valor CBS calculado
-        formatValue((p as any).baseicms || 0),
-        formatValue((p as any).totalicms || 0),
-        // Preferir aliquota direta se fornecida, senão calcular por base/valor pelo
+        // ---- CLÁSSICO (ordem do modelo MELO) ----
+        formatValue((p as any).baseicms || 0),   // BS.ICMS
+        formatValue((p as any).totalicms || 0),  // V.ICMS
+        formatValue((p as any).totalipi || 0),   // V.IPI
+        // ALIQ.ICMS — alíquota direta ou calculada por base/valor
         formatPercent(
           (p as any).aliquota_icms ?? (p as any).aliquotaICMS ?? (
-            (p as any).baseicms && (p as any).baseicms > 0 
-              ? ((p as any).totalicms || 0) / (p as any).baseicms * 100 
+            (p as any).baseicms && (p as any).baseicms > 0
+              ? ((p as any).totalicms || 0) / (p as any).baseicms * 100
               : 0
           )
         ),
-        formatValue((p as any).baseipi || 0),
-        formatValue((p as any).totalipi || 0),
-        // Preferir aliquota direta se fornecida, senão calcular por base/valor
+        // ALIQ.IPI — alíquota direta ou calculada por base/valor
         formatPercent(
           (p as any).aliquota_ipi ?? (p as any).aliquotaIPI ?? (
-            (p as any).baseipi && (p as any).baseipi > 0 
-              ? ((p as any).totalipi || 0) / (p as any).baseipi * 100 
+            (p as any).baseipi && (p as any).baseipi > 0
+              ? ((p as any).totalipi || 0) / (p as any).baseipi * 100
               : 0
           )
         ),
+        // ---- REFORMA TRIBUTÁRIA (anexado ao fim, conforme LC 214/2025) ----
+        formatPercent(aliqIBS), // %IBS
+        formatPercent(aliqCBS), // %CBS
+        formatValue(valorIBS),  // V.IBS
+        formatValue(valorCBS),  // V.CBS
       ];
 
       // if (index === 0) {
@@ -1536,16 +1538,15 @@ export const gerarPreviewNF = async (
         'QTD',
         'V.UNIT',
         'V.TOTAL',
+        'BS.ICMS',
+        'V.ICMS',
+        'V.IPI',
+        'ALIQ. ICMS',
+        'ALIQ. IPI',
         '%IBS',
         '%CBS',
         'V.IBS',
         'V.CBS',
-        'BC.ICMS',
-        'V.ICMS',
-        '%ICMS',
-        'BC.IPI',
-        'V.IPI',
-        '%IPI',
       ],
     ],
     didDrawPage: (data) => {
@@ -1645,7 +1646,7 @@ export const gerarPreviewNF = async (
   doc.text('INFORMAÇÕES COMPLEMENTARES', margin + 3, y + 20);
 
   doc.setFontSize(7).setFont('helvetica', 'bold');
-  doc.text('RESERVA AO FISCO', margin + infoComplWidth + 3, y + 10);
+  doc.text('RESERVADO AO FISCO', margin + infoComplWidth + 3, y + 10);
 
   doc.setFontSize(5).setFont('helvetica', 'normal'); // Fonte reduzida para 5
   
