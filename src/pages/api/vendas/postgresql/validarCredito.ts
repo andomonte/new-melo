@@ -101,6 +101,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    // Classe V/D = à vista obrigatório — não verifica crédito
+    if (claspgto === 'V' || claspgto === 'D') {
+      return res.status(200).json({
+        passou: 'OK',
+        mensagem: '',
+        status: 'Somente à vista',
+        saldoDisponivel,
+        claspgto,
+      });
+    }
+
     // ========================================
     // 3. SEM_LIMITE_FINANCEIRO — verificação de crédito
     // ========================================
@@ -142,7 +153,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const falta = valor - saldoDisponivel;
       return res.status(200).json({
         passou: 'NOK',
-        mensagem: `CRÉDITO INSUFICIENTE PARA VENDA A PRAZO. Limite disponível: R$ ${saldoDisponivel.toFixed(2)} | Total da venda: R$ ${valor.toFixed(2)} | Faltam: R$ ${falta.toFixed(2)}. Opções: escolha À VISTA, CARTÃO DE CRÉDITO ou solicite aumento de crédito.`,
+        mensagem: `Crédito insuficiente. Disponível: R$ ${saldoDisponivel.toFixed(2)} | Venda: R$ ${valor.toFixed(2)}`,
         status: 'Sem Crédito',
         saldoDisponivel,
         creditoTemp,

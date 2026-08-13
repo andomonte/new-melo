@@ -1528,9 +1528,9 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   const prazoBloqueadoMsg = useMemo(() => {
     if (!clienteSelecionado) return '';
-    if (['V', 'D'].includes(claspgto)) return `Cliente à vista obrigatório (${claspgto})`;
-    if (temDescontoAvista) return 'Desconto à vista aplicado';
-    if (restricaoFinanceira?.passou === 'NOK') return 'Sem crédito para prazo';
+    if (['V', 'D'].includes(claspgto)) return 'Somente à vista';
+    if (temDescontoAvista) return 'Desconto à vista';
+    if (restricaoFinanceira?.passou === 'NOK') return 'Sem crédito';
     return '';
   }, [clienteSelecionado, claspgto, temDescontoAvista, restricaoFinanceira]);
 
