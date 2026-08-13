@@ -257,8 +257,6 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
     if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
       const parcelas = Number(h.parcelasCartao) || 1;
       fp = `CARTAO DE CREDITO ${String(parcelas).padStart(2, '0')}x`;
-    } else if (fpUpper.includes('DEPOSITO')) {
-      fp = `DEPOSITO BANCARIO`;
     } else {
       // Dinheiro, PIX, Débito, etc → prefixar com A VISTA (motivo)
       const motivo = h.avistaMotivo || 'VE';

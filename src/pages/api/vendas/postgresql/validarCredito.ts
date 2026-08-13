@@ -56,9 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Formas de pagamento que isentam verificação de crédito
     const fpNorm = fp.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const isCartao = fpNorm.substring(0, 17) === 'CARTAO DE CREDITO' || fpNorm.includes('CARTAO') && fpNorm.includes('CREDITO');
-    const isAvista = fpNorm.includes('A VISTA') || fpNorm === 'PIX' || fpNorm.includes('DINHEIRO') || (fpNorm.includes('DEBITO') || fpNorm.includes('CARTAO DE DEBITO'));
-    const isDeposito = fpNorm.includes('DEPOSITO BANCARIO') || fpNorm.includes('DEPOSITO');
-    const isentaCredito = isCartao || isAvista || isDeposito;
+    const isAvista = fpNorm.includes('A VISTA') || fpNorm === 'PIX' || fpNorm.includes('DINHEIRO') || fpNorm.includes('DEBITO');
+    const isentaCredito = isCartao || isAvista;
 
     // ========================================
     // 2. STATUS_CLIENTE — verificações de bloqueio

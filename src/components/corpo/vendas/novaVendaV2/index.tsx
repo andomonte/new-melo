@@ -1503,13 +1503,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return desc.includes('DINHEIRO') || desc.includes('PIX') || desc.includes('DEBITO') || desc.includes('DÉBITO');
   }, [avistaForcado, fPagamento, opcoesFP]);
 
-  // Forma é depósito bancário
-  const isDeposito = useMemo(() => {
-    if (!fPagamento) return false;
-    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
-    return desc.includes('DEPOSITO') || desc.includes('DEPÓSITO');
-  }, [fPagamento, opcoesFP]);
-
   // Auto-set transportadora "CLIENTE RETIRA" para classe V (sem status 4)
   useEffect(() => {
     if (claspgto === 'V' && !clienteTempAvista) {
@@ -1526,16 +1519,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
   // Prazo desabilitado quando: à vista, cartão, depósito, classe V/D, ou fechamento semanal
   const prazoDesabilitado = useMemo(() => {
-    return avistaForcado || isAvista || isCartaoCredito || isDeposito || prazo === 'FECHAMENTO NA SEMANA';
-  }, [avistaForcado, isAvista, isCartaoCredito, isDeposito, prazo]);
+    return avistaForcado || isAvista || isCartaoCredito || prazo === 'FECHAMENTO NA SEMANA';
+  }, [avistaForcado, isAvista, isCartaoCredito, prazo]);
 
   // Forma ↔ Prazo: excludentes
   // Quando escolhe forma (à vista/cartão/depósito) → limpa prazo
   useEffect(() => {
-    if ((isAvista || isCartaoCredito || isDeposito) && prazo) {
+    if ((isAvista || isCartaoCredito) && prazo) {
       setPrazo(''); setPrazosArray([]);
     }
-  }, [isAvista, isCartaoCredito, isDeposito]);
+  }, [isAvista, isCartaoCredito]);
 
   // Quando escolhe prazo → auto-set forma como BOLETO
   useEffect(() => {
@@ -1558,16 +1551,22 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   }, [clienteSelecionado, totalVenda, isAvista, isCartaoCredito]);
 
   // Filtrar formas de pagamento por prazo
-  // Forma de pagamento: sem BOLETO (implícito pelo prazo) e sem OUTROS
+  // Forma de pagamento: só DINHEIRO, PIX, CARTÃO DÉBITO, CARTÃO CRÉDITO
+  // BOLETO é implícito pelo prazo (auto-setado, não aparece na lista)
+  // Quando prazo está preenchido, forma fica fixa como BOLETO (não editável)
   const opcoesFPFiltradas = useMemo(() => {
     if (!opcoesFP.length) return [];
     return opcoesFP.filter(fp => {
       const d = (fp.descricao || '').toUpperCase();
-      if (d.includes('BOLETO')) return false; // boleto é implícito pelo prazo
-      if (d.includes('OUTROS')) return false;
-      return true;
+      return d.includes('DINHEIRO') || d === 'PIX' || d.includes('DEBITO') || d.includes('DÉBITO') || d.includes('CREDITO') || d.includes('CRÉDITO');
     });
   }, [opcoesFP]);
+
+  // Forma de pagamento travada como BOLETO quando tem prazo
+  const fpTravadoBoleto = useMemo(() => {
+    if (!prazo || prazo === 'FECHAMENTO NA SEMANA') return false;
+    return true;
+  }, [prazo]);
 
   const fpFiltradosPorBusca = useMemo(() => {
     if (!buscaFP.trim()) return opcoesFPFiltradas;
@@ -1606,9 +1605,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
     if (isCartaoCredito && parcelasCartao > 0) {
       return `CARTAO DE CREDITO ${String(parcelasCartao).padStart(2, '0')}x`;
-    }
-    if (fpUpper.includes('DEPOSITO')) {
-      return 'DEPOSITO BANCARIO';
     }
     if (isAvista) {
       const motivo = avistaMotivo || 'VE';
@@ -2219,18 +2215,19 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {/* Forma de Pagamento (ANTES do prazo — como Delphi) */}
               <div className="flex-1 relative min-w-[200px]">
-                  {!fPagamento ? (
+                  {!fPagamento && !fpTravadoBoleto ? (
                     <Search size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 z-10 pointer-events-none" />
                   ) : null}
-                  <input type="text" ref={fpInputRef} tabIndex={0}
-                    readOnly={!!fPagamento}
-                    value={fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
-                    onChange={(e) => { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); }}
-                    onClick={() => { if (!fPagamento) { setShowFP(true); setFpIdx(0); } }}
+                  <input type="text" ref={fpInputRef} tabIndex={fpTravadoBoleto ? -1 : 0}
+                    readOnly={!!fPagamento || fpTravadoBoleto}
+                    value={fpTravadoBoleto ? 'BOLETO' : fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : buscaFP}
+                    onChange={(e) => { if (!fpTravadoBoleto) { setBuscaFP(e.target.value); setShowFP(true); setFpIdx(0); } }}
+                    onClick={() => { if (!fPagamento && !fpTravadoBoleto) { setShowFP(true); setFpIdx(0); } }}
                     onFocus={() => {}}
                     onBlur={() => setTimeout(() => { setShowFP(false); setBuscaFP(''); if (editingField === 'fPagamento') cancelEdit(); }, 150)}
-                    onDoubleClick={() => { if (fPagamento) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
+                    onDoubleClick={() => { if (fPagamento && !fpTravadoBoleto) { startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); } }}
                     onKeyDown={(e) => {
+                      if (fpTravadoBoleto) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
                       if (e.key === 'Escape' && editingField === 'fPagamento') { e.preventDefault(); cancelEdit(); setShowFP(false); return; }
                       if (fPagamento) {
                         if (e.key === 'Enter') { e.preventDefault(); startEdit('fPagamento', { fPagamento }); setFPagamento(''); setBuscaFP(''); setShowFP(true); setFpIdx(0); }
@@ -2246,7 +2243,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                       if (e.key === 'Escape') setShowFP(false);
                     }}
                     placeholder=" "
-                    className={`${MI_INPUT} ${fPagamento ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
+                    className={`${MI_INPUT} ${fpTravadoBoleto ? 'bg-gray-100 dark:bg-zinc-900 cursor-default opacity-70' : fPagamento ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
                   <label className={MI_LABEL}>Forma Pagamento</label>
                   {showFP && !fPagamento && fpFiltradosPorBusca.length > 0 ? (
