@@ -23,7 +23,7 @@ import ModalAdicionarItemRapido from '../bloqueadas/ModalAdicionarItemRapido';
 import ModalEquivalentes from '../bloqueadas/ModalEquivalentes';
 import ModalHistoricoProduto from '../bloqueadas/ModalHistoricoProduto';
 import ModalPrazoParcelas from '../novaVenda/prazo';
-import { calcImposto } from '@/lib/calcImposto';
+import { calcularIBSCBS as calcImposto } from '@/lib/calc_engine_ibs_cbs';
 import api from '@/components/services/api';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
