@@ -828,6 +828,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       saldo,
       tipo: cli.TIPO || cli.tipo || '',
       tipoPreco: (['BALCÃO','ZFM','INTERIOR','ALC','AMAZ. OCIDENTAL','FORA ESTADO','FORA ESTADO VAREJO','RORAIMA'][Number(cli.PRVENDA || cli.prvenda || 0)] || ''),
+      prvenda: String(cli.PRVENDA || cli.prvenda || '0'),
       codvend: cli.CODVEND || cli.codvend || '',
       claspgto: cli.CLASPGTO || cli.claspgto || '',
       statusCli: cli.STATUS || cli.status || '1',
@@ -1454,10 +1455,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   // Validação financeira via API (equivalente REGRAS_VENDAS.SUBMETER_REGRA do Oracle)
   const [restricaoFinanceira, setRestricaoFinanceira] = useState<{ passou: string; mensagem: string; status?: string } | null>(null);
   const validarCreditoRef = useRef<any>(null);
+  const clienteAnteriorRef = useRef<string | null>(null);
   useEffect(() => {
     if (validarCreditoRef.current) clearTimeout(validarCreditoRef.current);
-    if (!clienteSelecionado?.codcli && !clienteSelecionado?.CODCLI) { setRestricaoFinanceira(null); return; }
-    setRestricaoFinanceira(null); // limpar imediatamente ao mudar cliente/valor
+    const codcliAtual = clienteSelecionado?.codcli || clienteSelecionado?.CODCLI || null;
+    if (!codcliAtual) { setRestricaoFinanceira(null); clienteAnteriorRef.current = null; return; }
+    // Só limpa imediatamente quando TROCA de cliente, não quando muda valor/forma
+    if (codcliAtual !== clienteAnteriorRef.current) {
+      setRestricaoFinanceira(null);
+      clienteAnteriorRef.current = codcliAtual;
+    }
     validarCreditoRef.current = setTimeout(() => {
       const codcli = clienteSelecionado.codcli || clienteSelecionado.CODCLI;
       api.post('/api/vendas/postgresql/validarCredito', {
@@ -1517,20 +1524,25 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return desc.includes('CREDITO') || desc.includes('CRÉDITO');
   }, [fPagamento, opcoesFP]);
 
-  // Prazo desabilitado quando: à vista, cartão, depósito, classe V/D, ou fechamento semanal
-  // Prazo bloqueado por regra do cliente (não pode mudar)
+  // Prazo bloqueado por regra do cliente — independente da forma de pagamento
+  // Usa dados do cliente direto, não a resposta da API (que varia conforme forma)
+  const saldoCliente = useMemo(() => {
+    if (!clienteSelecionado) return 0;
+    return Number(clienteSelecionado.saldo || 0);
+  }, [clienteSelecionado]);
+
   const prazoBloqueado = useMemo(() => {
     if (!clienteSelecionado) return false;
     if (avistaForcado) return true; // classe V/D, desconto à vista
-    if (restricaoFinanceira?.passou === 'NOK') return true; // sem crédito
+    if (totalVenda > 0 && saldoCliente < totalVenda) return true; // sem crédito pra prazo
     return false;
-  }, [clienteSelecionado, avistaForcado, restricaoFinanceira]);
+  }, [clienteSelecionado, avistaForcado, totalVenda, saldoCliente]);
 
   const prazoBloqueadoMsg = useMemo(() => {
     if (!clienteSelecionado) return '';
     if (['V', 'D'].includes(claspgto)) return `Cliente à vista obrigatório (${claspgto})`;
     if (temDescontoAvista) return 'Desconto à vista aplicado';
-    if (restricaoFinanceira?.passou === 'NOK') return 'Sem crédito para prazo';
+    if (totalVenda > 0 && saldoCliente < totalVenda) return 'Sem crédito para prazo';
     return '';
   }, [clienteSelecionado, claspgto, temDescontoAvista, restricaoFinanceira]);
 
@@ -1987,22 +1999,29 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   <span><span className="font-semibold">Tipo:</span> <span className="font-medium">{clienteSelecionado.tipo || '-'}</span></span>
                 </div>
                 {/* Status financeiro — só da API validarCredito */}
-                {restricaoFinanceira ? (
-                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs border ${
-                    restricaoFinanceira.passou === 'NOK'
-                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                  }`}>
-                    {restricaoFinanceira.passou === 'NOK'
-                      ? <AlertTriangle size={13} className="text-red-500 shrink-0" />
-                      : null}
-                    <span className={`font-semibold ${
-                      restricaoFinanceira.passou === 'NOK'
-                        ? 'text-red-700 dark:text-red-300'
-                        : 'text-blue-700 dark:text-blue-300'
-                    }`}>{restricaoFinanceira.passou === 'NOK' ? restricaoFinanceira.mensagem : restricaoFinanceira.status}</span>
-                  </div>
-                ) : null}
+                {restricaoFinanceira ? (() => {
+                  // Badge baseado no STATUS REAL do cliente (não muda com forma de pagamento)
+                  const clienteInativoOuJudicial = restricaoFinanceira.passou === 'NOK' && !restricaoFinanceira.mensagem?.includes('CRÉDITO INSUFICIENTE');
+                  const semCreditoPrazo = totalVenda > 0 && saldoCliente < totalVenda && !avistaForcado;
+                  const isNOK = clienteInativoOuJudicial;
+                  const isAlerta = semCreditoPrazo && !isNOK;
+                  const msg = isNOK ? restricaoFinanceira.mensagem
+                    : isAlerta ? `Crédito insuficiente para prazo. Disponível: R$ ${saldoCliente.toFixed(2)}`
+                    : avistaForcado ? `Somente à vista (${claspgto})`
+                    : `Liberado — Disponível: R$ ${saldoCliente.toFixed(2)}`;
+                  const cor = isNOK ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                    : isAlerta ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+                  const textCor = isNOK ? 'text-red-700 dark:text-red-300'
+                    : isAlerta ? 'text-amber-700 dark:text-amber-300'
+                    : 'text-blue-700 dark:text-blue-300';
+                  return (
+                    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs border ${cor}`}>
+                      {(isNOK || isAlerta) ? <AlertTriangle size={13} className={isNOK ? 'text-red-500 shrink-0' : 'text-amber-500 shrink-0'} /> : null}
+                      <span className={`font-semibold ${textCor}`}>{msg}</span>
+                    </div>
+                  );
+                })() : null}
               </div>
             ) : null}
           </div>
@@ -2831,6 +2850,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         onClose={() => { setAddItemOpen(false); restaurarFocoGrid(); }}
         onAdicionarItens={handleAdicionarItens}
         itensExistentes={itensGrid.map((i) => i.codprod)}
+        armId={selectedArmazem?.value}
+        tipoPreco={clienteSelecionado?.prvenda || '0'}
       />
 
       {zoomProduto ? (

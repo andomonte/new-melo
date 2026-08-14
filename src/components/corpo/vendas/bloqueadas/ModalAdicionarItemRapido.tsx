@@ -46,6 +46,8 @@ interface ModalAdicionarItemRapidoProps {
   onClose: () => void;
   onAdicionarItens: (itens: ItemAdicionado[]) => void;
   itensExistentes: string[];
+  armId?: string | number;
+  tipoPreco?: string | number;
 }
 
 const BATCH_SIZE = 50;
@@ -55,6 +57,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   onClose,
   onAdicionarItens,
   itensExistentes,
+  armId,
+  tipoPreco,
 }) => {
   const { toast } = useToast();
   const { user } = useContext(AuthContext) as any;
@@ -257,7 +261,30 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
           filtros: filtrosAtivos,
         });
       } else {
-        data = await getProdutos({ page, perPage: BATCH_SIZE, search: search.trim(), sortBy, sortDir, searchField });
+        // Usar mesma API da V1: filtra por armazém e calcula estoque disponível (qtest - reservada)
+        const resp = await api.post('/api/vendas/postgresql/produto', {
+          descricao: search.trim(),
+          PRVENDA: tipoPreco || '0',
+          arm_id: armId || 1001,
+        });
+        const rows = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
+        data = {
+          data: rows.map((p: any) => ({
+            ...p,
+            codprod: String(p.codprod || p.CODPROD || '').trim(),
+            ref: p.ref || p.REF || '',
+            descr: p.descr || p.aplic_extendida || '',
+            aplic_extendida: p.aplic_extendida || p.descr || '',
+            codmarca: p.marca || p.codmarca || '',
+            estoque_disponivel: Number(p.qtddisponivel || p.estoque_disponivel || 0),
+            prvenda: Number(p.prvenda || p.precovenda || 0),
+            prcompra: Number(p.prcompra || 0),
+            prcustoatual: Number(p.prcustoatual || 0),
+            dolar: p.dolar || 'N',
+            codgpe: p.codgpe || '',
+          })),
+          meta: { total: rows.length, lastPage: 1, currentPage: 1, perPage: BATCH_SIZE },
+        };
       }
       if (data?.data?.length > 0) {
         const produtos = data.data;
@@ -647,11 +674,26 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
             }
           }).catch(() => setListaProd([]));
         } else {
-          getProdutos({ page: 1, perPage: BATCH_SIZE, search: currentSearch.trim(), sortBy: col, sortDir: newDir, searchField })
-            .then((data) => {
-              if (data?.data?.length > 0) {
-                setListaProd(data.data);
-                setTotalProd(data.meta?.total || 0);
+          api.post('/api/vendas/postgresql/produto', {
+            descricao: currentSearch.trim(),
+            PRVENDA: tipoPreco || '0',
+            arm_id: armId || 1001,
+          }).then((resp) => {
+              const rows = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
+              const mapped = rows.map((p: any) => ({
+                ...p,
+                codprod: String(p.codprod || '').trim(),
+                ref: p.ref || '', descr: p.descr || p.aplic_extendida || '',
+                aplic_extendida: p.aplic_extendida || p.descr || '',
+                codmarca: p.marca || p.codmarca || '',
+                estoque_disponivel: Number(p.qtddisponivel || 0),
+                prvenda: Number(p.prvenda || p.precovenda || 0),
+                prcompra: Number(p.prcompra || 0), prcustoatual: Number(p.prcustoatual || 0),
+                dolar: p.dolar || 'N', codgpe: p.codgpe || '',
+              }));
+              if (mapped.length > 0) {
+                setListaProd(mapped);
+                setTotalProd(mapped.length);
                 setPageLoaded(1);
                 setLinhaSelecionada(0);
               } else {
