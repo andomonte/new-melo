@@ -238,8 +238,12 @@ export async function calcularIBSCBS(
   const impostosRs: ImpostosItemRS = {
     valorIBS, // Informativo 2026 (não soma no total)
     valorCBS, // Informativo 2026 (não soma no total)
-    valorImpostos: totalImpostosReais,
-    totalComImpostos: subtotalItem + totalImpostosReais,
+    valorImpostos: totalImpostosReais, // carga tributária total (informativo)
+    // "Total c/ Imposto" = valor que o cliente REALMENTE paga = subtotal + tributos "POR FORA"
+    // (IPI + ICMS-ST). ICMS/PIS/COFINS/FCP são "por dentro" (já embutidos no preço) e NÃO somam
+    // — senão o vendedor vê um valor que não bate com a nota. Mesma regra do calcImposto.ts (V1)
+    // e do VALOR DA NOTA da DANFE (produtos + IPI + ST).
+    totalComImpostos: +(subtotalItem + valorIPI + valorST).toFixed(2),
     valorIPI,
     valorICMS,
     valorICMS_Subst: valorST,
