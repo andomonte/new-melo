@@ -271,17 +271,17 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         data = {
           data: rows.map((p: any) => ({
             ...p,
-            codprod: String(p.codprod || p.CODPROD || '').trim(),
-            ref: p.ref || p.REF || '',
-            descr: p.descr || p.aplic_extendida || '',
-            aplic_extendida: p.aplic_extendida || p.descr || '',
-            codmarca: p.marca || p.codmarca || '',
-            estoque_disponivel: Number(p.qtddisponivel || p.estoque_disponivel || 0),
-            prvenda: Number(p.prvenda || p.precovenda || 0),
-            prcompra: Number(p.prcompra || 0),
+            codprod: String(p.CODPROD || p.codprod || '').trim(),
+            ref: p.REF || p.ref || '',
+            descr: p.DESCR || p.descr || p.aplic_extendida || '',
+            aplic_extendida: p.DESCR || p.aplic_extendida || p.descr || '',
+            codmarca: p.MARCA || p.marca || p.codmarca || '',
+            estoque_disponivel: Number(p.QTDDISPONIVEL || p.qtddisponivel || p.estoque_disponivel || 0),
+            prvenda: Number(p.PRECOVENDA || p.prvenda || p.precovenda || 0),
+            prcompra: Number(p.PRCOMPRA || p.prcompra || 0),
             prcustoatual: Number(p.prcustoatual || 0),
-            dolar: p.dolar || 'N',
-            codgpe: p.codgpe || '',
+            dolar: p.DOLAR || p.dolar || 'N',
+            codgpe: p.CODGPE || p.codgpe || '',
           })),
           meta: { total: rows.length, lastPage: 1, currentPage: 1, perPage: BATCH_SIZE },
         };
@@ -682,14 +682,14 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               const rows = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
               const mapped = rows.map((p: any) => ({
                 ...p,
-                codprod: String(p.codprod || '').trim(),
-                ref: p.ref || '', descr: p.descr || p.aplic_extendida || '',
-                aplic_extendida: p.aplic_extendida || p.descr || '',
-                codmarca: p.marca || p.codmarca || '',
-                estoque_disponivel: Number(p.qtddisponivel || 0),
-                prvenda: Number(p.prvenda || p.precovenda || 0),
-                prcompra: Number(p.prcompra || 0), prcustoatual: Number(p.prcustoatual || 0),
-                dolar: p.dolar || 'N', codgpe: p.codgpe || '',
+                codprod: String(p.CODPROD || p.codprod || '').trim(),
+                ref: p.REF || p.ref || '', descr: p.DESCR || p.descr || p.aplic_extendida || '',
+                aplic_extendida: p.DESCR || p.aplic_extendida || p.descr || '',
+                codmarca: p.MARCA || p.marca || p.codmarca || '',
+                estoque_disponivel: Number(p.QTDDISPONIVEL || p.qtddisponivel || 0),
+                prvenda: Number(p.PRECOVENDA || p.prvenda || p.precovenda || 0),
+                prcompra: Number(p.PRCOMPRA || p.prcompra || 0), prcustoatual: Number(p.prcustoatual || 0),
+                dolar: p.DOLAR || p.dolar || 'N', codgpe: p.CODGPE || p.codgpe || '',
               }));
               if (mapped.length > 0) {
                 setListaProd(mapped);
