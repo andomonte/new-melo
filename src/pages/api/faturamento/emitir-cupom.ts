@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
+import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { getPgPool } from '@/lib/pg';
 import { parseStringPromise } from 'xml2js';
 import { create } from 'xmlbuilder2';
@@ -747,23 +748,39 @@ export default async function handler(
         iest: dados.dbclien?.iest || '',
       };
       
-      const pdfDoc = await gerarPreviewCupomFiscal(
-        faturaComCliente,
-        dados.dbitvenda || [],
-        dados.dbvenda || {},
-        dados.emitente || {},
-        'valida',
-        {
-          chaveAcesso: chaveAutorizada,
-          protocolo,
-          numeroNFe: nroformEmissao,
-          serieNFe: serieEmissao,
-          dataEmissao: dataEmissao, // Usar a data extraída do XML
-          valorTotal: totalNF.toFixed(2)
-        }
-      );
+      const dadosNFeEmis = {
+        chaveAcesso: chaveAutorizada,
+        protocolo,
+        numeroNFe: nroformEmissao,
+        serieNFe: serieEmissao,
+        dataEmissao, // Usar a data extraída do XML
+        valorTotal: totalNF.toFixed(2),
+      };
 
-      const pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
+      // NFC-e em HTML (layout MELO via puppeteer). Fallback pro jsPDF se o HTML falhar.
+      let pdfBuffer: Buffer;
+      try {
+        pdfBuffer = await gerarPdfNotaHtml(
+          'nfce',
+          faturaComCliente,
+          dados.dbitvenda || [],
+          dados.dbvenda || {},
+          dados.emitente || {},
+          dadosNFeEmis,
+          { homologacao: isHomologacao },
+        );
+      } catch (errHtml) {
+        console.warn('⚠️ NFC-e HTML→PDF falhou, usando jsPDF (fallback):', errHtml);
+        const pdfDoc = await gerarPreviewCupomFiscal(
+          faturaComCliente,
+          dados.dbitvenda || [],
+          dados.dbvenda || {},
+          dados.emitente || {},
+          'valida',
+          dadosNFeEmis,
+        );
+        pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
+      }
 
       // Salvar no banco
       if (pool) {

@@ -1,10 +1,12 @@
-﻿import React, { useEffect, useState } from 'react';
-import { gerarPreviewNF } from '@/utils/gerarPreviewNF';
-import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal'; 
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { gerarDanfeHtmlNFe } from '@/lib/danfe/gerarDanfeHtml';
+import { gerarNfceHtml } from '@/lib/danfe/gerarNfceHtml';
+import JsBarcode from 'jsbarcode';
+import QRCode from 'qrcode';
 import axios from 'axios';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, X } from 'lucide-react';
+import { Download, Printer, X } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -16,8 +18,10 @@ interface Props {
 
 export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produtos, venda }: Props) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [htmlContent, setHtmlContent] = useState<string | null>(null); // NF-e HTML (layout MELO)
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [erro, setErro] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const carregarEGerarPDF = async () => {
@@ -27,8 +31,9 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
       
       if (!temVenda && !temFatura) return;
       
-      setIsLoading(true); 
+      setIsLoading(true);
       setPdfUrl(null);
+      setHtmlContent(null);
       setErro(null);
 
       try {
@@ -137,34 +142,54 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
           tipoDocumento: isPessoaFisica ? 'NFC-e (Cupom Fiscal)' : 'NF-e'
         });
         
-        let doc;
         if (isPessoaFisica) {
-          // Pessoa física - gerar Cupom Fiscal (NFC-e)
-          console.log('📄 Gerando Cupom Fiscal (NFC-e) para pessoa física...');
-          doc = await gerarPreviewCupomFiscal(
+          // Pessoa física - NFC-e em HTML (layout MELO, reconstruído do Rave)
+          console.log('📄 Gerando NFC-e (HTML) para pessoa física...');
+          const dadosNFePrev = (faturaCompleta as any).dadosNFe || undefined;
+          const chaveNum = String(
+            dadosNFePrev?.chaveAcesso || (faturaCompleta as any).chave_acesso || '',
+          ).replace(/\D/g, '');
+          let qrCodeDataUrl = '';
+          try {
+            const conteudoQr =
+              chaveNum.length >= 20
+                ? `https://www.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp?chNFe=${chaveNum}`
+                : 'PREVIEW - SEM VALIDADE';
+            qrCodeDataUrl = await QRCode.toDataURL(conteudoQr, { errorCorrectionLevel: 'M', margin: 1, width: 300 });
+          } catch { /* sem QR no preview */ }
+          const html = gerarNfceHtml(
             faturaCompleta,
             dadosCompletos.dbitvenda,
             dadosCompletos.dbvenda,
-            dadosEmpresa
+            dadosEmpresa,
+            dadosNFePrev,
+            { logoSrc: `${window.location.origin}/images/logoPdf.png`, qrCodeDataUrl },
           );
+          setHtmlContent(html);
         } else {
-          // Pessoa jurídica (empresa) - gerar NFe
-          console.log('📄 Gerando NF-e para pessoa jurídica...');
-          doc = await gerarPreviewNF(
+          // Pessoa jurídica - NF-e em HTML (layout MELO, reconstruído do Rave)
+          console.log('📄 Gerando NF-e (HTML) para pessoa jurídica...');
+          const dadosNFePrev = (faturaCompleta as any).dadosNFe || undefined;
+          const chaveNum = String(
+            dadosNFePrev?.chaveAcesso || (faturaCompleta as any).chave_acesso || '',
+          ).replace(/\D/g, '');
+          let barcodeSvg = '';
+          if (chaveNum.length >= 20) {
+            const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            try {
+              JsBarcode(svgEl as any, chaveNum, { format: 'CODE128C', displayValue: false, margin: 0, height: 40, width: 1.4 });
+              barcodeSvg = svgEl.outerHTML;
+            } catch { /* sem barcode no preview sem chave */ }
+          }
+          const html = gerarDanfeHtmlNFe(
             faturaCompleta,
             dadosCompletos.dbitvenda,
             dadosCompletos.dbvenda,
-            dadosEmpresa
+            dadosEmpresa,
+            dadosNFePrev,
+            { logoSrc: `${window.location.origin}/images/logoPdf.png`, barcodeSvg },
           );
-        }
-
-        if (doc) {
-          const pdfBlob = doc.output('blob');
-          const url = URL.createObjectURL(pdfBlob);
-          setPdfUrl(url);
-          console.log(' PDF gerado com sucesso!');
-        } else {
-          throw new Error('Erro ao gerar o PDF');
+          setHtmlContent(html);
         }
 
       } catch (error) {
@@ -187,6 +212,76 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
       }
     };
   }, [pdfUrl]);
+
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [imprimindo, setImprimindo] = useState(false);
+
+  // Gera o PDF da NF-e HTML no SERVIDOR (puppeteer, landscape garantido — o print do
+  // navegador ignora @page e sai em retrato).
+  const gerarPdfBlob = async (): Promise<Blob> => {
+    const codigo = fatura?.codfat || venda?.codvenda || venda?.nrovenda || 'danfe';
+    const resp = await axios.post(
+      '/api/faturamento/danfe-html-pdf',
+      { html: htmlContent, filename: `nota-${codigo}` },
+      { responseType: 'blob' },
+    );
+    return resp.data as Blob;
+  };
+
+  // Salvar PDF (download)
+  const handleSalvarPdf = async () => {
+    if (!htmlContent || gerandoPdf || imprimindo) return;
+    setGerandoPdf(true);
+    try {
+      const codigo = fatura?.codfat || venda?.codvenda || venda?.nrovenda || 'danfe';
+      const url = URL.createObjectURL(await gerarPdfBlob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nota-${codigo}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (e) {
+      console.error('Erro ao gerar PDF da nota:', e);
+      alert('Erro ao gerar o PDF da nota.');
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
+
+  // Imprimir direto (sem salvar): imprime o PDF em paisagem num iframe oculto
+  const handleImprimir = async () => {
+    if (!htmlContent || gerandoPdf || imprimindo) return;
+    setImprimindo(true);
+    try {
+      const url = URL.createObjectURL(await gerarPdfBlob());
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      iframe.src = url;
+      iframe.onload = () => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch {
+            /* noop */
+          }
+        }, 300);
+      };
+      document.body.appendChild(iframe);
+      // limpa depois de um tempo (dá tempo do diálogo de impressão)
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        iframe.remove();
+      }, 60000);
+    } catch (e) {
+      console.error('Erro ao imprimir a nota:', e);
+      alert('Erro ao imprimir a nota.');
+    } finally {
+      setImprimindo(false);
+    }
+  };
 
   const handleDownload = () => {
     if (pdfUrl) {
@@ -222,6 +317,28 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
                 <Download size={16} />
                 Download PDF
               </Button>
+            )}
+            {htmlContent && (
+              <>
+                <Button
+                  onClick={handleImprimir}
+                  disabled={gerandoPdf || imprimindo}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:opacity-60"
+                  size="sm"
+                >
+                  <Printer size={16} />
+                  {imprimindo ? 'Preparando...' : 'Imprimir'}
+                </Button>
+                <Button
+                  onClick={handleSalvarPdf}
+                  disabled={gerandoPdf || imprimindo}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
+                  size="sm"
+                >
+                  <Download size={16} />
+                  {gerandoPdf ? 'Gerando PDF...' : 'Salvar PDF'}
+                </Button>
+              </>
             )}
             <Button
               onClick={onClose}
@@ -266,6 +383,17 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
                 src={pdfUrl}
                 className="w-full h-full border-0"
                 title="Preview da Nota Fiscal"
+              />
+            </div>
+          )}
+
+          {htmlContent && !erro && (
+            <div className="h-full w-full bg-white rounded-lg shadow-sm overflow-auto border border-gray-200 dark:border-zinc-700">
+              <iframe
+                ref={iframeRef}
+                srcDoc={htmlContent}
+                className="w-full h-full border-0 bg-white"
+                title="Preview da Nota Fiscal (NF-e)"
               />
             </div>
           )}

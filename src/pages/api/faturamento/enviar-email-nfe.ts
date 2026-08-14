@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import { enviarDocumentoFiscal } from '@/lib/nfeEmailService';
 import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
+import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { pool } from '@/lib/db';
 
 export default async function handler(
@@ -297,44 +298,22 @@ export default async function handler(
     }
 
     if (!pdfBuffer) {
-      // Gerar PDF da NFe (usando faturaComCliente que tem dados do cliente e impostos)
-      const pdfDoc = await gerarNotaFiscalValida(
-        faturaComCliente,
-        produtos,
-        venda,
-        dadosEmpresa,
-        dadosNFe,
-      );
-
-      // Debug: log inputs que influenciam o PDF e salvar uma cópia temporária para inspeção
+      // Regenera o PDF (o guardado no banco não veio válido). Layout HTML (MELO) com
+      // o tipo certo (NFe/NFC-e) e fallback pro jsPDF.
+      const tipoDoc: 'nfe' | 'nfce' =
+        String(fatura.tipo_documento || '').toLowerCase() === 'nfce' ||
+        String(fatura.modelo || '') === '65' ||
+        String(faturaComCliente.cpfcgc || '').replace(/\D/g, '').length === 11
+          ? 'nfce'
+          : 'nfe';
       try {
-        console.log('📄 DEBUG - Gerando PDF NFe - fatura resumo:', {
-          codfat: fatura.codfat,
-          cliente: fatura.nomefant || fatura.nome || null,
-          chave: fatura.chave,
-          numero_nfe: fatura.numero_nfe,
-          totalnf: fatura.totalnf,
-        });
-        console.log('📄 DEBUG - dadosEmpresa resumo:', {
-          nome: dadosEmpresa.nomecontribuinte || dadosEmpresa.xNome,
-          cgc: dadosEmpresa.cgc || dadosEmpresa.cnpj,
-          endereco: dadosEmpresa.logradouro || dadosEmpresa.endereco,
-        });
-        console.log('📄 DEBUG - produtos: count=', produtos.length, 'exemplo=', produtos[0]);
-
-        const pdfBufferPreview = Buffer.from((pdfDoc as any).output('arraybuffer'));
-        const os = require('os');
-        const fs = require('fs');
-        const path = require('path');
-        const tmpdir = os.tmpdir();
-        const outPath = path.join(tmpdir, `NFe-${codfat}.pdf`);
-        fs.writeFileSync(outPath, pdfBufferPreview);
-        console.log('📁 DEBUG - PDF salvo temporariamente em:', outPath);
-      } catch (e) {
-        console.error('❌ Erro ao gravar PDF de debug:', e);
+        pdfBuffer = await gerarPdfNotaHtml(tipoDoc, faturaComCliente, produtos, venda, dadosEmpresa, dadosNFe);
+        console.log('📄 PDF (HTML) regenerado para e-mail, tipo:', tipoDoc);
+      } catch (errHtml) {
+        console.warn('⚠️ HTML→PDF falhou no e-mail, usando jsPDF (fallback):', errHtml);
+        const pdfDoc = await gerarNotaFiscalValida(faturaComCliente, produtos, venda, dadosEmpresa, dadosNFe);
+        pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
       }
-
-      pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
     }
 
     // Gerar boletos válidos se a fatura tiver cobrança configurada

@@ -8,6 +8,7 @@ import { decrypt } from '@/utils/crypto';
 import { extrairCNPJDoCertificado } from '@/utils/certificadoExtractor';
 import gerarDanfePDF from '@/components/services/sefazNfe/gerarDanfePDF';
 import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
+import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { create } from 'xmlbuilder2';
 import { getPgPool } from '@/lib/pg';
@@ -950,33 +951,31 @@ export default async function handler(
           },
         });
 
-        const pdfDoc = await gerarNotaFiscalValida(
+        // NF-e em HTML (layout MELO via puppeteer)
+        pdfBuffer = await gerarPdfNotaHtml(
+          'nfe',
           faturaParaPdf,
           produtosParaPdf,
           vendaParaPdf,
           empresaParaPdf,
           dadosNFe,
+          { homologacao: ambienteSefaz === 'HOMOLOGACAO' },
         );
-        console.log('✅ PDF customizado gerado com sucesso');
-        console.log('🔍 Tipo do pdfDoc retornado:', {
-          tipo: typeof pdfDoc,
-          tem_output: typeof pdfDoc?.output === 'function',
-          constructor: pdfDoc?.constructor?.name,
-          keys: Object.keys(pdfDoc || {}).slice(0, 10)
-        });
-        pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
+        console.log('✅ PDF (HTML) gerado com sucesso');
       } catch (pdfError) {
-        console.warn(
-          '⚠️ Erro ao gerar PDF customizado, usando gerador padrão:',
-          pdfError,
-        );
-        console.log('🔄 Tentando gerador padrão...');
-        // Fallback para o gerador padrão
+        console.warn('⚠️ NF-e HTML→PDF falhou, usando jsPDF (fallback):', pdfError);
         try {
-          pdfBuffer = await gerarDanfePDF();
-          console.log('✅ PDF padrão gerado com sucesso');
+          const pdfDoc = await gerarNotaFiscalValida(
+            faturaParaPdf,
+            produtosParaPdf,
+            vendaParaPdf,
+            empresaParaPdf,
+            dadosNFe,
+          );
+          pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
+          console.log('✅ PDF (jsPDF fallback) gerado com sucesso');
         } catch (pdfFallbackError) {
-          console.error('❌ Erro no gerador padrão também:', pdfFallbackError);
+          console.error('❌ Erro no fallback jsPDF também:', pdfFallbackError);
           throw pdfFallbackError;
         }
       }

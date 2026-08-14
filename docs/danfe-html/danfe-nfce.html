@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>DANFE NFC-e</title>
+<style>
+  @page { size: A4 landscape; margin: 4mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 6.2pt; background:#fff; }
+  .danfe { width: 289mm; min-height: 200mm; border: 0.6mm solid #000; display: flex; margin: 0 auto; position: relative; }
+  .marca { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:50; overflow:hidden; }
+  .marca span { font-size:64pt; font-weight:700; color:rgba(90,90,90,0.16); transform:rotate(-32deg); white-space:nowrap; letter-spacing:6pt; }
+
+  .canhoto { width: 9mm; border-right: 0.4mm solid #000; display: flex; flex-direction: column; }
+  .canhoto .cel { border-bottom: 0.4mm solid #000; position: relative; }
+  .canhoto .cel:last-child { border-bottom: none; }
+  .canhoto .cel span { position: absolute; inset: 0; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 5pt; line-height: 1.1; padding: 1mm 0.5mm; }
+  .canhoto .cel.recibo { flex: 3.2; } .canhoto .cel.data { flex: 1.1; } .canhoto .cel.assin { flex: 2.6; }
+  .nfnum { width: 8mm; border-right: 0.4mm solid #000; position: relative; }
+  .nfnum .rot { position: absolute; inset: 0; writing-mode: vertical-rl; transform: rotate(180deg); display: flex; align-items: center; justify-content: center; gap: 3mm; font-weight: 700; text-align: center; }
+  .nfnum .rot .lab { font-size: 6.5pt; } .nfnum .rot .val { font-size: 10pt; letter-spacing: 0.3pt; }
+
+  .corpo { flex: 1; display: flex; flex-direction: column; }
+  .sec { display: flex; border-top: 0.4mm solid #000; } .sec:first-child { border-top: none; }
+  .sec .rotlbl { width: 4mm; border-right: 0.4mm solid #000; position: relative; flex: none; }
+  .sec .rotlbl span { position: absolute; inset: 0; writing-mode: vertical-rl; transform: rotate(180deg); display: flex; align-items: center; justify-content: center; font-size: 5pt; font-weight: 700; text-align: center; letter-spacing: 0.2pt; }
+  .sec .body { flex: 1; }
+  .row { display: flex; }
+  .row > .cell { border-left: 0.3mm solid #000; padding: 0.4mm 1mm 1mm; min-height: 6.6mm; position: relative; }
+  .row > .cell:first-child { border-left: none; }
+  .row + .row { border-top: 0.3mm solid #000; }
+  .k { font-size: 4.6pt; line-height: 1; white-space: nowrap; }
+  .v { font-size: 7pt; font-weight: 700; line-height: 1.1; margin-top: 0.4mm; } .v.big { font-size: 9pt; }
+  .r { text-align: right; } .c { text-align: center; } .grow { flex: 1; }
+
+  /* Cabeçalho NFC-e */
+  .header { display: flex; align-items: stretch; }
+  .header .emit { flex: 2.6; display: flex; gap: 2mm; padding: 1.5mm; align-items: center; }
+  .header .emit img { height: 13mm; }
+  .header .emit .dados { font-size: 6.5pt; line-height: 1.25; }
+  .header .emit .dados .ttl { font-weight: 700; font-size: 7pt; }
+  .header .danfe-box { flex: 2.1; border-left: 0.4mm solid #000; padding: 1mm; text-align: center; display: flex; flex-direction: column; }
+  .header .danfe-box .t1 { font-weight: 700; font-size: 11pt; }
+  .header .danfe-box .t2 { font-size: 5.6pt; line-height: 1.1; }
+  .header .danfe-box .np { font-size: 5.8pt; font-style: italic; margin: 0.6mm 0; }
+  .header .danfe-box .nsf { display: flex; justify-content: space-around; margin-top: auto; font-size: 6pt; }
+  .header .danfe-box .nsf b { font-size: 8pt; display:block; }
+  .header .qr { width: 26mm; border-left: 0.4mm solid #000; padding: 1mm; display: flex; align-items: center; justify-content: center; }
+  .header .qr img { width: 100%; height: auto; }
+
+  /* Mensagem fiscal (centro) */
+  .msgfiscal { text-align: center; padding: 1.5mm; font-size: 6pt; line-height: 1.5; }
+  .msgfiscal .tt { font-weight: 700; font-size: 7pt; margin-bottom: 0.6mm; }
+  .msgfiscal .chv { font-weight: 700; font-size: 7pt; letter-spacing: 0.3pt; }
+
+  /* Totais */
+  .totais .fp { padding: 0.4mm 1mm 1mm; position: relative; }
+
+  /* Tabela de produtos */
+  .prod { flex: 1; display: flex; flex-direction: column; }
+  table.itens { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.itens th, table.itens td { border: 0.3mm solid #000; font-size: 5.6pt; padding: 0.3mm 0.6mm; overflow: hidden; }
+  table.itens thead th { font-weight: 700; text-align: center; font-size: 5pt; line-height: 1.05; }
+  table.itens td { height: 3.6mm; vertical-align: top; }
+  table.itens td.l { text-align: left; } table.itens td.r { text-align: right; } table.itens td.c { text-align: center; }
+  .prod .fill { flex: 1; border: 0.3mm solid #000; border-top: none; }
+  .prod .fill .cols { display: flex; height: 100%; }
+  .prod .fill .cols span { border-right: 0.3mm solid #000; } .prod .fill .cols span:last-child { border-right: none; }
+  col.c-cod { width: 17mm; } col.c-ncm { width: 12mm; } col.c-cst { width: 6mm; } col.c-cfop { width: 7mm; }
+  col.c-un { width: 6mm; } col.c-qtd { width: 8mm; } col.c-vu { width: 13mm; } col.c-vt { width: 14mm; }
+  col.c-bic { width: 12mm; } col.c-vic { width: 12mm; } col.c-aic { width: 9mm; }
+  col.c-pibs { width: 8mm; } col.c-pcbs { width: 8mm; } col.c-vibs { width: 9mm; } col.c-vcbs { width: 9mm; }
+
+  .foot .compl { display: flex; }
+  .foot .compl .ic { flex: 1; border-right: 0.4mm solid #000; padding: 1mm; min-height: 16mm; }
+  .foot .compl .qi { width: 45mm; padding: 1mm; display:flex; flex-direction:column; }
+  .foot .compl .qi .qtd { text-align:right; font-weight:700; font-size:9pt; }
+  .foot .compl .qi .rf { margin-top:auto; }
+  .foot .compl .k { font-size: 5pt; font-weight: 700; } .foot .compl .msg { font-size: 5.4pt; line-height: 1.25; margin-top: 0.6mm; }
+</style>
+</head>
+<body>
+<div class="danfe">
+  <div class="marca"><span>SEM VALIDADE</span></div>
+
+  <div class="canhoto">
+    <div class="cel recibo"><span>RECEBEMOS DE MELO DISTRIBUIDORA DE PEÇAS LTDA OS PRODUTOS CONSTANTES NA NOTA FISCAL NOTIFICADA AO LADO.</span></div>
+    <div class="cel data"><span>DATA DE RECEBIMENTO</span></div>
+    <div class="cel assin"><span>IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR</span></div>
+  </div>
+  <div class="nfnum"><div class="rot"><span class="lab">NOTA FISCAL Nº</span><span class="val">000142570</span></div></div>
+
+  <div class="corpo">
+    <!-- Cabeçalho -->
+    <div class="header">
+      <div class="emit">
+        <img src="{{LOGO}}" alt="MELO">
+        <div class="dados">
+          <div class="ttl">Identificação do Emitente</div>
+          RUA TEFE, No.487 PC 14 JANEIRO<br>
+          CEP: 69020-090 MANAUS (AM)<br>
+          FONE: (92)2121-4000 FAX: (92)2121-409
+        </div>
+      </div>
+      <div class="danfe-box">
+        <div class="t1">DANFE NFC-e</div>
+        <div class="t2">DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA PARA<br>CONSUMIDOR FINAL</div>
+        <div class="np">Não permite aproveitamento de crédito de ICMS</div>
+        <div class="nsf"><span>Nº<b>000142570</b></span><span>SÉRIE<b>003</b></span><span>FOLHA<b>1/1</b></span></div>
+      </div>
+      <div class="qr"><img src="{{QRCODE}}" alt="QR"></div>
+    </div>
+
+    <!-- Consumidor -->
+    <div class="sec">
+      <div class="rotlbl"><span>CONSUMIDOR</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="cell grow"><div class="k">NATUREZA DA OPERAÇÃO</div><div class="v">VENDA DE MERCADORIA ADQUIRIDA</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">PROTOCOLO DE AUTORIZAÇÃO</div><div class="v r">113263766675211 12/08/2026 10:36:01</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">INSCRIÇÃO ESTADUAL</div><div class="v">041647815</div></div>
+          <div class="cell grow"><div class="k">INSC. EST. DA SUBST. TRIBUTÁRIO</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">CNPJ</div><div class="v">04618302000189</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">NOME</div><div class="v">35800 - KAIC TOBIAS SOUZA TORRES</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">CPF/CNPJ</div><div class="v">03916337246</div></div>
+          <div class="cell" style="flex:0.4"><div class="k">DATA DA EMISSÃO</div><div class="v r">12/08/2026 10:35:40</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">ENDEREÇO</div><div class="v">RUA PIQUIA Nro: 50</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">BAIRRO</div><div class="v">HONORIO ROLDAO</div></div>
+          <div class="cell" style="flex:0.25"><div class="k">CEP</div><div class="v">69735000</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">DATA DE SAÍDA</div><div class="v">&nbsp;</div></div>
+        </div>
+        <div class="row">
+          <div class="cell" style="flex:0.5"><div class="k">MUNICÍPIO</div><div class="v">PRESIDENTE FIGUEIREDO</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">FONE</div><div class="v">&nbsp;</div></div>
+          <div class="cell" style="flex:0.12"><div class="k">UF</div><div class="v c">AM</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">HORA DE SAÍDA</div><div class="v">&nbsp;</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DUP -->
+    <div class="sec">
+      <div class="rotlbl"><span>DUP</span></div>
+      <div class="body"><div class="row"><div class="cell grow"><div class="k">FATURA / DUPLICATA</div><div class="v">A VISTA</div></div></div></div>
+    </div>
+
+    <!-- Mensagem fiscal -->
+    <div class="sec">
+      <div class="rotlbl"><span>MENS. FISCAL</span></div>
+      <div class="body">
+        <div class="msgfiscal">
+          <div class="tt">ÁREA DE MENSAGEM FISCAL</div>
+          Número 000142570 Série 3 Emissão 12/08/2026 10:35:40 - Via do Consumidor<br>
+          Consulte pela Chave de Acesso em http://sistemas.sefaz.am.gov.br/nfceweb/formConsulta.do<br>
+          CHAVE DE ACESSO<br>
+          <span class="chv">1326 0804 6183 0200 0189 6500 3000 1425 7011 7759 5921</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Totais -->
+    <div class="sec totais">
+      <div class="rotlbl"><span>TOTAIS</span></div>
+      <div class="body">
+        <div class="row"><div class="cell grow"><div class="k">FORMA DE PAGAMENTO</div><div class="v">OUTROS&nbsp;&nbsp;&nbsp;1.348,20</div></div></div>
+        <div class="row">
+          <div class="cell grow"><div class="k">TRIBUTOS TOTAIS INCIDENTES (Lei Federal 12.741/2012)</div><div class="v r">9,23 (0,68%)</div></div>
+          <div class="cell grow"><div class="k">DESCONTO</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR TOTAL DOS PRODUTOS</div><div class="v r">1.348,20</div></div>
+          <div class="cell grow" style="background:#eee"><div class="k">VALOR DA NOTA</div><div class="v r big">1.348,20</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Produtos -->
+    <div class="sec" style="flex:1">
+      <div class="rotlbl"><span>DADOS DOS PRODUTOS/SERVIÇOS</span></div>
+      <div class="body prod">
+        <table class="itens">
+          <colgroup><col class="c-cod"><col class="c-desc"><col class="c-ncm"><col class="c-cst"><col class="c-cfop"><col class="c-un"><col class="c-qtd"><col class="c-vu"><col class="c-vt"><col class="c-bic"><col class="c-vic"><col class="c-aic"><col class="c-pibs"><col class="c-pcbs"><col class="c-vibs"><col class="c-vcbs"></colgroup>
+          <thead><tr><th>CÓD. PRODUTO</th><th>DESCRIÇÃO DOS PRODUTOS / SERVIÇOS</th><th>NCM</th><th>CST</th><th>CFOP</th><th>UND</th><th>QTD</th><th>V. UNITÁRIO</th><th>V. TOTAL</th><th>BS. ICMS</th><th>V. ICMS</th><th>ALIQ. ICMS</th><th>%IBS</th><th>%CBS</th><th>V.IBS</th><th>V.CBS</th></tr></thead>
+          <tbody>
+            <tr><td class="l">00000000601236</td><td class="l"><b>82313FLEX</b><br>JUNTA CABECOTE MOTOR VW POWER 1.0 8V GOL/FOX FIBRA</td><td class="c">84841000</td><td class="c">560</td><td class="c">5405</td><td class="c">PC</td><td class="r">2</td><td class="r">49,90</td><td class="r">99,80</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,10</td><td class="r">0,90</td></tr>
+            <tr><td class="l">00000000632159</td><td class="l"><b>CT874K3</b><br>KIT TENSOR CORREIA DENTADA GM AGILE 1.4 8V 09&gt;14 CELTA</td><td class="c">84835090</td><td class="c">560</td><td class="c">5405</td><td class="c">PC</td><td class="r">1</td><td class="r">106,00</td><td class="r">106,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,11</td><td class="r">0,95</td></tr>
+            <tr><td class="l">00000000635829</td><td class="l"><b>K7RTCMM</b><br>VELA IGNICAO F5DPPR302 SP33 VW FOX 1.0 TOTAL FLEX 08&gt;14</td><td class="c">85111000</td><td class="c">260</td><td class="c">5405</td><td class="c">PC</td><td class="r">8</td><td class="r">8,60</td><td class="r">68,80</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,07</td><td class="r">0,62</td></tr>
+            <tr><td class="l">00000000656406</td><td class="l"><b>MBCBC159A</b><br>BOMBA COMBUSTIVEL UNIVERSAL FLEX GM AGILE 1.4 FLEX 10.09</td><td class="c">84133020</td><td class="c">160</td><td class="c">5405</td><td class="c">PC</td><td class="r">10</td><td class="r">64,90</td><td class="r">649,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,65</td><td class="r">5,84</td></tr>
+            <tr><td class="l">00000000632560</td><td class="l"><b>MBCH0220</b><br>JUNTA HOMOCINETICA FIAT PALIO/SIENA 1.0/1.4 96&gt;00 20X22</td><td class="c">87085099</td><td class="c">160</td><td class="c">5405</td><td class="c">PC</td><td class="r">2</td><td class="r">66,50</td><td class="r">133,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,13</td><td class="r">1,20</td></tr>
+            <tr><td class="l">00000000632566</td><td class="l"><b>MBCH9700</b><br>JUNTA HOMOCINETICA GM CORSA TDS SISTEMA DANA 28X22 DENTES</td><td class="c">87085099</td><td class="c">160</td><td class="c">5405</td><td class="c">PC</td><td class="r">4</td><td class="r">72,90</td><td class="r">291,60</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,29</td><td class="r">2,62</td></tr>
+          </tbody>
+        </table>
+        <div class="fill"><div class="cols">
+          <span style="width:17mm"></span><span style="flex:1"></span><span style="width:12mm"></span><span style="width:6mm"></span><span style="width:7mm"></span><span style="width:6mm"></span><span style="width:8mm"></span><span style="width:13mm"></span><span style="width:14mm"></span><span style="width:12mm"></span><span style="width:12mm"></span><span style="width:9mm"></span><span style="width:8mm"></span><span style="width:8mm"></span><span style="width:9mm"></span><span style="width:9mm"></span>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Inf. Adicionais + Qtd itens -->
+    <div class="sec foot">
+      <div class="rotlbl"><span>INF. ADICIONAIS</span></div>
+      <div class="body">
+        <div class="compl">
+          <div class="ic">
+            <div class="k">INFORMAÇÕES COMPLEMENTARES</div>
+            <div class="msg">
+              NRO DOC.: 001699866; PEDIDO: 1819833;<br>
+              MENSAGEM: MERC.RETIRADA ST PROT.ICMS 41-49/2008 MERCADORIA JÁ TRIB.NAS DEMAIS FASES DE COMERCIALIZAÇÃO
+              PROT 41/2008 E DECRETO 27.770 DE 25/07/2008 DEVOLUCAO DE MERCADORIA NO PRAZO DE 7 DIAS MEDIANTE NF.
+              CANCELAMENTO DE NFE 24 HORAS E NFC-E E BALCAO 30 MIN.<br>
+              VALORES REFERENTES AO IBS (0,10%) E CBS (0,90%) CALCULADOS PARA FINS DE TRANSIÇÃO E APRENDIZADO, CONFORME LEI COMPLEMENTAR Nº 214/2025. ESTES VALORES NÃO COMPÕEM O TOTAL DA OPERAÇÃO NESTE PERÍODO.
+            </div>
+          </div>
+          <div class="qi">
+            <div class="k">QUANTIDADE DE ITENS</div>
+            <div class="qtd">6</div>
+            <div class="rf"><div class="k">RESERVADO AO FISCO</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

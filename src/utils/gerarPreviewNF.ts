@@ -1098,7 +1098,14 @@ export const gerarPreviewNF = async (
   })();
   drawField('DATA DE ENTR./SAÍDA', dataHoraSaida, currentX, y, fieldWidth, 15);
 
-  y += 25; // Aumentado para dar mais espaço
+  y += 20;
+
+  // ---- FATURA / DUPLICATA (DUP) — sequência do modelo MELO (após destinatário) ----
+  const prazoNota = getValue(
+    (fatura as any).prazo ?? (fatura as any).cond_pagto ?? (fatura as any).prazopag ?? '',
+  );
+  drawField('FATURA / DUPLICATA', prazoNota ? `PRAZO: ${prazoNota}` : 'A VISTA', margin, y, contentWidth, 14);
+  y += 22;
 
   // Totais IBS/CBS calculados a partir dos ITENS (mesma fórmula da tabela de produtos),
   // para o quadro "CÁLCULO DO IMPOSTO" e a observação baterem com as linhas dos itens
@@ -1577,7 +1584,32 @@ export const gerarPreviewNF = async (
     },
   });
 
-  y += 10;
+  // ---- Preencher a página: estende a grade da tabela até o rodapé (padrão MELO) ----
+  // O rodapé (Dados Adicionais + ISSQN) só aparece na ÚLTIMA página. Se a última página
+  // da tabela não tiver espaço para ele, abre uma página nova só com o rodapé.
+  const dadosH = 66;
+  const issqnH = 20;
+  const footerTop = pageHeight - dadosH - issqnH - 8;
+  let finalY = (doc as any).lastAutoTable?.finalY ?? y;
+
+  if (finalY > footerTop) {
+    doc.addPage();
+    desenharCanhotoVertical();
+    const novaY = desenharCabecalhoCompleto(doc, dadosEmpresa, fatura, dadosNota, doc.getNumberOfPages());
+    doc.setFontSize(8).setFont('helvetica', 'bold');
+    doc.text('DADOS DO PRODUTO/SERVIÇO (Continuação)', margin, Number(novaY || 135) + 15);
+    finalY = Number(novaY || 135) + 22;
+  }
+
+  // Estende a grade (verticais das colunas) de finalY até o topo do rodapé.
+  // Larguras na MESMA ordem/valores do columnStyles (col.1 = descrição, flexível).
+  doc.setLineWidth(0.3);
+  const colW = [40, contentWidth - 385, 30, 18, 18, 15, 20, 28, 28, 26, 22, 22, 20, 18, 18, 18, 22, 22];
+  let bx = margin;
+  doc.line(bx, finalY, bx, footerTop); // borda esquerda
+  for (const w of colW) { bx += w; doc.line(bx, finalY, bx, footerTop); } // verticais + borda direita
+  doc.line(margin, footerTop, margin + contentWidth, footerTop); // fecha embaixo
+  y = footerTop;
 
   // 8. CÁLCULO DO ISSQN - COMENTADO
   // // Verificar se cabe na página, senão pular (Evita corte)
@@ -1633,20 +1665,20 @@ export const gerarPreviewNF = async (
 
   // y = issqnY + 30; // Gap reduzido de 40 para 30
 
-  // 9. DADOS ADICIONAIS (altura compactada de 100 para 75)
-  const dadosAdicionaisHeight = 75; 
+  // 9. DADOS ADICIONAIS (rodapé colado embaixo)
+  const dadosAdicionaisHeight = dadosH;
   doc.setLineWidth(0.5);
   doc.rect(margin, y, contentWidth, dadosAdicionaisHeight);
   const infoComplWidth = contentWidth * 0.65;
   doc.line(margin + infoComplWidth, y, margin + infoComplWidth, y + dadosAdicionaisHeight);
 
   doc.setFontSize(7).setFont('helvetica', 'bold');
-  doc.text('DADOS ADICIONAIS', margin + 3, y + 10);
+  doc.text('DADOS ADICIONAIS', margin + 3, y + 8);
   doc.setFontSize(6).setFont('helvetica', 'normal');
-  doc.text('INFORMAÇÕES COMPLEMENTARES', margin + 3, y + 20);
+  doc.text('INFORMAÇÕES COMPLEMENTARES', margin + 3, y + 15);
 
   doc.setFontSize(7).setFont('helvetica', 'bold');
-  doc.text('RESERVADO AO FISCO', margin + infoComplWidth + 3, y + 10);
+  doc.text('RESERVADO AO FISCO', margin + infoComplWidth + 3, y + 8);
 
   doc.setFontSize(5).setFont('helvetica', 'normal'); // Fonte reduzida para 5
   
@@ -1672,15 +1704,16 @@ export const gerarPreviewNF = async (
     venda.obs,
   )}\n${regimeTexto}${obsIBSCBS}`;
   const infoLines = doc.splitTextToSize(infoText, infoComplWidth - 6);
-  doc.text(infoLines, margin + 3, y + 30);
-  
-  // Texto de consulta abaixo do retângulo (mais próximo)
-  doc.setFontSize(6).setFont('helvetica', 'bold');
-  doc.text(
-    'Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no site da Sefaz Autorizada.',
-    margin + 3,
-    y + dadosAdicionaisHeight  - 2, // Gap reduzido para 8
-  );
+  doc.text(infoLines, margin + 3, y + 21);
+
+  // ---- Faixa ISSQN + QUANTIDADE DE ITENS (rodapé, padrão MELO) ----
+  const issqnY = y + dadosAdicionaisHeight;
+  const issqnQ = contentWidth / 5;
+  drawField('INSCRIÇÃO MUNICIPAL', getValue((dadosEmpresa as any).inscricaomunicipal), margin, issqnY, issqnQ, issqnH);
+  drawField('VALOR TOTAL DOS PRODUTOS', formatValue(fatura.totalprod), margin + issqnQ, issqnY, issqnQ, issqnH, 'right');
+  drawField('BASE DE CÁLCULO DO ISSQN', '0,00', margin + 2 * issqnQ, issqnY, issqnQ, issqnH, 'right');
+  drawField('VALOR DO ISSQN', '0,00', margin + 3 * issqnQ, issqnY, issqnQ, issqnH, 'right');
+  drawField('QUANTIDADE DE ITENS', String(produtosParaExibir.length), margin + 4 * issqnQ, issqnY, issqnQ, issqnH, 'right');
 
   // Texto diagonal "SEM VALIDADE" no meio do documento (apenas para preview)
   if (dadosNota.textoMarcaDagua) {

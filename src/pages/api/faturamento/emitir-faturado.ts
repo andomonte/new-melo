@@ -8,6 +8,7 @@ import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
 import { adicionarQRCodeNFCe } from '@/utils/adicionarQRCodeNFCe';
 import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
+import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { decrypt } from '@/utils/crypto';
 import { extrairCNPJDoCertificado } from '@/utils/certificadoExtractor';
@@ -544,24 +545,22 @@ export default async function handler(
         valorTotal: dbfatura.totalnf || 0,
       };
 
-      if (isPessoaFisica) {
-        const pdfDoc = await gerarPreviewCupomFiscal(
+      // PDF da nota em HTML (layout MELO via puppeteer). Fallback pro jsPDF se falhar.
+      try {
+        pdfBuffer = await gerarPdfNotaHtml(
+          isPessoaFisica ? 'nfce' : 'nfe',
           faturaParaPdf,
           produtos,
           dbvenda || {},
           emitente,
-          'valida',
-          dadosNFe
+          dadosNFe,
+          { homologacao: isHomologacao },
         );
-        pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
-      } else {
-        const pdfDoc = await gerarNotaFiscalValida(
-          faturaParaPdf,
-          produtos,
-          dbvenda || {},
-          emitente,
-          dadosNFe
-        );
+      } catch (errHtml) {
+        console.warn('⚠️ HTML→PDF falhou (emitir-faturado), usando jsPDF (fallback):', errHtml);
+        const pdfDoc = isPessoaFisica
+          ? await gerarPreviewCupomFiscal(faturaParaPdf, produtos, dbvenda || {}, emitente, 'valida', dadosNFe)
+          : await gerarNotaFiscalValida(faturaParaPdf, produtos, dbvenda || {}, emitente, dadosNFe);
         pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
       }
 
@@ -645,6 +644,44 @@ export default async function handler(
       } catch (e) {
         console.error('❌ Erro ao atualizar denegada:', e);
       }
+    }
+
+    // Salvar a NF-e REJEITADA no histórico — assim o status da fatura vira "Rejeitada"
+    // e a rejeição fica visível. Antes ficava sem registro e a fatura seguia "Pendente".
+    try {
+      const rejClient = await getPgPool().connect();
+      try {
+        const codnumerico = Math.floor(Math.random() * 1e9).toString().padStart(9, '0');
+        await rejClient.query(
+          `INSERT INTO db_manaus.dbfat_nfe (
+            codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, xmlremessa, xmlretorno,
+            status, numprotocolo, dthrprotocolo, motivo, tipo_emissao, modelo, tpemissao, emailenviado
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          [
+            codfat,
+            dbfatura.nroform || '1',
+            codnumerico,
+            new Date(),
+            chaveAcesso || null,
+            '4.00',
+            xmlAssinado || null,
+            xmlResposta || null,
+            status,
+            protocolo,
+            new Date(),
+            motivo ? motivo.substring(0, 2000) : null,
+            1,
+            modelo,
+            1,
+            'N',
+          ],
+        );
+        console.log('📝 NF-e rejeitada salva no histórico (status:', status, ')');
+      } finally {
+        rejClient.release();
+      }
+    } catch (e) {
+      console.error('⚠️ Erro ao salvar NF-e rejeitada no histórico:', e);
     }
 
     return res.status(400).json({

@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>DANFE NF-e</title>
+<style>
+  @page { size: A4 landscape; margin: 4mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 6.2pt; }
+  .danfe { width: 289mm; min-height: 200mm; border: 0.6mm solid #000; display: flex; }
+
+  /* ---------- Canhoto vertical (recibo) ---------- */
+  .canhoto { width: 9mm; border-right: 0.4mm solid #000; display: flex; flex-direction: column; }
+  .canhoto .cel { border-bottom: 0.4mm solid #000; position: relative; }
+  .canhoto .cel:last-child { border-bottom: none; }
+  .canhoto .cel span {
+    position: absolute; inset: 0; writing-mode: vertical-rl; transform: rotate(180deg);
+    font-size: 5pt; line-height: 1.1; padding: 1mm 0.5mm; text-align: left;
+  }
+  .canhoto .cel.recibo { flex: 3.2; }
+  .canhoto .cel.data { flex: 1.1; }
+  .canhoto .cel.assin { flex: 2.6; }
+
+  /* NOTA FISCAL Nº — coluna vertical estreita */
+  .nfnum { width: 8mm; border-right: 0.4mm solid #000; position: relative; }
+  .nfnum .rot {
+    position: absolute; inset: 0; writing-mode: vertical-rl; transform: rotate(180deg);
+    display: flex; align-items: center; justify-content: center; gap: 3mm;
+    font-weight: 700; text-align: center;
+  }
+  .nfnum .rot .lab { font-size: 6.5pt; }
+  .nfnum .rot .val { font-size: 10pt; letter-spacing: 0.3pt; }
+
+  .corpo { flex: 1; display: flex; flex-direction: column; }
+
+  /* ---------- Seções com rótulo vertical ---------- */
+  .sec { display: flex; border-top: 0.4mm solid #000; }
+  .sec:first-child { border-top: none; }
+  .sec .rotlbl {
+    width: 4mm; border-right: 0.4mm solid #000; position: relative; flex: none;
+  }
+  .sec .rotlbl span {
+    position: absolute; inset: 0; writing-mode: vertical-rl; transform: rotate(180deg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 5pt; font-weight: 700; text-align: center; letter-spacing: 0.2pt;
+  }
+  .sec .body { flex: 1; }
+
+  /* ---------- Grades de campos ---------- */
+  .row { display: flex; }
+  .row > .cell { border-left: 0.3mm solid #000; padding: 0.4mm 1mm 1mm; min-height: 6.6mm; position: relative; }
+  .row > .cell:first-child { border-left: none; }
+  .row + .row { border-top: 0.3mm solid #000; }
+  .k { font-size: 4.6pt; line-height: 1; color: #000; white-space: nowrap; }
+  .v { font-size: 7pt; font-weight: 700; line-height: 1.1; margin-top: 0.4mm; }
+  .v.big { font-size: 9pt; }
+  .r { text-align: right; }
+  .c { text-align: center; }
+  .grow { flex: 1; }
+
+  /* ---------- Cabeçalho ---------- */
+  .header { display: flex; align-items: stretch; }
+  .header .emit { flex: 3.0; display: flex; gap: 2mm; padding: 1.5mm; align-items: center; }
+  .header .emit img { height: 13mm; }
+  .header .emit .dados { font-size: 6.5pt; line-height: 1.25; }
+  .header .emit .dados .nome { font-weight: 700; font-size: 8pt; }
+  .header .emit .dados .ttl { font-weight: 700; font-size: 7pt; }
+  .header .danfe-box { flex: 1.0; border-left: 0.4mm solid #000; padding: 1mm; text-align: center; display: flex; flex-direction: column; }
+  .header .danfe-box .t1 { font-weight: 700; font-size: 11pt; }
+  .header .danfe-box .t2 { font-size: 5.4pt; line-height: 1.05; }
+  .header .danfe-box .es { display: flex; justify-content: space-between; align-items: center; margin-top: 1mm; font-size: 6pt; text-align: left; }
+  .header .danfe-box .es .box1 { border: 0.4mm solid #000; width: 6mm; height: 6mm; font-size: 10pt; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .header .danfe-box .nsf { display: flex; justify-content: space-between; margin-top: 1mm; font-size: 6pt; }
+  .header .danfe-box .nsf b { font-size: 8pt; }
+  .header .chave { flex: 1.9; border-left: 0.4mm solid #000; padding: 1mm; display: flex; flex-direction: column; gap: 0.8mm; }
+  .header .chave .barcode { font-family: 'Libre Barcode 128', monospace; }
+  .barwrap { text-align: center; }
+  .barwrap svg { height: 15mm; width: 100%; }
+  .header .chave .lin { border-top: 0.3mm solid #000; padding-top: 0.6mm; }
+  .header .chave .lin .k { font-size: 4.6pt; }
+  .header .chave .chv { font-weight: 700; font-size: 6.6pt; text-align: center; letter-spacing: 0.2pt; }
+
+  /* ---------- Tabela de produtos ---------- */
+  .prod { flex: 1; display: flex; flex-direction: column; }
+  table.itens { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.itens th, table.itens td { border: 0.3mm solid #000; font-size: 5.6pt; padding: 0.3mm 0.6mm; overflow: hidden; }
+  table.itens thead th { font-weight: 700; text-align: center; font-size: 5pt; line-height: 1.05; }
+  table.itens td { height: 3.6mm; vertical-align: top; }
+  table.itens td.l { text-align: left; }
+  table.itens td.r { text-align: right; }
+  table.itens td.c { text-align: center; }
+  .prod .fill { flex: 1; border: 0.3mm solid #000; border-top: none; }
+  .prod .fill .cols { display: flex; height: 100%; }
+  .prod .fill .cols span { border-right: 0.3mm solid #000; }
+  .prod .fill .cols span:last-child { border-right: none; }
+
+  /* colunas fixas (mm) — descrição flexível */
+  col.c-cod { width: 17mm; } col.c-desc { } col.c-ncm { width: 12mm; }
+  col.c-cst { width: 6mm; } col.c-cfop { width: 7mm; } col.c-un { width: 6mm; }
+  col.c-qtd { width: 8mm; } col.c-vu { width: 12mm; } col.c-vt { width: 13mm; }
+  col.c-bic { width: 11mm; } col.c-vic { width: 11mm; } col.c-vipi { width: 9mm; }
+  col.c-aic { width: 8mm; } col.c-aipi { width: 8mm; }
+  col.c-pibs { width: 7mm; } col.c-pcbs { width: 7mm; } col.c-vibs { width: 8mm; } col.c-vcbs { width: 8mm; }
+
+  .foot .compl { display: flex; }
+  .foot .compl .ic { flex: 0.62; border-right: 0.4mm solid #000; padding: 1mm; min-height: 16mm; }
+  .foot .compl .rf { flex: 0.38; padding: 1mm; }
+  .foot .compl .k { font-size: 5pt; font-weight: 700; }
+  .foot .compl .msg { font-size: 5.4pt; line-height: 1.25; margin-top: 0.6mm; }
+</style>
+</head>
+<body>
+<div class="danfe">
+
+  <!-- Canhoto -->
+  <div class="canhoto">
+    <div class="cel recibo"><span>RECEBEMOS DE MELO DISTRIBUIDORA DE PEÇAS LTDA OS PRODUTOS CONSTANTES NA NOTA FISCAL NOTIFICADA AO LADO.</span></div>
+    <div class="cel data"><span>DATA DE RECEBIMENTO</span></div>
+    <div class="cel assin"><span>IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR</span></div>
+  </div>
+  <div class="nfnum">
+    <div class="rot"><span class="lab">NOTA FISCAL Nº</span><span class="val">001463393</span></div>
+  </div>
+
+  <div class="corpo">
+
+    <!-- Cabeçalho -->
+    <div class="header">
+      <div class="emit">
+        <img src="{{LOGO}}" alt="MELO">
+        <div class="dados">
+          <div class="ttl">Identificação do Emitente</div>
+          <div class="nome">MELO DISTRIBUIDORA DE PEÇAS LTDA</div>
+          RUA TEFE, No.487 PC 14 JANEIRO<br>
+          CEP: 69020-090 MANAUS (AM)<br>
+          FONE: (92)2121-4000 FAX: (92)2121-409
+        </div>
+      </div>
+      <div class="danfe-box">
+        <div class="t1">DANFE</div>
+        <div class="t2">DOCUMENTO AUXILIAR DE<br>NOTA FISCAL ELETRÔNICA</div>
+        <div class="es">
+          <div>0 - ENTRADA<br>1 - SAÍDA</div>
+          <div class="box1">1</div>
+        </div>
+        <div class="nsf"><span>Nº <b>001463393</b></span></div>
+        <div class="nsf"><span>SÉRIE <b>001</b></span><span>FOLHA <b>1/1</b></span></div>
+      </div>
+      <div class="chave">
+        <div class="barwrap"><svg id="barcode"></svg></div>
+        <div class="lin"><div class="k">CHAVE DE ACESSO</div><div class="chv">1326 0804 6183 0200 0189 5500 1001 4633 9315 9329 7023</div></div>
+        <div class="lin"><div class="k">Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no Site da Sefaz Autorizadora</div></div>
+        <div class="lin"><div class="k">PROTOCOLO DE AUTORIZAÇÃO DE USO</div><div class="v">113263767729050 13/08/2026 08:01:35</div></div>
+      </div>
+    </div>
+
+    <!-- Natureza / inscrições -->
+    <div class="sec">
+      <div class="rotlbl"><span>VALOR&nbsp;&nbsp;796,30</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="cell grow"><div class="k">NATUREZA DA OPERAÇÃO</div><div class="v">VENDA DE MERCADORIA ADQUIRIDA</div></div>
+          <div class="cell" style="flex:0.6"><div class="k">DADOS DA NF-e</div><div class="v">&nbsp;</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">INSCRIÇÃO ESTADUAL</div><div class="v">041647815</div></div>
+          <div class="cell grow"><div class="k">INSC. EST. DA SUBST. TRIBUTÁRIO</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">CNPJ</div><div class="v">04618302000189</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Destinatário -->
+    <div class="sec">
+      <div class="rotlbl"><span>DESTINATÁRIO</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="cell grow"><div class="k">NOME/RAZÃO SOCIAL</div><div class="v">34723 - FORTE PNEUS AUTO CENTER LTDA</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">CPF/CNPJ</div><div class="v">36810634000238</div></div>
+          <div class="cell" style="flex:0.4"><div class="k">DATA DA EMISSÃO</div><div class="v r">13/08/2026 08:01:36</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">ENDEREÇO</div><div class="v">AVENIDA COMPENSA Nro: 76</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">BAIRRO</div><div class="v">VILA DA PRATA</div></div>
+          <div class="cell" style="flex:0.25"><div class="k">CEP</div><div class="v">69030575</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">DATA DE SAÍDA/ENTRADA</div><div class="v">&nbsp;</div></div>
+        </div>
+        <div class="row">
+          <div class="cell" style="flex:0.5"><div class="k">MUNICÍPIO</div><div class="v">MANAUS</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">FONE</div><div class="v">(93)35234253</div></div>
+          <div class="cell" style="flex:0.12"><div class="k">UF</div><div class="v c">AM</div></div>
+          <div class="cell" style="flex:0.4"><div class="k">INSCRIÇÃO ESTADUAL</div><div class="v">05.426.265-8</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">HORA DE SAÍDA</div><div class="v">&nbsp;</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DUP -->
+    <div class="sec">
+      <div class="rotlbl"><span>DUP</span></div>
+      <div class="body">
+        <div class="row"><div class="cell grow"><div class="k">FATURA / DUPLICATA</div><div class="v">PRAZO: 30</div></div></div>
+      </div>
+    </div>
+
+    <!-- Imposto -->
+    <div class="sec">
+      <div class="rotlbl"><span>IMPOSTO</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="cell grow"><div class="k">BASE DE CÁLCULO DE ICMS</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR DO ICMS</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">BASE DE CÁLCULO DO ICMS SUBSTITUIÇÃO</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR DO ICMS SUBSTITUIÇÃO</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR TOTAL DOS PRODUTOS</div><div class="v r">796,30</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">ALÍQUOTA IBS (%)</div><div class="v r">0,10</div></div>
+          <div class="cell grow"><div class="k">VALOR IBS</div><div class="v r">0,80</div></div>
+          <div class="cell grow"><div class="k">ALÍQUOTA CBS (%)</div><div class="v r">0,90</div></div>
+          <div class="cell grow"><div class="k">VALOR CBS</div><div class="v r">7,17</div></div>
+          <div class="cell grow"><div class="k">IBS ESTADUAL</div><div class="v r">0,80</div></div>
+          <div class="cell grow"><div class="k">IBS MUNICIPAL</div><div class="v r">0,00</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">VALOR DO FRETE</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR DO SEGURO</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">DESCONTO</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">OUTRAS DESPESAS ACESSORIAS</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR DO IPI</div><div class="v r">0,00</div></div>
+          <div class="cell grow" style="background:#eee"><div class="k">VALOR DA NOTA</div><div class="v r big">796,30</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transporte -->
+    <div class="sec">
+      <div class="rotlbl"><span>TRANSPORTE</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="cell grow"><div class="k">RAZÃO SOCIAL</div><div class="v">CLIENTE RETIRA - MELO DISTRIBUIDORA</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">FRETE POR CONTA</div><div class="v">9 – Sem Ocorrência de Transporte</div></div>
+          <div class="cell" style="flex:0.3"><div class="k">CÓDIGO ANTT.</div><div class="v">&nbsp;</div></div>
+          <div class="cell" style="flex:0.35"><div class="k">PLACA DO VEÍCULO</div><div class="v">&nbsp;</div></div>
+          <div class="cell" style="flex:0.12"><div class="k">UF</div><div class="v c">AM</div></div>
+          <div class="cell" style="flex:0.4"><div class="k">CNPJ/CPF</div><div class="v">04618302000189</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">ENDEREÇO</div><div class="v">AVENIDA TEFE</div></div>
+          <div class="cell" style="flex:0.6"><div class="k">MUNICÍPIO</div><div class="v">MANAUS</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">INSCRIÇÃO ESTADUAL</div><div class="v">04.164.781-5</div></div>
+        </div>
+        <div class="row">
+          <div class="cell grow"><div class="k">QUANTIDADE</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">ESPÉCIE</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">MARCA</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">NUMERAÇÃO</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">PESO BRUTO</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">PESO LÍQUIDO</div><div class="v">&nbsp;</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Produtos -->
+    <div class="sec" style="flex:1">
+      <div class="rotlbl"><span>DADOS DOS PRODUTOS/SERVIÇOS</span></div>
+      <div class="body prod">
+        <table class="itens">
+          <colgroup>
+            <col class="c-cod"><col class="c-desc"><col class="c-ncm"><col class="c-cst"><col class="c-cfop"><col class="c-un"><col class="c-qtd"><col class="c-vu"><col class="c-vt"><col class="c-bic"><col class="c-vic"><col class="c-vipi"><col class="c-aic"><col class="c-aipi"><col class="c-pibs"><col class="c-pcbs"><col class="c-vibs"><col class="c-vcbs">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>CÓD. PRODUTO</th><th>DESCRIÇÃO DOS PRODUTOS / SERVIÇOS</th><th>NCM</th><th>CST</th><th>CFOP</th><th>UND</th><th>QTD</th><th>V. UNITÁRIO</th><th>V. TOTAL</th><th>BS. ICMS</th><th>V. ICMS</th><th>V. IPI</th><th>ALIQ. ICMS</th><th>ALIQ. IPI</th><th>%IBS</th><th>%CBS</th><th>V.IBS</th><th>V.CBS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="l">0000000647643</td><td class="l"><b>0986B01490</b><br>FILTRO LUBRIFICANTE FIAT ARGO 1.0/1.3 17&gt; MOBI 1.0 17&gt; 3 CIL</td><td class="c">84212300</td><td class="c">260</td><td class="c">5405</td><td class="c">UN</td><td class="r">10</td><td class="r">12,64</td><td class="r">126,40</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,13</td><td class="r">1,14</td></tr>
+            <tr><td class="l">0000000639612</td><td class="l"><b>0986BB0178</b><br>PASTILHA FREIO DIANTEIRA BB1968 VW POLO/T-CROSS/VIRTUS 18&gt;</td><td class="c">87083019</td><td class="c">260</td><td class="c">5405</td><td class="c">JG</td><td class="r">2</td><td class="r">111,00</td><td class="r">222,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,22</td><td class="r">2,00</td></tr>
+            <tr><td class="l">0000000561432</td><td class="l"><b>0986BB0786</b><br>PASTILHA FREIO DIANTEIRA FIAT UNO VIVACE 1.0 EVO 10&gt;</td><td class="c">87083019</td><td class="c">260</td><td class="c">5405</td><td class="c">JG</td><td class="r">6</td><td class="r">59,00</td><td class="r">354,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,35</td><td class="r">3,19</td></tr>
+            <tr><td class="l">0000000306519</td><td class="l"><b>0986BF0024</b><br>FILTRO COMBUSTIVEL</td><td class="c">84212300</td><td class="c">260</td><td class="c">5405</td><td class="c">PC</td><td class="r">10</td><td class="r">9,39</td><td class="r">93,90</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,00</td><td class="r">0,10</td><td class="r">0,90</td><td class="r">0,09</td><td class="r">0,85</td></tr>
+          </tbody>
+        </table>
+        <div class="fill">
+          <div class="cols">
+            <span style="width:17mm"></span><span style="flex:1"></span><span style="width:12mm"></span><span style="width:6mm"></span><span style="width:7mm"></span><span style="width:6mm"></span><span style="width:8mm"></span><span style="width:12mm"></span><span style="width:13mm"></span><span style="width:11mm"></span><span style="width:11mm"></span><span style="width:9mm"></span><span style="width:8mm"></span><span style="width:8mm"></span><span style="width:7mm"></span><span style="width:7mm"></span><span style="width:8mm"></span><span style="width:8mm"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISSQN -->
+    <div class="sec">
+      <div class="rotlbl"><span>&nbsp;</span></div>
+      <div class="body">
+        <div class="row">
+          <div class="cell grow"><div class="k">INSCRIÇÃO ESTADUAL</div><div class="v">&nbsp;</div></div>
+          <div class="cell grow"><div class="k">VALOR TOTAL DOS PRODUTOS</div><div class="v r">796,30</div></div>
+          <div class="cell grow"><div class="k">BASE DE CÁLCULO DO ISSQN</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">VALOR DO ISSQN</div><div class="v r">0,00</div></div>
+          <div class="cell grow"><div class="k">QUANTIDADE DE ITENS</div><div class="v r">4</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inf. Adicionais -->
+    <div class="sec foot">
+      <div class="rotlbl"><span>INF. ADICIONAIS</span></div>
+      <div class="body">
+        <div class="compl">
+          <div class="ic">
+            <div class="k">INFORMAÇÕES COMPLEMENTARES</div>
+            <div class="msg">
+              NRO DOC.: 001700176; PEDIDO: 1820144;<br>
+              MENSAGEM: MERC.RETIRADA ST PROT.ICMS 41-49/2008 MERCADORIA JÁ TRIB.NAS DEMAIS FASES DE COMERCIALIZAÇÃO
+              PROT 41/2008 E DECRETO 27.770 DE 25/07/2008 DEVOLUCAO DE MERCADORIA NO PRAZO DE 7 DIAS MEDIANTE NF.
+              CANCELAMENTO DE NFE 24 HORAS E NFC-E E BALCAO 30 MIN.<br>
+              VALORES REFERENTES AO IBS (0,10%) E CBS (0,90%) CALCULADOS PARA FINS DE TRANSIÇÃO E APRENDIZADO, CONFORME LEI COMPLEMENTAR Nº 214/2025. ESTES VALORES NÃO COMPÕEM O TOTAL DA OPERAÇÃO NESTE PERÍODO.
+            </div>
+          </div>
+          <div class="rf"><div class="k">RESERVADO AO FISCO</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="{{JSBARCODE}}"></script>
+<script>
+  try {
+    JsBarcode('#barcode', '13260804618302000189550010014633931593297023', { format: 'CODE128C', displayValue: false, margin: 0, height: 40, width: 1.4 });
+  } catch (e) {}
+</script>
+</body>
+</html>
