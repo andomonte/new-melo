@@ -996,7 +996,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           operadorNome: operadorSel?.nome || null,
           arm_id: armId,
           formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
-          parcelasCartao: isCartaoCredito ? parcelasCartao : null,
+          parcelasCartao: isCartaoCredito ? (parcelasCartao > 0 ? parcelasCartao : 1) : null,
           avista: isAvista,
           avistaMotivo: isAvista ? avistaMotivo : null,
           requisicao: requisicao || '',
@@ -1051,7 +1051,9 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     if (clienteBloqueado) { setEnvioStep('erro'); setEnvioMsg('O CLIENTE ESTÁ BLOQUEADO, CONSULTE O SETOR DE COBRANÇA.'); return; }
     if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('ESCOLHA PRODUTOS!'); return; }
     if (itensGrid.length > 500) { setEnvioStep('erro'); setEnvioMsg('JÁ EXISTEM 500 ITENS SELECIONADOS PARA ESTA VENDA'); return; }
-    if (isCartaoCredito && (!parcelasCartao || parcelasCartao <= 0)) { setEnvioStep('erro'); setEnvioMsg('INFORME O PARCELAMENTO DO CARTÃO'); return; }
+    // Se cartão e parcelas não definida, auto-setar 1x (timing do useEffect pode não ter executado)
+    const parcelasEfetivas = isCartaoCredito ? (parcelasCartao > 0 ? parcelasCartao : 1) : 0;
+    if (isCartaoCredito && parcelasEfetivas <= 0) { setEnvioStep('erro'); setEnvioMsg('INFORME O PARCELAMENTO DO CARTÃO'); return; }
     if (isClienteBalcao && totalVenda > 10000) { setEnvioStep('erro'); setEnvioMsg('CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.'); return; }
     if (isClienteBalcao && !isAvista && !isCartaoCredito) { setEnvioStep('erro'); setEnvioMsg('CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.'); return; }
 
@@ -1082,7 +1084,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           vendedor: vendedorSel?.codigo || null,
           operador: operadorSel?.codigo || null,
           formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
-          parcelasCartao: isCartaoCredito ? parcelasCartao : null,
+          parcelasCartao: isCartaoCredito ? (parcelasCartao > 0 ? parcelasCartao : 1) : null,
           avista: isAvista,
           avistaMotivo: isAvista ? avistaMotivo : null,
           requisicao: requisicao || '',
@@ -2602,7 +2604,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
                             vendedor: vendedorSel?.codigo || null, operador: operadorSel?.codigo || null,
                             formaPagamento: fPagamento ? (opcoesFP.find(f => f.id === fPagamento)?.descricao || fPagamento) : null,
-          parcelasCartao: isCartaoCredito ? parcelasCartao : null,
+          parcelasCartao: isCartaoCredito ? (parcelasCartao > 0 ? parcelasCartao : 1) : null,
                             avista: isAvista,
           avistaMotivo: isAvista ? avistaMotivo : null,
                             requisicao: requisicao || '',
@@ -2646,7 +2648,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   </button>
                 ) : (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30 || (isClienteBalcao && totalVenda > 10000) || (isClienteBalcao && !isAvista && !isCartaoCredito) || (isCartaoCredito && parcelasCartao <= 0)}
+                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30 || (isClienteBalcao && totalVenda > 10000) || (isClienteBalcao && !isAvista && !isCartaoCredito)}
                     title=""
                     onClick={handleFinalizarVenda}
                     className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
