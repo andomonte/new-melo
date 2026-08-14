@@ -19,13 +19,6 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/manaus",
-      "permanent": false
-    }
-  ],
   "env": {
     "NODE_ENV": "production"
   }
