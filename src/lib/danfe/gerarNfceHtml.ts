@@ -59,9 +59,15 @@ export function gerarNfceHtml(
   const chave = getValue(dadosNFe.chaveAcesso);
   const protocolo = getValue(dadosNFe.protocolo, 'SEM VALIDADE');
 
+  // Preferir o dhEmi REAL da nota (dadosNFe.dataEmissao, ex.: "2026-08-14T15:15:42-04:00")
+  // e ler os componentes direto da string (já vem no horário de Manaus -04:00) para não
+  // escorregar de fuso. Só cai em fatura.data (data da venda, hora zerada) se não houver dhEmi.
   const dataEmissao = (() => {
-    const d = fatura.data ? new Date(fatura.data) : new Date();
+    const src = getValue(dadosNFe.dataEmissao) || fatura.data;
     const p = (n: number) => String(n).padStart(2, '0');
+    const m = String(src).match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}:${m[6]}`;
+    const d = src ? new Date(src) : new Date();
     return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   })();
 

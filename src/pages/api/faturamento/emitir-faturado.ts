@@ -536,12 +536,17 @@ export default async function handler(
         iest: dbclien?.iest || '',
       };
 
+      // dhEmi REAL do XML (já no horário de Manaus, ex.: "2026-08-14T15:15:42-04:00").
+      // Evita a DANFE mostrar hora UTC (toISOString) ou 00:00 (data da venda).
+      const dhEmiMatch = xmlAssinado.match(/<dhEmi>([^<]+)<\/dhEmi>/);
+      const dataEmissaoReal = dhEmiMatch?.[1]?.trim() || new Date().toISOString();
+
       const dadosNFe = {
         chaveAcesso: chaveAutorizada,
         protocolo: protocolo || undefined,
         numeroNFe,
         serieNFe,
-        dataEmissao: new Date().toISOString(),
+        dataEmissao: dataEmissaoReal,
         valorTotal: dbfatura.totalnf || 0,
       };
 

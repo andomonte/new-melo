@@ -340,6 +340,8 @@ export default async function listarFaturas(
         nfe.chave AS nfe_chave,
         nfe.numprotocolo AS nfe_protocolo,
         nfe.motivo AS nfe_motivo,
+        nfe.dthrprotocolo AS nfe_dthrprotocolo,
+        nfe.modelo AS nfe_modelo,
         CASE 
           WHEN nfe.status IS NOT NULL AND nfe.status != '100' THEN nfe.motivo
           ELSE NULL

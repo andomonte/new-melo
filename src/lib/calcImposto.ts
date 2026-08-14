@@ -184,13 +184,11 @@ export async function calcImposto(
   );
   const valorPIS = toN(data?.valores?.valorpis ?? data?.campos?.valorpis ?? 0);
   const valorCOFINS = toN(data?.valores?.valorcofins ?? data?.campos?.valorcofins ?? 0);
-  const valorImpostos = +(
-    valorIPI +
-    valorICMS +
-    valorICMS_Subst +
-    valorPIS +
-    valorCOFINS
-  ).toFixed(2);
+  // "Total c/ Imposto" = o valor que o cliente REALMENTE paga.
+  // Só somam os tributos "POR FORA" (que aumentam o valor a pagar e entram no VALOR DA
+  // NOTA): IPI + ICMS-ST. ICMS/PIS/COFINS são "por dentro" (já embutidos no preço) —
+  // ficam disponíveis no objeto (tooltip informativo) mas NÃO somam ao total.
+  const valorImpostos = +(valorIPI + valorICMS_Subst).toFixed(2);
 
   const impostosRs: ImpostosItemRS = {
     valorIPI,

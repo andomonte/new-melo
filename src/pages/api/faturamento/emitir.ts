@@ -696,7 +696,8 @@ export default async function handler(
       // Extrair dados da NFe para gerar PDF válido
       const chaveAcesso = retEnviNFe.protNFe?.infProt?.chNFe || '';
       const protocolo = retEnviNFe.protNFe?.infProt?.nProt || '';
-      const dataEmissao = new Date().toISOString();
+      // fallback; será sobrescrito com o dhEmi REAL do XML (formato Manaus -04:00) abaixo
+      let dataEmissao = new Date().toISOString();
       
       // CORREÇÃO: Extrair número da NFe e série do XML ORIGINAL (antes de enviar)
       // Parse do XML enviado para extrair ide
@@ -708,6 +709,10 @@ export default async function handler(
       const ideOriginal = xmlOriginalParsed?.NFe?.infNFe?.ide;
       let numeroNFe = ideOriginal?.nNF?.toString() || '';
       let serieNFe = ideOriginal?.serie?.toString() || '1';
+
+      // dhEmi REAL da nota (já no horário de Manaus, ex.: "2026-08-14T15:15:42-04:00").
+      // Evita a DANFE mostrar hora UTC (do toISOString) ou 00:00 (data da venda).
+      if (ideOriginal?.dhEmi) dataEmissao = String(ideOriginal.dhEmi);
 
       // CORREÇÃO: Se o número extraído for '1' (fallback), tentar extrair da chave de acesso
       if (numeroNFe === '1' && chaveAcesso && chaveAcesso.length === 44) {

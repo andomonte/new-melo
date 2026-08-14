@@ -224,7 +224,10 @@ export function gerarXMLNFe(dados: any): string {
 
   
   const cUF = '13';
-  const dhEmi = new Date(data || new Date());
+  // dhEmi = INSTANTE REAL da emissão (com hora), igual à NFC-e. Antes usava `data`
+  // (data da VENDA, que vinha sem hora → 00:00 e com dia desatualizado); a SEFAZ
+  // espera o momento real de emissão da nota, não a data do pedido/venda.
+  const dhEmi = new Date();
   const AAMM = dhEmi.getFullYear().toString().substring(2) + ('0' + (dhEmi.getMonth() + 1)).slice(-2);
   const CNPJ = emitente?.cnpj?.replace(/\D/g, '') ?? '';
   const mod = '55';

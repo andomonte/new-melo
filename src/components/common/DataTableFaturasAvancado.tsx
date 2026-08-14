@@ -668,6 +668,27 @@ export default function DataTableFaturasAvancado({
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
 
   const handleAbrirModalCancelar = (fatura: any) => {
+    // Regra de prazo da SEFAZ, validada ANTES de abrir o modal do motivo:
+    //   NF-e (mod.55): 24h após autorização | NFC-e (mod.65): 30 minutos.
+    // Se já expirou, nem pede o motivo — informa direto (não chega a chamar a SEFAZ).
+    const autorizacao = fatura?.nfe_dthrprotocolo;
+    if (autorizacao) {
+      const ehNfce = String(fatura?.nfe_modelo || '55') === '65';
+      const limiteMin = ehNfce ? 30 : 24 * 60;
+      const decorridoMin = (Date.now() - new Date(autorizacao).getTime()) / 60000;
+      if (Number.isFinite(decorridoMin) && decorridoMin > limiteMin) {
+        pedirConfirmacao(() => {}, {
+          somenteOk: true,
+          type: 'warning',
+          title: 'Cancelamento não permitido',
+          message:
+            `Esta ${ehNfce ? 'NFC-e' : 'NF-e'} não pode mais ser cancelada. ` +
+            `O prazo de cancelamento é de ${ehNfce ? '30 minutos' : '24 horas'} após a autorização e já expirou ` +
+            `(autorizada há ${Math.round(decorridoMin)} min).`,
+        });
+        return;
+      }
+    }
     setFaturaParaCancelar(fatura);
     setMotivoCancelamento('');
     setModalCancelarAberto(true);

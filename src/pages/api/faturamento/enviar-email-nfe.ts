@@ -31,6 +31,7 @@ export default async function handler(
         nfe.chave,
         nfe.numprotocolo,
         nfe.dthrprotocolo,
+        nfe.xmlremessa,
         CAST(nfe.nrodoc_fiscal AS TEXT) as numero_documento,
         nfe.modelo,
         nfe.emailenviado,
@@ -236,11 +237,15 @@ export default async function handler(
       transp: fatura.transp,
     };
 
+    // dhEmi REAL (formato Manaus -04:00) extraído do XML assinado armazenado.
+    // Evita a DANFE do email mostrar 00:00 (data da venda). Fallback: fatura.data.
+    const dhEmiXml = String(fatura.xmlremessa || '').match(/<dhEmi>([^<]+)<\/dhEmi>/)?.[1]?.trim();
+
     const dadosNFe = {
       chaveAcesso: fatura.chave,
       protocolo: fatura.numprotocolo,
       numeroNFe: fatura.numero_nfe,
-      dataEmissao: fatura.data,
+      dataEmissao: dhEmiXml || fatura.data,
       // Fallback robusto para evitar valor zero: totalnf -> totalfat -> 0
       valorTotal: Number(fatura.totalnf || fatura.totalfat || 0),
     };

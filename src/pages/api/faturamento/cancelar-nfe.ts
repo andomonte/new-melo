@@ -5,7 +5,8 @@ import https from 'https';
 import { getPgPool } from '@/lib/pg';
 import { parseStringPromise } from 'xml2js';
 
-import { assinarXML } from '@/components/services/sefazNfe/assinarXml';
+import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assinarXml';
+import { decrypt } from '@/utils/crypto';
 
 export default async function handler(
   req: NextApiRequest,
@@ -35,7 +36,7 @@ export default async function handler(
       // Primeiro tentativa: buscar como string
       console.log('🔍 Tentando buscar codfat como string:', codfat);
       let result = await client.query(
-        'SELECT * FROM dbfat_nfe WHERE codfat = $1',
+        "SELECT * FROM dbfat_nfe WHERE codfat = $1 ORDER BY (status = '100') DESC, dthrprotocolo DESC NULLS LAST",
         [String(codfat)],
       );
 
@@ -43,7 +44,7 @@ export default async function handler(
         // Segunda tentativa: buscar como number
         console.log('🔍 Tentando buscar codfat como number:', Number(codfat));
         result = await client.query(
-          'SELECT * FROM dbfat_nfe WHERE codfat = $1',
+          "SELECT * FROM dbfat_nfe WHERE codfat = $1 ORDER BY (status = '100') DESC, dthrprotocolo DESC NULLS LAST",
           [Number(codfat)],
         );
       }
@@ -56,7 +57,7 @@ export default async function handler(
           codfatSemZero,
         );
         result = await client.query(
-          'SELECT * FROM dbfat_nfe WHERE codfat = $1',
+          "SELECT * FROM dbfat_nfe WHERE codfat = $1 ORDER BY (status = '100') DESC, dthrprotocolo DESC NULLS LAST",
           [codfatSemZero],
         );
       }
@@ -121,10 +122,62 @@ export default async function handler(
       });
     }
 
+    // 2.05 REGRA DE PRAZO DE CANCELAMENTO DA SEFAZ — validada ANTES de enviar, para já
+    // informar ao usuário que a nota não pode mais ser cancelada:
+    //   NF-e (mod.55): até 24 horas após a autorização.
+    //   NFC-e (mod.65): até 30 minutos após a autorização.
+    {
+      const ehNfce = String(nota.modelo || '55') === '65';
+      const limiteMin = ehNfce ? 30 : 24 * 60;
+      const decorridoMin = (Date.now() - new Date(dataAutorizacaoRaw).getTime()) / 60000;
+      if (Number.isFinite(decorridoMin) && decorridoMin > limiteMin) {
+        return res.status(400).json({
+          erro:
+            `Esta ${ehNfce ? 'NFC-e' : 'NF-e'} não pode mais ser cancelada. ` +
+            `O prazo de cancelamento é de ${ehNfce ? '30 minutos' : '24 horas'} após a autorização e já expirou ` +
+            `(autorizada há ${Math.round(decorridoMin)} min).`,
+          prazoExpirado: true,
+          modelo: String(nota.modelo || '55'),
+          minutosDecorridos: Math.round(decorridoMin),
+        });
+      }
+    }
+
+    // 2.1 Carregar o certificado do BANCO (mesmo da emissão). O cert de arquivo em disco
+    // é legado/morto — a SEFAZ o rejeita no handshake (SSL alert 46 "certificate unknown").
+    let certificadoKey = '';
+    let certificadoCrt = '';
+    let cadeiaCrt: string | null = null;
+    let cnpjEmitente = '18053139000169';
+    {
+      const cliCert = await getPgPool().connect();
+      try {
+        const emp = await cliCert.query(
+          `SELECT "certificadoKey", "certificadoCrt", "cadeiaCrt", cgc
+             FROM dadosempresa
+            WHERE "certificadoKey" IS NOT NULL AND "certificadoCrt" IS NOT NULL
+            LIMIT 1`,
+        );
+        if (!emp.rowCount) {
+          return res.status(400).json({ erro: 'Nenhuma empresa com certificado digital configurado.' });
+        }
+        const emitenteRaw = emp.rows[0];
+        certificadoKey = (await decrypt(emitenteRaw.certificadoKey)) || '';
+        certificadoCrt = (await decrypt(emitenteRaw.certificadoCrt)) || '';
+        cadeiaCrt = emitenteRaw.cadeiaCrt ? await decrypt(emitenteRaw.cadeiaCrt) : null;
+        if (!certificadoKey || !certificadoCrt) {
+          return res.status(400).json({ erro: 'Erro ao descriptografar o certificado digital.' });
+        }
+        cnpjEmitente = String(emitenteRaw.cgc || '18053139000169').replace(/\D/g, '');
+      } finally {
+        cliCert.release();
+      }
+    }
+
     // 3. Gerar XML de cancelamento com estrutura correta
     const chave = nota.chave;
     const nProt = nota.numprotocolo;
-    const cnpj = '18053139000169'.replace(/\D/g, '');
+    const cnpj = cnpjEmitente;
 
     // CORREÇÃO: Usar a data de autorização da NFe como base para evitar erros 578/579
     const dataAutorizacao = new Date(dataAutorizacaoRaw);
@@ -134,34 +187,15 @@ export default async function handler(
     // - Maior ou igual à data de autorização da NFe (erro 579)
     // - Menor ou igual à data atual do servidor da SEFAZ (erro 578)
 
-    let dataEvento;
-
-    // Se a data de autorização é muito antiga (mais de 1 hora), usar data atual menos alguns minutos
-    const umHoraAtras = new Date(agora.getTime() - 60 * 60 * 1000);
-
-    if (dataAutorizacao < umHoraAtras) {
-      // NFe antiga: usar data atual menos 10 minutos para dar margem
-      dataEvento = new Date(agora.getTime() - 10 * 60 * 1000);
-    } else {
-      // NFe recente: usar data de autorização mais 1 minuto
-      dataEvento = new Date(dataAutorizacao.getTime() + 1 * 60 * 5000);
-
-      // Mas não pode ser maior que agora menos 5 minutos
-      const cincoMinutosAtras = new Date(agora.getTime() - 5 * 60 * 10000);
-      if (dataEvento > cincoMinutosAtras) {
-        dataEvento = cincoMinutosAtras;
-      }
-    }
-
-    // Formatar data/hora no padrão correto para o Amazonas (UTC-4)
-    const year = dataEvento.getFullYear();
-    const month = String(dataEvento.getMonth() + 1).padStart(2, '0');
-    const day = String(dataEvento.getDate()).padStart(2, '0');
-    const hours = String(dataEvento.getHours()).padStart(2, '0');
-    const minutes = String(dataEvento.getMinutes()).padStart(2, '0');
-    const seconds = String(dataEvento.getSeconds()).padStart(2, '0');
-
-    const dhEvento = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}-04:00`;
+    // dhEvento = horário ATUAL no fuso do Amazonas (UTC-4). Precisa ser >= data de
+    // autorização (senão rejeição 579) e <= horário do servidor SEFAZ (senão 578).
+    // Como o prazo já foi validado acima, "agora" está sempre dentro da janela.
+    // Calculado via UTC-4 explícito para independer do fuso do servidor.
+    const agoraAm = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const dhEvento =
+      `${agoraAm.getUTCFullYear()}-${p2(agoraAm.getUTCMonth() + 1)}-${p2(agoraAm.getUTCDate())}` +
+      `T${p2(agoraAm.getUTCHours())}:${p2(agoraAm.getUTCMinutes())}:${p2(agoraAm.getUTCSeconds())}-04:00`;
 
     // Validar tamanho da justificativa (mínimo 15 caracteres)
     if (motivo.length < 15) {
@@ -194,12 +228,12 @@ export default async function handler(
   </evento>
 </envEvento>`;
 
-    // 4. Assinar XML de cancelamento
-    const xmlAssinado = await assinarXML(
+    // 4. Assinar XML de cancelamento (certificado do BANCO, igual à emissão)
+    const xmlAssinado = await assinarXMLComCertificados(
       xmlCancelamento,
       'infEvento',
-      'src/nfe-sefaz-node/certificado/certificado.key',
-      'src/nfe-sefaz-node/certificado/certificado.crt',
+      certificadoKey,
+      certificadoCrt,
     );
 
     // 5. Remover declaração XML do xmlAssinado se existir (para evitar duplicação)
@@ -223,11 +257,9 @@ export default async function handler(
 
     // 7. Enviar para Sefaz
     const agent = new https.Agent({
-      key: fs.readFileSync('src/nfe-sefaz-node/certificado/certificado.key'),
-      cert: fs.readFileSync('src/nfe-sefaz-node/certificado/certificado.crt'),
-      ca: fs.existsSync('src/nfe-sefaz-node/certificado/cadeia.pem')
-        ? fs.readFileSync('src/nfe-sefaz-node/certificado/cadeia.pem')
-        : undefined,
+      key: Buffer.from(certificadoKey),
+      cert: Buffer.from(certificadoCrt),
+      ca: cadeiaCrt ? Buffer.from(cadeiaCrt) : undefined,
       rejectUnauthorized: false,
     });
 
