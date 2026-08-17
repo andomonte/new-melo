@@ -15,6 +15,7 @@ import SecaoCollapse from '@/components/common/SecaoCollapse';
 import AbaProdutos from './AbaProdutos';
 import FaturamentoNotaV2 from '../v2/FaturamentoNotaV2';
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { Textarea } from '@/components/ui/textarea';
 import DetalhesClienteModal from '../modalDetlahesCliente';
 import { useNavigate } from 'react-router-dom';
@@ -420,9 +421,28 @@ export default function FaturamentoNota({
     habilitarValor: false,
     impostoNa1Parcela: false,
     freteNa1Parcela: false,
+    // Cartão/dinheiro/pix (tipo ≠ Boleto/Carteira): se marcado, gera 1 parcela de 30
+    // dias com o valor total (vai pro contas a receber). Se não, não gera cobrança.
+    gerar30dias: false,
   });
   const [boletoPreviewURL, setBoletoPreviewURL] = useState<string | null>(null);
   const [isBoletoPreviewOpen, setIsBoletoPreviewOpen] = useState(false);
+  // Marca (uma vez por tipo) que o "gerar 30 dias" já foi auto-ligado — não re-liga
+  // se o usuário desmarcar depois.
+  const auto30DiasRef = useRef<string>('');
+  // Modal central de confirmação (usado para a contingência da SEFAZ).
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  const confirmarContingencia = (mensagem: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      pedirConfirmacao(() => resolve(true), {
+        title: 'SEFAZ indisponível',
+        message: mensagem,
+        type: 'warning',
+        confirmText: 'Emitir em contingência',
+        cancelText: 'Cancelar',
+        onCancel: () => resolve(false),
+      });
+    });
 
   type StatusVendaType = {
     tipodoc: string;
@@ -688,6 +708,52 @@ export default function FaturamentoNota({
     return [{ value: 'BOLETO', label: 'BOLETO' }];
   }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
 
+  // Pré-preenche o TIPO DE FATURA a partir do obsfat da venda (ex.: "CARTAO DE
+  // CREDITO 01x" → Cartão de Crédito), como o Delphi faz ao abrir o faturamento.
+  useEffect(() => {
+    // dadosVenda pode ser objeto (1 venda) ou array (várias) — pega a 1ª.
+    const vendaObj = Array.isArray(dadosVenda) ? dadosVenda[0] : dadosVenda;
+    const obs = String(vendaObj?.obsfat || '').toUpperCase();
+    const ehCartao =
+      obs.startsWith('CARTAO DE CREDITO') || obs.startsWith('CARTÃO DE CRÉDITO');
+    if (!ehCartao) return;
+    // Só age enquanto o tipo ainda é o default BOLETO (não sobrescreve escolha manual).
+    if (formCobranca.tipoFatura !== 'BOLETO') return;
+
+    const cartaoOpt = opcoesTipoFatura.find((o) =>
+      /CR[EÉ]DITO/.test(String(o.value).toUpperCase()),
+    );
+    if (cartaoOpt) {
+      handleCobrancaChange('tipoFatura', cartaoOpt.value);
+      return;
+    }
+    // Cartão não está nas opções (banco atual não é MELO). Força MELO — onde as
+    // opções de cartão existem, como o Delphi força o banco/forma no cartão.
+    const melo = bancos.find((b: any) => b.nome === 'MELO');
+    if (melo && formCobranca.banco !== melo.banco) {
+      handleCobrancaChange('banco', melo.banco);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dadosVenda, opcoesTipoFatura, bancos, formCobranca.banco, formCobranca.tipoFatura]);
+
+  // À vista (cartão crédito/débito, pix, dinheiro): já vem com "gerar 30 dias" MARCADO
+  // e a parcela única gerada. Aplica uma vez por tipo (não re-marca se o usuário desmarcar).
+  useEffect(() => {
+    const tipo = String(formCobranca.tipoFatura || '').toUpperCase();
+    const ehAVista = /CR[EÉ]DITO|D[EÉ]BITO|PIX|DINHEIRO/.test(tipo);
+    if (!ehAVista) {
+      auto30DiasRef.current = '';
+      return;
+    }
+    if (auto30DiasRef.current === tipo) return; // já aplicou para este tipo
+    auto30DiasRef.current = tipo;
+    handleCobrancaChange('gerar30dias', true);
+    const venc = new Date();
+    venc.setDate(venc.getDate() + 30);
+    setParcelas([{ dias: 30, vencimento: getProximoDiaUtil(venc).toISOString() }]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formCobranca.tipoFatura]);
+
   // Usar dados calculados da API se disponíveis, senão usar cálculos hardcoded como fallback
   const dadosResumoFinanceiro = vendaData?.resumoFinanceiro;
 
@@ -696,6 +762,20 @@ export default function FaturamentoNota({
   const totalNF = dadosResumoFinanceiro?.totalGeral ?? (
     totalProdutos - Number(desconto) + Number(acrescimo) + Number(frete)
   );
+
+  // Valor de entrada (à vista) informado na cobrança. Subtrai do total ANTES de
+  // dividir nas parcelas — ex.: total 1000, entrada 400, 3x → (600)/3 = 200 cada.
+  // Aceita vírgula decimal (400,50).
+  const getValorEntrada = () =>
+    formCobranca.habilitarValor
+      ? parseFloat(
+          String(formCobranca.valorVista ?? '')
+            .replace(/\./g, '') // tira ponto de milhar
+            .replace(',', '.'), // vírgula decimal → ponto
+        ) || 0
+      : 0;
+  const getTotalLiquidoCobranca = () => Math.max(0, totalNF - getValorEntrada());
+
   const previewParcelas = useMemo<ParcelaPreview[]>(() => {
     // Usa parcelasPagamento (do hook) se disponível, senão usa parcelas (estado local)
     const parcelasParaUsar =
@@ -703,10 +783,7 @@ export default function FaturamentoNota({
 
     if (parcelasParaUsar.length === 0) return [];
 
-    let valorLiquido = totalNF;
-    if (formCobranca.habilitarValor && formCobranca.valorVista) {
-      valorLiquido -= parseFloat(formCobranca.valorVista) || 0;
-    }
+    const valorLiquido = getTotalLiquidoCobranca();
     let valorBaseParcela =
       parcelasParaUsar.length > 0 ? valorLiquido / parcelasParaUsar.length : 0;
     const parcelasCalculadas = parcelasParaUsar.map((p, index) => {
@@ -787,6 +864,31 @@ export default function FaturamentoNota({
       modelo: selecao.modelo,
     });
 
+    // SEFAZ fora do ar → oferece CONTINGÊNCIA no modal central. Se confirmar, re-emite
+    // com contingencia=true (NFC-e offline, tpEmis=9).
+    if (res.data?.contingenciaDisponivel) {
+      const confirmou = await confirmarContingencia(
+        res.data.mensagem ||
+          'SEFAZ indisponível. Deseja emitir esta nota em CONTINGÊNCIA (offline)?',
+      );
+      if (!confirmou) {
+        throw new Error('Emissão cancelada — SEFAZ indisponível.');
+      }
+      const resC = await axios.post(selecao.endpoint, { ...payload, contingencia: true });
+      if (!resC.data?.sucesso) {
+        throw new Error(
+          resC.data?.motivo || resC.data?.detalhe || 'Falha ao emitir em contingência.',
+        );
+      }
+      return {
+        ...resC.data,
+        tipoEmissao: selecao.tipoEmissao,
+        modelo: selecao.modelo,
+        descricao: selecao.descricao,
+        contingencia: true,
+      };
+    }
+
     if (!res.data || !res.data.sucesso) {
       throw new Error(
         res.data.motivo || `Falha ao emitir ${selecao.descricao}.`,
@@ -799,6 +901,55 @@ export default function FaturamentoNota({
       tipoEmissao: selecao.tipoEmissao,
       modelo: selecao.modelo,
       descricao: selecao.descricao,
+    };
+  };
+
+  // Monta o payload de COBRANÇA para gravar JUNTO com a fatura numa transação única
+  // (salvar.ts). Retorna null quando não há cobrança. Mesma regra de parcelas do fluxo
+  // antigo (handleSalvarDadosCobranca), mas SEM chamar API — os dados vão no /salvar.
+  const montarDadosCobranca = () => {
+    if (statusVenda?.cobranca !== 'S') return null;
+
+    const requerParcelas =
+      formCobranca.tipoFatura === 'BOLETO' ||
+      formCobranca.tipoFatura === 'BOLETO BANCARIO' ||
+      formCobranca.gerar30dias;
+
+    const combinedParcelas = parcelas
+      .map((p, idx) => ({ ...p, isSaved: false, originalIndex: idx }))
+      .concat(
+        parcelasPagamento.map((p) => ({
+          ...p,
+          isSaved: true,
+          dias: p.dia,
+          vencimento: p.data.split('T')[0],
+          originalIndex: -1,
+        })),
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime(),
+      );
+
+    if (requerParcelas && combinedParcelas.length === 0) {
+      throw new Error('Para gerar cobrança, adicione ao menos uma parcela.');
+    }
+
+    const codvenda =
+      vendasSelecionadas.length > 0 ? vendasSelecionadas[0].codvenda : null;
+
+    return {
+      banco: formCobranca.banco,
+      tipofat: formCobranca.tipoFatura,
+      codvenda,
+      parcelas: requerParcelas
+        ? combinedParcelas.map((p, index) => ({
+            vencimento: p.vencimento,
+            valor: getTotalLiquidoCobranca() / combinedParcelas.length,
+            documento: `NF${nroformulario}${String.fromCharCode(65 + index)}`,
+            nossoNumero: `693913${index + 1}`,
+          }))
+        : [],
     };
   };
 
@@ -871,6 +1022,9 @@ export default function FaturamentoNota({
         informar_no_corpo_nf: informarNoCorpoNF ? 'S' : 'N',
         vendas: vendasSelecionadas.map((v) => v.codvenda),
         usuario_associacao: cliente?.codcli || '',
+        // COBRANÇA na MESMA transação da fatura (atomicidade). null = sem cobrança.
+        // Se a cobrança falhar no servidor, a fatura é revertida junto (sem órfã).
+        cobranca_dados: montarDadosCobranca(),
       };
 
       const res = await axios.post('/api/faturamento/salvar', payload);
@@ -915,7 +1069,8 @@ export default function FaturamentoNota({
     // Verifica se é um tipo de documento que requer parcelas
     const requerParcelas =
       formCobranca.tipoFatura === 'BOLETO' ||
-      formCobranca.tipoFatura === 'BOLETO BANCARIO';
+      formCobranca.tipoFatura === 'BOLETO BANCARIO' ||
+      formCobranca.gerar30dias;
 
     // Combinar parcelas manuais e salvas para o preview
     const combinedParcelas = parcelas
@@ -977,7 +1132,7 @@ export default function FaturamentoNota({
         parcelas: requerParcelas
           ? combinedParcelas.map((p, index) => ({
               vencimento: p.vencimento,
-              valor: totalNF / combinedParcelas.length, // Dividir o valor total pelas parcelas
+              valor: getTotalLiquidoCobranca() / combinedParcelas.length, // Dividir o valor total pelas parcelas
               documento: `NF${nroformulario}${String.fromCharCode(65 + index)}`,
               nossoNumero: `693913${index + 1}`,
             }))
@@ -1686,14 +1841,20 @@ export default function FaturamentoNota({
             id: loadingToast,
           },
         );
-        await handleSalvarDadosCobranca(novoCodfat);
-        // Salvar parcelas na nova tabela se houver
-        if (parcelas.length > 0 && dadosVenda.codvenda) {
-          await salvarParcelas(
-            dadosVenda.codvenda,
-            parcelas.map((p) => ({ dia: p.dias })),
-          );
+        if (agrupandoFaturas) {
+          // AGRUPAMENTO: cobrança segue como passo separado (comportamento original).
+          await handleSalvarDadosCobranca(novoCodfat);
+          // Salvar parcelas na nova tabela se houver
+          if (parcelas.length > 0 && dadosVenda.codvenda) {
+            await salvarParcelas(
+              dadosVenda.codvenda,
+              parcelas.map((p) => ({ dia: p.dias })),
+            );
+          }
         }
+        // INDIVIDUAL: a cobrança (dbreceb + dbprazo) JÁ foi gravada na MESMA transação
+        // da fatura em salvar.ts — se falhasse, a fatura teria sido revertida junto,
+        // sem deixar fatura órfã (era o bug do fluxo antigo em 2 chamadas HTTP).
         updateWindowProgress(currentStepNum, 'Cobrança configurada', 'success');
 
         etapa = 'envio de e-mail da cobrança';
@@ -3526,6 +3687,18 @@ O problema está na Inscrição Estadual (IE), não na série!
     const novosDias = Math.ceil((util.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
     setParcelas((prev: any[]) => prev.map((p, i) => (i === idx ? { ...p, vencimento: util.toISOString(), dias: novosDias } : p)));
   };
+  // Editar os DIAS → recalcula o vencimento (próximo dia útil), inverso do atualizarVencimento.
+  const atualizarDiasV2 = (idx: number, diasStr: string) => {
+    const dias = parseInt(String(diasStr), 10);
+    if (isNaN(dias) || dias <= 0) return;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const venc = new Date(hoje.getTime());
+    venc.setDate(venc.getDate() + dias);
+    const util = getProximoDiaUtil(venc);
+    const diasReais = Math.ceil((util.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+    setParcelas((prev: any[]) => prev.map((p, i) => (i === idx ? { ...p, dias: diasReais, vencimento: util.toISOString() } : p)));
+  };
   const removerParcelaV2 = (idx: number) => {
     setParcelas((prev: any[]) => prev.filter((_: any, i: number) => i !== idx));
   };
@@ -3558,6 +3731,18 @@ O problema está na Inscrição Estadual (IE), não na série!
     tipoFatura: (v) => handleCobrancaChange('tipoFatura', v),
     prazoSelecionado: (v) => handleCobrancaChange('prazoSelecionado', v),
     habilitarValor: (v) => handleCobrancaChange('habilitarValor', v),
+    valorVista: (v) => handleCobrancaChange('valorVista', v),
+    gerar30dias: (v) => {
+      handleCobrancaChange('gerar30dias', v);
+      if (v) {
+        // 1 parcela de 30 dias com o valor total (próximo dia útil).
+        const venc = new Date();
+        venc.setDate(venc.getDate() + 30);
+        setParcelas([{ dias: 30, vencimento: getProximoDiaUtil(venc).toISOString() }]);
+      } else {
+        setParcelas([]);
+      }
+    },
     impostoNa1Parcela: (v) => handleCobrancaChange('impostoNa1Parcela', v),
     freteNa1Parcela: (v) => handleCobrancaChange('freteNa1Parcela', v),
     diferenciada: setDiferenciada,
@@ -3616,7 +3801,7 @@ O problema está na Inscrição Estadual (IE), não na série!
       especie, marca, numero, pesoBruto, pesoLiquido, quantidade,
       tipodoc: statusVenda.tipodoc, cobranca: statusVenda.cobranca,
       banco: formCobranca.banco, tipoFatura: formCobranca.tipoFatura, prazoSelecionado: formCobranca.prazoSelecionado,
-      habilitarValor: formCobranca.habilitarValor, impostoNa1Parcela: formCobranca.impostoNa1Parcela, freteNa1Parcela: formCobranca.freteNa1Parcela,
+      habilitarValor: formCobranca.habilitarValor, valorVista: formCobranca.valorVista, impostoNa1Parcela: formCobranca.impostoNa1Parcela, freteNa1Parcela: formCobranca.freteNa1Parcela, gerar30dias: formCobranca.gerar30dias,
       diferenciada, comissaoExterno, comissaoInterno, percDesconto, percAcrescimo, desconto, acrescimo,
       descRadio: informarDescontoCorpo ? 'S' : 'N', acresRadio: informarAcrescimoCorpo ? 'S' : 'N',
       textoBuscaMensagem, intervaloDias, qtdParcelas,
@@ -3654,15 +3839,27 @@ O problema está na Inscrição Estadual (IE), não na série!
         { value: '4', label: '4 - Transporte Próprio por conta do Destinatário' },
         { value: '9', label: '9 - Sem Ocorrência de Transporte' },
       ],
-      parcelas: (parcelas || []).map((p: any, i: number) => ({
-        idx: i,
-        parcela: i + 1,
-        dias: p.dias ?? '',
-        vencimento: p.vencimento ? new Date(p.vencimento).toISOString().slice(0, 10) : '',
-        valor: (parcelas.length ? Number(totalNF) / parcelas.length : 0).toFixed(2),
-        editavel: true,
-      })),
-      totalParcelas: Number(totalNF).toFixed(2),
+      parcelas: (() => {
+        // Exibe as parcelas SALVAS na venda (dbprazo_pagamento, via hook) quando existirem;
+        // senão as geradas localmente. Normaliza dia/data → dias/vencimento.
+        const lista = (parcelasPagamento.length > 0 ? parcelasPagamento : parcelas) || [];
+        const n = lista.length;
+        const liquido = getTotalLiquidoCobranca(); // total - entrada
+        // base truncada a 2 casas; a ÚLTIMA parcela absorve os centavos p/ somar exato.
+        const base = n ? Math.floor((liquido / n) * 100) / 100 : 0;
+        return lista.map((p: any, i: number) => {
+          const venc = p.vencimento ?? p.data;
+          return {
+            idx: i,
+            parcela: i + 1,
+            dias: (p.dias ?? p.dia) ?? '',
+            vencimento: venc ? new Date(venc).toISOString().slice(0, 10) : '',
+            valor: (i === n - 1 ? +(liquido - base * (n - 1)).toFixed(2) : base).toFixed(2),
+            editavel: true,
+          };
+        });
+      })(),
+      totalParcelas: getTotalLiquidoCobranca().toFixed(2),
       mensagens: (mensagensNF || []).map((m: any) => ({ codigo: m.codigo, descricao: m.descricao || m.texto || m.mensagem || '' })),
       sugestoes: (sugestoes || []).map((m: any) => ({ codigo: m.codigo, descricao: m.mensagem })),
       recalculandoImposto,
@@ -3672,6 +3869,7 @@ O problema está na Inscrição Estadual (IE), não na série!
       emitir: () => handleProcessoCompleto(faturasAgrupadas),
       gerarParcelas: gerarParcelasV2,
       atualizarVencimento: atualizarVencimentoV2,
+      atualizarDias: atualizarDiasV2,
       removerParcela: removerParcelaV2,
       buscaMensagem: (t: string) => handleBuscaMensagemChange({ target: { value: t } } as any),
       removerMensagem: (cod: any) => removerMensagem(cod),
@@ -3695,6 +3893,7 @@ O problema está na Inscrição Estadual (IE), não na série!
           onSave={handleSalvarNovaMensagem}
         />
         {renderModalEmissao()}
+        {ConfirmacaoSalvarModal}
       </>
     );
   }

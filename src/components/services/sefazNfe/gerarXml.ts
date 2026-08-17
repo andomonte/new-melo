@@ -369,18 +369,22 @@ export function gerarXMLNFe(dados: any): string {
           serie: serieNF,
           nNF: numeroNF,
           dhEmi: formatarDataSefaz(dhEmi),
-          tpNF: '1',
+          // tpNF: 0=entrada (devolução), 1=saída (venda, padrão)
+          tpNF: String(dados?.tpNF ?? '1'),
           idDest: '1',
           cMunFG: '1302603',
           tpImp: '1',
           tpEmis,
           cDV,
           tpAmb,
-          finNFe: '1',
+          // finNFe: 1=normal (padrão), 4=devolução de mercadoria
+          finNFe: String(dados?.finNFe ?? '1'),
           indFinal: '1',
           indPres: '1',
           procEmi: '0',
           verProc: '1.0',
+          // Referência à NF-e original (devolução/estorno).
+          ...(dados?.refNFe ? { NFref: { refNFe: String(dados.refNFe) } } : {}),
         },
         emit: {
           // CORREÇÃO: Usar campo correto baseado no tipo de documento

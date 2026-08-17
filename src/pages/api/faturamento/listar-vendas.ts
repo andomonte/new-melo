@@ -38,6 +38,8 @@ export default async function handler(
   const perPage = parseInt(req.query.perPage as string) || 10;
   const rawFiltros = req.query.filtros || '[]';
   const termoBusca = (req.query.search as string) || '';
+  // Usuário atual: usado só para marcar quais reservas são de OUTRAS pessoas.
+  const usuarioAtual = (req.query.usuario as string) || '';
 
   let filtros: any[] = [];
   try {
@@ -164,9 +166,12 @@ export default async function handler(
       SELECT v.codvenda, v.nrovenda, v.tipo, v.obs, v.total, v.data,v.codvend,
              v.transp as transportadora,
              c.codcli, c.nome as cliente, c.uf, c.cep, c.cidade, c.bairro,
-             c.ender, c.numero, c.complemento
+             c.ender, c.numero, c.complemento,
+             r.usuario AS reservado_por, r.usuario_nome AS reservado_por_nome
       FROM dbvenda v
       LEFT JOIN dbclien c ON v.codcli = c.codcli
+      LEFT JOIN db_manaus.fat_reserva_venda r
+        ON r.codvenda = v.codvenda AND r.expira_em > now()
       ${whereSQL}
       ORDER BY v.data DESC, v.codvenda DESC
       LIMIT $${values.length + 1}
@@ -193,6 +198,12 @@ export default async function handler(
       transportadora: v.transportadora ?? '',
       codcli: v.codcli ?? '',
       codvend: v.codvend ?? '',
+      // Reserva (soft lock): quem detém e se é de OUTRO usuário (para desabilitar a linha).
+      reservado_por: v.reservado_por ?? null,
+      reservado_por_nome: v.reservado_por_nome ?? null,
+      reservado_por_outro:
+        !!v.reservado_por &&
+        String(v.reservado_por) !== String(usuarioAtual),
     }));
 
     res.status(200).json({

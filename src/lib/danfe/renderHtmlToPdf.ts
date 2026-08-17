@@ -4,7 +4,11 @@
 // garantindo a orientação correta — o print do navegador não respeita @page.
 import type { Buffer as NodeBuffer } from 'buffer';
 
-export async function renderHtmlToPdf(html: string): Promise<NodeBuffer> {
+export async function renderHtmlToPdf(
+  html: string,
+  opts: { landscape?: boolean } = {},
+): Promise<NodeBuffer> {
+  const landscape = opts.landscape ?? true; // paisagem = padrão (DANFE)
   // import dinâmico para não pesar bundles que não usam puppeteer
   const puppeteer = (await import('puppeteer')).default;
   const browser = await puppeteer.launch({
@@ -16,7 +20,7 @@ export async function renderHtmlToPdf(html: string): Promise<NodeBuffer> {
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
     const pdf = await page.pdf({
       format: 'A4',
-      landscape: true,
+      landscape,
       printBackground: true,
       margin: { top: '4mm', bottom: '4mm', left: '4mm', right: '4mm' },
     });

@@ -1919,6 +1919,7 @@ const ProdutosPage = () => {
         isOpen={isAtualizarCustoOpen}
         onClose={() => setIsAtualizarCustoOpen(false)}
         onSuccess={forcarRefresh}
+        codprodsSelecionados={Array.from(selectedProducts)}
       />
 
       {/* Modal Demanda */}

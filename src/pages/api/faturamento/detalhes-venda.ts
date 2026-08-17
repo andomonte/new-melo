@@ -215,6 +215,7 @@ export default async function handler(
             data: row.data,
             transp: row.transp,
             obs: row.obs,
+            obsfat: row.obsfat, // forma de pagamento (ex.: "CARTAO DE CREDITO 01x")
             total: row.total,
             codcli: row.codcli,
             codvend: row.codvend,

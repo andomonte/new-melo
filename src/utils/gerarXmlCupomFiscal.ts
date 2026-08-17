@@ -281,7 +281,8 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
     console.log(`🔄 Série alfanumérica "${serieNF}" convertida para código numérico: ${serieChave}`);
   }
   
-  const tpEmis = '1'; // Tipo de emissão: 1 = Normal
+  // Tipo de emissão: 1 = Normal; 9 = Contingência offline (NFC-e). Parametrizado.
+  const tpEmis = String(dados?.tpEmis || '1');
 
   // CORREÇÃO: cNF (Código Numérico) - SEMPRE 8 dígitos
   // Gerar cNF único combinando número do pedido + aleatório
@@ -387,6 +388,15 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
      .ele('procEmi').txt('1').up()             // B26
      .ele('verProc').txt('4.00').up()           // B27
      .up();
+
+  // Contingência offline (tpEmis=9): dhCont (entrada em contingência) + xJust (motivo).
+  if (tpEmis === '9') {
+    ide.ele('dhCont').txt(formatarDataSefaz(new Date())).up();
+    ide
+      .ele('xJust')
+      .txt(String(dados?.justificativaContingencia || 'SEFAZ indisponivel - emissao em contingencia').slice(0, 256))
+      .up();
+  }
 
   // Emitente
   const emit = infNFe.ele('emit');

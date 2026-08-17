@@ -29,6 +29,9 @@ export default async function handler(
     return res.status(405).json({ erro: 'Método não permitido' });
   }
 
+  // Fora do try para ficar acessível no catch (detecção de contingência).
+  const contingencia = Boolean(req.body?.contingencia);
+
   try {
     // Busca codfat do body
     const { codfat } = req.body;
@@ -342,6 +345,8 @@ export default async function handler(
         emitente,  // Usar emitente diretamente, não dados.emitente
         cliente: clienteParaXml,
         produtos: produtosNFCe,
+        tpEmis: contingencia ? '9' : '1',
+        justificativaContingencia: 'SEFAZ indisponivel - emissao em contingencia',
         data: new Date(),
         pedido: nroformEmissao,
         serie: serieEmissao,
@@ -395,7 +400,11 @@ export default async function handler(
         dataEmissao
       );
 
-      urlSefaz = getUrlSefazAtual('NFCE_AUTORIZACAO', ambienteEmpresa);
+      urlSefaz = contingencia
+        ? (String(ambienteEmpresa) === '1'
+            ? 'https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx'
+            : 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx')
+        : getUrlSefazAtual('NFCE_AUTORIZACAO', ambienteEmpresa);
 
     } else {
       // ========== NF-e (NOTA FISCAL) ==========
@@ -704,6 +713,19 @@ export default async function handler(
       detalhe = JSON.stringify(detalhe, null, 2);
     }
     console.error('❌ Erro ao emitir:', detalhe);
+
+    // SEFAZ fora do ar (falha de conexão) e ainda não em contingência → oferece contingência.
+    const semConexao = /ENOTFOUND|ETIMEDOUT|ECONNREFUSED|ECONNRESET|EAI_AGAIN|socket hang up|getaddrinfo|timeout/i.test(
+      String(error?.message || error?.code || detalhe),
+    );
+    if (semConexao && !contingencia) {
+      return res.status(200).json({
+        sucesso: false,
+        contingenciaDisponivel: true,
+        mensagem: 'SEFAZ indisponível. Deseja emitir esta nota em CONTINGÊNCIA (offline)?',
+        detalhe: String(error?.message || 'sem conexão com a SEFAZ'),
+      });
+    }
 
     return res.status(500).json({
       sucesso: false,

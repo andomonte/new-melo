@@ -3,6 +3,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
+import { inserirCobranca } from '@/lib/faturamento/inserirCobranca';
 
 /**
  * Resolve a operação fiscal do faturamento a partir de Movimentação (SAIDA/ENTRADA)
@@ -193,6 +194,9 @@ export default async function handler(
     desconto_suframa = 'N',
     imposto_antecipado = 'N',
     mva_antecipado = 0,
+    // COBRANÇA ATÔMICA: dados da cobrança gravados na MESMA transação da fatura.
+    // Se null/ausente, a fatura é criada sem cobrança (fluxo de agrupamento/edição).
+    cobranca_dados = null,
   } = req.body;
 
   // DEBUG: Log do payload recebido
@@ -548,6 +552,23 @@ export default async function handler(
       }
 
       console.log(`📦 Baixa de estoque concluída para venda ${codvenda}`);
+    }
+
+    // ===== COBRANÇA NA MESMA TRANSAÇÃO (atomicidade fatura + cobrança) =====
+    // Fiel ao GERAR_FATURA do Delphi: fatura, baixa de estoque e cobrança são UMA
+    // unidade. Se a cobrança falhar aqui, o catch abaixo faz ROLLBACK de tudo — não
+    // sobra fatura órfã (o bug de antes, quando a cobrança era uma 2ª chamada HTTP).
+    if (cobranca === 'S' && cobranca_dados) {
+      console.log('💳 Gravando cobrança na mesma transação da fatura...');
+      await inserirCobranca(client, {
+        codfat: novoCodfat,
+        codcli: cliente.codcli,
+        banco: cobranca_dados.banco,
+        tipofat: cobranca_dados.tipofat,
+        codvenda: cobranca_dados.codvenda ?? vendasArray[0] ?? null,
+        parcelas: cobranca_dados.parcelas ?? [],
+      });
+      console.log('✅ Cobrança gravada na transação da fatura');
     }
 
     await client.query('COMMIT');

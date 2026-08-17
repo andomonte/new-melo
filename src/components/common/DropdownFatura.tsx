@@ -8,6 +8,9 @@ import {
 import {
   Edit,
   FileText,
+  FileSignature,
+  BatteryCharging,
+  Undo2,
   DollarSign,
   CircleChevronDown,
   Mail,
@@ -28,6 +31,10 @@ interface Props {
   onEmitirNotaClick: () => void;
   onVisualizarBoletosClick: () => void;
   onVerProdutosClick?: () => void;
+  onCartaCorrecaoClick?: () => void;
+  onTermoBateriasClick?: () => void;
+  onEstornoClick?: () => void;
+  onEmitirDevolucaoClick?: () => void;
   isSelecionada?: boolean;
 }
 
@@ -44,8 +51,16 @@ export default function DropdownFatura({
   onEmitirNotaClick,
   onVisualizarBoletosClick,
   onVerProdutosClick,
+  onCartaCorrecaoClick,
+  onTermoBateriasClick,
+  onEstornoClick,
+  onEmitirDevolucaoClick,
   isSelecionada = false,
 }: Props) {
+  // É uma DI de devolução (gerada por estorno) quando tem codfatrel + natureza DEVOLUCAO.
+  const ehDI =
+    !!fatura?.codfatrel &&
+    String(fatura?.descrcfop || '').toUpperCase().includes('DEVOLU');
        
   const [open, setOpen] = useState(false);
 
@@ -129,6 +144,27 @@ export default function DropdownFatura({
           <FileText className="size-4 text-red-700 group-hover:text-white transition" />
           Cancelar Nota Fiscal
         </DropdownMenuItem>
+
+        {onCartaCorrecaoClick && (
+          <DropdownMenuItem
+            onClick={onCartaCorrecaoClick}
+            disabled={
+              fatura.nfe_status !== '100' ||
+              String(fatura.nfe_modelo ?? '55') === '65'
+            }
+            title={
+              fatura.nfe_status !== '100'
+                ? 'Só é possível para NF-e autorizada'
+                : String(fatura.nfe_modelo ?? '55') === '65'
+                  ? 'Carta de Correção não vale para NFC-e'
+                  : 'Gerar Carta de Correção Eletrônica'
+            }
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-teal-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <FileSignature className="size-4 text-teal-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Carta de Correção
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           onClick={onCobrancaClick}
@@ -214,6 +250,48 @@ export default function DropdownFatura({
           <MailCheck className="size-4 text-blue-500 group-hover:text-white transition" />
           Enviar Cobrança
         </DropdownMenuItem>
+
+        {onEmitirDevolucaoClick && ehDI && (
+          <DropdownMenuItem
+            onClick={onEmitirDevolucaoClick}
+            disabled={fatura.nfe_status === '100'}
+            title={
+              fatura.nfe_status === '100'
+                ? 'Devolução já emitida'
+                : 'Emitir a NF-e de devolução desta DI'
+            }
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-orange-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <Undo2 className="size-4 text-orange-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Emitir Nota DI (devolução)
+          </DropdownMenuItem>
+        )}
+
+        {onEstornoClick && !ehDI && (
+          <DropdownMenuItem
+            onClick={onEstornoClick}
+            disabled={fatura.nfe_status !== '100'}
+            title={
+              fatura.nfe_status !== '100'
+                ? 'Só é possível estornar NF-e autorizada'
+                : 'Estornar NF-e (gera devolução após 24h da autorização)'
+            }
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-orange-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <Undo2 className="size-4 text-orange-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Estorno de NF-e
+          </DropdownMenuItem>
+        )}
+
+        {onTermoBateriasClick && (
+          <DropdownMenuItem
+            onClick={onTermoBateriasClick}
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-lime-600 hover:text-white transition"
+          >
+            <BatteryCharging className="size-4 text-lime-600 group-hover:text-white transition" />
+            Termo de Compromisso de Baterias
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
