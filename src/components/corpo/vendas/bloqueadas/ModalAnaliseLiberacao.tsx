@@ -15,8 +15,6 @@ import {
   Calendar,
   CreditCard,
   AlertCircle,
-  Plus,
-  Trash2,
   Keyboard,
   ArrowLeftRight,
   History,
@@ -31,13 +29,10 @@ import {
 } from '@/components/ui/context-menu';
 import { useToast } from '@/hooks/use-toast';
 import ProductZoomModal from '@/components/common/ProductZoomModal';
-import ModalAdicionarItemRapido from './ModalAdicionarItemRapido';
 import ModalEquivalentes from './ModalEquivalentes';
 import ModalHistoricoProduto from './ModalHistoricoProduto';
-import ModalFinalizarVenda from './ModalFinalizarVenda';
 import { AgGridReact } from 'ag-grid-react';
 import { AllCommunityModule, ModuleRegistry, themeQuartz } from 'ag-grid-community';
-import type { CellValueChangedEvent } from 'ag-grid-community';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -193,7 +188,8 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
   const [modalHistProduto, setModalHistProduto] = useState(false);
   const [produtoHist, setProdutoHist] = useState<any>(null);
-  const [modalFinalizar, setModalFinalizar] = useState(false);
+  const [confirmNaoAutorizar, setConfirmNaoAutorizar] = useState(false);
+  const [liberando, setLiberando] = useState(false);
 
   // Refs para evitar re-registrar handlers quando modais abrem/fecham
   const modaisAbertosRef = React.useRef(false);
@@ -225,10 +221,48 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
     }
   };
 
+  // ---------- Ações: Liberar / Não Autorizar ----------
+  const handleLiberar = useCallback(async () => {
+    setLiberando(true);
+    try {
+      const resp = await fetch('/api/vendas/analise-liberacao', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codvenda, resultado: 'LIBERADA', usuario: user?.usuario || 'SISTEMA' }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Erro ao liberar');
+      toast({ title: 'Venda liberada com sucesso!' });
+      onLiberar();
+    } catch (err: any) {
+      toast({ title: 'Erro ao liberar', description: err.message, variant: 'destructive' });
+    } finally {
+      setLiberando(false);
+    }
+  }, [codvenda, user, toast, onLiberar]);
+
+  const handleNaoAutorizar = useCallback(async () => {
+    setConfirmNaoAutorizar(false);
+    setLiberando(true);
+    try {
+      const resp = await fetch('/api/vendas/analise-liberacao', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codvenda, resultado: 'NAO_AUTORIZADA', usuario: user?.usuario || 'SISTEMA' }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Erro ao rejeitar');
+      toast({ title: 'Venda não autorizada', description: 'Venda cancelada e estoque liberado.' });
+      onLiberar();
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    } finally {
+      setLiberando(false);
+    }
+  }, [codvenda, user, toast, onLiberar]);
+
   // ---------- AG Grid: itens da venda ----------
   const [itensGrid, setItensGrid] = React.useState<any[]>([]);
-  const [itemParaRemover, setItemParaRemover] = React.useState<string | null>(null);
-  const [addItemOpen, setAddItemOpen] = React.useState(false);
   const [zoomProduto, setZoomProduto] = React.useState<any>(null);
   const [linhaSelecionada, setLinhaSelecionada] = React.useState(-1);
   const gridRef = React.useRef<any>(null);
@@ -237,82 +271,6 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
   const ultimaCelulaRef = React.useRef<any>(null);
   const itensOriginaisRef = React.useRef<Set<string>>(new Set());
 
-  const handleRemoverItem = useCallback((codprod: string) => {
-    setItensGrid((prev) => prev.filter((r) => r.codprod !== codprod));
-    // Remover do banco
-    fetch('/api/vendas/analise-itens', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codvenda, codprod, usuario: user?.usuario }),
-    }).catch(() => {});
-    toast({ title: `Item ${codprod} removido.` });
-  }, [toast, codvenda, user?.usuario]);
-
-  const handleAdicionarItens = useCallback((itensNovos: any[]) => {
-    itensNovos.forEach((item) => {
-      if (item.qtd === 0) {
-        // Remover
-        setItensGrid((prev) => prev.filter((r) => r.codprod !== item.codprod));
-        fetch('/api/vendas/analise-itens', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codvenda, codprod: item.codprod, usuario: user?.usuario }),
-        }).catch(() => {});
-      } else {
-        // Salvar no banco, esperar resposta com impostos, e só então inserir no grid
-        fetch('/api/vendas/analise-itens', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codvenda, codprod: item.codprod, qtd: item.qtd, prunit: item.prunit, prcompra: item.prcompra, ref: item.ref, descr: item.descr, usuario: user?.usuario }),
-        })
-          .then((res) => res.json())
-          .then((result) => {
-            const imp = result.impostos || {};
-            const totalImpostos = (imp.totalicms || 0) + (imp.totalipi || 0) + (imp.valorpis || 0) + (imp.valorcofins || 0) + (imp.totalsubst_trib || 0);
-            const totalItem = item.qtd * item.prunit;
-
-            const itemCompleto = {
-              ...item,
-              codgpe: result.codgpe || item.codgpe || '',
-              origem: result.origem || item.origem || 'N',
-              impostos: {
-                icms: imp.totalicms || 0,
-                ipi: imp.totalipi || 0,
-                pis: imp.valorpis || 0,
-                cofins: imp.valorcofins || 0,
-                st: imp.totalsubst_trib || 0,
-                total_impostos: totalImpostos,
-              },
-              total_com_imposto: totalItem + totalImpostos,
-            };
-
-            setItensGrid((prev) => {
-              const idx = prev.findIndex((r) => r.codprod === item.codprod);
-              if (idx >= 0) {
-                // Atualizar no lugar (não mover)
-                const novos = [...prev];
-                novos[idx] = { ...novos[idx], ...itemCompleto, total_item: item.qtd * novos[idx].prunit };
-                return novos;
-              }
-              // Novo: inserir no topo
-              return [itemCompleto, ...prev];
-            });
-          })
-          .catch(() => {
-            // Fallback: inserir sem impostos
-            setItensGrid((prev) => {
-              const idx = prev.findIndex((r) => r.codprod === item.codprod);
-              if (idx >= 0) {
-                const novos = [...prev];
-                novos[idx] = { ...novos[idx], qtd: item.qtd, total_item: item.qtd * novos[idx].prunit };
-                return novos;
-              }
-              return [item, ...prev];
-            });
-          });
-      }
-    });
-  }, [codvenda]);
 
   React.useEffect(() => {
     if (data?.itens) {
@@ -342,49 +300,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
     );
   }, []);
 
-  const onItemCellChanged = useCallback((event: CellValueChangedEvent) => {
-    const field = event.colDef.field;
-    const rowIndex = event.rowIndex;
-    if (rowIndex == null || !field) return;
-
-    setItensGrid((prev) => {
-      const novos = [...prev];
-      const row = { ...novos[rowIndex] };
-
-      if (field === 'qtd') {
-        row.qtd = Number(event.newValue) || 0;
-        row.total_item = row.qtd * row.prunit;
-      } else if (field === 'prunit') {
-        row.prunit = Number(event.newValue) || 0;
-        row.total_item = row.qtd * row.prunit;
-        if (row.prvenda_original > 0) {
-          row.desconto_percentual = ((row.prvenda_original - row.prunit) / row.prvenda_original) * 100;
-        }
-        if (row.prcompra > 0) {
-          row.margem = ((row.prunit / row.prcompra) - 1) * 100;
-        }
-      }
-
-      novos[rowIndex] = row;
-      return novos;
-    });
-  }, []);
-
-  const DeleteItemRenderer = React.useCallback((props: any) => {
-    const codprod = props.data?.codprod;
-    if (!codprod) return null;
-    return (
-      <button onClick={() => setItemParaRemover(codprod)} className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded" title="Remover item">
-        <Trash2 size={15} />
-      </button>
-    );
-  }, []);
-
   const itensColumnDefs = React.useMemo((): any[] => [
-    { headerName: '', field: '_delete', width: 40, maxWidth: 40, sortable: false,
-      cellStyle: { display: 'flex', alignItems: 'center', justifyContent: 'center' },
-      cellRendererSelector: () => ({ component: DeleteItemRenderer }),
-    },
     { headerName: 'Referência', field: 'ref', width: 120, cellStyle: { fontWeight: 500 } },
     {
       headerName: 'Produto', field: 'descr', flex: 2, minWidth: 150,
@@ -402,9 +318,8 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         );
       },
     },
-    { headerName: 'Qtd', field: 'qtd', width: 55, type: 'numericColumn', editable: true,
-      cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
-      valueParser: (p: any) => parseInt(String(p.newValue)) || 0,
+    { headerName: 'Qtd', field: 'qtd', width: 55, type: 'numericColumn',
+      cellStyle: { fontWeight: 600 },
     },
     { headerName: 'Custo', field: 'prcompra', width: 70,
       valueFormatter: (p: any) => fmtMoeda(p.value),
@@ -412,9 +327,8 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
     { headerName: 'Preço Tabela', field: 'prvenda_original', width: 90,
       valueFormatter: (p: any) => fmtMoeda(p.value),
     },
-    { headerName: 'Preço Vendido', field: 'prunit', width: 95, editable: true,
-      cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
-      valueParser: (p: any) => parseFloat(String(p.newValue).replace('R$', '').replace(',', '.').trim()) || 0,
+    { headerName: 'Preço Vendido', field: 'prunit', width: 95,
+      cellStyle: { fontWeight: 600 },
       cellRendererSelector: () => ({
         component: (p: any) => {
           if (!p.data) return <span>{fmtMoeda(p.value)}</span>;
@@ -466,7 +380,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
   ], []);
 
   // ---------- Sync ref de modais abertos ----------
-  modaisAbertosRef.current = modalCliente || modalFinanceiro || modalHistorico || modalAlertas || !!zoomProduto || addItemOpen || modalEquivalentes || modalHistProduto || modalFinalizar;
+  modaisAbertosRef.current = modalCliente || modalFinanceiro || modalHistorico || modalAlertas || !!zoomProduto || modalEquivalentes || modalHistProduto || confirmNaoAutorizar;
 
   const restaurarFocoGrid = useCallback(() => {
     setTimeout(() => {
@@ -587,8 +501,6 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         if (item) { setProdutoHist({ codprod: item.codprod, ref: item.ref, descr: item.descr }); setModalHistProduto(true); }
         else toast({ title: 'Selecione um item na planilha' });
       }
-      else if (e.ctrlKey && (e.key === '+' || e.key === '=' || e.key === 'Add')) { e.preventDefault(); e.stopImmediatePropagation(); setAddItemOpen(true); }
-      else if (e.ctrlKey && e.key === 'l') { e.preventDefault(); e.stopImmediatePropagation(); setModalFinalizar(true); }
       else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
     };
 
@@ -743,26 +655,28 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                   {/* Toolbar */}
                   <div className="flex items-center justify-between py-2">
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setAddItemOpen(true)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-md"
-                      >
-                        <Plus size={14} /> Adicionar Item
-                      </button>
                       <span className="text-[11px] text-gray-400">
-                        {itensGrid.length} itens | Duplo clique edita | Botão direito para mais opções
+                        {itensGrid.length} itens | Botão direito para mais opções
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
                         <Keyboard size={11} />
-                        F2 Cliente | F3 Financeiro | F4 Histórico | F5 Alertas | F9 Equiv. | F10 Hist. Produto | Ctrl+Z Zoom | Ctrl++ Adicionar | Ctrl+L Liberar | Esc
+                        F2 Cliente | F3 Financeiro | F4 Histórico | F5 Alertas | F9 Equiv. | F10 Hist. Produto | Ctrl+Z Zoom | Esc
                       </span>
                       <button
-                        onClick={() => setModalFinalizar(true)}
-                        className="px-4 py-1.5 text-xs font-medium rounded-md bg-green-600 hover:bg-green-700 text-white flex items-center gap-1.5"
+                        onClick={() => setConfirmNaoAutorizar(true)}
+                        className="px-4 py-1.5 text-xs font-medium rounded-md bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5"
                       >
-                        <CheckCircle size={14} />
+                        <XCircle size={14} />
+                        Não Autorizado
+                      </button>
+                      <button
+                        onClick={handleLiberar}
+                        disabled={liberando}
+                        className="px-4 py-1.5 text-xs font-medium rounded-md bg-green-600 hover:bg-green-700 text-white flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {liberando ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                         Liberar Venda
                       </button>
                     </div>
@@ -820,7 +734,6 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
                       rowData={itensGrid}
                       columnDefs={itensColumnDefs}
                       defaultColDef={{ sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true }}
-                      onCellValueChanged={onItemCellChanged}
                       stopEditingWhenCellsLoseFocus={true}
                       singleClickEdit={false}
                       enterNavigatesVertically={true}
@@ -863,7 +776,7 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         </ContextMenuTrigger>
 
         {/* Context Menu (botão direito) */}
-        <ContextMenuContent className={`w-56 ${addItemOpen ? 'hidden' : ''}`}>
+        <ContextMenuContent className="w-56">
           <ContextMenuLabel className="text-xs text-gray-500">Venda {codvenda}</ContextMenuLabel>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => setModalCliente(true)}>
@@ -917,14 +830,12 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
             <History size={14} className="mr-2" /> Histórico Produto
             <span className="ml-auto text-[10px] text-gray-400">F10</span>
           </ContextMenuItem>
-          <ContextMenuItem onClick={() => setAddItemOpen(true)}>
-            <Plus size={14} className="mr-2" /> Adicionar Item
-            <span className="ml-auto text-[10px] text-gray-400">Ctrl++</span>
-          </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onClick={() => setModalFinalizar(true)} className="text-green-600">
+          <ContextMenuItem onClick={handleLiberar} className="text-green-600">
             <CheckCircle size={14} className="mr-2" /> Liberar Venda
-            <span className="ml-auto text-[10px] text-gray-400">Ctrl+L</span>
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => setConfirmNaoAutorizar(true)} className="text-red-600">
+            <XCircle size={14} className="mr-2" /> Não Autorizado
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -1239,19 +1150,11 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         product={zoomProduto}
       />
 
-      {/* ========== Modal: Adicionar Produtos ========== */}
-      <ModalAdicionarItemRapido
-        isOpen={addItemOpen}
-        onClose={() => { setAddItemOpen(false); restaurarFocoGrid(); }}
-        onAdicionarItens={handleAdicionarItens}
-        itensExistentes={itensGrid.filter((i) => !i._novo).map((i) => i.codprod)}
-      />
-
       {/* ========== Modal: Equivalentes ========== */}
       <ModalEquivalentes
         isOpen={modalEquivalentes}
         onClose={() => { setModalEquivalentes(false); setProdutoEquivalente(null); restaurarFocoGrid(); }}
-        onAdicionarItens={handleAdicionarItens}
+        onAdicionarItens={() => { toast({ title: 'Apenas consulta', description: 'Nesta tela não é possível adicionar itens.' }); setModalEquivalentes(false); }}
         itensExistentes={itensGrid.map((i) => i.codprod)}
         produto={produtoEquivalente}
       />
@@ -1263,14 +1166,25 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         produto={produtoHist}
       />
 
-      {/* ========== Modal: Finalizar Venda ========== */}
-      <ModalFinalizarVenda
-        isOpen={modalFinalizar}
-        onClose={() => { setModalFinalizar(false); restaurarFocoGrid(); }}
-        codvenda={codvenda}
-        onFinalizar={onLiberar}
-        usuario={user?.usuario}
-      />
+      {/* ========== Confirmação: Não Autorizado ========== */}
+      {confirmNaoAutorizar ? (
+        <AlertDialog open={true} onOpenChange={() => setConfirmNaoAutorizar(false)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Não autorizar venda {codvenda}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A venda será <strong>cancelada</strong> e o estoque reservado será <strong>liberado</strong>. Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleNaoAutorizar} className="bg-red-600 hover:bg-red-700">
+                Confirmar — Não Autorizar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
 
       {/* ========== Modal: Pontos de Atenção ========== */}
       {data && modalAlertas ? (
@@ -1307,26 +1221,6 @@ const ModalAnaliseLiberacao: React.FC<ModalAnaliseLiberacaoProps> = ({
         </div>
       ) : null}
 
-      {/* AlertDialog pra confirmar exclusão de item */}
-      <AlertDialog open={!!itemParaRemover} onOpenChange={(open) => { if (!open) setItemParaRemover(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remover Item</AlertDialogTitle>
-            <AlertDialogDescription>
-              Deseja remover o item <b>{itemParaRemover}</b> da venda?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => {
-              if (itemParaRemover) handleRemoverItem(itemParaRemover);
-              setItemParaRemover(null);
-            }}>
-              Remover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

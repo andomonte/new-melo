@@ -17,6 +17,7 @@ interface CompartilharOrcamentoModalProps {
   onClose: () => void;
   pdfId: string;
   pdfUrl: string;
+  nomeArquivo?: string;
   dados: DadosOrcamento;
 }
 
@@ -24,6 +25,7 @@ const CompartilharOrcamentoModal: React.FC<CompartilharOrcamentoModalProps> = ({
   open,
   onClose,
   pdfUrl,
+  nomeArquivo,
   dados,
 }) => {
   const { toast } = useToast();
@@ -73,10 +75,39 @@ const CompartilharOrcamentoModal: React.FC<CompartilharOrcamentoModalProps> = ({
     window.location.href = mailtoUrl;
   };
 
-  // Download do PDF
-  const handleDownload = () => {
-    const downloadUrl = `${pdfUrl}?download=true`;
-    window.open(downloadUrl, '_blank');
+  // Download do PDF com diálogo "Salvar como" (escolha de pasta)
+  const handleDownload = async () => {
+    const fileName = nomeArquivo ? `${nomeArquivo}.pdf` : `orcamento_${dados.codvenda}.pdf`;
+
+    // Tenta usar showSaveFilePicker (Chrome/Edge) para abrir diálogo de pasta
+    if ('showSaveFilePicker' in window) {
+      try {
+        const resp = await fetch(pdfUrl);
+        const blob = await resp.blob();
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        toast({ title: 'PDF salvo com sucesso!' });
+        return;
+      } catch (err: any) {
+        // Usuário cancelou ou não suportado — fallback abaixo
+        if (err?.name === 'AbortError') return;
+      }
+    }
+
+    // Fallback: download normal
+    const resp = await fetch(pdfUrl);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Abrir PDF em nova aba

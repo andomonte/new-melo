@@ -57,10 +57,15 @@ export default async function handler(
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', pdfBuffer.length);
 
+    // Nome do arquivo: usa query param ?nome=xxx ou fallback para orcamento_ID
+    const nomeArquivo = (typeof req.query.nome === 'string' && req.query.nome)
+      ? req.query.nome.replace(/[^a-zA-Z0-9_\-\.]/g, '') + '.pdf'
+      : `orcamento_${id}.pdf`;
+
     if (download) {
-      res.setHeader('Content-Disposition', `attachment; filename="orcamento_${id}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
     } else {
-      res.setHeader('Content-Disposition', `inline; filename="orcamento_${id}.pdf"`);
+      res.setHeader('Content-Disposition', `inline; filename="${nomeArquivo}"`);
     }
 
     // Cache por 1 hora (já que expira em 24h)

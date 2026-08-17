@@ -1606,10 +1606,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   }, [opcoesFPFiltradas, buscaFP]);
 
   // ---------- Cartão de crédito ----------
-  const ACRESCIMO_CARTAO: Record<number, number> = {
-    1: 1.0270, 2: 1.0517, 3: 1.0694, 4: 1.0875, 5: 1.1057,
-    6: 1.1246, 7: 1.1434, 8: 1.1620, 9: 1.1800, 10: 1.2000,
-  };
 
   const maxParcelasCartao = useMemo(() => {
     if (!isCartaoCredito || totalVenda <= 0) return 1;
@@ -1623,11 +1619,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     if (parcelasCartao > maxParcelasCartao) setParcelasCartao(maxParcelasCartao);
   }, [isCartaoCredito, maxParcelasCartao]);
 
-  const totalComAcrescimo = useMemo(() => {
-    if (!isCartaoCredito || parcelasCartao <= 0) return totalVenda;
-    const fator = ACRESCIMO_CARTAO[parcelasCartao] || 1;
-    return Math.round(totalVenda * fator * 100) / 100;
-  }, [isCartaoCredito, parcelasCartao, totalVenda]);
+  const totalComAcrescimo = totalVenda;
 
   // Texto do obsfat montado automaticamente (mesmo padrão Delphi)
   const obsfatTexto = useMemo(() => {
@@ -2321,14 +2313,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   {showParcelasDropdown ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {Array.from({ length: maxParcelasCartao }, (_, i) => i + 1).map((n) => {
-                        const fator = ACRESCIMO_CARTAO[n] || 1;
-                        const perc = ((fator - 1) * 100).toFixed(2);
                         return (
                           <div key={n} className={`px-3 py-1.5 cursor-pointer text-sm flex justify-between ${n - 1 === parcelasIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                             onMouseDown={(ev) => { ev.preventDefault(); setParcelasCartao(n); setShowParcelasDropdown(false); setTimeout(() => navegarFocavel('next'), 50); }}
                           >
                             <span className="font-bold">{n}x</span>
-                            <span className="text-xs text-gray-500">+{perc}%</span>
                           </div>
                         );
                       })}
@@ -2564,8 +2553,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               <div className="flex items-center gap-4">
                 <span className="text-sm font-semibold text-gray-800">{totalItens} itens</span>
                 <span className="font-bold text-xl text-blue-600">Total: {formatCurrency(totalVenda)}</span>
-                {isCartaoCredito && parcelasCartao > 0 && totalComAcrescimo !== totalVenda ? (
-                  <span className="text-sm font-bold text-orange-600">Cartão {parcelasCartao}x: {formatCurrency(totalComAcrescimo)} (+{(((ACRESCIMO_CARTAO[parcelasCartao] || 1) - 1) * 100).toFixed(2)}%)</span>
+                {isCartaoCredito && parcelasCartao > 0 ? (
+                  <span className="text-sm font-bold text-orange-600">Cartão {parcelasCartao}x</span>
                 ) : null}
               </div>
               <div className="flex items-center gap-2">

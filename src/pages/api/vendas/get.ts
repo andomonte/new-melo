@@ -928,9 +928,8 @@ export default async function handle(
     const orderVendaSql = buildOrderVenda(sortKey, sortDir);
     const orderDraftSql = buildOrderDraft(sortKey, sortDir);
 
-    if (!codusr) {
-      return res.status(200).json({ data: [], meta: mkMeta(0, page, perPage) });
-    }
+    // Se codusr não foi informado (ex.: admin vendo todas), não filtra por usuário
+    // mas continua normalmente sem o filtro de codusr
 
     /* --- SALVA (drafts sem tipo E) --- */
     if (statusFront === 'salva') {
@@ -1095,7 +1094,7 @@ export default async function handle(
       });
     }
 
-    /* --- COMBINADAS (drafts sem E + vendas F/N) --- */
+    /* --- COMBINADAS (drafts sem E + vendas N) — Não Faturadas + Orçadas --- */
     if (statusFront === 'combinadas') {
       const draftsSemE = await queryDraftsRaw(
         client,
@@ -1110,20 +1109,20 @@ export default async function handle(
         ),
       );
 
-      const vendasFN = await queryVendasRaw(
+      const vendasN = await queryVendasRaw(
         client,
         appendSearchToWhereVenda(
           buildWhereClauseVendaMulti({
             codvenda: codvendaFilter,
             codusr,
-            statusIn: ['F', 'N'],
+            statusIn: ['N'],
           }),
           searchField,
           search,
         ),
       );
 
-      const unificados = mergeUniqueByCodvenda(draftsSemE, vendasFN);
+      const unificados = mergeUniqueByCodvenda(draftsSemE, vendasN);
       unificados.sort((a, b) => {
         const mult = sortDir === 'ASC' ? 1 : -1;
         const av = a?.[sortKey];

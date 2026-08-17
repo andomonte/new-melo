@@ -104,6 +104,73 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
+  // ---------- PATCH: Liberar ou Não Autorizar ----------
+  if (req.method === 'PATCH') {
+    const { codvenda, resultado, usuario } = req.body;
+    if (!codvenda || !resultado) {
+      return res.status(400).json({ error: 'codvenda e resultado são obrigatórios' });
+    }
+
+    const pool = getPgPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      if (resultado === 'LIBERADA') {
+        // Desbloquear: mudar status de B para N
+        await client.query(
+          "UPDATE dbvenda SET status = 'N' WHERE codvenda = $1 AND status = 'B'",
+          [codvenda],
+        );
+        // Registrar auditoria
+        await client.query(
+          `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
+           VALUES ($1, 'LIBERADA', $2, NOW())`,
+          [codvenda, usuario || 'SISTEMA'],
+        );
+      } else if (resultado === 'NAO_AUTORIZADA') {
+        // Cancelar venda e liberar estoque reservado
+        const itens = await client.query(
+          'SELECT codprod, qtd FROM dbitvenda WHERE codvenda = $1',
+          [codvenda],
+        );
+        for (const item of itens.rows) {
+          if (Number(item.qtd) > 0) {
+            await client.query(
+              `UPDATE cad_armazem_produto
+               SET arp_qtest_reservada = GREATEST(COALESCE(arp_qtest_reservada, 0) - $2, 0)
+               WHERE arp_codprod = $1`,
+              [item.codprod, Number(item.qtd)],
+            );
+          }
+        }
+        await client.query(
+          "UPDATE dbvenda SET status = 'C' WHERE codvenda = $1",
+          [codvenda],
+        );
+        // Registrar auditoria
+        await client.query(
+          `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
+           VALUES ($1, 'NAO_AUTORIZADA', $2, NOW())`,
+          [codvenda, usuario || 'SISTEMA'],
+        );
+      } else {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Resultado inválido. Use LIBERADA ou NAO_AUTORIZADA.' });
+      }
+
+      await client.query('COMMIT');
+      return res.status(200).json({ ok: true, resultado });
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error('Erro ao processar liberação:', error);
+      return res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
+    }
+  }
+
+  // ---------- GET: Análise da venda ----------
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Método não permitido' });
   }

@@ -22,6 +22,7 @@ import ModalVerItensVenda from '../centralVendas/ModalVerItensVenda';
 import CompartilharOrcamentoModal from '../centralVendas/CompartilharOrcamentoModal';
 import NovaVendaV2 from '../novaVendaV2';
 import ModalAnaliseLiberacao from '../bloqueadas/ModalAnaliseLiberacao';
+import ModalEditarVendaFinalizada from './ModalEditarVendaFinalizada';
 import { useRouter } from 'next/router';
 
 // Tipos e Interfaces
@@ -104,6 +105,10 @@ const VendasPage = () => {
   const [sortDir, setSortDir] = useState<SortDir>('desc'); // Padrão: 'desc' (mais recente/maior)
   const [modalDesbloqueio, setModalDesbloqueio] = useState(false);
   const [codvendaDesbloqueio, setCodvendaDesbloqueio] = useState('');
+  const [modalEditarFinalizada, setModalEditarFinalizada] = useState(false);
+  const [codvendaEditarFinalizada, setCodvendaEditarFinalizada] = useState('');
+  const [filtroVendedor, setFiltroVendedor] = useState<string>('todos');
+  const [listaVendedores, setListaVendedores] = useState<{codvend: string; nome: string}[]>([]);
   const [modalNovaVenda, setModalNovaVenda] = useState(() => {
     try { return sessionStorage.getItem('centralV2_modalAberto') === 'novaVenda'; } catch { return false; }
   });
@@ -205,15 +210,35 @@ const VendasPage = () => {
     }
   };
 
+  const isAdmin = user?.perfil === 'ADMINISTRAÇÃO';
+
+  // Carregar lista de vendedores para o filtro do admin
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch('/api/vendedores/get?perPage=9999')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.data) {
+          setListaVendedores(data.data.map((v: any) => ({ codvend: String(v.codvend).trim(), nome: v.nome || v.NOMERAZAO || '' })));
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin]);
+
+  // Para admin: determina o codusr a filtrar (todos ou vendedor específico)
+  const codusrFiltro = isAdmin
+    ? (filtroVendedor === 'todos' ? undefined : filtroVendedor)
+    : user?.codusr;
+
   async function refreshVendas() {
     setLoading(true);
     try {
       const data = await getVendas({
         page,
         perPage,
-        codvend: user?.codusr,
+        codvend: codusrFiltro,
         status: statusFilter,
-        codvendUsuario: user?.codusr || undefined,
+        codvendUsuario: codusrFiltro,
         sortBy: sortBy || undefined,
         sortDir: sortDir || undefined,
         search: searchTerm || undefined,
@@ -273,10 +298,9 @@ const VendasPage = () => {
       const data = await getVendas({
         page,
         perPage,
-        codvend: user?.codusr,
+        codvend: codusrFiltro,
         status: statusToSend,
-        codvendUsuario: user?.codusr || undefined,
-        // 💡 NOVOS PARÂMETROS PARA A API
+        codvendUsuario: codusrFiltro,
         sortBy: sortBy || undefined,
         sortDir: sortDir || undefined,
         search: searchTerm || undefined,
@@ -314,6 +338,7 @@ const VendasPage = () => {
     searchTerm,
     statusFilter,
     vendedorUsuario,
+    filtroVendedor,
     sortBy,
     sortDir,
   ]);
@@ -329,7 +354,7 @@ const VendasPage = () => {
   // Atalhos de teclado
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (verItensOpen || compartilharPdfOpen || delOpen || modalNovaVenda || modalDesbloqueio) return;
+      if (verItensOpen || compartilharPdfOpen || delOpen || modalNovaVenda || modalDesbloqueio || modalEditarFinalizada) return;
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
@@ -356,10 +381,14 @@ const VendasPage = () => {
         return;
       }
       // E: editar
-      if (e.key === 'e' && sel >= 0 && data?.[sel] && userPermissions.editar) {
+      if (e.key === 'e' && sel >= 0 && data?.[sel]) {
         e.preventDefault();
-        if ((data[sel] as any).tipoOrigem === 'SALVA') {
+        const venda = data[sel] as any;
+        if (venda.tipoOrigem === 'SALVA' && userPermissions.editar) {
           handleEditarClick(data[sel]);
+        } else if (venda.tipoOrigem === 'VENDA' && venda.status === 'N' && user?.funcoes?.some(function(f: any) { return (typeof f === 'string' ? f : f?.sigla) === 'EVF'; })) {
+          setCodvendaEditarFinalizada(venda.codvenda);
+          setModalEditarFinalizada(true);
         }
         return;
       }
@@ -1290,6 +1319,7 @@ const VendasPage = () => {
       setPdfCompartilharData({
         pdfId: result.pdf_id,
         pdfUrl: result.pdf_url,
+        nomeArquivo: result.nome_arquivo,
         dados: result.dados,
       });
       setCompartilharPdfOpen(true);
@@ -1475,10 +1505,11 @@ const VendasPage = () => {
                       role="menuitem"
                       title="Gerar PDF do Orçamento"
                     >
-                      <FileText
-                        className="mr-2 text-green-600 dark:text-green-400"
-                        size={16}
-                      />
+                      <svg className="mr-2" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6z" fill="#DC2626" />
+                        <path d="M14 2v4a2 2 0 0 0 2 2h4" fill="#EF4444" />
+                        <text x="12" y="17" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold" fontFamily="Arial">PDF</text>
+                      </svg>
                       Gerar PDF
                     </button>
                   )}
@@ -1560,6 +1591,24 @@ const VendasPage = () => {
                       Desbloquear Venda
                     </button>
                   )}
+
+                  {/* Editar Venda Finalizada — só aparece para vendas não faturadas (VENDA + status N) e se o user tem função EVF */}
+                  {vendaItem.tipoOrigem === 'VENDA' && vendaItem.status === 'N' && user?.funcoes?.some(function(f: any) { return (typeof f === 'string' ? f : f?.sigla) === 'EVF'; }) && (
+                    <button
+                      key={`editar-finalizada-${vendaItem.codvenda}`}
+                      onClick={() => {
+                        setCodvendaEditarFinalizada(vendaItem.codvenda);
+                        setModalEditarFinalizada(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 w-full"
+                      role="menuitem"
+                      title="Editar venda finalizada (não faturada)"
+                    >
+                      <Pencil className="mr-2 text-orange-500" size={16} />
+                      Editar Venda
+                    </button>
+                  )}
                 </div>
               </div>,
               document.body,
@@ -1592,6 +1641,19 @@ const VendasPage = () => {
             </div>
 
             <div className="flex items-center gap-6">
+              {isAdmin && (
+                <div className="w-52">
+                  <SelectInput
+                    name="filtroVendedor"
+                    options={[
+                      { value: 'todos', label: 'Todos os Vendedores' },
+                      ...listaVendedores.map(v => ({ value: v.codvend, label: `${v.codvend} — ${v.nome}` })),
+                    ]}
+                    defaultValue={filtroVendedor}
+                    onValueChange={(val: string) => { setFiltroVendedor(val); setPage(1); }}
+                  />
+                </div>
+              )}
               <div className="w-40">
                 <SelectInput
                   name="statusFilter"
@@ -1691,6 +1753,7 @@ const VendasPage = () => {
           onClose={handleCloseCompartilharModal}
           pdfId={pdfCompartilharData.pdfId}
           pdfUrl={pdfCompartilharData.pdfUrl}
+          nomeArquivo={pdfCompartilharData.nomeArquivo}
           dados={pdfCompartilharData.dados}
         />
       )}
@@ -1753,6 +1816,16 @@ const VendasPage = () => {
           onClose={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); }}
           codvenda={codvendaDesbloqueio}
           onLiberar={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); refreshVendas(); }}
+        />
+      ) : null}
+
+      {/* Modal Editar Venda Finalizada */}
+      {modalEditarFinalizada && codvendaEditarFinalizada ? (
+        <ModalEditarVendaFinalizada
+          isOpen={modalEditarFinalizada}
+          onClose={() => { setModalEditarFinalizada(false); setCodvendaEditarFinalizada(''); }}
+          codvenda={codvendaEditarFinalizada}
+          onSalvar={() => { setModalEditarFinalizada(false); setCodvendaEditarFinalizada(''); refreshVendas(); }}
         />
       ) : null}
 

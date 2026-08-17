@@ -267,7 +267,8 @@ export default async function handler(
         cofins_aliquota: aliqCofins,
         cofins_valor: cofinsValor,
         ncm: ncm || item.campos?.ncm || item.ncm || '',
-      });
+        st_valor: stValor,
+      } as any);
     }
 
     const totalImpostos = totalIcms + totalIpi + totalPis + totalCofins;
@@ -293,8 +294,8 @@ export default async function handler(
       total_impostos: totalImpostos,
     };
 
-    // ============= GERAR PDF =============
-    const doc = new jsPDF();
+    // ============= GERAR PDF — PAISAGEM =============
+    const doc = new jsPDF({ orientation: 'landscape', format: 'A4' });
     const pageWidth = doc.internal.pageSize.getWidth();
 
     // Carregar logo da empresa
@@ -310,18 +311,18 @@ export default async function handler(
     // Cabeçalho com logo e título ORÇAMENTO
     let headerY = 15;
     if (logoBase64) {
-      doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', 14, 8, 60, 25);
-      doc.setFontSize(20);
+      doc.addImage(`data:image/png;base64,${logoBase64}`, 'PNG', 14, 8, 50, 20);
+      doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 51, 102);
-      doc.text('ORÇAMENTO', pageWidth - 14, 22, { align: 'right' });
-      headerY = 36;
+      doc.text('ORÇAMENTO', pageWidth - 14, 20, { align: 'right' });
+      headerY = 32;
     } else {
-      doc.setFontSize(20);
+      doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 51, 102);
-      doc.text('ORÇAMENTO', pageWidth / 2, 20, { align: 'center' });
-      headerY = 28;
+      doc.text('ORÇAMENTO', pageWidth / 2, 18, { align: 'center' });
+      headerY = 26;
     }
 
     // Linha separadora
@@ -329,62 +330,71 @@ export default async function handler(
     doc.setLineWidth(0.5);
     doc.line(14, headerY, pageWidth - 14, headerY);
 
-    // Número e Data
-    doc.setFontSize(10);
+    // Número, Data, Vendedor — linha única
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
-    doc.text(`Nº: ${dadosOrcamento.codvenda}`, 14, headerY + 8);
-    doc.text(`Data: ${dadosOrcamento.data}`, pageWidth - 14, headerY + 8, { align: 'right' });
+    doc.text(`Nº: ${dadosOrcamento.codvenda}`, 14, headerY + 6);
+    doc.text(`Data: ${dadosOrcamento.data}`, 80, headerY + 6);
+    if (dadosOrcamento.vendedor_nome) {
+      doc.text(`Vendedor: ${dadosOrcamento.vendedor_nome}`, 140, headerY + 6);
+    }
 
-    // Dados do cliente
-    let currentY = headerY + 16;
-    doc.setFontSize(10);
+    // Dados do cliente — linha compacta
+    let currentY = headerY + 13;
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.text('CLIENTE:', 14, currentY);
     doc.setFont('helvetica', 'normal');
-    doc.text(dadosOrcamento.cliente_nome || 'Não informado', 35, currentY);
-
-    if (dadosOrcamento.cliente_cnpj) {
-      currentY += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('CNPJ/CPF:', 14, currentY);
-      doc.setFont('helvetica', 'normal');
-      doc.text(dadosOrcamento.cliente_cnpj, 40, currentY);
-    }
+    let clienteInfo = dadosOrcamento.cliente_nome || 'Não informado';
+    if (dadosOrcamento.cliente_cnpj) clienteInfo += `  |  CNPJ/CPF: ${dadosOrcamento.cliente_cnpj}`;
+    doc.text(clienteInfo, 38, currentY);
 
     if (dadosOrcamento.cliente_endereco) {
-      currentY += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Endereço:', 14, currentY);
-      doc.setFont('helvetica', 'normal');
+      currentY += 5;
       const enderecoCompleto = `${dadosOrcamento.cliente_endereco}${dadosOrcamento.cliente_cidade ? ' - ' + dadosOrcamento.cliente_cidade : ''}${dadosOrcamento.cliente_uf ? '/' + dadosOrcamento.cliente_uf : ''}`;
-      doc.text(enderecoCompleto.substring(0, 80), 38, currentY);
-    }
-
-    if (dadosOrcamento.vendedor_nome) {
-      currentY += 6;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Vendedor:', 14, currentY);
       doc.setFont('helvetica', 'normal');
-      doc.text(dadosOrcamento.vendedor_nome, 38, currentY);
+      doc.text(enderecoCompleto.substring(0, 120), 14, currentY);
     }
 
-    // Tabela de itens
-    const startY = currentY + 8;
+    // Tabela de itens — com impostos por item
+    const startY = currentY + 6;
+
+    const totalComImpostos = dadosOrcamento.total + dadosOrcamento.total_ipi;
 
     autoTable(doc, {
       startY,
-      head: [['REF', 'DESCRIÇÃO', 'NCM', 'QTD', 'PREÇO UNIT.', 'ICMS%', 'IPI%', 'TOTAL']],
-      body: dadosOrcamento.itens.map((item) => [
-        item.ref,
-        item.descr.substring(0, 35),
-        item.ncm || '-',
-        item.qtd.toString(),
-        `R$ ${item.prunit.toFixed(2)}`,
-        item.icms_aliquota > 0 ? `${item.icms_aliquota.toFixed(0)}%` : '-',
-        item.ipi_aliquota > 0 ? `${item.ipi_aliquota.toFixed(0)}%` : '-',
-        `R$ ${item.total.toFixed(2)}`,
-      ]),
+      head: [['REF', 'DESCRIÇÃO', 'NCM', 'QTD', 'UNIT.', 'DESC%', 'SUBTOTAL', 'ICMS', 'IPI', 'ST', 'PIS', 'COFINS', 'TOTAL']],
+      body: dadosOrcamento.itens.map((item) => {
+        const stValor = Number((item as any).st_valor || 0);
+        const totalItem = item.total + item.ipi_valor + stValor;
+        return [
+          item.ref,
+          item.descr.substring(0, 45),
+          item.ncm || '-',
+          item.qtd.toString(),
+          item.prunit.toFixed(2),
+          item.desconto > 0 ? `${item.desconto.toFixed(1)}%` : '-',
+          item.total.toFixed(2),
+          item.icms_valor > 0 ? item.icms_valor.toFixed(2) : '-',
+          item.ipi_valor > 0 ? item.ipi_valor.toFixed(2) : '-',
+          stValor > 0 ? stValor.toFixed(2) : '-',
+          item.pis_valor > 0 ? item.pis_valor.toFixed(2) : '-',
+          item.cofins_valor > 0 ? item.cofins_valor.toFixed(2) : '-',
+          totalItem.toFixed(2),
+        ];
+      }),
+      // Linha de totais no rodapé da tabela
+      foot: [[
+        '', '', '', '', '', 'TOTAIS:',
+        dadosOrcamento.total.toFixed(2),
+        dadosOrcamento.total_icms > 0 ? dadosOrcamento.total_icms.toFixed(2) : '-',
+        dadosOrcamento.total_ipi > 0 ? dadosOrcamento.total_ipi.toFixed(2) : '-',
+        '-',
+        dadosOrcamento.total_pis > 0 ? dadosOrcamento.total_pis.toFixed(2) : '-',
+        dadosOrcamento.total_cofins > 0 ? dadosOrcamento.total_cofins.toFixed(2) : '-',
+        totalComImpostos.toFixed(2),
+      ]],
       styles: {
         fontSize: 7,
         cellPadding: 1.5,
@@ -395,110 +405,72 @@ export default async function handler(
         fontStyle: 'bold',
         fontSize: 7,
       },
+      footStyles: {
+        fillColor: [230, 240, 250],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+        fontSize: 7,
+      },
       columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 18 },
-        3: { cellWidth: 12, halign: 'center' },
-        4: { cellWidth: 22, halign: 'right' },
-        5: { cellWidth: 14, halign: 'center' },
-        6: { cellWidth: 14, halign: 'center' },
-        7: { cellWidth: 25, halign: 'right' },
+        0: { cellWidth: 22 },                          // REF
+        1: { cellWidth: 'auto' },                      // DESCRIÇÃO (flex)
+        2: { cellWidth: 18 },                          // NCM
+        3: { cellWidth: 12, halign: 'center' },        // QTD
+        4: { cellWidth: 20, halign: 'right' },         // UNIT.
+        5: { cellWidth: 14, halign: 'center' },        // DESC%
+        6: { cellWidth: 22, halign: 'right' },         // SUBTOTAL
+        7: { cellWidth: 18, halign: 'right' },         // ICMS
+        8: { cellWidth: 16, halign: 'right' },         // IPI
+        9: { cellWidth: 16, halign: 'right' },         // ST
+        10: { cellWidth: 16, halign: 'right' },        // PIS
+        11: { cellWidth: 18, halign: 'right' },        // COFINS
+        12: { cellWidth: 24, halign: 'right' },        // TOTAL
       },
       theme: 'grid',
     });
 
     const finalY = doc.lastAutoTable?.finalY || startY + 50;
 
-    // Box de totais
-    const boxX = pageWidth - 90;
-    const boxY = finalY + 5;
-    const boxWidth = 76;
-
-    doc.setDrawColor(0, 51, 102);
-    doc.setLineWidth(0.3);
-    doc.rect(boxX, boxY, boxWidth, 45);
-
-    doc.setFillColor(0, 51, 102);
-    doc.rect(boxX, boxY, boxWidth, 7, 'F');
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('RESUMO DE IMPOSTOS', boxX + boxWidth / 2, boxY + 5, { align: 'center' });
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-
-    let lineY = boxY + 13;
-    doc.text('ICMS:', boxX + 3, lineY);
-    doc.text(`R$ ${dadosOrcamento.total_icms.toFixed(2)}`, boxX + boxWidth - 3, lineY, { align: 'right' });
-
-    lineY += 6;
-    doc.text('IPI:', boxX + 3, lineY);
-    doc.text(`R$ ${dadosOrcamento.total_ipi.toFixed(2)}`, boxX + boxWidth - 3, lineY, { align: 'right' });
-
-    lineY += 6;
-    doc.text('PIS:', boxX + 3, lineY);
-    doc.text(`R$ ${dadosOrcamento.total_pis.toFixed(2)}`, boxX + boxWidth - 3, lineY, { align: 'right' });
-
-    lineY += 6;
-    doc.text('COFINS:', boxX + 3, lineY);
-    doc.text(`R$ ${dadosOrcamento.total_cofins.toFixed(2)}`, boxX + boxWidth - 3, lineY, { align: 'right' });
-
-    lineY += 3;
-    doc.line(boxX + 2, lineY, boxX + boxWidth - 2, lineY);
-
-    lineY += 5;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Total Impostos:', boxX + 3, lineY);
-    doc.text(`R$ ${dadosOrcamento.total_impostos.toFixed(2)}`, boxX + boxWidth - 3, lineY, { align: 'right' });
-
-    // Total do orçamento
+    // Total a pagar — destaque abaixo da tabela
+    let totalY = finalY + 6;
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('SUBTOTAL:', 14, boxY + 15);
-    doc.text(`R$ ${dadosOrcamento.total.toFixed(2)}`, 14, boxY + 23);
-
-    doc.setFontSize(12);
     doc.setTextColor(0, 51, 102);
-    // Total a pagar = subtotal + IPI (por fora) — ICMS/PIS/COFINS já embutidos no preço
-    const totalComImpostos = dadosOrcamento.total + dadosOrcamento.total_ipi;
-    doc.text('TOTAL A PAGAR:', 14, boxY + 35);
-    doc.text(`R$ ${totalComImpostos.toFixed(2)}`, 14, boxY + 43);
+    doc.text(`TOTAL A PAGAR: R$ ${totalComImpostos.toFixed(2)}`, pageWidth - 14, totalY, { align: 'right' });
 
-    // Condições de pagamento
-    const infoY = boxY + 52;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(80);
+    doc.text(`Subtotal: R$ ${dadosOrcamento.total.toFixed(2)}  |  IPI: R$ ${dadosOrcamento.total_ipi.toFixed(2)}`, pageWidth - 14, totalY + 5, { align: 'right' });
+
+    // Condições e observações — lado esquerdo
     if (dadosOrcamento.prazo) {
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text('Condições de Pagamento:', 14, infoY);
+      doc.text('Condições:', 14, totalY);
       doc.setFont('helvetica', 'normal');
-      doc.text(dadosOrcamento.prazo, 62, infoY);
+      doc.text(dadosOrcamento.prazo, 42, totalY);
     }
 
     if (dadosOrcamento.obs) {
-      const obsY = dadosOrcamento.prazo ? infoY + 8 : infoY;
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Observações:', 14, obsY);
-      doc.setFont('helvetica', 'normal');
+      const obsY = totalY + 6;
       doc.setFontSize(8);
-      const obsLines = doc.splitTextToSize(dadosOrcamento.obs, pageWidth - 28);
-      doc.text(obsLines.slice(0, 3), 14, obsY + 5);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Obs:', 14, obsY);
+      doc.setFont('helvetica', 'normal');
+      const obsLines = doc.splitTextToSize(dadosOrcamento.obs, pageWidth / 2);
+      doc.text(obsLines.slice(0, 2), 26, obsY);
     }
 
     // Rodapé
     const pageHeight = doc.internal.pageSize.getHeight();
     doc.setFontSize(7);
     doc.setTextColor(120);
-    doc.text('* Valores de impostos calculados com base nas alíquotas vigentes. Sujeitos a confirmação na emissão da NF.', pageWidth / 2, pageHeight - 18, { align: 'center' });
-    doc.text('Este orçamento é válido por 7 dias a partir da data de emissão. Preços sujeitos a alteração sem aviso prévio.', pageWidth / 2, pageHeight - 13, { align: 'center' });
-
-    doc.setFontSize(8);
-    doc.setTextColor(100);
-    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+    doc.text('Valores de impostos sujeitos a confirmação na emissão da NF. Orçamento válido por 7 dias. Preços sujeitos a alteração sem aviso prévio.', pageWidth / 2, pageHeight - 10, { align: 'center' });
+    doc.setFontSize(7);
+    doc.setTextColor(150);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth - 14, pageHeight - 5, { align: 'right' });
 
     // Salvar PDF em arquivo temporário
     ensureTempDir();
@@ -509,11 +481,24 @@ export default async function handler(
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
     fs.writeFileSync(pdfFilePath, pdfBuffer);
 
+    // Nome amigável do arquivo: venda_CODCLI_yyyymmddhhmmssms.pdf
+    const now = new Date();
+    const ts = now.getFullYear().toString()
+      + String(now.getMonth() + 1).padStart(2, '0')
+      + String(now.getDate()).padStart(2, '0')
+      + String(now.getHours()).padStart(2, '0')
+      + String(now.getMinutes()).padStart(2, '0')
+      + String(now.getSeconds()).padStart(2, '0')
+      + String(now.getMilliseconds()).padStart(3, '0');
+    const codcliSafe = String(codcli || 'sem_cliente').replace(/[^a-zA-Z0-9_-]/g, '');
+    const nomeArquivo = `venda_${codcliSafe}_${ts}`;
+
     // Retornar ID e informações do orçamento
     return res.status(200).json({
       success: true,
       pdf_id: pdfId,
       pdf_url: `/api/vendas/orcamento-pdf/${pdfId}`,
+      nome_arquivo: nomeArquivo,
       dados: {
         codvenda: dadosOrcamento.codvenda,
         cliente_nome: dadosOrcamento.cliente_nome,
