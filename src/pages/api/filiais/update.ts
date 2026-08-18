@@ -10,7 +10,8 @@ export default async function handle(
 ): Promise<void> {
   let client: PoolClient | undefined;
 
-  const { codigo_filial, nome_filial }: Filial = req.body;
+  const { codigo_filial, nome_filial } = req.body as Filial;
+  const timezone = (req.body as any).timezone;
 
   if (!codigo_filial || !nome_filial) {
     res
@@ -23,17 +24,15 @@ export default async function handle(
     const pool = getPgPool();
     client = await pool.connect();
 
-    const updateQuery = `
-      UPDATE tb_filial
-      SET nome_filial = $1
-      WHERE codigo_filial = $2
-      RETURNING *;
-    `;
+    const updateQuery = timezone
+      ? `UPDATE tb_filial SET nome_filial = $1, timezone = $3 WHERE codigo_filial = $2 RETURNING *`
+      : `UPDATE tb_filial SET nome_filial = $1 WHERE codigo_filial = $2 RETURNING *`;
 
-    const result = await client.query(updateQuery, [
-      nome_filial,
-      codigo_filial,
-    ]);
+    const params = timezone
+      ? [nome_filial, codigo_filial, timezone]
+      : [nome_filial, codigo_filial];
+
+    const result = await client.query(updateQuery, params);
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Filial não encontrada.' });

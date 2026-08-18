@@ -1,5 +1,10 @@
 // lib/pgClient.ts
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
+
+// TIMEZONE FIX: retornar datas como strings brutas (mesmo fix do pg.ts)
+types.setTypeParser(1082, (val: string) => val); // date
+types.setTypeParser(1114, (val: string) => val); // timestamp without tz
+types.setTypeParser(1184, (val: string) => val); // timestamp with tz
 
 type PgPoolMap = Record<string, Pool>;
 

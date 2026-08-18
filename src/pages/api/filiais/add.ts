@@ -13,6 +13,7 @@ export default async function handle(
   const data: Filial = req.body;
   const saveData = {
     nome_filial: data.nome_filial,
+    timezone: (data as any).timezone || 'America/Manaus',
   };
 
   try {
@@ -20,13 +21,14 @@ export default async function handle(
     client = await pool.connect();
 
     const insertQuery = `
-      INSERT INTO tb_filial (nome_filial)
-      VALUES ($1)
+      INSERT INTO tb_filial (nome_filial, timezone)
+      VALUES ($1, $2)
       RETURNING *;
     `;
 
     const filialResult = await client.query(insertQuery, [
       saveData.nome_filial,
+      saveData.timezone,
     ]);
     const filial = filialResult.rows[0];
 

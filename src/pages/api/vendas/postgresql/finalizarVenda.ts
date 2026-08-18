@@ -383,6 +383,7 @@ async function insertPgVenda(
   status: string,
   total: number,
   empresaData: { cnpj: string | null; ie: string | null },
+  filialTz: string = 'America/Manaus',
 ) {
   const DEFAULT_NUMEROSERIE = 'SO PRENOTA TEM NUMERO DE SERIE';
 
@@ -393,9 +394,9 @@ async function insertPgVenda(
        vlrfrete, codtptransp, bloqueada, estoque_virtual, numeroserie, numerocupom,
        obsfat, localentregacliente, statuspedido, dtupdate, cnpj_empresa, ie_empresa
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,CURRENT_DATE,$7,NULL,$8,
+       $1,$2,$3,$4,$5,$6,NOW() AT TIME ZONE '${filialTz}',$7,NULL,$8,
        $9,$10,$11,$12,$13,$14,$15,'N',NULL,'N',
-       $16,$17,'0','N',$18,NULL,$19,$20, 1, CURRENT_TIMESTAMP, $21, $22
+       $16,$17,'0','N',$18,NULL,$19,$20, 1, NOW() AT TIME ZONE '${filialTz}', $21, $22
      )`,
     [
       h.operacao ?? null,
@@ -874,8 +875,15 @@ export default async function handler(
     );
     log('cálculo de impostos concluído');
 
+    // Buscar timezone da filial
+    const filialTzResult = await pgClient.query(
+      `SELECT timezone FROM db_manaus.tb_filial WHERE nome_filial = $1 LIMIT 1`,
+      [filial],
+    );
+    const filialTz = filialTzResult.rows[0]?.timezone || 'America/Manaus';
+
     // POSTGRES
-    await insertPgVenda(pgClient, ids, hPg, status, total, empresaData);
+    await insertPgVenda(pgClient, ids, hPg, status, total, empresaData, filialTz);
     await insertPgItensAndStock(pgClient, ids, itensComImpostos);
     await insertPgPrazos(pgClient, ids.codvenda, body.prazos);
     await insertPgServImp(pgClient, ids, h, total, armForPrint);

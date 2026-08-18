@@ -1,5 +1,13 @@
 // src/lib/pg.ts
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
+
+// TIMEZONE FIX: O driver pg converte date/timestamp usando o timezone do processo Node.
+// Na Vercel (UTC), isso faz datas aparecerem 1 dia atrás no browser de Manaus (UTC-4).
+// Solução: retornar datas como strings brutas, sem conversão automática.
+// O frontend formata explicitamente.
+types.setTypeParser(1082, (val: string) => val); // date → 'yyyy-mm-dd' (sem conversão para Date)
+types.setTypeParser(1114, (val: string) => val); // timestamp without tz → string bruta
+types.setTypeParser(1184, (val: string) => val); // timestamp with tz → string bruta
 
 declare global {
   // eslint-disable-next-line no-var

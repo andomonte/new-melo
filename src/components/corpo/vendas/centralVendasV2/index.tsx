@@ -1358,6 +1358,8 @@ const VendasPage = () => {
         pdfId: result.pdf_id,
         pdfUrl: result.pdf_url,
         nomeArquivo: result.nome_arquivo,
+        draftId: draftData.draft_id,
+        codvenda: venda.codvenda,
         dados: result.dados,
       });
       setCompartilharPdfOpen(true);
@@ -1433,7 +1435,11 @@ const VendasPage = () => {
 
       codcliente: vendaItem.dbclien?.nomefant || vendaItem.dbclien?.nome,
       data_venda: vendaItem.data
-        ? new Date(vendaItem.data).toLocaleDateString('pt-BR')
+        ? (() => {
+            // Extrair yyyy-mm-dd da string ISO para evitar bug de timezone
+            const d = String(vendaItem.data).substring(0, 10).split('-');
+            return d.length === 3 ? `${d[2]}/${d[1]}/${d[0]}` : new Date(vendaItem.data).toLocaleDateString('pt-BR');
+          })()
         : 'N/A',
       valor_total: valorNumerico.toLocaleString('pt-BR', {
         style: 'currency',
@@ -1551,6 +1557,56 @@ const VendasPage = () => {
                       Gerar PDF
                     </button>
                   )}
+                  {(vendaItem.tipoOrigem === 'SALVA' ||
+                    vendaItem.tipoOrigem === 'SALVA2') && (
+                    <button
+                      key={`excel-${vendaItem.codvenda}`}
+                      onClick={async () => {
+                        closeAllDropdowns();
+                        const draftData = (vendaItem as any)?.draft;
+                        if (!draftData?.draft_id) { toast({ title: 'Erro', description: 'Draft não disponível.', variant: 'destructive' }); return; }
+                        try {
+                          toast({ title: 'Gerando Excel...' });
+                          const resp = await fetch('/api/vendas/orcamento-pdf/gerar-excel', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ draft_id: draftData.draft_id, codvenda: vendaItem.codvenda }),
+                          });
+                          if (!resp.ok) throw new Error('Erro ao gerar Excel');
+                          const blob = await resp.blob();
+                          const codcli = String(vendaItem.codcli || 'sem_cliente').replace(/[^a-zA-Z0-9_-]/g, '');
+                          const ts = new Date().toISOString().replace(/[-:T]/g, '').substring(0, 15);
+                          const xlsName = 'venda_' + codcli + '_' + ts + '.xlsx';
+                          if ('showSaveFilePicker' in window) {
+                            try {
+                              const handle = await (window as any).showSaveFilePicker({ suggestedName: xlsName, types: [{ description: 'Excel', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+                              const writable = await handle.createWritable();
+                              await writable.write(blob);
+                              await writable.close();
+                              toast({ title: 'Excel salvo!' });
+                              return;
+                            } catch (err: any) { if (err?.name === 'AbortError') return; }
+                          }
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url; a.download = xlsName; a.click();
+                          URL.revokeObjectURL(url);
+                        } catch (err: any) {
+                          toast({ title: 'Erro ao gerar Excel', description: err.message, variant: 'destructive' });
+                        }
+                      }}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 w-full"
+                      role="menuitem"
+                      title="Gerar Excel do Orçamento"
+                    >
+                      <svg className="mr-2" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6H6z" fill="#16A34A" />
+                        <path d="M14 2v4a2 2 0 0 0 2 2h4" fill="#22C55E" />
+                        <text x="12" y="17" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold" fontFamily="Arial">XLS</text>
+                      </svg>
+                      Gerar Excel
+                    </button>
+                  )}
 
                   {userPermissions.editar &&
                     (vendaItem.tipoOrigem === 'SALVA' ? (
@@ -1665,6 +1721,7 @@ const VendasPage = () => {
                       Cancelar Venda
                     </button>
                   )}
+
                 </div>
               </div>,
               document.body,
@@ -1810,6 +1867,8 @@ const VendasPage = () => {
           pdfId={pdfCompartilharData.pdfId}
           pdfUrl={pdfCompartilharData.pdfUrl}
           nomeArquivo={pdfCompartilharData.nomeArquivo}
+          draftId={pdfCompartilharData.draftId}
+          codvenda={pdfCompartilharData.codvenda}
           dados={pdfCompartilharData.dados}
         />
       )}

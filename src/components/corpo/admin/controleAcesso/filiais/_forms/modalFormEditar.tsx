@@ -86,6 +86,32 @@ const FormFilialContainer: React.FC<FormFilialContainerProps> = ({
                 error={error?.nome_filial}
                 required
               />
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone</label>
+                <select
+                  value={(filial as any).timezone || 'America/Manaus'}
+                  onChange={(e) => {
+                    setHasChanges(true);
+                    handleFilialChange({ ...filial, timezone: e.target.value } as any);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="America/Manaus">America/Manaus (UTC-4)</option>
+                  <option value="America/Boa_Vista">America/Boa_Vista (UTC-4)</option>
+                  <option value="America/Porto_Velho">America/Porto_Velho (UTC-4)</option>
+                  <option value="America/Cuiaba">America/Cuiabá (UTC-4)</option>
+                  <option value="America/Sao_Paulo">America/São_Paulo (UTC-3)</option>
+                  <option value="America/Recife">America/Recife (UTC-3)</option>
+                  <option value="America/Fortaleza">America/Fortaleza (UTC-3)</option>
+                  <option value="America/Belem">America/Belém (UTC-3)</option>
+                  <option value="America/Rio_Branco">America/Rio_Branco (UTC-5)</option>
+                  <option value="America/Noronha">America/Noronha (UTC-2)</option>
+                  <option value="America/Bogota">America/Bogotá (UTC-5)</option>
+                  <option value="America/Lima">America/Lima (UTC-5)</option>
+                  <option value="America/New_York">America/New_York (UTC-5)</option>
+                  <option value="Europe/Lisbon">Europe/Lisboa (UTC+0)</option>
+                </select>
+              </div>
             </div>
           )}
         </div>

@@ -18,6 +18,8 @@ interface CompartilharOrcamentoModalProps {
   pdfId: string;
   pdfUrl: string;
   nomeArquivo?: string;
+  draftId?: string;
+  codvenda?: string;
   dados: DadosOrcamento;
 }
 
@@ -26,6 +28,8 @@ const CompartilharOrcamentoModal: React.FC<CompartilharOrcamentoModalProps> = ({
   onClose,
   pdfUrl,
   nomeArquivo,
+  draftId,
+  codvenda,
   dados,
 }) => {
   const { toast } = useToast();
@@ -114,6 +118,7 @@ const CompartilharOrcamentoModal: React.FC<CompartilharOrcamentoModalProps> = ({
   const handleOpenPdf = () => {
     window.open(pdfUrl, '_blank');
   };
+
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center p-4">

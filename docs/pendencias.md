@@ -154,3 +154,22 @@
 ### 11. Tabela de preço para envio ao cliente
 - **O quê:** Filtro da tela de venda do Delphi para criar tabela de preço personalizada para enviar ao cliente
 - **Referência:** Imagem `WhatsApp Image 2026-07-18 at 10.07.57.jpeg`
+
+### 12. APIs na pasta dbOracle que usam PostgreSQL
+- **O quê:** A pasta `src/pages/api/dbOracle/` contém 15 APIs que já foram migradas para PostgreSQL mas permanecem com o nome/caminho antigo do Oracle. Isso causa confusão e dificulta manutenção.
+- **APIs afetadas:**
+  - `buscarCliente.ts`, `buscarClientecompaginacao.ts`
+  - `buscarCredito.ts`, `buscarCreditoTemp.ts`
+  - `buscarDocumento.ts`, `buscarEmpresa.ts`
+  - `buscarTransporte.ts`, `buscarUltimaVenda.ts`
+  - `buscarVendedor.ts`, `buscarVendedorCod.ts`
+  - `precoCliente.ts`, `produto.ts`
+  - `finalizarVenda.ts`
+  - Cópias: `buscarCliente copy.ts`, `finalizarVenda copy.ts`
+- **O que fazer:**
+  1. Mover para pastas corretas (`/api/vendas/`, `/api/clientes/`, etc.) ou criar `/api/postgresql/` unificada
+  2. Atualizar TODAS as referências no frontend (buscar por `/api/dbOracle/`)
+  3. Remover arquivos "copy" que são duplicatas
+  4. Testar cada endpoint após a mudança
+- **Risco:** Alto — muitas telas referenciam esses caminhos. Fazer com busca global e testar tudo.
+- **Prioridade:** Média — não causa bug mas causa confusão para qualquer desenvolvedor
