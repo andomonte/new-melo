@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 1. Verificar status da venda
     const vendaResult = await client.query(
-      'SELECT status, codcli FROM dbvenda WHERE codvenda = $1',
+      'SELECT status, codcli, total FROM dbvenda WHERE codvenda = $1',
       [codvenda],
     );
     if (vendaResult.rows.length === 0) {
@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Venda não encontrada' });
     }
 
-    const { status, codcli } = vendaResult.rows[0];
+    const { status, codcli, total: totalAnterior } = vendaResult.rows[0];
     if (status === 'F') {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Venda já faturada — não pode ser editada' });
@@ -84,15 +84,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const novaQtd = Number(item.qtd);
         if (novaQtd <= 0) continue; // Qtd zero não permitida
 
-        // Buscar qtd original
+        // Buscar qtd original e arm_id
         const original = await client.query(
-          'SELECT qtd, prunit FROM dbitvenda WHERE codvenda = $1 AND codprod = $2',
+          'SELECT qtd, prunit, arm_id FROM dbitvenda WHERE codvenda = $1 AND codprod = $2',
           [codvenda, item.codprod],
         );
         if (original.rows.length === 0) continue;
 
         const qtdOriginal = Number(original.rows[0].qtd);
         const prunit = Number(original.rows[0].prunit);
+        const armId = original.rows[0].arm_id;
 
         // Só permite diminuir
         if (novaQtd >= qtdOriginal) continue;
@@ -154,14 +155,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           [idAnalise, item.codprod, String(qtdOriginal), String(novaQtd)],
         );
 
-        // Liberar reserva da diferença
+        // Liberar reserva da diferença (por armazém)
         const diff = qtdOriginal - novaQtd;
         if (diff > 0) {
           await client.query(
             `UPDATE cad_armazem_produto
              SET arp_qtest_reservada = GREATEST(COALESCE(arp_qtest_reservada, 0) - $2, 0)
-             WHERE arp_codprod = $1`,
-            [item.codprod, diff],
+             WHERE arp_codprod = $1 AND arp_arm_id = $3`,
+            [item.codprod, diff, armId],
           );
         }
       }
@@ -172,13 +173,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const codprod of itensRemovidos) {
         // Buscar dados antes de deletar
         const itemRef = await client.query(
-          'SELECT qtd, prunit FROM dbitvenda WHERE codvenda = $1 AND codprod = $2',
+          'SELECT qtd, prunit, arm_id FROM dbitvenda WHERE codvenda = $1 AND codprod = $2',
           [codvenda, codprod],
         );
         if (itemRef.rows.length === 0) continue;
 
         const qtdDel = Number(itemRef.rows[0].qtd);
         const prDel = Number(itemRef.rows[0].prunit);
+        const armIdDel = itemRef.rows[0].arm_id;
 
         // Deletar item
         await client.query(
@@ -186,13 +188,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           [codvenda, codprod],
         );
 
-        // Liberar reserva
+        // Liberar reserva (por armazém)
         if (qtdDel > 0) {
           await client.query(
             `UPDATE cad_armazem_produto
              SET arp_qtest_reservada = GREATEST(COALESCE(arp_qtest_reservada, 0) - $2, 0)
-             WHERE arp_codprod = $1`,
-            [codprod, qtdDel],
+             WHERE arp_codprod = $1 AND arp_arm_id = $3`,
+            [codprod, qtdDel, armIdDel],
           );
         }
 
@@ -215,7 +217,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       [codvenda, totalResult.rows[0].total],
     );
 
-    // 6. Marcar conclusão da auditoria
+    // 6. Atualizar débito do cliente (reduzir pela diferença)
+    const novoTotal = Number(totalResult.rows[0].total);
+    const diffDebito = Number(totalAnterior) - novoTotal;
+    if (diffDebito > 0 && codcli) {
+      await client.query(
+        `UPDATE dbclien SET debito = GREATEST(COALESCE(debito, 0) - $1, 0) WHERE codcli = $2`,
+        [diffDebito, codcli],
+      );
+    }
+
+    // 7. Marcar conclusão da auditoria
     await client.query(
       `UPDATE db_manaus.dbanalise_liberacao
        SET resultado = 'EDITADA', dt_conclusao = NOW()

@@ -116,6 +116,14 @@ export default async function handler(
     try {
       await client.query('BEGIN');
 
+      // Buscar dados da venda para atualização do débito
+      const vendaInfo = await client.query(
+        'SELECT codcli, total FROM dbvenda WHERE codvenda = $1',
+        [codvenda],
+      );
+      const vendaCodcli = vendaInfo.rows[0]?.codcli;
+      const vendaTotal = Number(vendaInfo.rows[0]?.total || 0);
+
       if (resultado === 'LIBERADA') {
         // Desbloquear: mudar status de B para N
         await client.query(
@@ -129,18 +137,18 @@ export default async function handler(
           [codvenda, usuario || 'SISTEMA'],
         );
       } else if (resultado === 'NAO_AUTORIZADA') {
-        // Cancelar venda e liberar estoque reservado
+        // Cancelar venda e liberar estoque reservado (por armazém)
         const itens = await client.query(
-          'SELECT codprod, qtd FROM dbitvenda WHERE codvenda = $1',
+          'SELECT codprod, qtd, arm_id FROM dbitvenda WHERE codvenda = $1',
           [codvenda],
         );
         for (const item of itens.rows) {
-          if (Number(item.qtd) > 0) {
+          if (Number(item.qtd) > 0 && item.arm_id) {
             await client.query(
               `UPDATE cad_armazem_produto
                SET arp_qtest_reservada = GREATEST(COALESCE(arp_qtest_reservada, 0) - $2, 0)
-               WHERE arp_codprod = $1`,
-              [item.codprod, Number(item.qtd)],
+               WHERE arp_codprod = $1 AND arp_arm_id = $3`,
+              [item.codprod, Number(item.qtd), item.arm_id],
             );
           }
         }
@@ -148,6 +156,13 @@ export default async function handler(
           "UPDATE dbvenda SET status = 'C' WHERE codvenda = $1",
           [codvenda],
         );
+        // Reduzir débito do cliente
+        if (vendaCodcli && vendaTotal > 0) {
+          await client.query(
+            `UPDATE dbclien SET debito = GREATEST(COALESCE(debito, 0) - $1, 0) WHERE codcli = $2`,
+            [vendaTotal, vendaCodcli],
+          );
+        }
         // Registrar auditoria
         await client.query(
           `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)

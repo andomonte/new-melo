@@ -893,6 +893,12 @@ export default async function handler(
       log('Draft excluído da tabela venda_draft:', h.draft_id);
     }
 
+    // Incrementar débito do cliente
+    await pgClient.query(
+      `UPDATE dbclien SET debito = COALESCE(debito, 0) + $1 WHERE codcli = $2`,
+      [total, h.codcli],
+    );
+
     // COMMIT
     await pgClient.query('COMMIT');
 

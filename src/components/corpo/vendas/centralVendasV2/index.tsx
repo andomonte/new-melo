@@ -24,6 +24,10 @@ import NovaVendaV2 from '../novaVendaV2';
 import ModalAnaliseLiberacao from '../bloqueadas/ModalAnaliseLiberacao';
 import ModalEditarVendaFinalizada from './ModalEditarVendaFinalizada';
 import { useRouter } from 'next/router';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // Tipos e Interfaces
 type SortDir = 'asc' | 'desc';
@@ -87,9 +91,20 @@ const VendasPage = () => {
   const prevSearchRef = useRef<string | null>(null);
   const [page, setPage] = useState<number>(1);
   const [perPage, setPerPage] = useState<number>(10);
-  const [statusFilter, setStatusFilter] = useState<VendaStatus>('combinadas');
-  const { dismiss, toast } = useToast();
   const router = useRouter();
+  const [statusFilter, setStatusFilter] = useState<VendaStatus>(() => {
+    if (typeof window !== 'undefined') {
+      const filtroInicial = sessionStorage.getItem('centralV2_filtroInicial');
+      if (filtroInicial) {
+        sessionStorage.removeItem('centralV2_filtroInicial');
+        if (['combinadas', 'todas', 'salva', 'salva2', 'faturada', 'finalizada', 'bloqueada', 'cancelada'].includes(filtroInicial)) {
+          return filtroInicial as VendaStatus;
+        }
+      }
+    }
+    return 'combinadas';
+  });
+  const { dismiss, toast } = useToast();
   const [loading, setLoading] = React.useState(false);
   const [delOpen, setDelOpen] = React.useState(false);
   const [delStep, setDelStep] = React.useState<
@@ -109,6 +124,9 @@ const VendasPage = () => {
   const [codvendaEditarFinalizada, setCodvendaEditarFinalizada] = useState('');
   const [filtroVendedor, setFiltroVendedor] = useState<string>('todos');
   const [listaVendedores, setListaVendedores] = useState<{codvend: string; nome: string}[]>([]);
+  const [confirmCancelar, setConfirmCancelar] = useState(false);
+  const [codvendaCancelar, setCodvendaCancelar] = useState('');
+  const [cancelando, setCancelando] = useState(false);
   const [modalNovaVenda, setModalNovaVenda] = useState(() => {
     try { return sessionStorage.getItem('centralV2_modalAberto') === 'novaVenda'; } catch { return false; }
   });
@@ -351,6 +369,20 @@ const VendasPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.usuario]);
 
+  // Escutar evento do ícone de desbloqueio no cabeçalho
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const filtro = (e as CustomEvent).detail;
+      if (filtro) {
+        setStatusFilter(filtro as VendaStatus);
+        limparBusca();
+        setPage(1);
+      }
+    };
+    window.addEventListener('centralV2:filtro', handler);
+    return () => window.removeEventListener('centralV2:filtro', handler);
+  }, []);
+
   // Atalhos de teclado
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -397,8 +429,14 @@ const VendasPage = () => {
     return () => window.removeEventListener('keydown', handler, true);
   }, [vendas.data, verItensOpen, compartilharPdfOpen, delOpen, modalNovaVenda, userPermissions]);
 
+  const limparBusca = () => {
+    setCodVenda('');
+    setSearchTerm(null);
+  };
+
   const handleStatusChange = (newStatus: string) => {
     setStatusFilter(newStatus as VendaStatus);
+    limparBusca();
     if (page !== 1) {
       setPage(1);
     }
@@ -1605,8 +1643,26 @@ const VendasPage = () => {
                       role="menuitem"
                       title="Editar venda finalizada (não faturada)"
                     >
-                      <Pencil className="mr-2 text-orange-500" size={16} />
+                      <Pencil className="mr-2 text-blue-500" size={16} />
                       Editar Venda
+                    </button>
+                  )}
+
+                  {/* Cancelar Venda — só vendas não faturadas (VENDA + status N) */}
+                  {vendaItem.tipoOrigem === 'VENDA' && vendaItem.status === 'N' && (
+                    <button
+                      key={`cancelar-${vendaItem.codvenda}`}
+                      onClick={() => {
+                        setCodvendaCancelar(vendaItem.codvenda);
+                        setConfirmCancelar(true);
+                        closeAllDropdowns();
+                      }}
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-red-600"
+                      role="menuitem"
+                      title="Cancelar venda e liberar estoque"
+                    >
+                      <Trash2 className="mr-2" size={16} />
+                      Cancelar Venda
                     </button>
                   )}
                 </div>
@@ -1658,7 +1714,7 @@ const VendasPage = () => {
                 <SelectInput
                   name="statusFilter"
                   options={statusOptions}
-                  defaultValue={statusFilter}
+                  value={statusFilter}
                   onValueChange={handleStatusChange}
                 />
               </div>
@@ -1815,7 +1871,7 @@ const VendasPage = () => {
           isOpen={modalDesbloqueio}
           onClose={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); }}
           codvenda={codvendaDesbloqueio}
-          onLiberar={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); refreshVendas(); }}
+          onLiberar={() => { setModalDesbloqueio(false); setCodvendaDesbloqueio(''); limparBusca(); refreshVendas(); }}
         />
       ) : null}
 
@@ -1825,8 +1881,55 @@ const VendasPage = () => {
           isOpen={modalEditarFinalizada}
           onClose={() => { setModalEditarFinalizada(false); setCodvendaEditarFinalizada(''); }}
           codvenda={codvendaEditarFinalizada}
-          onSalvar={() => { setModalEditarFinalizada(false); setCodvendaEditarFinalizada(''); refreshVendas(); }}
+          onSalvar={() => { setModalEditarFinalizada(false); setCodvendaEditarFinalizada(''); limparBusca(); refreshVendas(); }}
         />
+      ) : null}
+
+      {/* Confirmação Cancelar Venda */}
+      {confirmCancelar ? (
+        <AlertDialog open={true} onOpenChange={() => { if (!cancelando) setConfirmCancelar(false); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cancelar venda {codvendaCancelar}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-2">
+                  <p>A venda será <strong>cancelada permanentemente</strong> e o estoque reservado será <strong>liberado</strong>.</p>
+                  <p className="text-red-600 font-semibold">Esta ação não pode ser desfeita.</p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={cancelando}>Voltar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={cancelando}
+                className="bg-red-600 hover:bg-red-700"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  setCancelando(true);
+                  try {
+                    const resp = await fetch('/api/vendas/cancelar-venda', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ codvenda: codvendaCancelar, usuario: user?.usuario || 'SISTEMA' }),
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) throw new Error(data.error || 'Erro ao cancelar');
+                    toast({ title: 'Venda cancelada', description: data.message });
+                    setConfirmCancelar(false);
+                    setCodvendaCancelar('');
+                    refreshVendas();
+                  } catch (err: any) {
+                    toast({ title: 'Erro ao cancelar', description: err.message, variant: 'destructive' });
+                  } finally {
+                    setCancelando(false);
+                  }
+                }}
+              >
+                {cancelando ? 'Cancelando...' : 'Confirmar — Cancelar Venda'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
 
       {/* Modal Nova Venda V2 */}

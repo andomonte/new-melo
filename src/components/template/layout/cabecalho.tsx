@@ -1,9 +1,10 @@
-import React, { useContext } from 'react';
-import { Menu, X } from 'lucide-react';
+import React, { useContext, useEffect, useState, useCallback } from 'react';
+import { Menu, X, LockOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PerfilPagina from '@/components/template/perfil';
 import { AuthContext } from '@/contexts/authContexts';
 import { ComponentType } from 'react';
+import { useRouter } from 'next/router';
 
 interface LayoutPaginaProps {
   ampliar?: boolean;
@@ -19,6 +20,33 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
 }) => {
   const { user } = useContext(AuthContext);
   const perfilUser = user;
+  const router = useRouter();
+  const [vendasBloqueadas, setVendasBloqueadas] = useState(0);
+
+  // Verificar se o usuário tem função DBV (Desbloquear Venda)
+  const temDBV = user?.funcoes?.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'DBV');
+  const isAdmin = user?.perfil === 'ADMINISTRAÇÃO';
+
+  // Buscar contagem de vendas bloqueadas
+  const fetchBloqueadas = useCallback(async () => {
+    if (!temDBV) return;
+    try {
+      // Admin vê todas as bloqueadas, outros veem só as próprias
+      const url = isAdmin
+        ? '/api/vendas/get?page=1&perPage=1&status=bloqueada'
+        : `/api/vendas/get?page=1&perPage=1&status=bloqueada&codvend_usuario=${user?.codusr || ''}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      setVendasBloqueadas(data?.meta?.total || 0);
+    } catch { /* ignora */ }
+  }, [temDBV, isAdmin, user?.codusr]);
+
+  useEffect(() => {
+    fetchBloqueadas();
+    // Polling a cada 60 segundos
+    const interval = setInterval(fetchBloqueadas, 60000);
+    return () => clearInterval(interval);
+  }, [fetchBloqueadas]);
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
@@ -49,7 +77,29 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
               </div>
             </div>
           </div>
-          <div className="w-[25%] flex items-center justify-end">
+          <div className="w-[25%] flex items-center justify-end gap-3">
+            {/* Notificação de vendas bloqueadas */}
+            {temDBV && vendasBloqueadas > 0 ? (
+              <button
+                onClick={() => {
+                  // Se já está na Central V2, muda o filtro direto
+                  if (window.location.pathname.includes('centralVendasV2')) {
+                    window.dispatchEvent(new CustomEvent('centralV2:filtro', { detail: 'bloqueada' }));
+                  } else {
+                    // Navega e seta flag para a Central V2 ler ao montar
+                    sessionStorage.setItem('centralV2_filtroInicial', 'bloqueada');
+                    router.push('/vendas/centralVendasV2');
+                  }
+                }}
+                className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+                title={`${vendasBloqueadas} venda(s) bloqueada(s) aguardando liberação`}
+              >
+                <LockOpen size={20} className="text-white" />
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+                  {vendasBloqueadas > 99 ? '99+' : vendasBloqueadas}
+                </span>
+              </button>
+            ) : null}
             <PerfilPagina perfilUser={perfilUser} />
           </div>
         </div>
