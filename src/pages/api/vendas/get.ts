@@ -589,6 +589,15 @@ async function queryOnlyVendas(
       v."data"                   AS "data",
       v."total"                  AS "total",
       v."status"                 AS "status",
+      v."prazo"                  AS "prazo",
+      v."obsfat"                 AS "obsfat",
+      v."obs"                    AS "obs",
+      v."transp"                 AS "transp",
+      v."codvend"                AS "codvend_venda",
+      v."codusr"                 AS "codusr_venda",
+      v."pedido"                 AS "pedido",
+      v."vlrfrete"               AS "vlrfrete",
+      v."localentregacliente"    AS "localentregacliente",
       'VENDA'                    AS "tipoOrigem",
       NULL::text                 AS "label"
     FROM "dbvenda" v
@@ -615,6 +624,15 @@ async function queryVendasRaw(
       v."data"                   AS "data",
       v."total"                  AS "total",
       v."status"                 AS "status",
+      v."prazo"                  AS "prazo",
+      v."obsfat"                 AS "obsfat",
+      v."obs"                    AS "obs",
+      v."transp"                 AS "transp",
+      v."codvend"                AS "codvend_venda",
+      v."codusr"                 AS "codusr_venda",
+      v."pedido"                 AS "pedido",
+      v."vlrfrete"               AS "vlrfrete",
+      v."localentregacliente"    AS "localentregacliente",
       'VENDA'                    AS "tipoOrigem",
       NULL::text                 AS "label"
     FROM "dbvenda" v
@@ -674,17 +692,37 @@ async function hydrateRows(client: PoolClient, rows: any[]) {
     FROM dbvenda_draft
     WHERE CAST(draft_id AS text) = ANY($1::text[])
   `;
-  const clientesQuery = ` 
-    SELECT codcli, nome, nomefant
+  const clientesQuery = `
+    SELECT codcli, nome, nomefant, cpfcgc, ender, cidade, uf, debito, limite
     FROM dbclien
     WHERE codcli = ANY($1::text[])
   `;
 
-  const [itensFinalizados, draftsFull, clientes] = await Promise.all([
+  // Coletar códigos de vendedor/operador para buscar nomes
+  const vendedorCodes = new Set<string>();
+  rows.forEach((v: any) => {
+    if (v.codvend_venda) vendedorCodes.add(String(v.codvend_venda).trim());
+    if (v.codusr_venda) vendedorCodes.add(String(v.codusr_venda).trim());
+  });
+  const vendedorCodesArr = Array.from(vendedorCodes);
+  const vendedoresQuery = vendedorCodesArr.length > 0
+    ? client.query(
+        `SELECT codvend, nome FROM dbvend WHERE ltrim(codvend::text,'0') = ANY($1::text[])`,
+        [vendedorCodesArr.map(c => c.replace(/^0+/, '') || '0')],
+      )
+    : Promise.resolve({ rows: [] });
+
+  const [itensFinalizados, draftsFull, clientes, vendedores] = await Promise.all([
     client.query(itensFinalizadosQuery, [vendaIds]),
     client.query(draftsFullQuery, [vendaIds]),
     client.query(clientesQuery, [clientIds]),
+    vendedoresQuery,
   ]);
+
+  // Map de vendedores (código sem zeros à esquerda → nome)
+  const vendedoresMap = new Map<string, string>(
+    vendedores.rows.map((v: any) => [String(v.codvend).trim().replace(/^0+/, '') || '0', v.nome || '']),
+  );
 
   // Map de itens finalizados (por codvenda)
   const itensMap = new Map<string, any[]>();
@@ -818,22 +856,22 @@ async function hydrateRows(client: PoolClient, rows: any[]) {
           (cli?.nome != null && String(cli.nome)) ||
           null,
 
-        // Campos comuns do header de draft que aqui não temos na lista:
-        // mantemos como null para a tela recalcular/solicitar
-        codusr: null,
+        codusr: v.codusr_venda ?? null,
         tipo: null,
-        transp: null,
+        transp: v.transp ?? null,
         codtptransp: null,
-        vlrfrete: null,
-        prazo: null,
+        vlrfrete: v.vlrfrete ?? null,
+        prazo: v.prazo ?? null,
         tipo_desc: null,
-        obs: null,
-        obsfat: null,
-        localentregacliente: null,
-        vendedor: null,
-        operador: null,
+        obs: v.obs ?? null,
+        obsfat: v.obsfat ?? null,
+        localentregacliente: v.localentregacliente ?? null,
+        vendedor: v.codvend_venda ?? null,
+        vendedor_nome: vendedoresMap.get(String(v.codvend_venda ?? '').trim().replace(/^0+/, '') || '0') || null,
+        operador: v.codusr_venda ?? null,
+        operador_nome: vendedoresMap.get(String(v.codusr_venda ?? '').trim().replace(/^0+/, '') || '0') || null,
         operacao: null,
-        pedido: null,
+        pedido: v.pedido ?? null,
         formaPagamento: null,
         condicaoPagamento: null,
         avista: null,

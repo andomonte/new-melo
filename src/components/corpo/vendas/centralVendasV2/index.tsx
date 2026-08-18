@@ -1536,7 +1536,7 @@ const VendasPage = () => {
                       className="mr-2 text-blue-500 dark:text-blue-400"
                       size={16}
                     />
-                    Ver Itens
+                    Detalhes da Venda
                   </button>
 
                   {/* Botão de gerar PDF - apenas para orçamentos (SALVA ou SALVA2) */}
