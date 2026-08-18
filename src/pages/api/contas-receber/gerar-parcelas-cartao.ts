@@ -15,14 +15,15 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { 
-    cod_receb, 
-    codopera, 
-    valorTotal, 
-    numParcelas, 
+  const {
+    cod_receb,
+    codopera,
+    valorTotal,
+    numParcelas,
     dt_base,
     cod_autorizacao,
-    username 
+    cod_documento,
+    username
   } = req.body;
 
   if (!cod_receb || !codopera || !valorTotal || !numParcelas) {
@@ -115,8 +116,9 @@ export default async function handler(
           sf,
           tx_cartao,
           codautorizacao,
+          coddocumento,
           nome
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
         String(proximoCodFreceb),
         cod_receb,
@@ -129,6 +131,7 @@ export default async function handler(
         'S', // SF: Soma
         taxaPercentual,
         cod_autorizacao || null,
+        cod_documento || null, // CV/NSU (comprovante da maquineta) — opcional
         `Parcela ${parcela.parcela} - ${operadora.descr}`
       ]);
 

@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import axios from 'axios';
+import { AuthContext } from '@/contexts/authContexts';
 import { ShoppingCart, Plus } from 'lucide-react';
 import { DefaultButton } from '@/components/common/Buttons';
 import DataTableFaturamentoNovo from '@/components/common/DataTableFaturamento';
@@ -14,6 +15,8 @@ import ModalStatusVenda from './ModalStatusVenda';
 import { set } from 'zod';
 
 export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFaturar?: any[] }) {
+  const { user } = useContext(AuthContext);
+  const RESERVA_TTL_MIN = 3; // reserva expira sozinha em 3 min (renovada por heartbeat)
   const [faturas, setFaturas] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [page, setPage] = useState(1);
@@ -43,8 +46,8 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
   const [termoBusca, setTermoBusca] = useState('');
   const [limiteColunas, setLimiteColunas] = useState(9);
   
-  const fetchFaturas = async () => {
-    setCarregando(true);
+  const fetchFaturas = async (silent = false) => {
+    if (!silent) setCarregando(true);
     try {
       const result = await axios.get('/api/faturamento/listar-vendas', {
         params: {
@@ -52,6 +55,7 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
           perPage,
           filtros: JSON.stringify(filtros),
           search: termoBusca, // Adicionar termo de busca global
+          usuario: user?.usuario || '', // marca reservas de OUTROS usuários
         },
       });
 
@@ -60,8 +64,69 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
     } catch (error) {
       console.error('Erro ao carregar vendas:', error);
     } finally {
-      setCarregando(false);
+      if (!silent) setCarregando(false);
     }
+  };
+
+  // ===== RESERVA (soft lock) de vendas =====
+  // Espelha o carrinho num ref para o cleanup/beacon sempre ver o valor atual.
+  const carrinhoRef = useRef<any[]>([]);
+  useEffect(() => {
+    carrinhoRef.current = carrinho;
+  }, [carrinho]);
+
+  const liberarVendas = (codvendas: string[]) => {
+    if (!codvendas.length || !user?.usuario) return;
+    axios
+      .post('/api/faturamento/liberar-venda', {
+        codvendas,
+        usuario: user.usuario,
+      })
+      .catch(() => {});
+  };
+
+  // Chamado quando o usuário marca/desmarca vendas: reserva as novas (atômico no
+  // servidor) e libera as removidas. Vendas "em uso por outro" são recusadas.
+  const handleSelecionarCarrinho = async (novaSelecao: any[]) => {
+    const atuaisIds = new Set(carrinho.map((v) => v.codvenda));
+    const novosIds = new Set(novaSelecao.map((v) => v.codvenda));
+    const adicionados = novaSelecao.filter((v) => !atuaisIds.has(v.codvenda));
+    const removidos = carrinho.filter((v) => !novosIds.has(v.codvenda));
+
+    if (removidos.length > 0) {
+      liberarVendas(removidos.map((v) => v.codvenda));
+    }
+
+    let selecaoFinal = novaSelecao;
+
+    if (adicionados.length > 0) {
+      try {
+        const { data } = await axios.post('/api/faturamento/reservar-venda', {
+          codvendas: adicionados.map((v) => v.codvenda),
+          usuario: user?.usuario,
+          usuario_nome: user?.usuario,
+          ttlMin: RESERVA_TTL_MIN,
+        });
+        const emUso: Array<{ codvenda: string; usuario_nome: string }> =
+          data?.emUso || [];
+        if (emUso.length > 0) {
+          const emUsoIds = new Set(emUso.map((e) => String(e.codvenda)));
+          emUso.forEach((e) =>
+            toast.error(`Venda ${e.codvenda} em uso por ${e.usuario_nome}.`),
+          );
+          selecaoFinal = novaSelecao.filter(
+            (v) => !emUsoIds.has(String(v.codvenda)),
+          );
+          fetchFaturas(true); // atualiza a lista p/ mostrar a reserva de terceiros
+        }
+      } catch (err) {
+        toast.error('Erro ao reservar a venda. Tente novamente.');
+        const addIds = new Set(adicionados.map((v) => v.codvenda));
+        selecaoFinal = novaSelecao.filter((v) => !addIds.has(v.codvenda));
+      }
+    }
+
+    setCarrinho(selecaoFinal);
   };
 
   // Função para processar filtros dinâmicos (similar ao ContasAPagar)
@@ -120,6 +185,55 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
 
     return () => clearTimeout(delay);
   }, [page, perPage, filtros, termoBusca]); // Adicionar termoBusca ao array de dependências
+
+  // POLLING: recarrega a lista a cada 20s (silencioso) para refletir reservas de
+  // outros usuários em tempo quase-real, sem WebSocket.
+  useEffect(() => {
+    const id = setInterval(() => fetchFaturas(true), 20_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, perPage, filtros, termoBusca, user?.usuario]);
+
+  // HEARTBEAT: enquanto houver vendas no carrinho, renova a reserva a cada 60s
+  // (TTL de 3 min). Se o navegador travar/fechar, a reserva expira e libera a venda.
+  useEffect(() => {
+    if (carrinho.length === 0 || !user?.usuario) return;
+    const id = setInterval(() => {
+      axios
+        .post('/api/faturamento/reservar-venda', {
+          codvendas: carrinho.map((v) => v.codvenda),
+          usuario: user.usuario,
+          usuario_nome: user.usuario,
+          ttlMin: RESERVA_TTL_MIN,
+        })
+        .catch(() => {});
+    }, 60_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carrinho, user?.usuario]);
+
+  // LIBERAR ao fechar a aba (sendBeacon) e ao desmontar (navegação SPA). Usa o ref
+  // para sempre enxergar o carrinho atual sem re-registrar o listener a cada mudança.
+  useEffect(() => {
+    const liberarBeacon = () => {
+      const cart = carrinhoRef.current;
+      if (!cart.length || !user?.usuario) return;
+      const payload = JSON.stringify({
+        codvendas: cart.map((v) => v.codvenda),
+        usuario: user.usuario,
+      });
+      navigator.sendBeacon(
+        '/api/faturamento/liberar-venda',
+        new Blob([payload], { type: 'application/json' }),
+      );
+    };
+    window.addEventListener('beforeunload', liberarBeacon);
+    return () => {
+      window.removeEventListener('beforeunload', liberarBeacon);
+      liberarBeacon(); // libera ao sair da tela (navegação interna)
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.usuario]);
 
   // Efeito para pré-selecionar faturas quando faturasParaFaturar é fornecido
   useEffect(() => {
@@ -181,6 +295,11 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
   // Função para fechar o modal de faturamento e limpar estados
   const handleFecharModalFaturamento = () => {
     setModalFaturamentoAberto(false);
+    // Libera as reservas das vendas do carrinho (emitiu ou abandonou) e atualiza a lista.
+    if (carrinho.length > 0) {
+      liberarVendas(carrinho.map((v) => v.codvenda));
+    }
+    fetchFaturas(true);
     // Limpar carrinho e outros estados relacionados
     setCarrinho([]);
     setNroVendaCarrinho('');
@@ -260,7 +379,7 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
             onPageChange={setPage}
             onPerPageChange={setPerPage}
             onFiltroChange={handleFiltroAvancado}
-            onSelecionarFaturas={setCarrinho}
+            onSelecionarFaturas={handleSelecionarCarrinho}
             termoBusca={termoBusca}
             setTermoBusca={setTermoBusca}
             limiteColunas={limiteColunas}

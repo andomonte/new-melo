@@ -81,6 +81,7 @@ import LocaisPage from '../corpo/admin/cadastro/locais';
 // Financeiro / Faturamento
 import ContasAPagar from '@/components/corpo/admin/financeiro/contasAPagar';
 import ContasAReceber from '@/components/corpo/admin/financeiro/contasAReceber';
+import Caixa from '@/components/corpo/admin/financeiro/caixa';
 import Faturar from '@/components/corpo/admin/financeiro/faturar';
 import Transferencia from '@/components/corpo/admin/financeiro/transferencia';
 import DashboardFinanceiro from '@/components/common/DashboardFinanceiro';
@@ -336,6 +337,12 @@ export const menus = [
             href: '/admin/financeiro/contasAReceber',
             icon: HandCoinsIcon,
             corpo: ContasAReceber,
+          },
+          {
+            name: 'Caixa',
+            href: '/admin/financeiro/caixa',
+            icon: TbCashRegister,
+            corpo: Caixa,
           },
               {
             name: 'Relatório Cartao',

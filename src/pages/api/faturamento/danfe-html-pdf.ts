@@ -10,12 +10,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Allow', ['POST']);
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-  const { html, filename } = req.body || {};
+  const { html, filename, orientacao } = req.body || {};
   if (!html || typeof html !== 'string') {
     return res.status(400).json({ error: 'html é obrigatório' });
   }
   try {
-    const pdf = await renderHtmlToPdf(html);
+    // 'portrait' para a Carta de Correção; padrão paisagem (DANFE).
+    const pdf = await renderHtmlToPdf(html, { landscape: orientacao !== 'portrait' });
     const nome = String(filename || 'danfe').replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${nome}.pdf"`);

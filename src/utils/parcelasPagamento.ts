@@ -11,19 +11,23 @@ export function calcularDataVencimento(dias: number): Date {
 }
 
 /**
- * Salva as parcelas  pagamento na tabela dbprazo_pagamento
+ * Salva as parcelas  pagamento na tabela dbprazo_pagamento.
+ * `db` opcional: passe um client de transação para gravar na MESMA transação
+ * (usado pela cobrança atômica em salvar.ts); sem ele, usa o pool (auto-commit).
  */
-export async function salvarParcelasPagamento(codvenda: string, parcelas: Array<{ dia: number }>): Promise<void> {
-  const pool = getPgPool();
-
+export async function salvarParcelasPagamento(
+  codvenda: string,
+  parcelas: Array<{ dia: number }>,
+  db: { query: (text: string, params?: any[]) => Promise<any> } = getPgPool(),
+): Promise<void> {
   // Primeiro, remove as parcelas existentes para esta venda
-  await pool.query('DELETE FROM dbprazo_pagamento WHERE codvenda = $1', [codvenda]);
+  await db.query('DELETE FROM dbprazo_pagamento WHERE codvenda = $1', [codvenda]);
 
   // Insere as novas parcelas
   for (const parcela of parcelas) {
     const dataVencimento = calcularDataVencimento(parcela.dia);
 
-    await pool.query(
+    await db.query(
       'INSERT INTO dbprazo_pagamento (data, dia, codvenda) VALUES ($1, $2, $3)',
       [dataVencimento, parcela.dia, codvenda]
     );

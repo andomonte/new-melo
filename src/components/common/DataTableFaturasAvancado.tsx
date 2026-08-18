@@ -6,6 +6,8 @@ import { Meta } from '@/data/common/meta';
 import axios from 'axios';
 import { toast } from 'sonner';
 import DropdownFatura from './DropdownFatura';
+import { gerarCartaCorrecaoHtml } from '@/lib/danfe/gerarCartaCorrecaoHtml';
+import { gerarTermoBateriasHtml } from '@/lib/danfe/gerarTermoBateriasHtml';
 import { Loader2, CheckCircle2, Download, X } from 'lucide-react';
 import ModalFormulario from '@/components/common/modalform';
 import FormInput from '@/components/common/FormInput';
@@ -28,6 +30,14 @@ import NotaFiscalPreviewModal from '../corpo/faturamento/NotaFiscalPreviewModal'
 import { time } from 'console';
 import ModalBoletos from './ModalBoletos';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
+
+// Formata valor em Real no padrão BR: R$ 3.664,05 (ponto de milhar, vírgula decimal).
+const formatarBRL = (v: any) =>
+  `R$ ${Number(v || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
 interface Props {
   faturas: any[];
   meta: Meta;
@@ -565,7 +575,35 @@ export default function DataTableFaturasAvancado({
       const { data } = await axios.post('/api/faturamento/emitir-faturado', {
         codfat: fatura.codfat,
       });
-      
+
+      // SEFAZ fora do ar → confirma no modal central e re-emite em contingência.
+      if (data?.contingenciaDisponivel) {
+        toast.dismiss(toastId);
+        const confirmou = await new Promise<boolean>((resolve) => {
+          pedirConfirmacao(() => resolve(true), {
+            title: 'SEFAZ indisponível',
+            message: data.mensagem || 'SEFAZ indisponível. Emitir esta nota em CONTINGÊNCIA (offline)?',
+            type: 'warning',
+            confirmText: 'Emitir em contingência',
+            cancelText: 'Cancelar',
+            onCancel: () => resolve(false),
+          });
+        });
+        if (!confirmou) return;
+        const tId2 = toast.loading('Emitindo em contingência...');
+        const { data: dataC } = await axios.post('/api/faturamento/emitir-faturado', {
+          codfat: fatura.codfat,
+          contingencia: true,
+        });
+        if (dataC?.sucesso) {
+          toast.success('Nota emitida em CONTINGÊNCIA!', { id: tId2 });
+          onAtualizarLista?.();
+        } else {
+          toast.error(dataC?.motivo || dataC?.detalhe || 'Falha ao emitir em contingência.', { id: tId2 });
+        }
+        return;
+      }
+
       if (data.sucesso && data.pdfBase64) {
         toast.success(`${data.tipoDocumento || 'Nota'} emitida com sucesso!`, { id: toastId });
         
@@ -737,6 +775,247 @@ const handleCancelarNota = async () => {
     setIsCanceling(false);
   }
 };
+
+  // ===== CARTA DE CORREÇÃO ELETRÔNICA (CC-e) =====
+  const [modalCartaCorrecaoAberto, setModalCartaCorrecaoAberto] = useState(false);
+  const [faturaParaCC, setFaturaParaCC] = useState<any | null>(null);
+  const [textoCartaCorrecao, setTextoCartaCorrecao] = useState('');
+  const [enviandoCC, setEnviandoCC] = useState(false);
+
+  const handleAbrirModalCartaCorrecao = (fatura: any) => {
+    // Só NF-e autorizada, não NFC-e, dentro de 30 dias (valida antes de abrir).
+    if (fatura?.nfe_status !== '100') {
+      pedirConfirmacao(() => {}, {
+        somenteOk: true, type: 'warning', title: 'Carta de Correção',
+        message: 'Só é possível gerar Carta de Correção para NF-e autorizada.',
+      });
+      return;
+    }
+    if (String(fatura?.nfe_modelo || '55') === '65') {
+      pedirConfirmacao(() => {}, {
+        somenteOk: true, type: 'warning', title: 'Carta de Correção',
+        message: 'Carta de Correção não é permitida para NFC-e.',
+      });
+      return;
+    }
+    const autorizacao = fatura?.nfe_dthrprotocolo;
+    if (autorizacao) {
+      const dias = (Date.now() - new Date(autorizacao).getTime()) / 86400000;
+      if (Number.isFinite(dias) && dias > 30) {
+        pedirConfirmacao(() => {}, {
+          somenteOk: true, type: 'warning', title: 'Carta de Correção',
+          message: `Prazo expirado: a Carta de Correção só pode ser enviada até 30 dias após a autorização (autorizada há ${Math.round(dias)} dias).`,
+        });
+        return;
+      }
+    }
+    setFaturaParaCC(fatura);
+    setTextoCartaCorrecao('');
+    setModalCartaCorrecaoAberto(true);
+  };
+
+  const handleEnviarCartaCorrecao = async () => {
+    if (!faturaParaCC) return;
+    if (textoCartaCorrecao.trim().length < 15) {
+      toast.error('O texto da correção deve ter no mínimo 15 caracteres.');
+      return;
+    }
+    setEnviandoCC(true);
+    try {
+      const { data } = await axios.post('/api/faturamento/carta-correcao', {
+        codfat: faturaParaCC.codfat,
+        correcao: textoCartaCorrecao,
+      });
+      toast.success(`Carta de Correção registrada (protocolo ${data.protocolo || '—'}).`);
+
+      // Gera o comprovante (HTML retrato) e baixa o PDF, como na NF-e.
+      try {
+        const html = gerarCartaCorrecaoHtml({
+          numeroNota: data.numeroNota || faturaParaCC.numero_nfe || faturaParaCC.nroform,
+          serie: data.serie || faturaParaCC.serie,
+          chave: data.chave,
+          protocolo: data.protocolo,
+          nSeqEvento: data.nSeqEvento,
+          dhEvento: data.dhEvento,
+          correcao: data.correcao,
+          homologacao: true,
+          logoSrc: typeof window !== 'undefined' ? window.location.origin + '/images/logoPdf.png' : undefined,
+          // Emitente REAL da nota (vindo do XML, via endpoint).
+          emitente: data.emitente,
+          // Destinatário: nome real do cliente (em homolog o XML traz o texto fixo
+          // "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO"), doc/endereço do XML da nota.
+          destinatario: {
+            nome:
+              faturaParaCC.cliente_nome ||
+              faturaParaCC.dbclien?.nome ||
+              data.destinatario?.nome,
+            documento: data.destinatario?.documento,
+            endereco: data.destinatario?.endereco,
+          },
+        });
+        const resp = await axios.post(
+          '/api/faturamento/danfe-html-pdf',
+          { html, filename: `cce-${faturaParaCC.codfat}`, orientacao: 'portrait' },
+          { responseType: 'blob' },
+        );
+        const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cce-${faturaParaCC.codfat}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (pdfErr) {
+        toast.warning('CC-e registrada, mas houve falha ao gerar o PDF do comprovante.');
+      }
+
+      setModalCartaCorrecaoAberto(false);
+      setFaturaParaCC(null);
+      setTextoCartaCorrecao('');
+      onAtualizarLista?.();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.motivo || err?.response?.data?.erro || 'Erro ao enviar a Carta de Correção.';
+      toast.error(msg);
+    } finally {
+      setEnviandoCC(false);
+    }
+  };
+
+  // ===== TERMO DE COMPROMISSO DE BATERIAS =====
+  const [modalTermoAberto, setModalTermoAberto] = useState(false);
+  const [termoFatura, setTermoFatura] = useState<any | null>(null);
+  const [termoCliente, setTermoCliente] = useState<any | null>(null);
+  const [termoProdutos, setTermoProdutos] = useState<any[]>([]);
+  const [gerandoTermo, setGerandoTermo] = useState(false);
+
+  const handleAbrirModalTermoBaterias = async (fatura: any) => {
+    try {
+      const { data } = await axios.get('/api/faturamento/termo-baterias', {
+        params: { codfat: fatura.codfat },
+      });
+      setTermoFatura(data.fatura);
+      setTermoCliente(data.cliente);
+      // Marca todos os itens por padrão; o usuário desmarca os que não são baterias.
+      setTermoProdutos((data.produtos || []).map((p: any) => ({ ...p, check: true })));
+      setModalTermoAberto(true);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Erro ao carregar os produtos da fatura.');
+    }
+  };
+
+  const handleGerarTermoBaterias = async () => {
+    const selecionados = termoProdutos.filter((p) => p.check);
+    if (selecionados.length === 0) {
+      toast.error('Marque ao menos um item (bateria) para gerar o termo.');
+      return;
+    }
+    setGerandoTermo(true);
+    try {
+      const html = gerarTermoBateriasHtml({
+        nroform: termoFatura?.nroform,
+        serie: termoFatura?.serie,
+        cliente: termoCliente,
+        produtos: selecionados,
+        logoSrc: typeof window !== 'undefined' ? window.location.origin + '/images/logoPdf.png' : undefined,
+      });
+      const resp = await axios.post(
+        '/api/faturamento/danfe-html-pdf',
+        { html, filename: `termo-baterias-${termoFatura?.codfat}`, orientacao: 'portrait' },
+        { responseType: 'blob' },
+      );
+      const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `termo-baterias-${termoFatura?.codfat}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setModalTermoAberto(false);
+    } catch (err) {
+      toast.error('Erro ao gerar o PDF do termo.');
+    } finally {
+      setGerandoTermo(false);
+    }
+  };
+
+  // ===== ESTORNO DE NF-e (fase 1: gerar a DI de devolução) =====
+  const [modalEstornoAberto, setModalEstornoAberto] = useState(false);
+  const [estornoFatura, setEstornoFatura] = useState<any | null>(null);
+  const [estornoJustificativa, setEstornoJustificativa] = useState('');
+  const [estornoCfop, setEstornoCfop] = useState('');
+  const [estornandoDI, setEstornandoDI] = useState(false);
+  const [estornoResultado, setEstornoResultado] = useState<any | null>(null);
+
+  const handleAbrirModalEstorno = (fatura: any) => {
+    if (fatura?.nfe_status !== '100') {
+      pedirConfirmacao(() => {}, {
+        somenteOk: true, type: 'warning', title: 'Estorno de NF-e',
+        message: 'Só é possível estornar NF-e autorizada.',
+      });
+      return;
+    }
+    // Estorno é para DEPOIS das 24h — antes disso o caminho é o Cancelamento.
+    const autorizacao = fatura?.nfe_dthrprotocolo;
+    if (autorizacao) {
+      const horas = (Date.now() - new Date(autorizacao).getTime()) / 3600000;
+      if (Number.isFinite(horas) && horas < 24) {
+        pedirConfirmacao(() => {}, {
+          somenteOk: true, type: 'warning', title: 'Estorno de NF-e',
+          message: `O Estorno é para DEPOIS de 24h da autorização (faltam ${Math.ceil(24 - horas)}h). Dentro de 24h, use Cancelar Nota Fiscal.`,
+        });
+        return;
+      }
+    }
+    setEstornoFatura(fatura);
+    setEstornoJustificativa('');
+    setEstornoCfop('');
+    setEstornoResultado(null);
+    setModalEstornoAberto(true);
+  };
+
+  const handleGerarEstornoDI = async () => {
+    if (!estornoFatura) return;
+    if (estornoJustificativa.trim().length < 15) {
+      toast.error('A justificativa deve ter no mínimo 15 caracteres.');
+      return;
+    }
+    if (!/^\d{4}$/.test(estornoCfop.trim())) {
+      toast.error('Informe um CFOP de devolução válido (4 dígitos).');
+      return;
+    }
+    setEstornandoDI(true);
+    try {
+      const { data } = await axios.post('/api/faturamento/estornar-nfe', {
+        codfat: estornoFatura.codfat,
+        cfop: estornoCfop.trim(),
+        justificativa: estornoJustificativa.trim(),
+      });
+      setEstornoResultado(data);
+      toast.success(`DI de devolução gerada: fatura ${data.codfatDI} (form ${data.nroformDI}).`);
+      onAtualizarLista?.();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.erro || 'Erro ao gerar o estorno.');
+    } finally {
+      setEstornandoDI(false);
+    }
+  };
+
+  // Fase 2: emite a NF-e de devolução de uma DI (pelo resultado do estorno ou pela Consulta).
+  const [emitindoDevolucao, setEmitindoDevolucao] = useState<string | null>(null);
+  const handleEmitirDevolucao = async (codfatDI: string) => {
+    if (!codfatDI) return;
+    setEmitindoDevolucao(codfatDI);
+    try {
+      const { data } = await axios.post('/api/faturamento/emitir-devolucao', { codfat: codfatDI });
+      toast.success(`Devolução autorizada! Protocolo ${data.protocolo || '—'}.`);
+      onAtualizarLista?.();
+      return true;
+    } catch (err: any) {
+      toast.error(err?.response?.data?.motivo || err?.response?.data?.erro || 'Erro ao emitir a devolução.');
+      return false;
+    } finally {
+      setEmitindoDevolucao(null);
+    }
+  };
 
   // Carregar grupos de pagamento
   const carregarGruposPagamento = async (codcli: string | null) => {
@@ -932,6 +1211,10 @@ const handleCancelarNota = async () => {
         }}
         onCancelarNotaClick={() => handleAbrirModalCancelar(f)}
         onEmitirNotaClick={() => handleEmitirNota(f)}
+        onCartaCorrecaoClick={() => handleAbrirModalCartaCorrecao(f)}
+        onTermoBateriasClick={() => handleAbrirModalTermoBaterias(f)}
+        onEstornoClick={() => handleAbrirModalEstorno(f)}
+        onEmitirDevolucaoClick={() => handleEmitirDevolucao(f.codfat)}
       />
     ),
     status: statusNfePill(f),
@@ -940,7 +1223,7 @@ const handleCancelarNota = async () => {
     codfat: f.codfat,
     nroform: f.nroform ?? '-',
     cliente_nome: ` ${f.codcli}-${f.cliente_nome ?? f.dbclien?.nome ?? '-'}`,
-    totalnf: `R$ ${Number(f.totalnf || 0).toFixed(2)}`,
+    totalnf: formatarBRL(f.totalnf),
     data: new Date(f.data).toLocaleDateString(),
     codvend: `${f.codvend} - ${f.nome_vendedor ?? '—'}`,
     codtransp: `${f.codtransp} - ${f.nome_transportadora ?? '—'}`,
@@ -958,7 +1241,7 @@ const handleCancelarNota = async () => {
 
     const tableData = faturas.map((f) =>
       colunas.map((col) => {
-        if (col === 'totalnf') return `R$ ${Number(f[col] || 0).toFixed(2)}`;
+        if (col === 'totalnf') return formatarBRL(f[col]);
         if (col === 'data') return new Date(f[col]).toLocaleDateString();
         return f[col] ?? '';
       }),
@@ -1134,6 +1417,233 @@ const handleCancelarNota = async () => {
   </DialogContent>
 </Dialog>
 
+        {/* Modal de Carta de Correção Eletrônica (CC-e) */}
+        <Dialog open={modalCartaCorrecaoAberto} onOpenChange={setModalCartaCorrecaoAberto}>
+          <DialogContent className="max-w-lg w-full bg-white dark:bg-zinc-900">
+            <DialogHeader>
+              <DialogTitle>Carta de Correção Eletrônica</DialogTitle>
+              <DialogDescription>
+                Descreva a correção da NF-e {faturaParaCC?.numero_nfe || faturaParaCC?.nroform}.
+                Não vale para valores/impostos, remetente/destinatário ou data de emissão.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="w-full">
+              <textarea
+                className="w-full min-h-[120px] border rounded p-2 text-black dark:text-white bg-gray-100 dark:bg-zinc-800 disabled:opacity-70"
+                value={textoCartaCorrecao}
+                onChange={(e) => setTextoCartaCorrecao(e.target.value.slice(0, 1000))}
+                placeholder="Ex.: No campo Transportadora, onde se lê CLIENTE RETIRA, leia-se..."
+                autoFocus
+                disabled={enviandoCC}
+                maxLength={1000}
+              />
+              <p className={`mt-1 text-xs text-right ${
+                textoCartaCorrecao.trim().length < 15 ? 'text-red-500 font-semibold' : 'text-green-600'
+              }`}>
+                {textoCartaCorrecao.length} / 1000 (mín. 15)
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-300 dark:bg-zinc-700 text-black dark:text-white hover:bg-gray-400 dark:hover:bg-zinc-600 disabled:opacity-50"
+                onClick={() => setModalCartaCorrecaoAberto(false)}
+                disabled={enviandoCC}
+              >
+                Fechar
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-teal-600 text-white hover:bg-teal-700 flex items-center justify-center min-w-[180px] disabled:cursor-not-allowed disabled:bg-teal-800"
+                onClick={handleEnviarCartaCorrecao}
+                disabled={enviandoCC || textoCartaCorrecao.trim().length < 15}
+              >
+                {enviandoCC ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Enviando à SEFAZ...
+                  </>
+                ) : (
+                  'Enviar Carta de Correção'
+                )}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal do Termo de Compromisso de Baterias */}
+        <Dialog open={modalTermoAberto} onOpenChange={setModalTermoAberto}>
+          <DialogContent className="max-w-2xl w-full bg-white dark:bg-zinc-900">
+            <DialogHeader>
+              <DialogTitle>Termo de Compromisso de Baterias</DialogTitle>
+              <DialogDescription>
+                Marque os itens que são baterias — o termo (logística reversa) será gerado só com eles.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="max-h-72 overflow-auto border rounded">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted">
+                  <tr>
+                    <th className="px-2 py-1 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={termoProdutos.length > 0 && termoProdutos.every((p) => p.check)}
+                        onChange={(e) =>
+                          setTermoProdutos((prev) => prev.map((p) => ({ ...p, check: e.target.checked })))
+                        }
+                      />
+                    </th>
+                    <th className="px-2 py-1 text-left">Referência</th>
+                    <th className="px-2 py-1 text-left">Descrição</th>
+                    <th className="px-2 py-1 text-left">Marca</th>
+                    <th className="px-2 py-1 text-center">Qtde</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {termoProdutos.map((p, i) => (
+                    <tr key={`${p.ref}-${p.codprod}`} className="odd:bg-muted/20">
+                      <td className="px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={!!p.check}
+                          onChange={(e) =>
+                            setTermoProdutos((prev) =>
+                              prev.map((x, j) => (j === i ? { ...x, check: e.target.checked } : x)),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1 whitespace-nowrap">{p.ref}</td>
+                      <td className="px-2 py-1">{p.descr}</td>
+                      <td className="px-2 py-1">{p.marca}</td>
+                      <td className="px-2 py-1 text-center">{p.qtde}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-300 dark:bg-zinc-700 text-black dark:text-white hover:bg-gray-400 dark:hover:bg-zinc-600 disabled:opacity-50"
+                onClick={() => setModalTermoAberto(false)}
+                disabled={gerandoTermo}
+              >
+                Fechar
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-lime-600 text-white hover:bg-lime-700 flex items-center justify-center min-w-[150px] disabled:cursor-not-allowed disabled:bg-lime-800"
+                onClick={handleGerarTermoBaterias}
+                disabled={gerandoTermo || termoProdutos.filter((p) => p.check).length === 0}
+              >
+                {gerandoTermo ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  'Gerar Termo (PDF)'
+                )}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Estorno de NF-e (fase 1: gerar a DI de devolução) */}
+        <Dialog open={modalEstornoAberto} onOpenChange={setModalEstornoAberto}>
+          <DialogContent className="max-w-lg w-full bg-white dark:bg-zinc-900">
+            <DialogHeader>
+              <DialogTitle>Estorno de NF-e</DialogTitle>
+              <DialogDescription>
+                Gera um documento de DEVOLUÇÃO (DI) que reverte a NF-e {estornoFatura?.numero_nfe || estornoFatura?.nroform} e estorna o estoque. A emissão da devolução à SEFAZ é o próximo passo.
+              </DialogDescription>
+            </DialogHeader>
+
+            {!estornoResultado ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs block mb-1">Justificativa (mín. 15 caracteres)</label>
+                  <textarea
+                    className="w-full min-h-[80px] border rounded p-2 text-black dark:text-white bg-gray-100 dark:bg-zinc-800 disabled:opacity-70"
+                    value={estornoJustificativa}
+                    onChange={(e) => setEstornoJustificativa(e.target.value)}
+                    placeholder="Motivo do estorno da NF-e..."
+                    disabled={estornandoDI}
+                    maxLength={255}
+                  />
+                  <p className={`mt-1 text-xs text-right ${estornoJustificativa.trim().length < 15 ? 'text-red-500 font-semibold' : 'text-green-600'}`}>
+                    {estornoJustificativa.length} / 255 (mín. 15)
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs block mb-1">CFOP de devolução (4 dígitos)</label>
+                  <input
+                    className="w-40 border rounded p-2 text-black dark:text-white bg-gray-100 dark:bg-zinc-800"
+                    value={estornoCfop}
+                    onChange={(e) => setEstornoCfop(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="ex.: 1202"
+                    inputMode="numeric"
+                    disabled={estornandoDI}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded border border-green-300 bg-green-50 dark:bg-green-950/30 p-3 text-sm">
+                <div className="font-semibold text-green-700 dark:text-green-400 mb-1">Documento de devolução (DI) gerado ✅</div>
+                <div>Fatura DI: <b>{estornoResultado.codfatDI}</b> · Formulário: <b>{estornoResultado.nroformDI}</b> · Itens: {estornoResultado.itens}</div>
+                <div>NF-e original: {estornoResultado.codfatOriginal} (marcada como estornada) · Estoque devolvido.</div>
+                <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">Próximo passo: emitir a NF-e de devolução à SEFAZ.</div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-300 dark:bg-zinc-700 text-black dark:text-white hover:bg-gray-400 dark:hover:bg-zinc-600 disabled:opacity-50"
+                onClick={() => setModalEstornoAberto(false)}
+                disabled={estornandoDI || !!emitindoDevolucao}
+              >
+                {estornoResultado ? 'Fechar' : 'Cancelar'}
+              </button>
+              {estornoResultado && (
+                <button
+                  className="px-4 py-2 rounded bg-orange-600 text-white hover:bg-orange-700 flex items-center justify-center min-w-[180px] disabled:cursor-not-allowed disabled:bg-orange-800"
+                  onClick={async () => {
+                    const ok = await handleEmitirDevolucao(estornoResultado.codfatDI);
+                    if (ok) setModalEstornoAberto(false);
+                  }}
+                  disabled={!!emitindoDevolucao}
+                >
+                  {emitindoDevolucao ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Emitindo à SEFAZ...
+                    </>
+                  ) : (
+                    'Emitir Devolução (SEFAZ)'
+                  )}
+                </button>
+              )}
+              {!estornoResultado && (
+                <button
+                  className="px-4 py-2 rounded bg-orange-600 text-white hover:bg-orange-700 flex items-center justify-center min-w-[150px] disabled:cursor-not-allowed disabled:bg-orange-800"
+                  onClick={handleGerarEstornoDI}
+                  disabled={estornandoDI || estornoJustificativa.trim().length < 15 || estornoCfop.trim().length !== 4}
+                >
+                  {estornandoDI ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Gerando DI...
+                    </>
+                  ) : (
+                    'Gerar DI de Devolução'
+                  )}
+                </button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:w-full text-black dark:text-white px-2 py-2 border-t border-zinc-600"></div>
         {/* Modal Produtos */}
         <Dialog open={mostrarProdutos} onOpenChange={setMostrarProdutos}>
@@ -1186,17 +1696,17 @@ const handleCancelarNota = async () => {
                           {p.qtd}
                         </td>
                         <td className="p-2 border text-gray-800 dark:text-white">
-                          R$ {Number(p.prunit).toFixed(2)}
+                          {formatarBRL(p.prunit)}
                         </td>
                         <td className="p-2 border  text-gray-800 dark:text-white ">
-                          R$ {Number(p.total_item).toFixed(2)}
+                          {formatarBRL(p.total_item)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 <div className="mt-4 text-right font-bold  text-gray-800 dark:text-white">
-                  Total: R$ {Number(faturaSelecionada?.totalnf || 0).toFixed(2)}
+                  Total: {formatarBRL(faturaSelecionada?.totalnf)}
                 </div>
               </div>
             ) : (
@@ -1448,7 +1958,7 @@ const handleCancelarNota = async () => {
                           {fatura.cliente_nome ?? fatura.dbclien?.nome ?? '-'}
                         </td>
                         <td className="p-2 border text-gray-800 dark:text-white">
-                          R$ {Number(fatura.totalnf || 0).toFixed(2)}
+                          {formatarBRL(fatura.totalnf)}
                         </td>
                         <td className="p-2 border text-gray-800 dark:text-white">
                           {new Date(fatura.data).toLocaleDateString()}
@@ -1489,7 +1999,7 @@ const handleCancelarNota = async () => {
                   </tbody>
                 </table>
                 <div className="mt-4 text-right font-bold text-gray-800 dark:text-white">
-                  Total: R$ {faturasDoGrupo.reduce((acc: number, f: any) => acc + Number(f.totalnf || 0), 0).toFixed(2)}
+                  Total: {formatarBRL(faturasDoGrupo.reduce((acc: number, f: any) => acc + Number(f.totalnf || 0), 0))}
                 </div>
               </div>
             ) : (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import AutocompletePessoa from '@/components/common/AutoCompletePessoa';
 import { calcularTotaisFatura } from '@/lib/faturamento/calcularTotaisFatura';
 
@@ -37,6 +37,7 @@ export type FatV2Ctx = {
     opcoes?: () => void;
     gerarParcelas?: () => void;
     atualizarVencimento?: (idx: number, isoDate: string) => void;
+    atualizarDias?: (idx: number, dias: string) => void;
     removerParcela?: (idx: number) => void;
     addMensagem?: () => void;
     removerMensagem?: (codigo: any) => void;
@@ -54,26 +55,6 @@ const txt = (v: any) => (v === undefined || v === null || v === '' ? '—' : Str
 
 export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const [aba, setAba] = useState<Aba>('natureza');
-
-  // Vendedores (código → nome) para exibir "código - nome" no campo Vendedor.
-  const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
-  useEffect(() => {
-    fetch('/api/faturamento/vendedorget')
-      .then((r) => r.json())
-      .then((rows: any[]) => {
-        const m: Record<string, string> = {};
-        (rows || []).forEach((v: any) => {
-          const k = String(v?.codvend ?? '').trim().replace(/^0+/, '');
-          if (k) m[k] = v?.nome ?? '';
-        });
-        setVendedoresMap(m);
-      })
-      .catch(() => {});
-  }, []);
-  const nomeVendedor = (cod?: string) => {
-    const k = String(cod ?? '').trim().replace(/^0+/, '');
-    return vendedoresMap[k] || '';
-  };
 
   // Fallback local (preview) se não vier ctx
   const [local, setLocal] = useState<Record<string, any>>({
@@ -268,16 +249,26 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                     <div className="fat-c2"><label>Final</label><input type="text" readOnly value={txt(cli.final ?? cli.consumidor_final)} /></div>
                     <div className="fat-c2"><label>Classe pgto</label><input type="text" readOnly value={txt(cli.claspgto ?? cli.classe_pgto)} /></div>
                     <div className="fat-c6"><label>Suframa</label><input type="text" readOnly value={txt(cli.isuframa ?? cli.suframa)} /></div>
-                    <div className="fat-c6"><label>Vendedor</label>
-                      <input type="text" readOnly value={f.vendedor ? `${f.vendedor}${nomeVendedor(f.vendedor) ? ' - ' + nomeVendedor(f.vendedor) : ''}` : ''} /></div>
+                    <div className="fat-c6">
+                      <AutocompletePessoa
+                        label="Vendedor"
+                        value={f.vendedor ?? ''}
+                        onChange={(cod) => set('vendedor', cod)}
+                        tipo="vendedor"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div className="fat-sec"><div className="fat-sec-header"><span>Comissão diferenciada</span></div>
                   <div className="fat-g">
-                    <div className="fat-c6"><label>Vendedor externo</label><input type="text" value={f.comissaoExterno ?? ''} onChange={(e) => set('comissaoExterno', e.target.value)} /></div>
-                    <div className="fat-c6"><label>Vendedor interno</label><input type="text" value={f.comissaoInterno ?? ''} onChange={(e) => set('comissaoInterno', e.target.value)} /></div>
-                    <label className="fat-ck fat-c6"><input type="checkbox" checked={!!f.diferenciada} onChange={(e) => set('diferenciada', e.target.checked)} /> Diferenciada</label>
+                    <label className="fat-ck fat-c12"><input type="checkbox" checked={!!f.diferenciada} onChange={(e) => set('diferenciada', e.target.checked)} /> Diferenciada</label>
+                    {f.diferenciada && (
+                      <>
+                        <div className="fat-c6"><label>Vendedor externo (%)</label><input type="number" step="0.01" value={f.comissaoExterno ?? ''} onChange={(e) => set('comissaoExterno', e.target.value)} /></div>
+                        <div className="fat-c6"><label>Vendedor interno (%)</label><input type="number" step="0.01" value={f.comissaoInterno ?? ''} onChange={(e) => set('comissaoInterno', e.target.value)} /></div>
+                      </>
+                    )}
                     {act.salvarComissao && (
                       <div className="fat-c6" style={{ display: 'flex', alignItems: 'flex-end' }}>
                         <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.salvarComissao}>Salvar</button></div>
@@ -389,9 +380,34 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                 <div className="fat-c3" style={{ display: 'flex', alignItems: 'flex-end' }}>
                   <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.gerarParcelas}>+ Gerar parcelas</button></div>
                 {chk('habilitarValor', 'Habilitar valor de entrada', 'fat-c3')}
+                {f.habilitarValor && (
+                  <div className="fat-c3"><label>Valor de entrada (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Ex: 400,00"
+                      value={f.valorVista ?? ''}
+                      onChange={(e) => {
+                        // Máscara de moeda em centavos: dígitos preenchem da direita.
+                        const digits = e.target.value.replace(/\D/g, '');
+                        const masked = digits
+                          ? (parseInt(digits, 10) / 100).toLocaleString('pt-BR', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : '';
+                        set('valorVista', masked);
+                      }}
+                    /></div>
+                )}
                 {chk('impostoNa1Parcela', 'Cobrar impostos na 1ª parcela', 'fat-c3')}
                 {chk('freteNa1Parcela', 'Cobrar frete na 1ª parcela', 'fat-c3')}
                 {chk('diferenciada', 'Comissão diferenciada', 'fat-c3')}
+                {f.tipoFatura &&
+                  !['BOLETO', 'BOLETO BANCARIO', 'BOLETO BANCÁRIO', 'CARTEIRA'].includes(
+                    String(f.tipoFatura).toUpperCase(),
+                  ) &&
+                  chk('gerar30dias', 'Gerar cobrança 30 dias (valor total)', 'fat-c4')}
               </div>
               <div className="fat-sub">Parcelas</div>
               <div className="fat-tbl-wrap"><table className="fat-tbl">
@@ -400,7 +416,15 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                   {PARCELAS.map((p: any, i: number) => (
                     <tr key={i}>
                       <td className="l">{p.parcela}</td>
-                      <td className="n">{p.dias}</td>
+                      <td className="n">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={p.dias}
+                          style={{ height: 20, width: 56, textAlign: 'right' }}
+                          onChange={(e) => act.atualizarDias?.(p.idx ?? i, e.target.value.replace(/\D/g, ''))}
+                        />
+                      </td>
                       <td className="l">
                         <input type="date" value={p.vencimento} min={minVenc} style={{ height: 20, width: 130 }}
                           onChange={(e) => act.atualizarVencimento?.(p.idx ?? i, e.target.value)} />

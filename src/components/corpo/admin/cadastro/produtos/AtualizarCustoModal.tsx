@@ -25,6 +25,8 @@ interface AtualizarCustoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** codprods marcados na lista de produtos (modo "Carregar selecionados", sem planilha). */
+  codprodsSelecionados?: string[];
 }
 
 interface MarcaOpt {
@@ -95,20 +97,76 @@ function letraColuna(i: number): string {
   return s;
 }
 
+// Sanitiza a digitação de percentual: só dígitos + UMA vírgula decimal.
+function sanitizarPercent(raw: string): string {
+  let s = String(raw ?? '').replace(/[^\d.,]/g, '').replace(/\./g, ',');
+  const partes = s.split(',');
+  if (partes.length > 2) s = partes[0] + ',' + partes.slice(1).join('');
+  return s;
+}
+
+// Campo de preço editável na grade (buffer local para permitir digitar decimais
+// com vírgula sem o round-trip pelo número quebrar a digitação). Commita n() ao pai.
+const CampoPrecoLinha: React.FC<{
+  inicial: number;
+  onCommit: (v: string) => void;
+}> = ({ inicial, onCommit }) => {
+  const [txt, setTxt] = useState(inicial ? String(inicial).replace('.', ',') : '');
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={txt}
+      onChange={(e) => {
+        const v = e.target.value.replace(/[^\d.,]/g, '');
+        setTxt(v);
+        onCommit(v);
+      }}
+      className="w-20 h-7 rounded border bg-background px-1 text-right"
+    />
+  );
+};
+
+// Campo com máscara de percentual: entrada numérica (vírgula decimal), alinhado à
+// direita, sufixo "%" e formatação para 2 casas ao sair (blur). Guarda string PT-BR.
+const CampoPercent: React.FC<{
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}> = ({ label, value, onChange }) => (
+  <div>
+    <label className="text-xs block mb-0.5">{label}</label>
+    <div className="relative">
+      <Input
+        value={value}
+        onChange={(e) => onChange(sanitizarPercent(e.target.value))}
+        onBlur={() => onChange(n(value).toFixed(2).replace('.', ','))}
+        onFocus={(e) => e.target.select()}
+        className="h-8 pr-6 text-right"
+        inputMode="decimal"
+      />
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+        %
+      </span>
+    </div>
+  </div>
+);
+
 export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  codprodsSelecionados = [],
 }) => {
   const { toast } = useToast();
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
 
-  // parâmetros de cálculo
-  const [desconto, setDesconto] = useState('0');
-  const [acrescimo, setAcrescimo] = useState('0');
-  const [custoFin, setCustoFin] = useState('0');
-  const [verbaMkt, setVerbaMkt] = useState('0');
-  const [frete, setFrete] = useState('0');
+  // parâmetros de cálculo (string PT-BR com máscara de %, ex.: "2,00")
+  const [desconto, setDesconto] = useState('0,00');
+  const [acrescimo, setAcrescimo] = useState('0,00');
+  const [custoFin, setCustoFin] = useState('0,00');
+  const [verbaMkt, setVerbaMkt] = useState('0,00');
+  const [frete, setFrete] = useState('0,00');
   const [zerarIpi, setZerarIpi] = useState(false);
   const [zerarSt, setZerarSt] = useState(false);
 
@@ -135,6 +193,8 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
 
   // grid resultado
   const [linhas, setLinhas] = useState<GridRow[]>([]);
+  // muda a cada carga para remontar os inputs editáveis da grade (reset do buffer local)
+  const [loadSeq, setLoadSeq] = useState(0);
   const [carregando, setCarregando] = useState(false);
   const [calculando, setCalculando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -263,6 +323,7 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
         });
       }
       setLinhas(novas);
+      setLoadSeq((s) => s + 1);
       toast({
         title: `Carregados: ${novas.length}`,
         description:
@@ -275,6 +336,53 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
       setCarregando(false);
     }
   }, [codmarca, dados, mapa, opc, toast]);
+
+  // Modo "sem planilha": carrega os produtos marcados na lista (dados atuais do
+  // dbprod). O usuário ajusta os preços de fábrica na grid e clica Calcular.
+  const carregarSelecionados = async () => {
+    if (!codprodsSelecionados || codprodsSelecionados.length === 0) {
+      toast({ title: 'Nenhum produto selecionado na lista.', variant: 'destructive' });
+      return;
+    }
+    setCarregando(true);
+    try {
+      const { data } = await api.post(
+        '/api/produtos/custo-carregar-selecionados',
+        { codprods: codprodsSelecionados },
+      );
+      const novas: GridRow[] = data.produtos || [];
+      setLinhas(novas);
+      setLoadSeq((s) => s + 1);
+      toast({
+        title: `Carregados: ${novas.length}`,
+        description: 'Ajuste os preços de fábrica na grade e clique em Calcular.',
+      });
+    } catch (e: any) {
+      toast({
+        title: 'Erro ao carregar selecionados',
+        description: e?.response?.data?.error,
+        variant: 'destructive',
+      });
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  // Edita um preço de fábrica direto na grade (modo selecionados) e zera os custos
+  // calculados (ficam desatualizados até clicar Calcular de novo).
+  const editarPrecoLinha = (
+    codprod: string,
+    campo: 'prBruto' | 'prNF' | 'prSNF',
+    valor: string,
+  ) => {
+    setLinhas((prev) =>
+      prev.map((l) =>
+        l.codprod === codprod
+          ? { ...l, [campo]: n(valor), custo: 0, custoFE: 0, custoZF: 0 }
+          : l,
+      ),
+    );
+  };
 
   const calcular = async () => {
     if (linhas.length === 0) {
@@ -357,8 +465,9 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
         <DialogHeader>
           <DialogTitle>Atualizar Custo da Mercadoria</DialogTitle>
           <DialogDescription>
-            Importe a planilha, mapeie as colunas, carregue os produtos, calcule
-            e salve os custos.
+            Use &quot;Carregar selecionados&quot; para os produtos marcados na lista, ou
+            importe uma planilha (mapeie as colunas) para lotes. Ajuste os preços
+            de fábrica na grade, clique em Calcular e depois em Salvar.
           </DialogDescription>
         </DialogHeader>
 
@@ -373,10 +482,7 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
               { l: 'Verba Mkt (+) %', v: verbaMkt, s: setVerbaMkt },
               { l: 'Frete (+) %', v: frete, s: setFrete },
             ].map((f) => (
-              <div key={f.l}>
-                <label className="text-xs block mb-0.5">{f.l}</label>
-                <Input value={f.v} onChange={(e) => f.s(e.target.value)} className="h-8" inputMode="decimal" />
-              </div>
+              <CampoPercent key={f.l} label={f.l} value={f.v} onChange={f.s} />
             ))}
             <div className="flex items-end gap-4">
               <label className="flex items-center gap-1 text-sm">
@@ -490,10 +596,16 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
             </div>
           )}
 
-          <div className="flex gap-2 mt-3">
+          <div className="flex flex-wrap gap-2 mt-3">
+            {codprodsSelecionados.length > 0 && (
+              <Button type="button" onClick={carregarSelecionados} disabled={carregando}>
+                {carregando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <FileSpreadsheet className="w-4 h-4 mr-1" />}
+                Carregar selecionados ({codprodsSelecionados.length})
+              </Button>
+            )}
             <Button type="button" variant="secondary" onClick={carregar} disabled={carregando}>
               {carregando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Upload className="w-4 h-4 mr-1" />}
-              Carregar
+              Carregar (planilha)
             </Button>
             <Button type="button" variant="secondary" onClick={calcular} disabled={calculando || linhas.length === 0}>
               {calculando ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Calculator className="w-4 h-4 mr-1" />}
@@ -525,9 +637,27 @@ export const AtualizarCustoModal: React.FC<AtualizarCustoModalProps> = ({
                     <td className="px-2 py-1 border-b whitespace-nowrap">{l.ref}</td>
                     <td className="px-2 py-1 border-b whitespace-nowrap max-w-[220px] truncate">{l.descricao}</td>
                     <td className="px-2 py-1 border-b">{l.ncm}</td>
-                    <td className="px-2 py-1 border-b text-right">{l.prBruto.toFixed(2)}</td>
-                    <td className="px-2 py-1 border-b text-right">{l.prNF.toFixed(2)}</td>
-                    <td className="px-2 py-1 border-b text-right">{l.prSNF.toFixed(2)}</td>
+                    <td className="px-1 py-0.5 border-b text-right">
+                      <CampoPrecoLinha
+                        key={`${loadSeq}-b-${l.codprod}`}
+                        inicial={l.prBruto}
+                        onCommit={(v) => editarPrecoLinha(l.codprod, 'prBruto', v)}
+                      />
+                    </td>
+                    <td className="px-1 py-0.5 border-b text-right">
+                      <CampoPrecoLinha
+                        key={`${loadSeq}-nf-${l.codprod}`}
+                        inicial={l.prNF}
+                        onCommit={(v) => editarPrecoLinha(l.codprod, 'prNF', v)}
+                      />
+                    </td>
+                    <td className="px-1 py-0.5 border-b text-right">
+                      <CampoPrecoLinha
+                        key={`${loadSeq}-snf-${l.codprod}`}
+                        inicial={l.prSNF}
+                        onCommit={(v) => editarPrecoLinha(l.codprod, 'prSNF', v)}
+                      />
+                    </td>
                     <td className="px-2 py-1 border-b text-right font-medium">{l.custo.toFixed(2)}</td>
                     <td className="px-2 py-1 border-b text-right">{l.custoFE.toFixed(2)}</td>
                     <td className="px-2 py-1 border-b text-right">{l.custoZF.toFixed(2)}</td>

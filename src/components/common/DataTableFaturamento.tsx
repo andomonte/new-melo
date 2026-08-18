@@ -68,6 +68,13 @@ export default function DataTableFaturamentoPadronizado({
   }, [faturasSelecionadas]);
 
   const toggleSelecionar = (fatura: any) => {
+    // Venda reservada por OUTRO usuário não pode ser selecionada (soft lock).
+    if (fatura.reservado_por_outro) {
+      toast.error(
+        `Venda em uso por ${fatura.reservado_por_nome || 'outro usuário'}.`,
+      );
+      return;
+    }
     const mesmaFatura = selecionadas.find(
       (s) => s.codvenda === fatura.codvenda,
     );
@@ -97,7 +104,14 @@ export default function DataTableFaturamentoPadronizado({
   };
 
   const rows = faturas.map((f) => ({
-    selecionar: (
+    selecionar: f.reservado_por_outro ? (
+      <span
+        title={`Em uso por ${f.reservado_por_nome || 'outro usuário'}`}
+        className="text-red-500"
+      >
+        🔒
+      </span>
+    ) : (
       <input
         type="checkbox"
         checked={selecionadas.some((s) => s.codvenda === f.codvenda)}
@@ -110,8 +124,15 @@ export default function DataTableFaturamentoPadronizado({
     data: new Date(f.data).toLocaleDateString(),
     tipo: f.tipo ?? '-',
     nrovenda: f.nrovenda ?? '-',
-    total: `R$ ${Number(f.total || 0).toFixed(2)}`,
-    cliente:  `${f.codcli} - ${f.cliente ?? '—'}`,
+    total: `R$ ${Number(f.total || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`,
+    cliente: f.reservado_por_outro
+      ? `${f.codcli} - ${f.cliente ?? '—'}  ·  🔒 em uso por ${
+          f.reservado_por_nome || 'outro'
+        }`
+      : `${f.codcli} - ${f.cliente ?? '—'}`,
     obs: f.obs ?? '-',
     uf: f.uf || '-',
     transporte: f.transportadora || '-',

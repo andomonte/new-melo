@@ -456,6 +456,9 @@ export default async function handler(
       frete: '0.00',
       seguro: '0.00',
       observacoes: dados.observacoes || '.',
+      // Contingência offline (SEFAZ indisponível): tpEmis=9 + justificativa.
+      tpEmis: dados.contingencia ? '9' : '1',
+      justificativaContingencia: dados.justificativaContingencia,
     });
 
     // 🔍 DEBUG: Verificar modelo no XML gerado
@@ -585,11 +588,17 @@ export default async function handler(
     const ambienteSefaz = getAmbienteSefaz();
     console.log(`🌐 Ambiente SEFAZ determinado: ${ambienteSefaz}`);
     
-    const urlsNfce = [
-      getUrlSefazAtual('NFCE_AUTORIZACAO'),     // URL principal baseada no ambiente
-      getUrlSefazAtual('NFCE_ALT1'),             // URL alternativa
-      'https://hom.nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx', // SVRS Contingência (sempre disponível)
-    ];
+    // URL do SVRS (contingência) — CORRIGIDA (o host antigo hom.nfce.svrs... não existe).
+    const ehProducao = String(ambienteSefaz).toUpperCase().includes('PROD') || String(ambienteSefaz) === '1';
+    const svrsUrl = ehProducao
+      ? 'https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx'
+      : 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx';
+
+    // Em CONTINGÊNCIA → vai direto pro SVRS. No normal → só a SEFAZ-AM (primária + alt);
+    // se falhar por conexão, devolvemos a opção de contingência (não cai auto no SVRS).
+    const urlsNfce = dados.contingencia
+      ? [svrsUrl]
+      : [getUrlSefazAtual('NFCE_AUTORIZACAO'), getUrlSefazAtual('NFCE_ALT1')];
     
     console.log(`🔗 URLs NFC-e para ${ambienteSefaz}:`, urlsNfce);
     
@@ -629,9 +638,10 @@ export default async function handler(
           continue;
         }
         
-        // Se é a última URL, lança o erro
-        throw new Error(`Todas as URLs NFC-e falharam. Último erro: ${lastError.message}`);
-        
+        // Última URL sem 200 — encerra o loop (tratamento pós-loop).
+        sefazResponse = undefined;
+        break;
+
       } catch (error: any) {
         lastError = error;
         console.warn(`⚠️ Falha na URL ${urlSefaz}:`, error.message);
@@ -647,12 +657,26 @@ export default async function handler(
           continue;
         }
         
-        // Se é a última URL, lança o erro
-        throw new Error(`Todas as URLs NFC-e falharam. Último erro: ${error.message}`);
+        // Última URL falhou — encerra o loop (tratamento pós-loop).
+        break;
       }
     }
 
     if (!sefazResponse) {
+      // Falha de CONEXÃO (não é rejeição). Se ainda não estamos em contingência,
+      // oferece a emissão em contingência (offline) para o usuário confirmar.
+      const semConexao = /ENOTFOUND|ETIMEDOUT|ECONNREFUSED|ECONNRESET|EAI_AGAIN|socket hang up|getaddrinfo|timeout/i.test(
+        String(lastError?.message || lastError?.code || ''),
+      );
+      if (semConexao && !dados.contingencia) {
+        return res.status(200).json({
+          sucesso: false,
+          contingenciaDisponivel: true,
+          mensagem:
+            'SEFAZ indisponível no momento. Deseja emitir esta NFC-e em CONTINGÊNCIA (offline)?',
+          detalhe: String(lastError?.message || 'sem conexão com a SEFAZ'),
+        });
+      }
       throw new Error(`Falha ao enviar para SEFAZ: ${lastError?.message || 'Todas as URLs falharam'}`);
     }
 
