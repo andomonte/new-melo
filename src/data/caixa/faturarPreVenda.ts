@@ -40,8 +40,14 @@ export async function faturarPreVenda(params: {
   codConta: string;
   username: string;
   onStep?: (etapa: string) => void;
+  /** 'VENDA' (default, caixa) ou 'TRANSFERENCIA' (define CFOP no salvar). */
+  tipoOperacao?: string;
+  /** true (default): gera cobrança/título. false: sem título (ex.: transferência). */
+  comCobranca?: boolean;
 }): Promise<FaturarResultado> {
   const { detalhes, codConta, username, onStep } = params;
+  const tipoOperacao = params.tipoOperacao || 'VENDA';
+  const comCobranca = params.comCobranca !== false;
   const { dbclien, dbvenda, resumoFinanceiro } = detalhes;
   const total = Number(resumoFinanceiro.totalGeral);
   const hoje = hojeISO();
@@ -59,19 +65,21 @@ export async function faturarPreVenda(params: {
     totalnf: total,
     cod_conta: codConta,
     tipodoc: 'N',
-    cobranca: 'S',
+    cobranca: comCobranca ? 'S' : 'N',
     insc07: 'N',
     tipo_movimentacao: 'SAIDA',
-    tipo_operacao: 'VENDA',
+    tipo_operacao: tipoOperacao,
     vendas: [dbvenda.codvenda],
     usuario_associacao: dbclien.codcli,
-    // cobrança à vista: 1 título com o total (recebido em seguida no caixa)
-    cobranca_dados: {
-      banco: '0',
-      tipofat: 'DINHEIRO',
-      codvenda: dbvenda.codvenda,
-      parcelas: [{ vencimento: hoje, valor: total, documento: `NF${dbvenda.nrovenda}A`, nossoNumero: '1' }],
-    },
+    // cobrança à vista (só quando comCobranca): 1 título com o total. Transferência = sem título.
+    cobranca_dados: comCobranca
+      ? {
+          banco: '0',
+          tipofat: 'DINHEIRO',
+          codvenda: dbvenda.codvenda,
+          parcelas: [{ vencimento: hoje, valor: total, documento: `NF${dbvenda.nrovenda}A`, nossoNumero: '1' }],
+        }
+      : null,
   };
   const sv = await jfetch('/api/faturamento/salvar', { method: 'POST', body: salvarBody });
   if (!sv.ok || !sv.json.codfat) {
@@ -157,18 +165,24 @@ export async function faturarPreVenda(params: {
       );
     }
 
-    // 6) título gerado pela fatura (para dar baixa em seguida)
-    onStep?.('Buscando título gerado…');
-    const tf = await jfetch(`/api/caixa/titulo-fatura?codfat=${encodeURIComponent(codfat)}`);
-    if (!tf.ok || !tf.json?.cod_receb) {
-      await jfetch('/api/caixa/reverter-fatura', { method: 'POST', body: { codfat } }).catch(() => {});
-      throw new Error('Fatura emitida mas título não localizado — operação desfeita.');
+    // 6) título gerado pela fatura (só quando há cobrança — transferência não tem título)
+    let cod_receb = '';
+    let valorTitulo = total;
+    if (comCobranca) {
+      onStep?.('Buscando título gerado…');
+      const tf = await jfetch(`/api/caixa/titulo-fatura?codfat=${encodeURIComponent(codfat)}`);
+      if (!tf.ok || !tf.json?.cod_receb) {
+        await jfetch('/api/caixa/reverter-fatura', { method: 'POST', body: { codfat } }).catch(() => {});
+        throw new Error('Fatura emitida mas título não localizado — operação desfeita.');
+      }
+      cod_receb = tf.json.cod_receb;
+      valorTitulo = Number(tf.json.valor_pgto ?? total);
     }
 
     return {
       codfat,
-      cod_receb: tf.json.cod_receb,
-      valorTitulo: Number(tf.json.valor_pgto ?? total),
+      cod_receb,
+      valorTitulo,
       nfe: {
         status: st,
         motivo: nf.json?.motivo,

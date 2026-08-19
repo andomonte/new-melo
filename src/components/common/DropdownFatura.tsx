@@ -229,9 +229,10 @@ export default function DropdownFatura({
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={onEmailDanfeClick}
-          disabled={fatura.emailnfe === 'S'}
+          disabled={fatura.nfe_status !== '100'}
+          title={fatura.nfe_status !== '100' ? 'Disponível apenas para notas AUTORIZADAS' : 'Enviar a DANFE + XML por email'}
           className={`group flex items-center gap-2 px-2 py-2 transition ${
-            fatura.emailnfe !== 'S'
+            fatura.nfe_status === '100'
               ? 'hover:bg-blue-500 hover:text-white'
               : 'opacity-50 cursor-not-allowed'
           }`}
@@ -242,10 +243,13 @@ export default function DropdownFatura({
 
         <DropdownMenuItem
           onClick={onenviarCobrancaClick}
-          // disabled={fatura.cobranca === 'S'}
-          className={`group flex items-center gap-2 px-2 py-2 transition 
-          
-          `}
+          disabled={fatura.cobranca !== 'S'}
+          title={fatura.cobranca !== 'S' ? 'Disponível apenas para faturas com cobrança/boleto' : 'Enviar o boleto por email'}
+          className={`group flex items-center gap-2 px-2 py-2 transition ${
+            fatura.cobranca === 'S'
+              ? 'hover:bg-blue-500 hover:text-white'
+              : 'opacity-50 cursor-not-allowed'
+          }`}
         >
           <MailCheck className="size-4 text-blue-500 group-hover:text-white transition" />
           Enviar Cobrança

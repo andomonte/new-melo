@@ -9,44 +9,59 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     console.log('🧪 Iniciando teste de configuração SMTP...');
-    
-    // Testar configuração SMTP
-    const configValida = await testarConfiguracaoSMTP();
-    
-    if (!configValida) {
-      return res.status(500).json({ 
-        error: 'Configuração SMTP inválida',
-        details: 'Verifique as variáveis de ambiente SMTP_*'
+
+    // 1) Testa a CONEXÃO (verify). Mostra o erro REAL — não a mensagem genérica de env vars.
+    const resultado = await testarConfiguracaoSMTP();
+    if (!resultado.ok) {
+      return res.status(422).json({
+        error: 'Falha na conexão SMTP',
+        details: resultado.error, // ex.: "Invalid login: 535-5.7.8 Username and Password not accepted"
+        config: resultado.config, // host/porta/usuário testados (ajuda a conferir)
       });
     }
 
-    // Testar envio de email simples
-    const { emailTeste } = req.body;
-    const emailDestino = emailTeste || 'lucasgabriel201100@gmail.com';
+    // 2) Conexão OK. Só envia email de teste se um destino for informado.
+    const emailDestino = req.body?.emailTeste;
+    if (!emailDestino) {
+      return res.status(200).json({
+        sucesso: true,
+        conexao: true,
+        message: `Conexão SMTP OK (${resultado.config?.host}:${resultado.config?.port} · ${resultado.config?.user}).`,
+        config: resultado.config,
+      });
+    }
 
-    console.log('📧 Enviando email de teste para:', emailDestino);
-
-    await enviarNFeComBoleto({
-      destinatario: emailDestino,
-      nomeCliente: 'TESTE CONFIGURAÇÃO SMTP',
-      numeroNota: 'TESTE-001',
-      valorTotal: 100.00,
-      dataVencimento: '2025-01-30',
-      pdfNFe: Buffer.from('PDF NFe teste'),
-      pdfBoleto: Buffer.from('PDF Boleto teste'),
-    });
-
-    console.log('✅ Email de teste enviado com sucesso!');
-
-    return res.status(200).json({
-      sucesso: true,
-      message: 'Configuração SMTP válida e email enviado com sucesso',
-      emailDestino,
-    });
-
+    // Envio de teste (isolado: se falhar, NÃO derruba a validação da conexão).
+    try {
+      console.log('📧 Enviando email de teste para:', emailDestino);
+      await enviarNFeComBoleto({
+        destinatario: emailDestino,
+        nomeCliente: 'TESTE CONFIGURAÇÃO SMTP',
+        numeroNota: 'TESTE-001',
+        valorTotal: 100.0,
+        dataVencimento: '2025-01-30',
+        pdfNFe: Buffer.from('PDF NFe teste'),
+        pdfBoleto: Buffer.from('PDF Boleto teste'),
+      });
+      return res.status(200).json({
+        sucesso: true,
+        conexao: true,
+        emailEnviado: true,
+        emailDestino,
+        message: 'Conexão SMTP OK e email de teste enviado com sucesso.',
+      });
+    } catch (envioErr: any) {
+      console.error('❌ Erro ao enviar email de teste (conexão está OK):', envioErr);
+      return res.status(200).json({
+        sucesso: true,
+        conexao: true,
+        emailEnviado: false,
+        message: `Conexão SMTP OK, mas falhou ao enviar o email de teste: ${envioErr.message}`,
+        config: resultado.config,
+      });
+    }
   } catch (error: any) {
     console.error('❌ Erro no teste SMTP:', error);
-    
     return res.status(500).json({
       error: 'Erro no teste SMTP',
       details: error.message,
