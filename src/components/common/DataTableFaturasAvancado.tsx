@@ -29,6 +29,7 @@ import AutocompletePessoa from './AutoCompletePessoa';
 import NotaFiscalPreviewModal from '../corpo/faturamento/NotaFiscalPreviewModal';
 import { time } from 'console';
 import ModalBoletos from './ModalBoletos';
+import ModalEnviarEmail from '../corpo/faturamento/ConsultaFatura/ModalEnviarEmail';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 // Formata valor em Real no padrão BR: R$ 3.664,05 (ponto de milhar, vírgula decimal).
@@ -1920,6 +1921,28 @@ const handleCancelarNota = async () => {
             fatura={faturaParaBoletos}
           />
         )}
+
+        {/* Enviar DANFE por email (compor email estilo Gmail) */}
+        <ModalEnviarEmail
+          open={!!emaildanfeModalAberto}
+          onClose={() => setEmaildanfeModalAberto(null)}
+          codfat={emaildanfeModalAberto?.codfat}
+          codcli={emaildanfeModalAberto?.codcli}
+          nomeCliente={emaildanfeModalAberto?.cliente_nome}
+          numeroNota={emaildanfeModalAberto?.numero_nfe || emaildanfeModalAberto?.nroform}
+          tipo="danfe"
+        />
+
+        {/* Enviar Cobrança por email */}
+        <ModalEnviarEmail
+          open={!!cobrancaEnviada}
+          onClose={() => setCobrancaEnviada(null)}
+          codfat={cobrancaEnviada?.codfat}
+          codcli={cobrancaEnviada?.codcli}
+          nomeCliente={cobrancaEnviada?.cliente_nome}
+          numeroNota={cobrancaEnviada?.numero_nfe || cobrancaEnviada?.nroform}
+          tipo="cobranca"
+        />
         
         {/* Modal Detalhes do Grupo */}
         <Dialog open={mostrarDetalhesGrupo} onOpenChange={fecharDetalhesGrupo}>

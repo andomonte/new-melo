@@ -31,7 +31,8 @@ export default async function handle(
     'codigo_filial', up.codigo_filial,
     'nome_filial', up.nome_filial,
     'codvend', up.codvend,
-    'codcomprador', up.codcomprador
+    'codcomprador', up.codcomprador,
+    'cod_conta', up.cod_conta
   )) FILTER (WHERE up.perfil_name IS NOT NULL), '[]') AS perfis
 FROM tb_login_user u
 LEFT JOIN tb_login_access_user a ON a.login_user_login = u.login_user_login

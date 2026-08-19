@@ -22,7 +22,7 @@ export default async function handler(
 
     const result = await client.query(
       `
-      SELECT perfil_name, codvend
+      SELECT perfil_name, codvend, cod_conta
       FROM tb_user_perfil
       WHERE user_login_id = $1 AND nome_filial = $2
       LIMIT 1;

@@ -62,27 +62,34 @@ async function createTransporter() {
   });
 }
 
-// Função para testar a configuração SMTP
-export async function testarConfiguracaoSMTP() {
+// Testa a configuração SMTP (só a CONEXÃO/verify). Retorna o erro REAL, não mascara.
+export async function testarConfiguracaoSMTP(): Promise<{
+  ok: boolean;
+  error?: string;
+  config?: { host: string; port: number; user: string; secure: boolean };
+}> {
+  let config;
   try {
-    console.log('🧪 Testando configuração SMTP...');
-    
+    config = await getSmtpConfigWithFallback();
+  } catch (error: any) {
+    return { ok: false, error: `Falha ao carregar config SMTP: ${error?.message || error}` };
+  }
+  const info = { host: config.host, port: config.port, user: config.user, secure: config.secure };
+  if (!config.user || !config.pass) {
+    return {
+      ok: false,
+      error: 'Sem usuário/senha SMTP (nenhuma configuração salva no banco nem em variáveis de ambiente).',
+      config: info,
+    };
+  }
+  try {
     const transporter = await createTransporter();
-    const config = await getSmtpConfigWithFallback();
-    
-    console.log('📧 Configurações:', {
-      host: config.host,
-      port: config.port,
-      user: config.user,
-      pass_length: config.pass?.length || 0,
-    });
-    
     await transporter.verify();
     console.log('✅ Configuração SMTP válida!');
-    return true;
-  } catch (error) {
+    return { ok: true, config: info };
+  } catch (error: any) {
     console.error('❌ Erro na configuração SMTP:', error);
-    return false;
+    return { ok: false, error: error?.message || String(error), config: info };
   }
 }
 

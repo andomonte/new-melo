@@ -1,14 +1,10 @@
-import React from 'react';
+import Transferencia from '@/components/corpo/transferencia/Transferencia';
 
 export default function PageSidebar() {
   return (
-    <div className="h-full flex w-full flex-col bg-muted/40 text-black dark:text-gray-50">
-      {/* inicio da tela desktop */}
-
-      <div className="  border-b border-l border-r border-gray-300 h-full w-[100%] ">
-        <div className=" w-[100%] h-full  flex justify-center items-center border-t border-gray-300 dark:bg-black bg-white">
-          Transferência Financeiro de Admin
-        </div>
+    <div className="h-full w-full flex flex-col bg-muted/40 text-black dark:text-gray-50">
+      <div className="h-full w-full flex flex-col overflow-hidden">
+        <Transferencia />
       </div>
     </div>
   );

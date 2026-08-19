@@ -58,6 +58,7 @@ interface ItemAdicionado {
       nome_filial: string;
       codvend?: string | null;
       codcomprador?: string | null;
+      cod_conta?: string | null;
       armazens?: Armazem[];
       funcoesDoUsuario: Funcao[];
     }[];
@@ -100,6 +101,7 @@ export default function FormCadastrarUsuario({
   const [filialSelecionada, setFilialSelecionada] = useState<string>('');
   const [codvendInput, setCodvendInput] = useState<string | null>(null);
   const [compradorInput, setCompradorInput] = useState<string | null>(null);
+  const [contaInput, setContaInput] = useState<string | null>(null);
 
   // Comprador por perfil/filial (igual ao Vendedor). Opções do select ao lado
   // do Vendedor; o valor escolhido é adicionado à linha.
@@ -112,7 +114,7 @@ export default function FormCadastrarUsuario({
     setLoadingCompradores(true);
     try {
       const resp = await fetch(
-        `/api/compradores/get?page=1&perPage=50&search=${encodeURIComponent(termo)}`,
+        `/api/compradores/get?page=1&perPage=500&search=${encodeURIComponent(termo)}`,
       );
       const json = await resp.json();
       const lista = (json.data ?? []).map((c: any) => ({
@@ -138,6 +140,44 @@ export default function FormCadastrarUsuario({
       return o ? o.label : String(cod);
     },
     [compradoresOpts],
+  );
+
+  // Operador (conta de caixa) por perfil/filial — igual ao Comprador.
+  const [contasOpts, setContasOpts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [loadingContas, setLoadingContas] = useState(false);
+
+  const buscarContas = useCallback(async (termo: string) => {
+    setLoadingContas(true);
+    try {
+      const resp = await fetch(
+        `/api/contas-caixa/get?search=${encodeURIComponent(termo)}`,
+      );
+      const json = await resp.json();
+      const lista = (json.data ?? []).map((c: any) => ({
+        value: String(c.cod_conta),
+        label: `${c.cod_conta} - ${c.nro_conta}`,
+      }));
+      setContasOpts(lista);
+    } catch (e) {
+      console.error('Erro ao buscar contas de caixa:', e);
+    } finally {
+      setLoadingContas(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    buscarContas('');
+  }, [buscarContas]);
+
+  const labelConta = useCallback(
+    (cod?: string | null) => {
+      if (!cod) return '';
+      const o = contasOpts.find((x) => x.value === String(cod));
+      return o ? o.label : String(cod);
+    },
+    [contasOpts],
   );
 
   const [hasChanges, setHasChanges] = useState(false);
@@ -230,6 +270,7 @@ export default function FormCadastrarUsuario({
         setFuncoesSelecionadas([]);
         setCodvendInput(null);
         setCompradorInput(null);
+        setContaInput(null);
         setItensAtivados({});
         // Limpa armazém selecionado
       }
@@ -284,6 +325,7 @@ export default function FormCadastrarUsuario({
         codigo_filial: codigoFilial,
         codvend: codvendInput ?? null,
         codcomprador: compradorInput ?? null,
+        cod_conta: contaInput ?? null,
         armazens: armazensSelecionados[filialSelecionada] ?? [],
         funcoesDoUsuario: funcoesSelecionadas,
       };
@@ -321,6 +363,7 @@ export default function FormCadastrarUsuario({
       setFilialSelecionada('');
       setCodvendInput(null);
       setCompradorInput(null);
+      setContaInput(null);
       setFuncoesSelecionadas([]);
       setItensAtivados({});
 
@@ -436,6 +479,7 @@ export default function FormCadastrarUsuario({
 
     setCodvendInput(filial?.codvend ?? null);
     setCompradorInput(filial?.codcomprador ?? null);
+    setContaInput(filial?.cod_conta ?? null);
     if (filialSelecionada) {
       setItensAtivados({ [filialSelecionada]: true });
     }
@@ -474,6 +518,7 @@ export default function FormCadastrarUsuario({
 
       setCodvendInput(filialExistente?.codvend ?? null);
       setCompradorInput(filialExistente?.codcomprador ?? null);
+      setContaInput(filialExistente?.cod_conta ?? null);
 
       if (filialExistente?.armazens) {
         setArmazensSelecionados((prev) => ({
@@ -488,6 +533,7 @@ export default function FormCadastrarUsuario({
       setFuncoesSelecionadas([]);
       setCodvendInput(null);
       setCompradorInput(null);
+      setContaInput(null);
     }
   };
 
@@ -504,6 +550,7 @@ export default function FormCadastrarUsuario({
     setFuncoesSelecionadas([]);
     setCodvendInput(null);
     setCompradorInput(null);
+    setContaInput(null);
     setItensAtivados({});
     setHasChanges(false);
     // Limpa armazém selecionado
@@ -602,6 +649,7 @@ export default function FormCadastrarUsuario({
       setFuncoesSelecionadas([]);
       setCodvendInput(null);
       setCompradorInput(null);
+      setContaInput(null);
       // Limpa armazém selecionado
     } else {
       const funcoesNormalizadas: Funcao[] = funcoes.map((funcao) => ({
@@ -631,6 +679,7 @@ export default function FormCadastrarUsuario({
 
       const codvendDoItemAtivado = filialEncontrada?.codvend ?? null;
       const codcompradorDoItemAtivado = filialEncontrada?.codcomprador ?? null;
+      const codContaDoItemAtivado = filialEncontrada?.cod_conta ?? null;
       // Obter ID do armazém do item ativado (para seleção única)
       const chave = filialName;
       if (filialEncontrada?.armazens) {
@@ -654,6 +703,11 @@ export default function FormCadastrarUsuario({
         codcompradorDoItemAtivado !== null &&
           codcompradorDoItemAtivado !== undefined
           ? String(codcompradorDoItemAtivado)
+          : null,
+      );
+      setContaInput(
+        codContaDoItemAtivado !== null && codContaDoItemAtivado !== undefined
+          ? String(codContaDoItemAtivado)
           : null,
       );
     }
@@ -740,6 +794,10 @@ export default function FormCadastrarUsuario({
     const compradorMudou =
       String(compradorInput ?? '') !== String(codcompradorItemNaLista ?? '');
 
+    const codContaItemNaLista = (filialNaLista as { cod_conta?: string | null })?.cod_conta ?? null;
+    const contaMudou =
+      String(contaInput ?? '') !== String(codContaItemNaLista ?? '');
+
     const armazemAtual: Armazem[] = armazensSelecionados[chave] ?? [];
 
     const armazensMudaram = !areArmazensEqual(
@@ -747,7 +805,9 @@ export default function FormCadastrarUsuario({
       armazensItemNaLista,
     );
 
-    return funcoesMudaram || codvendMudou || compradorMudou || armazensMudaram;
+    return (
+      funcoesMudaram || codvendMudou || compradorMudou || contaMudou || armazensMudaram
+    );
   })();
 
   const armazensFiltradosDaFilialSelecionada = (): Armazem[] => {
@@ -945,6 +1005,24 @@ export default function FormCadastrarUsuario({
                 />
               </div>
 
+              {/* Operador (conta de caixa) por perfil/filial — opcional,
+                  igual ao Comprador. */}
+              <div className="w-[25%]">
+                <label className="block mb-1 text-sm font-medium">
+                  Operador <span className="ml-1">(opcional)</span>
+                </label>
+                <SelectPadrao
+                  searchable
+                  name="cod_conta"
+                  placeholder="Selecione um operador"
+                  options={contasOpts}
+                  value={contaInput ?? ''}
+                  onValueChange={(v) => setContaInput(v || null)}
+                  onInputChange={(termo) => buscarContas(termo)}
+                  loading={loadingContas}
+                />
+              </div>
+
               {/* Ajuste para seleção ÚNICA de Armazéns - REMOVIDO 'multiple' */}
               <div className="w-[25%] flex justify-center items-end">
                 <button
@@ -989,7 +1067,7 @@ export default function FormCadastrarUsuario({
           </div>
 
           <div className="mt-4  rounded-lg border border-gray-300 dark:border-gray-600 shadow h-[calc(100vh-330px)] flex flex-col">
-            <div className="bg-gray-200 dark:bg-gray-700 p-2 grid grid-cols-7 gap-4 border-b border-gray-300 dark:border-gray-600">
+            <div className="bg-gray-200 dark:bg-gray-700 p-2 grid grid-cols-8 gap-4 border-b border-gray-300 dark:border-gray-600">
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Perfil
               </div>
@@ -1001,6 +1079,9 @@ export default function FormCadastrarUsuario({
               </div>
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Comprador
+              </div>
+              <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
+                Operador
               </div>
               <div className="font-semibold text-sm text-gray-600 dark:text-gray-300 flex justify-center items-center">
                 Armazéns
@@ -1023,7 +1104,7 @@ export default function FormCadastrarUsuario({
                   return (
                     <div
                       key={key}
-                      className={`grid grid-cols-7 gap-4 p-2 border-b dark:border-gray-700 text-sm ${
+                      className={`grid grid-cols-8 gap-4 p-2 border-b dark:border-gray-700 text-sm ${
                         isAtivado ? 'bg-blue-100 dark:bg-blue-900' : ''
                       }`}
                     >
@@ -1044,6 +1125,9 @@ export default function FormCadastrarUsuario({
                         {filial.codcomprador
                           ? labelComprador(filial.codcomprador)
                           : 'N/A'}
+                      </div>
+                      <div className="flex items-center justify-center text-center">
+                        {filial.cod_conta ? labelConta(filial.cod_conta) : 'N/A'}
                       </div>
                       <div className="flex items-center justify-center text-center">
                         {filial.armazens?.map((a) => {

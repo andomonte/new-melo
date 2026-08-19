@@ -184,7 +184,8 @@ export default async function handler(
       codvenda: v.codvenda,
       cliente: v.cliente || '',
       total: Number(v.total ?? 0),
-      data: v.data?.toISOString().split('T')[0] ?? '',
+      // pg agora retorna datas como STRING (lib/pg setTypeParser). Pega só YYYY-MM-DD.
+      data: v.data ? String(v.data).slice(0, 10) : '',
       nrovenda: v.nrovenda ?? '',
       tipo: v.tipo ?? '',
       obs: v.obs ?? '',

@@ -1045,7 +1045,9 @@ export default async function handler(
         const emailenviado = 'N'; // String de 1 caractere (S/N)
 
         const dataEmissao = new Date();
-        const xmlremessa = xmlBruto;
+        // Guarda a NFe ASSINADA (não a xmlBruto sem assinatura): é o XML que a SEFAZ
+        // autorizou e o que o cliente/contador precisa (para montar o nfeProc no envio).
+        const xmlremessa = xmlAssinado || xmlBruto;
         const xmlretorno = xmlResposta;
         const pdfBase64 = pdfBuffer.toString('base64');
 

@@ -21,6 +21,7 @@ interface FilialPayload {
   nome_filial: string;
   codvend?: string | null;
   codcomprador?: string | null;
+  cod_conta?: string | null; // conta do operador de caixa (por filial)
   funcoesDoUsuario?: Funcao[];
   armazens?: ArmazemDoPayload[];
 }
@@ -92,8 +93,8 @@ export default async function handle(
         // 2.1) tb_user_perfil
         await client.query(
           `INSERT INTO tb_user_perfil
-            (user_login_id, perfil_name, codigo_filial, nome_filial, codvend, codcomprador)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+            (user_login_id, perfil_name, codigo_filial, nome_filial, codvend, codcomprador, cod_conta)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             login_user_login,
             perfil.perfil_name,
@@ -101,6 +102,7 @@ export default async function handle(
             filial.nome_filial,
             filial.codvend ?? null,
             filial.codcomprador ?? null,
+            filial.cod_conta ?? null,
           ],
         );
 
