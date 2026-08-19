@@ -35,6 +35,16 @@ const CompartilharOrcamentoModal: React.FC<CompartilharOrcamentoModalProps> = ({
   const { toast } = useToast();
   const [copying, setCopying] = useState(false);
 
+  // Escape fecha o modal
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   // URL completa do PDF

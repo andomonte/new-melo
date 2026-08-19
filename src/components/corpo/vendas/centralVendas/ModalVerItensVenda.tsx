@@ -27,7 +27,8 @@ const formatDateTime = (dateStr: string | null | undefined): string => {
   const d = str.substring(0, 10).split('-');
   const t = str.substring(11, 16);
   if (d.length !== 3) return '-';
-  return t ? `${d[2]}/${d[1]}/${d[0]} ${t}` : `${d[2]}/${d[1]}/${d[0]}`;
+  // Só mostra hora se não for 00:00 (vendas antigas sem hora)
+  return t && t !== '00:00' ? `${d[2]}/${d[1]}/${d[0]} ${t}` : `${d[2]}/${d[1]}/${d[0]}`;
 };
 
 const statusLabel = (s: string | null) => {
@@ -54,6 +55,16 @@ const ModalVerItensVenda: React.FC<ModalVerItensVendaProps> = ({
   onClose,
   venda,
 }) => {
+  // Escape fecha o modal
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !venda) return null;
 
   const itens = venda.dbitvenda || [];

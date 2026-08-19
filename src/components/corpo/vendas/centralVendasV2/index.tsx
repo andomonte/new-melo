@@ -12,7 +12,7 @@ import {
   FileText,
 } from 'lucide-react';
 
-import DataTable from '@/components/common/DataTablePadrao';
+import DataTable from '@/components/common/DataTableNavegavel';
 import { DefaultButton } from '@/components/common/Buttons';
 import SelectInput from '@/components/common/SelectPadrao'; // NOSSO COMPONENTE PADRÃO
 import { useToast } from '@/hooks/use-toast';
@@ -69,6 +69,10 @@ type VendaStatus =
   | 'bloqueada'
   | undefined;
 
+// --- Material Input (mesmo padrão da Nova Venda V2) ---
+const MI_INPUT = 'peer h-full w-full rounded-[7px] border-2 border-gray-300 dark:border-gray-400 bg-transparent px-3 py-2.5 !pr-9 font-sans text-sm font-normal text-gray-900 dark:text-white outline outline-0 transition-colors focus:border-blue-500 dark:focus:border-blue-400 focus:border-t-transparent dark:focus:border-t-transparent dark:border-t-transparent border-t-transparent placeholder-shown:border-t placeholder-shown:border-gray-300 dark:placeholder-shown:border-gray-400';
+const MI_LABEL = 'text-gray-900 dark:text-white before:content-[" "] after:content-[" "] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-bold leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-600 dark:peer-placeholder-shown:text-gray-300 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-blue-600 dark:peer-focus:text-blue-400 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-blue-500 dark:peer-focus:before:border-blue-400 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-blue-500 dark:peer-focus:after:border-blue-400';
+
 // --- Constantes ---
 const statusOptions = [
   { value: 'combinadas', label: 'Não Faturadas + Orçadas' },
@@ -124,6 +128,16 @@ const VendasPage = () => {
   const [codvendaEditarFinalizada, setCodvendaEditarFinalizada] = useState('');
   const [filtroVendedor, setFiltroVendedor] = useState<string>('todos');
   const [listaVendedores, setListaVendedores] = useState<{codvend: string; nome: string}[]>([]);
+  // Inputs de filtro (em vez de selects)
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [statusIdx, setStatusIdx] = useState(-1);
+  const [showVendedorDropdown, setShowVendedorDropdown] = useState(false);
+  const [vendedorIdx, setVendedorIdx] = useState(-1);
+  const [buscaVendedorFiltro, setBuscaVendedorFiltro] = useState('');
+  const statusInputRef = useRef<HTMLInputElement>(null);
+  const vendedorInputRef = useRef<HTMLInputElement>(null);
+  const novaVendaBtnRef = useRef<HTMLButtonElement>(null);
+
   const [confirmCancelar, setConfirmCancelar] = useState(false);
   const [codvendaCancelar, setCodvendaCancelar] = useState('');
   const [cancelando, setCancelando] = useState(false);
@@ -389,41 +403,7 @@ const VendasPage = () => {
       if (verItensOpen || compartilharPdfOpen || delOpen || modalNovaVenda || modalDesbloqueio || modalEditarFinalizada) return;
       const tag = (e.target as HTMLElement)?.tagName;
       const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-
-      if (e.key === 'ArrowDown' && !emInput) {
-        e.preventDefault();
-        const data = vendas.data;
-        if (data?.length > 0) setLinhaSelecionada((prev) => Math.min(prev + 1, data.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowUp' && !emInput) {
-        e.preventDefault();
-        setLinhaSelecionada((prev) => Math.max(prev - 1, 0));
-        return;
-      }
       if (emInput) return;
-
-      const sel = linhaSelecionadaRef.current;
-      const data = vendas.data;
-
-      // Enter ou V: ver itens
-      if ((e.key === 'Enter' || e.key === 'v') && sel >= 0 && data?.[sel]) {
-        e.preventDefault();
-        handleVerItensClick(data[sel]);
-        return;
-      }
-      // E: editar
-      if (e.key === 'e' && sel >= 0 && data?.[sel]) {
-        e.preventDefault();
-        const venda = data[sel] as any;
-        if (venda.tipoOrigem === 'SALVA' && userPermissions.editar) {
-          handleEditarClick(data[sel]);
-        } else if (venda.tipoOrigem === 'VENDA' && venda.status === 'N' && user?.funcoes?.some(function(f: any) { return (typeof f === 'string' ? f : f?.sigla) === 'EVF'; })) {
-          setCodvendaEditarFinalizada(venda.codvenda);
-          setModalEditarFinalizada(true);
-        }
-        return;
-      }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
@@ -977,21 +957,52 @@ const VendasPage = () => {
       [vendaId]: !prevRotations[vendaId],
     }));
     if (!dropdownStates[vendaId]) {
+      // Posição temporária fora da tela — será ajustada pelo useEffect
       const rect = buttonElement.getBoundingClientRect();
       setDropdownPositions({
-        [vendaId]: {
-          top: rect.top - (rect.height + 6),
-          left: rect.left - (174 - rect.width) + 2 + window.scrollX,
-        },
+        [vendaId]: { top: -9999, left: -9999, _btnTop: rect.top, _btnBottom: rect.bottom, _btnRight: rect.right },
       });
     }
   };
+
+  const [menuIdx, setMenuIdx] = useState(-1);
 
   const closeAllDropdowns = () => {
     setDropdownStates({});
     setIconRotations({});
     setDropdownPositions({});
+    setMenuIdx(-1);
+    // Devolver foco ao grid
+    setTimeout(() => {
+      const tbody = document.querySelector('tbody[tabindex]') as HTMLElement;
+      if (tbody) tbody.focus({ preventScroll: true });
+    }, 50);
   };
+
+  // Recalcular posição do dropdown após renderização
+  useEffect(() => {
+    const openId = Object.keys(dropdownStates).find(k => dropdownStates[k]);
+    if (!openId) return;
+    const pos = dropdownPositions[openId];
+    if (!pos || pos.top !== -9999) return; // já posicionado
+
+    const menuEl = document.querySelector(`[data-dropdown-menu="${openId}"]`) as HTMLElement;
+    if (!menuEl) return;
+
+    const menuHeight = menuEl.offsetHeight;
+    const menuWidth = menuEl.offsetWidth;
+    const btnTop = (pos as any)._btnTop || 0;
+    const btnBottom = (pos as any)._btnBottom || 0;
+    const btnRight = (pos as any)._btnRight || 0;
+
+    const spaceBelow = window.innerHeight - btnBottom;
+    const top = spaceBelow >= menuHeight + 4
+      ? btnBottom + 4
+      : btnTop - menuHeight - 4;
+    const left = btnRight - menuWidth;
+
+    setDropdownPositions(prev => ({ ...prev, [openId]: { top, left } }));
+  });
   // 1) Coloque isso perto dos seus hooks/estados, acima do return:
   const getSearchPlaceholder = (field?: string) => {
     const f = String(field ?? 'todas').toLowerCase();
@@ -1310,9 +1321,17 @@ const VendasPage = () => {
     closeAllDropdowns();
   };
 
+  const voltarFocoGrid = () => {
+    setTimeout(() => {
+      const tbody = document.querySelector('tbody[tabindex]') as HTMLElement;
+      if (tbody) tbody.focus({ preventScroll: true });
+    }, 50);
+  };
+
   const handleCloseVerItensModal = () => {
     setVerItensOpen(false);
     setVendaComItensParaVer(null);
+    voltarFocoGrid();
   };
 
   // Gerar PDF de orçamento e abrir modal de compartilhamento
@@ -1382,6 +1401,7 @@ const VendasPage = () => {
   const handleCloseCompartilharModal = () => {
     setCompartilharPdfOpen(false);
     setPdfCompartilharData(null);
+    voltarFocoGrid();
   };
 
   useEffect(() => {
@@ -1494,6 +1514,7 @@ const VendasPage = () => {
             ref={(el) => {
               if (el) actionButtonRefs.current[vendaItem.codvenda] = el;
             }}
+            data-action-toggle="true"
             onClick={(e) => toggleDropdown(vendaItem.codvenda, e.currentTarget)}
             className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-transform duration-200"
             title="Mais Ações"
@@ -1510,22 +1531,61 @@ const VendasPage = () => {
             createPortal(
               <div
                 key={`portal-dropdown-${vendaItem.codvenda}`}
+                data-dropdown-menu={vendaItem.codvenda}
                 ref={(el) => {
                   if (el) dropdownRefs.current[vendaItem.codvenda] = el;
                 }}
-                className="text-slate-800 bg-white dark:text-gray-100 dark:bg-slate-800"
+                className="text-slate-800 bg-white dark:text-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-zinc-600"
                 style={{
-                  position: 'absolute',
+                  position: 'fixed',
                   top: dropdownPositions[vendaItem.codvenda]?.top,
                   left: dropdownPositions[vendaItem.codvenda]?.left,
-                  minWidth: '144px',
+                  minWidth: '180px',
                   borderRadius: '0.375rem',
                   boxShadow:
-                    '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.07)',
+                    '0 4px 12px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1)',
                   zIndex: 1000,
                 }}
               >
-                <div className="py-1" role="menu" aria-orientation="vertical">
+                <div
+                  className="py-1"
+                  role="menu"
+                  aria-orientation="vertical"
+                  ref={(el) => {
+                    if (el) {
+                      // Focar no primeiro botão do menu ao abrir
+                      setTimeout(() => {
+                        const first = el.querySelector('[role="menuitem"]') as HTMLElement;
+                        if (first) first.focus({ preventScroll: true });
+                      }, 50);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    const items = Array.from((e.currentTarget as HTMLElement).querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+                    const current = document.activeElement as HTMLElement;
+                    const idx = items.indexOf(current);
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const next = idx < items.length - 1 ? idx + 1 : 0;
+                      items[next]?.focus({ preventScroll: true });
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const prev = idx > 0 ? idx - 1 : items.length - 1;
+                      items[prev]?.focus({ preventScroll: true });
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (current && items.includes(current)) {
+                        (current as HTMLButtonElement).click();
+                      }
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      closeAllDropdowns();
+                    }
+                  }}
+                >
                   <button
                     key={`view-items-${vendaItem.codvenda}`}
                     onClick={() => handleVerItensClick(vendaItem)}
@@ -1753,36 +1813,124 @@ const VendasPage = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+              {/* Filtro Vendedor (admin) — padrão Material Input igual Nova Venda V2 */}
               {isAdmin && (
-                <div className="w-52">
-                  <SelectInput
-                    name="filtroVendedor"
-                    options={[
-                      { value: 'todos', label: 'Todos os Vendedores' },
-                      ...listaVendedores.map(v => ({ value: v.codvend, label: `${v.codvend} — ${v.nome}` })),
-                    ]}
-                    defaultValue={filtroVendedor}
-                    onValueChange={(val: string) => { setFiltroVendedor(val); setPage(1); }}
+                <div className="relative min-w-[200px]">
+                  <input
+                    ref={vendedorInputRef}
+                    type="text"
+                    tabIndex={0}
+                    readOnly={!!filtroVendedor && !showVendedorDropdown}
+                    value={showVendedorDropdown ? buscaVendedorFiltro : (filtroVendedor === 'todos' ? 'Todos os Vendedores' : listaVendedores.find(v => v.codvend === filtroVendedor)?.nome || filtroVendedor)}
+                    onClick={() => { if (!showVendedorDropdown) { setShowVendedorDropdown(true); setBuscaVendedorFiltro(''); setVendedorIdx(0); } }}
+                    onDoubleClick={() => { setFiltroVendedor('todos'); setBuscaVendedorFiltro(''); setShowVendedorDropdown(true); setVendedorIdx(0); setPage(1); }}
+                    onChange={(e) => { setBuscaVendedorFiltro(e.target.value); setVendedorIdx(0); }}
+                    onBlur={() => setTimeout(() => { setShowVendedorDropdown(false); setBuscaVendedorFiltro(''); }, 150)}
+                    onKeyDown={(e) => {
+                      const opts = [{ codvend: 'todos', nome: 'Todos os Vendedores' }, ...listaVendedores].filter(v => !buscaVendedorFiltro || v.nome.toUpperCase().includes(buscaVendedorFiltro.toUpperCase()) || v.codvend.includes(buscaVendedorFiltro));
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (showVendedorDropdown && vendedorIdx >= 0 && opts[vendedorIdx]) {
+                          setFiltroVendedor(opts[vendedorIdx].codvend); setShowVendedorDropdown(false); setPage(1);
+                          setTimeout(() => statusInputRef.current?.focus({ preventScroll: true }), 50);
+                        } else if (!showVendedorDropdown) {
+                          setShowVendedorDropdown(true); setBuscaVendedorFiltro(''); setVendedorIdx(0);
+                        }
+                      }
+                      else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (showVendedorDropdown) { setVendedorIdx(p => { const n = Math.min(p + 1, opts.length - 1); setTimeout(() => document.querySelector('[data-vendedor-idx="' + n + '"]')?.scrollIntoView({ block: 'nearest' }), 0); return n; }); }
+                        else { const searchInput = document.querySelector('[data-datatable-search] input') as HTMLElement; if (searchInput) searchInput.focus({ preventScroll: true }); else { const tbody = document.querySelector('tbody[tabindex]') as HTMLElement; if (tbody) tbody.focus({ preventScroll: true }); } }
+                      }
+                      else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (showVendedorDropdown) { setVendedorIdx(p => { const n = Math.max(p - 1, 0); setTimeout(() => document.querySelector('[data-vendedor-idx="' + n + '"]')?.scrollIntoView({ block: 'nearest' }), 0); return n; }); }
+                      }
+                      else if (e.key === 'Escape') { setShowVendedorDropdown(false); }
+                      else if (e.key === 'ArrowRight' && !showVendedorDropdown) { e.preventDefault(); statusInputRef.current?.focus({ preventScroll: true }); }
+                      else if (e.key === 'ArrowLeft' && !showVendedorDropdown) { e.preventDefault(); }
+                    }}
+                    placeholder=" "
+                    className={`${MI_INPUT} ${filtroVendedor && !showVendedorDropdown ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''}`}
                   />
+                  <label className={MI_LABEL}>Vendedor</label>
+                  {showVendedorDropdown && (() => {
+                    const opts = [{ codvend: 'todos', nome: 'Todos os Vendedores' }, ...listaVendedores].filter(v => !buscaVendedorFiltro || v.nome.toUpperCase().includes(buscaVendedorFiltro.toUpperCase()) || v.codvend.includes(buscaVendedorFiltro));
+                    return opts.length > 0 ? (
+                      <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                        {opts.map((v, i) => (
+                          <div key={v.codvend} data-vendedor-idx={i} className={`px-3 py-1.5 cursor-pointer text-sm ${i === vendedorIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                            onMouseDown={(ev) => { ev.preventDefault(); setFiltroVendedor(v.codvend); setShowVendedorDropdown(false); setPage(1); }}>
+                            {v.codvend === 'todos' ? v.nome : `${v.codvend} — ${v.nome}`}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               )}
-              <div className="w-40">
-                <SelectInput
-                  name="statusFilter"
-                  options={statusOptions}
-                  value={statusFilter}
-                  onValueChange={handleStatusChange}
+              {/* Filtro Status — padrão Material Input igual Nova Venda V2 */}
+              <div className="relative min-w-[180px]">
+                <input
+                  ref={statusInputRef}
+                  type="text"
+                  tabIndex={0}
+                  readOnly
+                  value={statusOptions.find(o => o.value === statusFilter)?.label || statusFilter}
+                  onClick={() => { if (!showStatusDropdown) { setShowStatusDropdown(true); setStatusIdx(statusOptions.findIndex(o => o.value === statusFilter)); } }}
+                  onBlur={() => setTimeout(() => setShowStatusDropdown(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (showStatusDropdown && statusIdx >= 0 && statusOptions[statusIdx]) {
+                        handleStatusChange(statusOptions[statusIdx].value); setShowStatusDropdown(false);
+                      } else if (!showStatusDropdown) {
+                        setShowStatusDropdown(true); setStatusIdx(statusOptions.findIndex(o => o.value === statusFilter));
+                      }
+                    }
+                    else if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      if (showStatusDropdown) { setStatusIdx(p => { const n = Math.min(p + 1, statusOptions.length - 1); setTimeout(() => document.querySelector('[data-status-idx="' + n + '"]')?.scrollIntoView({ block: 'nearest' }), 0); return n; }); }
+                      else { const searchInput = document.querySelector('[data-datatable-search] input') as HTMLElement; if (searchInput) searchInput.focus({ preventScroll: true }); else { const tbody = document.querySelector('tbody[tabindex]') as HTMLElement; if (tbody) tbody.focus({ preventScroll: true }); } }
+                    }
+                    else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      if (showStatusDropdown) { setStatusIdx(p => { const n = Math.max(p - 1, 0); setTimeout(() => document.querySelector('[data-status-idx="' + n + '"]')?.scrollIntoView({ block: 'nearest' }), 0); return n; }); }
+                    }
+                    else if (e.key === 'Escape') { setShowStatusDropdown(false); }
+                    else if (e.key === 'ArrowLeft' && !showStatusDropdown) { e.preventDefault(); if (isAdmin) vendedorInputRef.current?.focus({ preventScroll: true }); }
+                    else if (e.key === 'ArrowRight' && !showStatusDropdown) { e.preventDefault(); novaVendaBtnRef.current?.focus({ preventScroll: true }); }
+                  }}
+                  placeholder=" "
+                  className={`${MI_INPUT} bg-gray-100 dark:bg-zinc-900 cursor-pointer`}
                 />
+                <label className={MI_LABEL}>Status</label>
+                {showStatusDropdown && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
+                    {statusOptions.map((opt, i) => (
+                      <div key={opt.value} data-status-idx={i} className={`px-3 py-1.5 cursor-pointer text-sm ${i === statusIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'} ${opt.value === statusFilter ? 'text-blue-600 dark:text-blue-400 font-semibold' : ''}`}
+                        onMouseDown={(ev) => { ev.preventDefault(); handleStatusChange(opt.value); setShowStatusDropdown(false); }}>
+                        {opt.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {userPermissions.cadastrar && (
-                <DefaultButton
+                <button
+                  ref={novaVendaBtnRef}
                   onClick={handleNovaVendaClick}
-                  className="px-3 py-1 text-sm h-8 flex items-center gap-1 hover:bg-blue-600 dark:hover:bg-blue-800 whitespace-nowrap min-w-fit"
-                  text="Nova Venda"
-                  icon={<PlusIcon size={18} />}
-                />
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowLeft') { e.preventDefault(); statusInputRef.current?.focus({ preventScroll: true }); }
+                    else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); const searchInput = document.querySelector('[data-datatable-search] input') as HTMLElement; if (searchInput) searchInput.focus({ preventScroll: true }); }
+                  }}
+                  className="px-3 py-1 text-sm h-8 flex items-center gap-1 bg-[#347AB6] hover:bg-blue-600 dark:hover:bg-blue-800 text-white font-bold rounded-md whitespace-nowrap min-w-fit focus:ring-2 focus:ring-blue-400"
+                >
+                  <PlusIcon size={18} />
+                  Nova Venda
+                </button>
               )}
             </div>
           </div>
@@ -1833,6 +1981,23 @@ const VendasPage = () => {
                 setSearchTerm(v);
                 if (page !== 1) setPage(1);
               }
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              const tbody = document.querySelector('tbody[tabindex]') as HTMLElement;
+              if (tbody) tbody.focus({ preventScroll: true });
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              if (novaVendaBtnRef.current) novaVendaBtnRef.current.focus({ preventScroll: true });
+              else statusInputRef.current?.focus({ preventScroll: true });
+            } else if (e.key === 'ArrowRight' && (e.target as HTMLInputElement).value === '') {
+              e.preventDefault();
+              // Ir para o botão Opções
+              const opcoes = document.querySelector('[data-datatable-opcoes] button') as HTMLElement;
+              if (opcoes) opcoes.focus({ preventScroll: true });
+            } else if (e.key === 'ArrowLeft' && (e.target as HTMLInputElement).selectionStart === 0) {
+              e.preventDefault();
+              if (novaVendaBtnRef.current) novaVendaBtnRef.current.focus({ preventScroll: true });
+              else statusInputRef.current?.focus({ preventScroll: true });
             }
           }}
           searchInputPlaceholder={searchPlaceholder}
@@ -1841,14 +2006,7 @@ const VendasPage = () => {
             const keyMap: Record<string, string> = { id: 'codvenda', codcliente: 'codcli', data_venda: 'data', valor_total: 'total', status: 'status' };
             handleSortChange(keyMap[column] || column, direction);
           }}
-          rowClassName={(_row: any, idx: any) => idx === linhaSelecionada ? 'bg-blue-50 dark:bg-blue-950' : ''}
-          onRowClick={(row: any) => {
-            const data = vendas.data;
-            if (data) {
-              const idx = data.findIndex((v: any) => v.id === row.id);
-              if (idx >= 0) setLinhaSelecionada(idx);
-            }
-          }}
+          onRowClick={() => {}}
         />
         </div>
       </main>
@@ -1993,7 +2151,16 @@ const VendasPage = () => {
 
       {/* Modal Nova Venda V2 */}
       {modalNovaVenda ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !confirmarLimparVenda) {
+              // Só fecha se nenhum dropdown/modal interno está aberto
+              const dropdownAberto = document.querySelector('.absolute.z-50, [role="menu"]');
+              if (!dropdownAberto) { e.preventDefault(); fecharModalNovaVenda(); }
+            }
+          }}
+        >
           <div className="flex items-center justify-between px-5 py-2.5 border-b-2 border-[#347AB6]/20 dark:border-zinc-700 bg-gradient-to-r from-[#347AB6]/5 to-transparent dark:from-zinc-800 dark:to-zinc-900">
             <h2 className="text-xl font-bold text-[#347AB6] dark:text-gray-100 tracking-tight">Nova Venda</h2>
             <div className="flex items-center gap-2">
