@@ -141,17 +141,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paramIndex++;
     }
 
-    // Busca geral (código, cliente, documento)
+    // Busca geral (título, cliente por nome ou código, documento)
     if (search) {
       whereClause += ` AND (
         CAST(r.cod_receb AS TEXT) LIKE $${paramIndex}
         OR UPPER(c.nome) LIKE UPPER($${paramIndex + 1})
         OR r.nro_doc LIKE $${paramIndex + 2}
+        OR CAST(r.codcli AS TEXT) LIKE $${paramIndex + 3}
       )`;
       params.push(`%${search}%`);
       params.push(`%${search}%`);
       params.push(`%${search}%`);
-      paramIndex += 3;
+      params.push(`%${search}%`);
+      paramIndex += 4;
     }
 
     // Query principal com cálculo de status baseado nos campos do PostgreSQL

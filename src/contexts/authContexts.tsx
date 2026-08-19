@@ -34,6 +34,7 @@ type User = {
   perfil: string;
   obs: string;
   codusr: string; // Este campo receberá o codvend
+  cod_conta?: string | null; // conta do operador de caixa (da filial atual) — usado no Caixa
   filial: string;
   permissoes?: Permissao[];
   funcoes?: string[];
@@ -286,7 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Erro ao buscar perfil da filial:', response.statusText);
         throw new Error('Falha ao buscar perfil da filial.');
       }
-      const { perfil_name, codvend } = await response.json();
+      const { perfil_name, codvend, cod_conta } = await response.json();
 
       // Em seguida, busca permissões, funções e armazéns para o novo perfil
       const [permissoes, funcoes, armazens] = await Promise.all([
@@ -300,6 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         filial,
         perfil: perfil_name,
         codusr: codvend || '', // ATRIBUIÇÃO DO codvend AQUI!
+        cod_conta: cod_conta ?? null, // conta do operador de caixa (da filial)
         permissoes,
         funcoes,
         armazens,
