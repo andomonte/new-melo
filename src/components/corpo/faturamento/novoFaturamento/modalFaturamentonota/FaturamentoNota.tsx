@@ -2115,34 +2115,17 @@ export default function FaturamentoNota({
               payloadEmissao?.codfat ||
               payloadEmissao?.dbfatura?.codfat ||
               'N/A';
-            const acao = detalhesErro?.acao || '';
             const serie =
               detalhesErro?.serie || payloadEmissao?.dbfatura?.serie || '?';
+            const cStat = errorSefaz?.response?.data?.status || detalhesErro?.cStat || '';
 
-            mensagemErroSefaz = `
-🚨 REJEIÇÃO SEFAZ: SÉRIE VINCULADA A OUTRA INSCRIÇÃO ESTADUAL
+            // Mostra o retorno LITERAL da SEFAZ (cStat + xMotivo), sem inventar
+            // explicação nem sugerir UPDATE no cadastro — o motivo cru é a evidência.
+            mensagemErroSefaz = `Rejeição SEFAZ${cStat ? ' ' + cStat : ''}: ${mensagemCompleta}
 
-Motivo da SEFAZ: ${mensagemCompleta}
+CNPJ ${cnpj} · Série ${serie} · IE ${ie} · Fatura ${codfat}
 
-📌 Informações:
-   • CNPJ: ${cnpj}
-   • Série usada: ${serie}
-   • IE enviada: ${ie}
-   • Código Fatura: ${codfat}
-
-✅ O QUE ISSO SIGNIFICA:
-A SEFAZ vincula cada SÉRIE a uma Inscrição Estadual. A série ${serie} já foi
-usada antes com uma IE diferente da que está sendo enviada agora (${ie}).
-O número e a série estão corretos — o que diverge é a Inscrição Estadual.
-
-🔍 COMO RESOLVER:
-1) Confirme a IE correta deste CNPJ (${cnpj}) — SINTEGRA: https://www.sintegra.gov.br/
-2) Se a IE cadastrada estiver errada, atualize:
-   ${acao || `UPDATE dadosempresa SET inscricaoestadual = 'IE_CORRETA' WHERE cgc = '${cnpj}';`}
-3) Ou emita numa série ainda não vinculada a outra IE neste ambiente.
-
-📚 Documentação: docs/erro-serie-vinculada-ie.md
-            `.trim();
+Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscrição Estadual do CNPJ no cadastro da SEFAZ antes de alterar qualquer dado do sistema.`.trim();
 
             console.error('🚨 ========== REJEIÇÃO SÉRIE VINCULADA A IE ==========');
             console.error(`CNPJ: ${cnpj}`);

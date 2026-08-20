@@ -16,22 +16,23 @@ export default async function handler(
     const client = await getPgPool().connect();
 
     try {
-      // Espelha FATURAMENTOS.FATURA_INCLUIR (Oracle): número = MAX(nroform)+1 de
-      // dbfatura (TODAS as faturas — o número é queimado na criação), ESCOPADO por
-      // (serie, insc07). Não usar dbfat_nfe autorizado: números rejeitados também
-      // consomem o contador, então basear-se em dbfatura evita repetir o número.
+      // Número = 1 + MAIOR entre: (a) MAX(nroform) em dbfatura escopado por (serie,insc07)
+      // e (b) MAX(nNF) das NF-e já USADAS na SEFAZ naquela SÉRIE (lido da chave). O (b)
+      // fecha a fragmentação (notas antigas via override têm dbfatura.serie='2' mas chave
+      // série='1') e evita reemitir número já autorizado na SEFAZ.
+      const serieChave = String(serie).replace(/\D/g, '').padStart(3, '0');
       const result = await client.query(
-        `SELECT MAX(numero) as ultimo_numero
-         FROM (
-           SELECT CAST(f.nroform AS INTEGER) as numero
-           FROM db_manaus.dbfatura f
-           WHERE f.serie = $1
-             AND COALESCE(f.insc07, 'N') = $2
-             AND f.nroform IS NOT NULL
-             AND f.nroform != ''
-             AND f.nroform ~ '^[0-9]+$'
-         ) AS todos_numeros`,
-        [serie, insc07Norm],
+        `SELECT GREATEST(
+           COALESCE((SELECT MAX(CAST(f.nroform AS INTEGER))
+                       FROM db_manaus.dbfatura f
+                      WHERE f.serie = $1 AND COALESCE(f.insc07,'N') = $2
+                        AND f.nroform ~ '^[0-9]+$'), 0),
+           COALESCE((SELECT MAX(CAST(substring(n.chave,26,9) AS INTEGER))
+                       FROM db_manaus.dbfat_nfe n
+                      WHERE length(n.chave) = 44 AND substring(n.chave,23,3) = $3
+                        AND n.status IN ('100','150','301','302','303')), 0)
+         ) AS ultimo_numero`,
+        [serie, insc07Norm, serieChave],
       );
 
       let proximoNumero = 1;

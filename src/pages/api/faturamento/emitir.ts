@@ -1335,41 +1335,10 @@ export default async function handler(
 
     const serieUsadaMsg = String(dados?.dbfatura?.serie ?? serieEmissao ?? '?');
     if (erroSerieVinculada) {
-      console.error('');
-      console.error(
-        '🚨 ========== REJEIÇÃO SEFAZ: SÉRIE VINCULADA A OUTRA IE ==========',
-      );
-      console.error(`📌 CNPJ: ${cnpjUsado}`);
-      console.error(`📌 Série usada: "${serieUsadaMsg}"`);
-      console.error(`📌 IE enviada: "${ieUsada}"`);
-      console.error(`📌 Motivo SEFAZ: ${motivo}`);
-      console.error('');
-      console.error(
-        '❌ PROBLEMA: A série "2" foi usada anteriormente com uma IE diferente!',
-      );
-      console.error('');
-      console.error('✅ SOLUÇÃO PRINCIPAL:');
-      console.error(
-        '   Verificar se a IE no cadastro da empresa está CORRETA:',
-      );
-      console.error('   1. Acesse: https://www.sintegra.gov.br/');
-      console.error(`   2. Consulte CNPJ: ${cnpjUsado}`);
-      console.error('   3. Verifique se a IE cadastrada é a mesma da consulta');
-      console.error('   4. Se diferente, atualize no banco de dados:');
-      console.error(
-        `      UPDATE dadosempresa SET inscricaoestadual = 'IE_CORRETA' WHERE cgc = '${cnpjUsado}';`,
-      );
-      console.error('');
-      console.error(
-        '⚠️  NOTA: A série "2" é padrão do sistema e gerenciada pela SEFAZ.',
-      );
-      console.error('    O problema está na IE, não na série.');
-      console.error('');
-      console.error(
-        '📚 Documentação completa: docs/erro-serie-vinculada-ie.md',
-      );
-      console.error('🔍 ===================================================');
-      console.error('');
+      // Loga o retorno LITERAL da SEFAZ — sem inventar explicação nem sugerir UPDATE.
+      console.error('🚨 REJEIÇÃO SEFAZ (série vinculada a IE)');
+      console.error(`   cStat: ${status} | xMotivo: ${motivo}`);
+      console.error(`   CNPJ: ${cnpjUsado} | Série: ${serieUsadaMsg} | IE enviada: ${ieUsada}`);
     }
 
     return res.status(400).json({
@@ -1381,13 +1350,11 @@ export default async function handler(
       ...(erroSerieVinculada && {
         detalhes: {
           tipo_erro: 'serie_vinculada_ie',
+          cStat: status,
           cnpj: cnpjUsado,
           serie: serieUsadaMsg,
           ie: ieUsada,
-          solucao: `Verifique se a IE está correta no cadastro da empresa. Acesse SINTEGRA e compare com a IE cadastrada no sistema.`,
-          acao: `UPDATE dadosempresa SET inscricaoestadual = 'IE_CORRETA' WHERE cgc = '${cnpjUsado}';`,
-          documentacao: 'docs/erro-serie-vinculada-ie.md',
-          nota: `A SEFAZ vincula cada série a uma IE. A série ${serieUsadaMsg} já foi usada com outra IE. O número/série estão corretos — corrija a Inscrição Estadual.`,
+          xMotivo: motivo, // retorno LITERAL da SEFAZ — sem tradução nem sugestão de UPDATE
         },
       }),
     });

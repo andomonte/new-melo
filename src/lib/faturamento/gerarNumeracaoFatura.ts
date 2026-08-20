@@ -32,22 +32,35 @@ export function determinarSerieFatura(opts: {
   return '1';
 }
 
-// Próximo NRO_FORMULARIO = MAX(nroform)+1 escopado por (serie, insc07), de dbfatura
-// (todas). O CHAMADOR deve segurar o LOCK em dbfatura na MESMA transação (como o
-// salvar.ts já faz) para a numeração ser atômica — igual ao FATURA_INCLUIR do Oracle.
+// Próximo NRO_FORMULARIO = 1 + o MAIOR entre:
+//   (a) MAX(nroform) em dbfatura escopado por (serie, insc07), e
+//   (b) MAX(nNF) das NF-e já USADAS na SEFAZ NAQUELA SÉRIE (lido da chave), opcionalmente
+//       escopado pelo CNPJ emitente.
+// O (b) fecha a FRAGMENTAÇÃO: notas antigas emitidas via override (dbfatura.serie='2'
+// mas chave série='1') não entram no (a), então sem o (b) o contador da série 1 ficaria
+// atrás do que a SEFAZ já autorizou → risco de 539. O CHAMADOR deve segurar o LOCK em
+// dbfatura na MESMA transação (atômico, como o FATURA_INCLUIR do Oracle).
 export async function proximoNroForm(
   client: { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> },
-  opts: { serie: string; insc07?: string | null; schema?: string },
+  opts: { serie: string; insc07?: string | null; cgc?: string | null; schema?: string },
 ): Promise<string> {
   const schema = opts.schema ?? 'db_manaus';
   const insc07 = String(opts.insc07 ?? 'N').toUpperCase();
+  const serieChave = String(opts.serie).replace(/\D/g, '').padStart(3, '0'); // série na chave = 3 díg
+  const cgc = opts.cgc ? String(opts.cgc).replace(/\D/g, '') : null;
   const r = await client.query(
-    `SELECT COALESCE(MAX(CAST(nroform AS INTEGER)), 0) + 1 AS n
-       FROM ${schema}.dbfatura
-      WHERE nroform ~ '^[0-9]+$'
-        AND serie = $1
-        AND COALESCE(insc07, 'N') = $2`,
-    [opts.serie, insc07],
+    `SELECT GREATEST(
+       COALESCE((SELECT MAX(CAST(nroform AS INTEGER))
+                   FROM ${schema}.dbfatura
+                  WHERE nroform ~ '^[0-9]+$' AND serie = $1 AND COALESCE(insc07,'N') = $2), 0),
+       COALESCE((SELECT MAX(CAST(substring(chave,26,9) AS INTEGER))
+                   FROM ${schema}.dbfat_nfe
+                  WHERE length(chave) = 44
+                    AND substring(chave,23,3) = $3
+                    AND ($4::text IS NULL OR substring(chave,7,14) = $4)
+                    AND status IN ('100','150','301','302','303')), 0)
+     ) + 1 AS n`,
+    [opts.serie, insc07, serieChave, cgc],
   );
   return String(r.rows[0].n).padStart(9, '0');
 }

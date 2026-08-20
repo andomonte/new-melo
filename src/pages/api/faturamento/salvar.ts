@@ -265,6 +265,7 @@ export default async function handler(
     //   • série: sai do (tipo da IE + modelo) — 04→1(55)/3(65), 07→2(55). O emitente
     //     depois deriva a IE pela série (série 1/3 = IE 04, série 2 = IE 07).
     let serieArmazem: string | null = null;
+    let cgcArmazem: string | null = null;
     try {
       const armRes = await client.query(
         `SELECT DISTINCT arm_id FROM dbitvenda WHERE codvenda = ANY($1) AND arm_id IS NOT NULL`,
@@ -284,6 +285,7 @@ export default async function handler(
           return res.status(400).json({ erro: reg.motivo, detalhe: reg.motivo });
         }
         if (reg.serie && !serieArmazem) serieArmazem = reg.serie;
+        if (fiscal.cgc && !cgcArmazem) cgcArmazem = fiscal.cgc;
       }
     } catch (eTrava) {
       console.warn('⚠️ Série/trava fiscal via armazém não pôde ser avaliada (segue):', eTrava);
@@ -321,8 +323,12 @@ export default async function handler(
       determinarSerieFatura({ tipofat: tipofatFatura, insc07, cgcEmpresa, tipoNf: 'N' }) ||
       '1';
 
-    console.log('📝 Calculando nroform (escopado por série + insc07)...');
-    const novoNroForm = await proximoNroForm(client, { serie: serieFatura, insc07 });
+    console.log('📝 Calculando nroform (escopado por série + insc07 + SEFAZ)...');
+    const novoNroForm = await proximoNroForm(client, {
+      serie: serieFatura,
+      insc07,
+      cgc: cgcArmazem,
+    });
     const ultimoNroForm = Number(novoNroForm) - 1;
 
     console.log('🔖 Buscando último selo...');
