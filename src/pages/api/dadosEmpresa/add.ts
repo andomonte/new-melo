@@ -235,27 +235,30 @@ export default async function handle(
           `;
           const checkResult = await client.query(checkIEQuery, [ie.inscricaoestadual]);
 
+          const tipoIE = String(ie.tipo || '04') === '07' ? '07' : '04';
           if (checkResult.rows.length === 0) {
             // Se não existe, insere
             const insertIEQuery = `
-              INSERT INTO db_ie (cgc, inscricaoestadual, nomecontribuinte)
-              VALUES ($1, $2, $3)
+              INSERT INTO db_ie (cgc, inscricaoestadual, nomecontribuinte, tipo)
+              VALUES ($1, $2, $3, $4)
             `;
             await client.query(insertIEQuery, [
               cgc,
               ie.inscricaoestadual,
-              ie.nomecontribuinte || nomecontribuinte
+              ie.nomecontribuinte || nomecontribuinte,
+              tipoIE
             ]);
           } else {
             // Se já existe, atualiza
             const updateIEQuery = `
               UPDATE db_ie
-              SET cgc = $1, nomecontribuinte = $2
-              WHERE inscricaoestadual = $3
+              SET cgc = $1, nomecontribuinte = $2, tipo = $3
+              WHERE inscricaoestadual = $4
             `;
             await client.query(updateIEQuery, [
               cgc,
               ie.nomecontribuinte || nomecontribuinte,
+              tipoIE,
               ie.inscricaoestadual
             ]);
           }

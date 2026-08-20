@@ -10,51 +10,48 @@ export default async function handler(
   }
 
   try {
-    const { serie, numeroAtual } = req.body;
+    const { serie, numeroAtual, insc07 } = req.body;
+    const insc07Norm = String(insc07 ?? 'N').toUpperCase() === 'S' ? 'S' : 'N';
 
     const client = await getPgPool().connect();
 
     try {
-      // IMPORTANTE: Buscar o maior número tanto em dbfatura quanto em dbfat_nfe
-      // para evitar duplicidade com notas já autorizadas
+      // Espelha FATURAMENTOS.FATURA_INCLUIR (Oracle): número = MAX(nroform)+1 de
+      // dbfatura (TODAS as faturas — o número é queimado na criação), ESCOPADO por
+      // (serie, insc07). Não usar dbfat_nfe autorizado: números rejeitados também
+      // consomem o contador, então basear-se em dbfatura evita repetir o número.
       const result = await client.query(
         `SELECT MAX(numero) as ultimo_numero
          FROM (
-           -- Números em dbfatura
            SELECT CAST(f.nroform AS INTEGER) as numero
            FROM db_manaus.dbfatura f
            WHERE f.serie = $1
+             AND COALESCE(f.insc07, 'N') = $2
              AND f.nroform IS NOT NULL
              AND f.nroform != ''
              AND f.nroform ~ '^[0-9]+$'
-           
-           UNION ALL
-           
-           -- Números em dbfat_nfe (notas já autorizadas)
-           SELECT CAST(nfe.nrodoc_fiscal AS INTEGER)
-           FROM db_manaus.dbfat_nfe nfe
-           INNER JOIN db_manaus.dbfatura f ON f.codfat = nfe.codfat
-           WHERE f.serie = $1
-             AND nfe.nrodoc_fiscal IS NOT NULL
-             AND nfe.nrodoc_fiscal != ''
-             AND nfe.nrodoc_fiscal ~ '^[0-9]+$'
-             AND nfe.status IN ('100', '150', '301', '302', '303')
          ) AS todos_numeros`,
-        [serie],
+        [serie, insc07Norm],
       );
 
-      let proximoNumero = 2; // Começar do 2 pois número 1 já existe na SEFAZ
+      let proximoNumero = 1;
 
       if (result.rows.length > 0 && result.rows[0].ultimo_numero !== null) {
         const ultimoNumero = parseInt(result.rows[0].ultimo_numero, 10);
         proximoNumero = ultimoNumero + 1;
         console.log(
-          `📊 Série ${serie}: último número usado = ${ultimoNumero}, próximo = ${proximoNumero}`,
+          `📊 Série ${serie}/insc07 ${insc07Norm}: último número = ${ultimoNumero}, próximo = ${proximoNumero}`,
         );
       } else {
-        console.log(
-          `📊 Série ${serie}: começando do número 2 (número 1 já existe na SEFAZ)`,
-        );
+        console.log(`📊 Série ${serie}/insc07 ${insc07Norm}: começando do número 1`);
+      }
+
+      // SALVAGUARDA anti-539: nunca reofertar um número <= o que acabou de ser
+      // rejeitado (numeroAtual). Se colidiu, salta pra frente do rejeitado.
+      const numAtualInt = parseInt(String(numeroAtual ?? '').replace(/\D/g, ''), 10);
+      if (Number.isFinite(numAtualInt) && numAtualInt >= proximoNumero) {
+        proximoNumero = numAtualInt + 1;
+        console.log(`⚠️ numeroAtual (${numAtualInt}) rejeitado — saltando para ${proximoNumero}`);
       }
 
       console.log(

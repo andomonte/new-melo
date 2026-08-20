@@ -3,6 +3,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
+import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
+import { resolverFiscalArmazem, determinarSeriePorIE } from '@/lib/faturamento/fiscalPorArmazem';
 import { inserirCobranca } from '@/lib/faturamento/inserirCobranca';
 
 /**
@@ -258,6 +260,35 @@ export default async function handler(
       });
     }
 
+    // 🚧 SÉRIE + TRAVA fiscal via ARMAZÉM (modelo do web): armazém das vendas → IE tipo.
+    //   • trava: IE 07 não emite NFC-e (mod 65 = cliente CPF) → bloqueia antes de criar.
+    //   • série: sai do (tipo da IE + modelo) — 04→1(55)/3(65), 07→2(55). O emitente
+    //     depois deriva a IE pela série (série 1/3 = IE 04, série 2 = IE 07).
+    let serieArmazem: string | null = null;
+    try {
+      const armRes = await client.query(
+        `SELECT DISTINCT arm_id FROM dbitvenda WHERE codvenda = ANY($1) AND arm_id IS NOT NULL`,
+        [vendasArray],
+      );
+      const cliDocRes = await client.query(
+        `SELECT cpfcgc FROM dbclien WHERE codcli = $1`,
+        [cliente?.codcli],
+      );
+      const docCli = String(cliDocRes.rows[0]?.cpfcgc || cliente?.cpfcgc || '').replace(/\D/g, '');
+      const modelo: '55' | '65' = docCli.length === 11 ? '65' : '55';
+      for (const row of armRes.rows) {
+        const fiscal = await resolverFiscalArmazem(client, row.arm_id);
+        if (!fiscal) continue;
+        const reg = determinarSeriePorIE(fiscal.tipo, modelo);
+        if (reg.bloqueado) {
+          return res.status(400).json({ erro: reg.motivo, detalhe: reg.motivo });
+        }
+        if (reg.serie && !serieArmazem) serieArmazem = reg.serie;
+      }
+    } catch (eTrava) {
+      console.warn('⚠️ Série/trava fiscal via armazém não pôde ser avaliada (segue):', eTrava);
+    }
+
     console.log('🔒 Aplicando lock na tabela...');
     // Lock na tabela para evitar race conditions
     await client.query('LOCK TABLE dbfatura IN EXCLUSIVE MODE');
@@ -274,17 +305,25 @@ export default async function handler(
     const novoCodigoInt = ultimoCodigo + 1;
     const novoCodfat = String(novoCodigoInt).padStart(9, '0');
 
-    console.log('📝 Buscando último nroform...');
-    // Busca o último nroform gerado (incremental, apenas valores numéricos válidos)
-    const maxNroFormResult = await client.query(
-      `SELECT COALESCE(MAX(CAST(nroform AS INTEGER)), 0) as ultimo_nroform 
-       FROM dbfatura 
-       WHERE nroform ~ '^[0-9]+$'`,
+    // 🎯 SÉRIE + NÚMERO fiéis ao Oracle (FATURAMENTOS.FATURA_INCLUIR):
+    //   série: '1' NF-e mod 55 | '3' NFC-e mod 65 (cupom) | '2' só Insc.07 (insc07='S'
+    //          e 12º dígito do CNPJ = '1'). Nunca mais série '2' fixa.
+    //   número: MAX(nroform)+1 ESCOPADO por (serie, insc07), de dbfatura (todas) —
+    //          o número é queimado na criação, então o contador sempre avança.
+    const tipofatFatura = String(tipodoc ?? '').toUpperCase().includes('FAG') ? 'FAG' : '1';
+    const empresaCgcResult = await client.query(
+      `SELECT cgc FROM dadosempresa WHERE cgc IS NOT NULL AND cgc <> '' LIMIT 1`,
     );
+    const cgcEmpresa = empresaCgcResult.rows[0]?.cgc || '';
+    // Série vem do ARMAZÉM (via IE tipo) quando resolvido; senão cai na regra insc07.
+    const serieFatura =
+      serieArmazem ||
+      determinarSerieFatura({ tipofat: tipofatFatura, insc07, cgcEmpresa, tipoNf: 'N' }) ||
+      '1';
 
-    const ultimoNroForm = maxNroFormResult.rows[0].ultimo_nroform || 0;
-    const novoNroFormInt = ultimoNroForm + 1;
-    const novoNroForm = String(novoNroFormInt).padStart(9, '0');
+    console.log('📝 Calculando nroform (escopado por série + insc07)...');
+    const novoNroForm = await proximoNroForm(client, { serie: serieFatura, insc07 });
+    const ultimoNroForm = Number(novoNroForm) - 1;
 
     console.log('🔖 Buscando último selo...');
     // Busca o último selo gerado (incremental, apenas valores numéricos válidos)
@@ -422,7 +461,7 @@ export default async function handler(
       pedido: pedidoProcessado,
       nfs: nfs,
       selo: novoSelo,
-      serie: '2'  // ✅ Série padrão NFe
+      serie: serieFatura  // ✅ Série pela regra Oracle (1 mod55 / 3 mod65 / 2 Insc.07)
     });
 
     await client.query(insertQuery, [
@@ -442,7 +481,7 @@ export default async function handler(
       pedidoProcessado, // Usa o pedido processado (truncado se necessário)
       nfs, // 'N' = mercadoria (padrão); 'S' só p/ nota de serviço
       novoSelo,       // Adiciona o selo incremental
-      '2',            // ✅ série padrão para NFe
+      serieFatura,    // ✅ série pela regra Oracle (1 mod55 / 3 mod65 / 2 Insc.07)
       natOpFatura.substring(0, 60), // descrcfop = Natureza da Operação
     ]);
 

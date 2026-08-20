@@ -12,6 +12,8 @@ import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { create } from 'xmlbuilder2';
 import { getPgPool } from '@/lib/pg';
+import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
+import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { obterCRTEmpresa } from '@/utils/consultarCRTReceita';
  
@@ -256,6 +258,26 @@ export default async function handler(
       }
     }
 
+    // 🎯 IE do emitente pela SÉRIE (modelo web armazém→IE): série 2 → IE tipo 07,
+    // série 1/3 → IE tipo 04. Substitui a IE global do dadosempresa, mantendo série↔IE
+    // consistentes e evitando a rejeição SEFAZ 615 (série vinculada a outra IE).
+    {
+      const serieFat = String(dados?.dbfatura?.serie ?? '').trim();
+      if (serieFat) {
+        const clientIE = await getPgPool().connect();
+        try {
+          const ieCorreta = await ieEmitentePorSerie(clientIE, emitenteRaw.cgc, serieFat);
+          const ieAtual = String(emitenteRaw.inscricaoestadual || '').replace(/\D/g, '');
+          if (ieCorreta && ieCorreta !== ieAtual) {
+            console.log(`🎯 IE do emitente ajustada pela série ${serieFat}: ${ieAtual} → ${ieCorreta}`);
+            emitenteRaw.inscricaoestadual = ieCorreta;
+          }
+        } finally {
+          clientIE.release();
+        }
+      }
+    }
+
     // 🆕 CONSULTAR CRT AUTOMATICAMENTE
     console.log('🔍 Consultando CRT da empresa...');
     const crtEmpresa = await obterCRTEmpresa(
@@ -309,72 +331,39 @@ export default async function handler(
     console.log('🔍 ===================================================');
     console.log('');
 
-    // 🎯 SÉRIE PADRÃO: Sempre usar "2" - a SEFAZ gerencia a numeração
-    const _serieEmissao = '2'; // Série fixa padrão (numérica, exigida pela SEFAZ)
+    // 🎯 SÉRIE + NÚMERO: fonte da verdade é a dbfatura (definida no salvar pela regra
+    // Oracle FATURAMENTOS.FATURA_INCLUIR — série 1 mod55 / 3 mod65 / 2 Insc.07; número
+    // escopado por (serie, insc07)). Aqui só confiamos no que veio e completamos o que
+    // faltar — sem mais série '2' fixa nem MAX de autorizadas.
+    let serieEmissao = String(dados?.dbfatura?.serie ?? '').trim();
     let nroformEmissao = dados?.dbfatura?.nroform;
+    const insc07Fatura = dados?.dbfatura?.insc07;
 
-    console.log('📌 Usando série padrão: "2" (gerenciada pela SEFAZ)');
+    if (!serieEmissao) {
+      const cgcEmpresa =
+        dados?.emitente?.cgc || dados?.dbfatura?.cnpj_empresa || dados?.emitente?.cnpj || '';
+      serieEmissao =
+        determinarSerieFatura({ tipofat: '1', insc07: insc07Fatura, cgcEmpresa, tipoNf: 'N' }) || '1';
+      if (!dados.dbfatura) dados.dbfatura = {};
+      dados.dbfatura.serie = serieEmissao;
+      console.log(`📌 Série ausente no payload — derivada pela regra Oracle: ${serieEmissao}`);
+    } else {
+      console.log(`📌 Série vinda da dbfatura: ${serieEmissao}`);
+    }
 
     if (!nroformEmissao || nroformEmissao === '') {
-      console.log(
-        '⚠️ nroform não fornecido no payload, buscando próximo número da série 2...',
-      );
-
+      console.log('⚠️ nroform ausente no payload — calculando (escopado por série + insc07)...');
+      const client = await getPgPool().connect();
       try {
-        // 🔍 IMPORTANTE: Buscar APENAS notas AUTORIZADAS (status = 100) na SEFAZ
-        // Isso evita reusar números de notas rejeitadas ou em processamento
-        const client = await getPgPool().connect();
-        try {
-          const proximoNumeroQuery = await client.query(
-            `SELECT MAX(numero) as ultimo_numero
-             FROM (
-               -- ✅ PRIORIDADE 1: Números AUTORIZADOS na SEFAZ (status 100)
-               SELECT CAST(nfe.nrodoc_fiscal AS INTEGER) as numero
-               FROM db_manaus.dbfat_nfe nfe
-               INNER JOIN db_manaus.dbfatura f ON f.codfat = nfe.codfat
-               WHERE f.serie = '2'
-                 AND nfe.nrodoc_fiscal IS NOT NULL
-                 AND nfe.nrodoc_fiscal != ''
-                 AND nfe.nrodoc_fiscal::text ~ '^[0-9]+$'
-                 AND nfe.status = '100'  -- APENAS AUTORIZADAS
-             ) AS todos_numeros`
-          );
-          
-          if (proximoNumeroQuery.rows.length > 0 && proximoNumeroQuery.rows[0].ultimo_numero !== null) {
-            const ultimoNumero = parseInt(proximoNumeroQuery.rows[0].ultimo_numero, 10);
-            nroformEmissao = String(ultimoNumero + 1).padStart(9, '0');
-            console.log(`✅ Próximo número calculado: série 2 = ${nroformEmissao} (último AUTORIZADO: ${ultimoNumero})`);
-            console.log(`📊 Base de cálculo: APENAS notas com status 100 (autorizadas) na SEFAZ`);
-          } else {
-            // 🚨 CORREÇÃO CRÍTICA: SEFAZ indica que números 1 E 2 JÁ FORAM AUTORIZADOS
-            // Chave número 1: 13251018053139000169550020000000011208942310
-            // Chave número 2: 13251018053139000169550020000000021000240867
-            // Começar do número 3 para evitar duplicidade
-            nroformEmissao = '000000003';
-            console.log(`🚨 CRÍTICO: Começando do número 3 (números 1 e 2 já existem na SEFAZ mas NÃO no banco local)`);
-            console.log(`📋 Chaves já autorizadas na SEFAZ:`);
-            console.log(`   - Número 1: 13251018053139000169550020000000011208942310`);
-            console.log(`   - Número 2: 13251018053139000169550020000000021000240867`);
-            console.log(`🔧 AÇÃO URGENTE: Execute scripts/verificar-nfe-numero-1.sql para sincronizar banco local`);
-            console.log(`⚠️  IMPORTANTE: Registre essas NFes no banco para evitar perda de histórico`);
-          }
-
-          // Atualizar o objeto dbfatura com série 2 e número calculado
-          if (!dados.dbfatura) dados.dbfatura = {};
-          dados.dbfatura.nroform = nroformEmissao;
-          dados.dbfatura.serie = '2'; // Sempre série 2
-          
-          console.log(`🎯 Número final para emissão: ${nroformEmissao} (série 2)`);
-        } finally {
-          client.release();
-        }
-        
-      } catch (error) {
-        console.error('❌ Erro ao buscar próximo número:', error);
-        throw new Error('Não foi possível determinar o próximo número da NFe');
+        nroformEmissao = await proximoNroForm(client, { serie: serieEmissao, insc07: insc07Fatura });
+      } finally {
+        client.release();
       }
+      if (!dados.dbfatura) dados.dbfatura = {};
+      dados.dbfatura.nroform = nroformEmissao;
+      console.log(`🎯 Número calculado para emissão: ${nroformEmissao} (série ${serieEmissao})`);
     } else {
-      console.log(`✅ nroform fornecido no payload: ${nroformEmissao}`);
+      console.log(`✅ nroform vindo do payload: ${nroformEmissao} (série ${serieEmissao})`);
     }
 
     const dadosNormalizados = await normalizarPayloadNFe(dados);
@@ -1344,14 +1333,16 @@ export default async function handler(
       motivo.toLowerCase().includes('vinculada') &&
       motivo.toLowerCase().includes('inscricao');
 
+    const serieUsadaMsg = String(dados?.dbfatura?.serie ?? serieEmissao ?? '?');
     if (erroSerieVinculada) {
       console.error('');
       console.error(
-        '🚨 ========== ERRO: SÉRIE VINCULADA A OUTRA IE ==========',
+        '🚨 ========== REJEIÇÃO SEFAZ: SÉRIE VINCULADA A OUTRA IE ==========',
       );
       console.error(`📌 CNPJ: ${cnpjUsado}`);
-      console.error(`📌 Série: "2" (padrão do sistema)`);
-      console.error(`📌 IE atual: "${ieUsada}"`);
+      console.error(`📌 Série usada: "${serieUsadaMsg}"`);
+      console.error(`📌 IE enviada: "${ieUsada}"`);
+      console.error(`📌 Motivo SEFAZ: ${motivo}`);
       console.error('');
       console.error(
         '❌ PROBLEMA: A série "2" foi usada anteriormente com uma IE diferente!',
@@ -1391,12 +1382,12 @@ export default async function handler(
         detalhes: {
           tipo_erro: 'serie_vinculada_ie',
           cnpj: cnpjUsado,
-          serie: '2',
+          serie: serieUsadaMsg,
           ie: ieUsada,
           solucao: `Verifique se a IE está correta no cadastro da empresa. Acesse SINTEGRA e compare com a IE cadastrada no sistema.`,
           acao: `UPDATE dadosempresa SET inscricaoestadual = 'IE_CORRETA' WHERE cgc = '${cnpjUsado}';`,
           documentacao: 'docs/erro-serie-vinculada-ie.md',
-          nota: 'A série "2" é padrão e gerenciada pela SEFAZ. O problema está na IE, não na série.',
+          nota: `A SEFAZ vincula cada série a uma IE. A série ${serieUsadaMsg} já foi usada com outra IE. O número/série estão corretos — corrija a Inscrição Estadual.`,
         },
       }),
     });

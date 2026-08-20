@@ -10,6 +10,7 @@ import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
+import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { decrypt } from '@/utils/crypto';
 import { extrairCNPJDoCertificado } from '@/utils/certificadoExtractor';
 import { create } from 'xmlbuilder2';
@@ -409,7 +410,22 @@ export default async function handler(
     } else {
       // ========== NF-e (NOTA FISCAL) ==========
       console.log('📄 Gerando NF-e (Nota Fiscal) para pessoa jurídica...');
-      
+
+      // IE do emitente pela SÉRIE (modelo web armazém→IE): série 2 → IE tipo 07,
+      // série 1/3 → IE tipo 04. A série vem da dbfatura (definida no salvar a partir do
+      // armazém da venda). Mantém série↔IE consistentes e evita a rejeição SEFAZ 615.
+      try {
+        const ieCorreta = await ieEmitentePorSerie(getPgPool(), emitente.cgc, dbfatura.serie || '1');
+        const ieAtual = String(emitente.ie || '').replace(/\D/g, '');
+        if (ieCorreta && ieCorreta !== ieAtual) {
+          console.log(`🎯 IE do emitente ajustada pela série ${dbfatura.serie}: ${ieAtual} → ${ieCorreta}`);
+          emitente.ie = ieCorreta; // dados.emitente é a MESMA referência
+          emitente.inscricaoestadual = ieCorreta;
+        }
+      } catch (eIE) {
+        console.warn('⚠️ IE por série (faturado) não pôde ser ajustada (segue):', eIE);
+      }
+
       const dadosNormalizados = await normalizarPayloadNFe(dados);
       const xmlBruto = gerarXMLNFe({
         ...dadosNormalizados,

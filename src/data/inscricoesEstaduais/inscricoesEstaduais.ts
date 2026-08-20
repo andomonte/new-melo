@@ -9,6 +9,9 @@ export interface InscricaoEstadual {
   cgc: string;
   inscricaoestadual: string;
   nomecontribuinte: string;
+  // '04' = IE principal (NF-e série 1 / NFC-e série 3); '07' = Inscrição 07
+  // (NF-e série 2, não emite NFC-e). Default '04'.
+  tipo?: string;
 }
 
 export interface InscricaoEstadualListResponse {

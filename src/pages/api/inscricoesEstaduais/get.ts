@@ -79,7 +79,8 @@ export default async function handler(
         SELECT
           ie.cgc,
           ie.inscricaoestadual,
-          ie.nomecontribuinte
+          ie.nomecontribuinte,
+          ie.tipo
         FROM db_ie ie
         ${whereClause}
         ORDER BY ie.nomecontribuinte ASC, ie.inscricaoestadual ASC

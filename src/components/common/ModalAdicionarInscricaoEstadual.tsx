@@ -25,12 +25,14 @@ const ModalAdicionarInscricaoEstadual: React.FC<ModalAdicionarInscricaoEstadualP
   onDelete,
 }) => {
   const [inscricaoEstadual, setInscricaoEstadual] = useState('');
+  const [tipo, setTipo] = useState<'04' | '07'>('04');
   const [error, setError] = useState<string | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const isEditing = editingIndex !== null;
 
   const handleEditClick = (ie: InscricaoEstadual, index: number) => {
     setInscricaoEstadual(ie.inscricaoestadual);
+    setTipo((ie.tipo as '04' | '07') === '07' ? '07' : '04');
     setEditingIndex(index);
     setError(null);
   };
@@ -41,6 +43,7 @@ const ModalAdicionarInscricaoEstadual: React.FC<ModalAdicionarInscricaoEstadualP
 
   const handleCancelEdit = () => {
     setInscricaoEstadual('');
+    setTipo('04');
     setEditingIndex(null);
     setError(null);
   };
@@ -70,6 +73,7 @@ const ModalAdicionarInscricaoEstadual: React.FC<ModalAdicionarInscricaoEstadualP
       cgc,
       inscricaoestadual: inscricaoEstadual.trim(),
       nomecontribuinte: nomeContribuinte, // Sempre usa o nome do formulário principal
+      tipo,
     };
 
     if (isEditing && editingIndex !== null) {
@@ -80,6 +84,7 @@ const ModalAdicionarInscricaoEstadual: React.FC<ModalAdicionarInscricaoEstadualP
 
     // Limpar form após salvar
     setInscricaoEstadual('');
+    setTipo('04');
     setEditingIndex(null);
     setError(null);
   };
@@ -120,6 +125,20 @@ const ModalAdicionarInscricaoEstadual: React.FC<ModalAdicionarInscricaoEstadualP
             onChange={(e) => setInscricaoEstadual(e.target.value)}
             required
           />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Tipo da Inscrição
+            </label>
+            <select
+              name="tipo"
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value === '07' ? '07' : '04')}
+              className="w-full px-3 py-2 border rounded-md dark:bg-zinc-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="04">Principal (NF-e série 1 · NFC-e série 3)</option>
+              <option value="07">Inscrição 07 (NF-e série 2 · sem NFC-e)</option>
+            </select>
+          </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 italic">
             * Esta inscrição será vinculada ao contribuinte: {nomeContribuinte || '(não informado)'}
           </div>
@@ -146,10 +165,24 @@ const ModalAdicionarInscricaoEstadual: React.FC<ModalAdicionarInscricaoEstadualP
                         : 'hover:bg-gray-50 dark:hover:bg-zinc-700'
                     }`}
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
                         {ie.inscricaoestadual}
                       </p>
+                      <span
+                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                          (ie.tipo || '04') === '07'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        }`}
+                        title={
+                          (ie.tipo || '04') === '07'
+                            ? 'Inscrição 07 — NF-e série 2, não emite NFC-e'
+                            : 'Principal — NF-e série 1, NFC-e série 3'
+                        }
+                      >
+                        {(ie.tipo || '04') === '07' ? 'IE 07' : 'IE 04'}
+                      </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <button

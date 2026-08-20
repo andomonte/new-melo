@@ -2035,55 +2035,14 @@ export default function FaturamentoNota({
       console.log('🔍 [DADOS] dadosFatura existe?', !!dadosFatura);
       console.log('🔍 [DADOS] dadosFatura.nroform:', dadosFatura?.nroform);
 
-      // ⚠️ IMPORTANTE: Consultar próximo número disponível ANTES de emitir
-      // Isso evita duplicidade desde a primeira tentativa
-      try {
-        const serieAtual = dadosFatura?.serie || '1'; // Série vem de dbfatura.serie
-        console.log(
-          `🔍 Consultando próximo número disponível para série ${serieAtual} ANTES da emissão...`,
-        );
-        console.log(`🔍 Série origem: dbfatura.serie = ${dadosFatura?.serie}`);
-
-        const responseProximoNumero = await axios.post(
-          '/api/faturamento/obter-proximo-numero-nfe',
-          {
-            serie: serieAtual,
-            numeroAtual: '1', // Não usado mais, endpoint pega o máximo do banco
-          },
-        );
-
-        if (responseProximoNumero.data?.sucesso) {
-          const proximoNumero = responseProximoNumero.data.proximoNumero;
-          const ultimoUsado = responseProximoNumero.data.ultimoNumeroUsado || 0;
-          console.log(
-            `✅ Próximo número disponível: ${proximoNumero} (último usado: ${ultimoUsado}, série ${serieAtual})`,
-          );
-
-          // Atualizar o payload com o número correto ANTES da primeira tentativa
-          if (dadosFatura) {
-            dadosFatura.nroform = String(proximoNumero).padStart(9, '0');
-          }
-          if (dadosVenda) {
-            dadosVenda.nrovenda = String(proximoNumero);
-          }
-
-          console.log(
-            `📝 Número da NFe ajustado de ${
-              dadosFatura?.nroform || 'N/A'
-            } para: ${String(proximoNumero).padStart(9, '0')}`,
-          );
-        } else {
-          console.warn(
-            '⚠️ Não foi possível consultar próximo número, usando número da fatura',
-          );
-        }
-      } catch (erroConsulta) {
-        console.warn(
-          '⚠️ Erro ao consultar próximo número disponível:',
-          erroConsulta,
-        );
-        console.warn('Continuando com número original da fatura');
-      }
+      // ✅ Número/série vêm do /salvar (regra Oracle: série 1 mod55 / 3 mod65 / 2 Insc.07,
+      // número escopado por (serie, insc07) e queimado na criação da fatura). NÃO
+      // reconsultar/sobrescrever aqui — o pré-fetch antigo causava off-by-one (o salvar
+      // já criou a fatura com o número, então obter-proximo devolvia número+1). O retry
+      // de 539 abaixo é a única salvaguarda, e só age se a SEFAZ realmente recusar.
+      console.log(
+        `🔢 Emitindo com número/série do salvar: nroform=${dadosFatura?.nroform}, série=${dadosFatura?.serie}`,
+      );
 
       // Tentar emitir a nota fiscal
       let erroSefaz = false;
@@ -2157,48 +2116,41 @@ export default function FaturamentoNota({
               payloadEmissao?.dbfatura?.codfat ||
               'N/A';
             const acao = detalhesErro?.acao || '';
+            const serie =
+              detalhesErro?.serie || payloadEmissao?.dbfatura?.serie || '?';
 
             mensagemErroSefaz = `
-🚨 ERRO: SÉRIE VINCULADA A OUTRA INSCRIÇÃO ESTADUAL
+🚨 REJEIÇÃO SEFAZ: SÉRIE VINCULADA A OUTRA INSCRIÇÃO ESTADUAL
 
-A SEFAZ rejeitou porque a série "2" foi usada anteriormente com uma IE diferente.
+Motivo da SEFAZ: ${mensagemCompleta}
 
 📌 Informações:
    • CNPJ: ${cnpj}
-   • Série: 2 (padrão do sistema, gerenciada pela SEFAZ)
-   • IE Atual no Sistema: ${ie}
+   • Série usada: ${serie}
+   • IE enviada: ${ie}
    • Código Fatura: ${codfat}
 
-✅ SOLUÇÃO:
-
-A série "2" é FIXA no sistema e gerenciada pela SEFAZ.
-O problema está na Inscrição Estadual (IE), não na série!
+✅ O QUE ISSO SIGNIFICA:
+A SEFAZ vincula cada SÉRIE a uma Inscrição Estadual. A série ${serie} já foi
+usada antes com uma IE diferente da que está sendo enviada agora (${ie}).
+O número e a série estão corretos — o que diverge é a Inscrição Estadual.
 
 🔍 COMO RESOLVER:
-
-1️⃣ Verificar IE Correta:
-   • Acesse: https://www.sintegra.gov.br/
-   • Consulte o CNPJ: ${cnpj}
-   • Anote a IE correta
-
-2️⃣ Atualizar IE no Sistema:
-   • Compare a IE da consulta com a IE atual (${ie})
-   • Se for diferente, peça ao administrador para atualizar no banco de dados
-   ${acao ? `\n   • SQL: ${acao}` : ''}
-
-⚠️  IMPORTANTE: Não é necessário mudar a série! 
-    A série "2" é padrão e está correta.
-    O que precisa ser corrigido é a Inscrição Estadual.
+1) Confirme a IE correta deste CNPJ (${cnpj}) — SINTEGRA: https://www.sintegra.gov.br/
+2) Se a IE cadastrada estiver errada, atualize:
+   ${acao || `UPDATE dadosempresa SET inscricaoestadual = 'IE_CORRETA' WHERE cgc = '${cnpj}';`}
+3) Ou emita numa série ainda não vinculada a outra IE neste ambiente.
 
 📚 Documentação: docs/erro-serie-vinculada-ie.md
             `.trim();
 
-            console.error('🚨 ========== ERRO SÉRIE VINCULADA ==========');
+            console.error('🚨 ========== REJEIÇÃO SÉRIE VINCULADA A IE ==========');
             console.error(`CNPJ: ${cnpj}`);
-            console.error(`Série: 2 (padrão)`);
-            console.error(`IE: ${ie}`);
+            console.error(`Série usada: ${serie}`);
+            console.error(`IE enviada: ${ie}`);
             console.error(`Fatura: ${codfat}`);
-            console.error('==========================================');
+            console.error(`Motivo SEFAZ: ${mensagemCompleta}`);
+            console.error('====================================================');
 
             updateWindowProgress(
               currentStep,
@@ -2245,7 +2197,8 @@ O problema está na Inscrição Estadual (IE), não na série!
                 '/api/faturamento/obter-proximo-numero-nfe',
                 {
                   serie: serieAtual,
-                  numeroAtual: numeroAtual,
+                  numeroAtual: numeroAtual, // rejeitado — endpoint salta pra frente dele
+                  insc07: payloadEmissao?.dbfatura?.insc07,
                 },
               );
 

@@ -20,6 +20,9 @@ export default async function handler(
   }
 
   const { cgc, inscricaoestadual, nomecontribuinte } = req.body;
+  // tipo: '04' = IE principal (NF-e série 1 / NFC-e série 3); '07' = Inscrição 07
+  // (NF-e série 2, não emite NFC-e). Default '04'.
+  const tipo = String(req.body?.tipo || '04') === '07' ? '07' : '04';
 
   // Validações
   if (!cgc || !inscricaoestadual || !nomecontribuinte) {
@@ -49,8 +52,8 @@ export default async function handler(
 
       // Inserir nova IE
       const insertQuery = `
-        INSERT INTO db_ie (cgc, inscricaoestadual, nomecontribuinte)
-        VALUES ($1, $2, $3)
+        INSERT INTO db_ie (cgc, inscricaoestadual, nomecontribuinte, tipo)
+        VALUES ($1, $2, $3, $4)
         RETURNING *
       `;
 
@@ -58,6 +61,7 @@ export default async function handler(
         cgc,
         inscricaoestadual,
         nomecontribuinte,
+        tipo,
       ]);
 
       return res.status(201).json({
