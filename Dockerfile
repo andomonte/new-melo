@@ -26,6 +26,12 @@ COPY . .
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Versão exibida no login. O deploy pode passar o commit:
+#   docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) ...
+# Se não passar, o next.config cai na versão do package.json (o BUILD_TIME sempre atualiza).
+ARG GIT_SHA=""
+ENV GIT_SHA=$GIT_SHA
+
 # Build the application
 RUN npm run build
 

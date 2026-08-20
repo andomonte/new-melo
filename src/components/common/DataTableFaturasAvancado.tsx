@@ -557,13 +557,11 @@ export default function DataTableFaturasAvancado({
 
   // Função que decide se abre preview ou PDF da nota emitida
   const handleVisualizarNota = async (fatura: any) => {
-    // Se a nota foi autorizada (status 100), buscar o PDF da nota emitida
-    if (fatura.nfe_status === '100') {
-      await buscarPdfNotaEmitida(fatura);
-    } else {
-      // Caso contrário, mostrar preview
-      await abrirModalPreview(fatura);
-    }
+    // Visualização SEMPRE no layout HTML (renderizado no cliente, sem puppeteer). Para
+    // notas autorizadas, o endpoint de dados completos anexa chave/protocolo, e a DANFE
+    // sai com código de barras/protocolo. Aposenta o PDF antigo (jsPDF) guardado na
+    // emissão — que era o que aparecia "com layout antigo" ao visualizar.
+    await abrirModalPreview(fatura);
   };
 
   const handleVisualizarBoletos = (fatura: any) => {

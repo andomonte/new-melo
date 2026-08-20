@@ -530,15 +530,91 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
         g.up();
       }
     } else {
-      // Regime Normal - usar CST com valores reais
-      const icms00 = icms.ele('ICMS00');
-      icms00.ele('orig').txt('0').up();
-      icms00.ele('CST').txt(prod.icms?.cstICMS ?? '00').up();
-      icms00.ele('modBC').txt('3').up(); // 3 = Valor da operação
-      icms00.ele('vBC').txt(Number(prod.icms?.baseICMS ?? prod.valorTotal ?? 0).toFixed(2)).up();
-      icms00.ele('pICMS').txt(Number(prod.icms?.pICMS ?? 0).toFixed(2)).up();
-      icms00.ele('vICMS').txt(Number(prod.icms?.vICMS ?? 0).toFixed(2)).up();
-      icms00.up();
+      // Regime Normal — o GRUPO ICMS precisa casar com o CST, senão a SEFAZ rejeita
+      // (215 Falha no schema). Antes usava sempre <ICMS00>, o que quebrava CST 60 (ST):
+      //   00→ICMS00 · 10→ICMS10 · 20→ICMS20 · 40/41/50→ICMS40 · 51→ICMS51 · 60→ICMS60
+      //   · 70→ICMS70 · demais→ICMS90.
+      const cst = String(prod.icms?.cstICMS ?? '00').replace(/\D/g, '').padStart(2, '0').slice(-2);
+      const orig = String(prod.icms?.origem ?? '0');
+      const modBC = String(prod.icms?.modBC ?? '3');
+      const vBC = Number(prod.icms?.baseICMS ?? prod.valorTotal ?? 0).toFixed(2);
+      const pICMS = Number(prod.icms?.pICMS ?? 0).toFixed(2);
+      const vICMS = Number(prod.icms?.vICMS ?? 0).toFixed(2);
+      const vBCST = Number(prod.icms?.vBCST ?? 0).toFixed(2);
+      const pICMSST = Number(prod.icms?.pICMSST ?? 0).toFixed(2);
+      const vICMSST = Number(prod.icms?.vICMSST ?? 0).toFixed(2);
+      const modBCST = String(prod.icms?.modBCST ?? '4');
+
+      const comBase = (g: any) => {
+        g.ele('orig').txt(orig).up();
+        g.ele('CST').txt(cst).up();
+        g.ele('modBC').txt(modBC).up();
+        g.ele('vBC').txt(vBC).up();
+        g.ele('pICMS').txt(pICMS).up();
+        g.ele('vICMS').txt(vICMS).up();
+      };
+
+      if (cst === '00') {
+        const g = icms.ele('ICMS00');
+        comBase(g);
+        g.up();
+      } else if (cst === '10') {
+        const g = icms.ele('ICMS10');
+        comBase(g);
+        g.ele('modBCST').txt(modBCST).up();
+        g.ele('vBCST').txt(vBCST).up();
+        g.ele('pICMSST').txt(pICMSST).up();
+        g.ele('vICMSST').txt(vICMSST).up();
+        g.up();
+      } else if (cst === '20') {
+        const g = icms.ele('ICMS20');
+        g.ele('orig').txt(orig).up();
+        g.ele('CST').txt(cst).up();
+        g.ele('modBC').txt(modBC).up();
+        g.ele('pRedBC').txt(Number(prod.icms?.pRedBC ?? 0).toFixed(2)).up();
+        g.ele('vBC').txt(vBC).up();
+        g.ele('pICMS').txt(pICMS).up();
+        g.ele('vICMS').txt(vICMS).up();
+        g.up();
+      } else if (['40', '41', '50'].includes(cst)) {
+        const g = icms.ele('ICMS40'); // isento / não tributada / suspensão: só orig+CST
+        g.ele('orig').txt(orig).up();
+        g.ele('CST').txt(cst).up();
+        g.up();
+      } else if (cst === '51') {
+        const g = icms.ele('ICMS51');
+        comBase(g);
+        g.up();
+      } else if (cst === '60') {
+        // ICMS cobrado anteriormente por ST: orig+CST (retenção opcional).
+        const g = icms.ele('ICMS60');
+        g.ele('orig').txt(orig).up();
+        g.ele('CST').txt(cst).up();
+        if (prod.icms?.vBCSTRet != null) {
+          g.ele('vBCSTRet').txt(Number(prod.icms.vBCSTRet).toFixed(2)).up();
+          g.ele('pST').txt(Number(prod.icms?.pST ?? 0).toFixed(4)).up();
+          g.ele('vICMSSubstituto').txt(Number(prod.icms?.vICMSSubstituto ?? 0).toFixed(2)).up();
+          g.ele('vICMSSTRet').txt(Number(prod.icms?.vICMSSTRet ?? 0).toFixed(2)).up();
+        }
+        g.up();
+      } else if (cst === '70') {
+        const g = icms.ele('ICMS70');
+        comBase(g);
+        g.ele('modBCST').txt(modBCST).up();
+        g.ele('vBCST').txt(vBCST).up();
+        g.ele('pICMSST').txt(pICMSST).up();
+        g.ele('vICMSST').txt(vICMSST).up();
+        g.up();
+      } else {
+        const g = icms.ele('ICMS90'); // catch-all schema-válido (CST 90)
+        g.ele('orig').txt(orig).up();
+        g.ele('CST').txt('90').up();
+        g.ele('modBC').txt(modBC).up();
+        g.ele('vBC').txt(vBC).up();
+        g.ele('pICMS').txt(pICMS).up();
+        g.ele('vICMS').txt(vICMS).up();
+        g.up();
+      }
     }
     icms.up();
     

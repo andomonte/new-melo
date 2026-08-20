@@ -321,6 +321,16 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Versão do sistema — para conferir se o deploy está atualizado. O build time
+          muda a cada rebuild da imagem, então é o indicador confiável de "atualizado". */}
+      <div
+        className="fixed bottom-2 right-3 z-50 text-[11px] text-slate-400 dark:text-slate-500 select-none"
+        title="Versão do sistema — confira se o deploy está atualizado"
+      >
+        v{process.env.NEXT_PUBLIC_APP_VERSION || 'dev'} · build{' '}
+        {(process.env.NEXT_PUBLIC_BUILD_TIME || '').replace('T', ' ').slice(0, 16)} UTC
+      </div>
     </main>
   );
 }

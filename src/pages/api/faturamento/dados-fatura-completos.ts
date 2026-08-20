@@ -443,6 +443,33 @@ export default async function handler(
       totaisImpostos.acrescimo -
       totaisImpostos.desconto;
 
+    // Autorização da NF-e (se autorizada) → permite o preview HTML renderizar a DANFE
+    // com chave, protocolo e código de barras. Padroniza a visualização no layout HTML
+    // (em vez de puxar o PDF antigo guardado na emissão).
+    try {
+      const nfeRes = await client.query(
+        `SELECT chave, numprotocolo, nrodoc_fiscal, "data", dthrprotocolo, modelo
+           FROM db_manaus.dbfat_nfe
+          WHERE codfat = $1 AND status = '100'
+          ORDER BY "data" DESC LIMIT 1`,
+        [codfat],
+      );
+      if (nfeRes.rows.length > 0) {
+        const n = nfeRes.rows[0];
+        (dbfatura as any).dadosNFe = {
+          chaveAcesso: n.chave,
+          protocolo: n.numprotocolo,
+          numeroNFe: n.nrodoc_fiscal,
+          serieNFe: (dbfatura as any).serie,
+          dataEmissao: n.dthrprotocolo || n.data,
+          tipoDocumento: n.modelo === '65' ? 'NFC-e' : 'NF-e',
+        };
+        (dbfatura as any).chave_acesso = n.chave;
+      }
+    } catch (eNfe) {
+      console.warn('⚠️ Não foi possível anexar autorização da NF-e ao preview:', eNfe);
+    }
+
     const dadosCompletos = {
       dbfatura,
       dbclien,
