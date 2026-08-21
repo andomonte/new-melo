@@ -477,6 +477,10 @@ const obterDadosNota = (tipoNota: TipoNota, dadosNFe?: DadosNFe) => {
 // 3. FUNÇÃO PRINCIPAL DE GERAÇÃO DO PDF
 // =================================================================================
 
+// Marcador exigido pela SEFAZ no destinatário de NF-e emitida em homologação.
+const HOMOLOG_NOME =
+  'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
+
 export const gerarPreviewNF = async (
   fatura: Fatura,
   produtos: Produto[],
@@ -484,6 +488,7 @@ export const gerarPreviewNF = async (
   dadosEmpresa: DadosEmpresa,
   tipoNota: TipoNota = 'preview',
   dadosNFe?: DadosNFe,
+  opts?: { homologacao?: boolean },
 ): Promise<jsPDF> => {
   // // TESTE URGENTE - Verificar se produtos chegam
   // console.log('� TESTE URGENTE - Status dos produtos:', {
@@ -528,6 +533,17 @@ export const gerarPreviewNF = async (
 
   // Obter dados baseados no tipo de nota
   const dadosNota = obterDadosNota(tipoNota, dadosNFe);
+
+  // HOMOLOGAÇÃO: a SEFAZ exige marca "SEM VALOR FISCAL" e o nome do destinatário
+  // forçado. O fallback jsPDF não tratava isso (só o HTML tratava) — aplica aqui.
+  if (opts?.homologacao) {
+    dadosNota.textoMarcaDagua = 'SEM VALOR FISCAL';
+    dadosNota.opacidadeMarca = dadosNota.opacidadeMarca || 0.12;
+    dadosNota.corMarca =
+      dadosNota.corMarca && dadosNota.corMarca.length ? dadosNota.corMarca : [200, 0, 0];
+    // Sobrescreve o nome do destinatário (usado em vários pontos do layout).
+    fatura = { ...fatura, nomefant: HOMOLOG_NOME };
+  }
 
   // Helper para desenhar campos
   const drawField = (
@@ -1101,10 +1117,23 @@ export const gerarPreviewNF = async (
   y += 20;
 
   // ---- FATURA / DUPLICATA (DUP) — sequência do modelo MELO (após destinatário) ----
+  // dupTexto vem pré-montado na emissão (parcelas reais conforme a forma de
+  // pagamento; ou nome da forma; ou A VISTA). Fallback: PRAZO/A VISTA.
   const prazoNota = getValue(
     (fatura as any).prazo ?? (fatura as any).cond_pagto ?? (fatura as any).prazopag ?? '',
   );
-  drawField('FATURA / DUPLICATA', prazoNota ? `PRAZO: ${prazoNota}` : 'A VISTA', margin, y, contentWidth, 14);
+  const dupTexto =
+    getValue((fatura as any).dupTexto) ||
+    (prazoNota ? `PRAZO: ${prazoNota}` : 'A VISTA');
+  // Fonte que ENCOLHE até caber na largura (ex.: 10 parcelas numa linha só).
+  let dupSize = 7;
+  doc.setFont('helvetica', 'bold');
+  while (dupSize > 4) {
+    doc.setFontSize(dupSize);
+    if (doc.getTextWidth(dupTexto) <= contentWidth - 6) break;
+    dupSize -= 0.5;
+  }
+  drawField('FATURA / DUPLICATA', dupTexto, margin, y, contentWidth, 14, 'left', dupSize);
   y += 22;
 
   // Totais IBS/CBS calculados a partir dos ITENS (mesma fórmula da tabela de produtos),
@@ -1820,6 +1849,7 @@ export const gerarNotaFiscalValida = async (
   venda: Venda,
   dadosEmpresa: DadosEmpresa,
   dadosNFe: DadosNFe,
+  opts?: { homologacao?: boolean },
 ): Promise<jsPDF> => {
   return gerarPreviewNF(
     fatura,
@@ -1828,6 +1858,7 @@ export const gerarNotaFiscalValida = async (
     dadosEmpresa,
     'valida',
     dadosNFe,
+    opts,
   );
 };
 

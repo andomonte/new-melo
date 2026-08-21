@@ -105,9 +105,17 @@ export function gerarDanfeHtmlNFe(
     return calc > 0 ? calc : num(fatura.totalnf);
   })();
 
-  // ---- DUP / prazo ----
+  // ---- FATURA / DUPLICATA ----
+  // dupTexto vem pré-montado na emissão (parcelas reais conforme a forma de
+  // pagamento: Boleto/Carteira → "Parc N. Venc DD/MM/AAAA ..."; PIX/Cartão/
+  // Dinheiro → nome da forma; senão A VISTA). Fallback: PRAZO/A VISTA.
   const prazo = getValue(fatura.prazo ?? fatura.cond_pagto ?? fatura.prazopag);
-  const dupTexto = prazo ? `PRAZO: ${prazo}` : 'A VISTA';
+  const dupTexto =
+    getValue((fatura as Any).dupTexto) ||
+    (prazo ? `PRAZO: ${prazo}` : 'A VISTA');
+  // Fonte adaptativa: encolhe conforme o comprimento (ex.: 10 parcelas) p/ caber.
+  const dupFontPx =
+    dupTexto.length > 150 ? 5 : dupTexto.length > 95 ? 6 : dupTexto.length > 55 ? 7 : 8;
 
   // ---- Linhas de produto ----
   const linhas = itens
@@ -318,7 +326,7 @@ export function gerarDanfeHtmlNFe(
     </div>
     <div class="sec">
       <div class="rotlbl"><span>DUP</span></div>
-      <div class="body"><div class="row"><div class="cell grow"><div class="k">FATURA / DUPLICATA</div><div class="v">${esc(dupTexto)}</div></div></div></div>
+      <div class="body"><div class="row"><div class="cell grow"><div class="k">FATURA / DUPLICATA</div><div class="v" style="font-size:${dupFontPx}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(dupTexto)}</div></div></div></div>
     </div>
     <div class="sec">
       <div class="rotlbl"><span>IMPOSTO</span></div>

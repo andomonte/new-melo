@@ -1,5 +1,12 @@
 # Guia — Chromium/Puppeteer no servidor melo (padronizar DANFE em HTML)
 
+> ✅ **JÁ IMPLEMENTADO NO CÓDIGO** (não precisa mais editar nada à mão):
+> - O `Dockerfile` já instala o Chromium do Alpine e seta `PUPPETEER_EXECUTABLE_PATH`.
+> - O `renderHtmlToPdf.ts` já resolve o binário automaticamente (`/usr/bin/chromium-browser`
+>   **ou** `/usr/bin/chromium`), então nem o `which` é necessário.
+> - **Ação do técnico:** só **rebuildar a imagem e subir** (`docker compose build --no-cache && docker compose up -d`).
+> O restante do guia abaixo é referência/explicação da causa raiz.
+
 > Objetivo: fazer o `renderHtmlToPdf` (puppeteer) funcionar no servidor Docker do melo,
 > para a DANFE/NFC-e sair **sempre no layout HTML** e podermos aposentar o fallback jsPDF
 > (o "layout antigo"). Nada aqui muda a lógica fiscal — é só ambiente de renderização.

@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
 import { gerarDanfeHtmlNFe } from '@/lib/danfe/gerarDanfeHtml';
+import { extrairTelefone } from '@/utils/extrairTelefone';
 import { gerarNfceHtml } from '@/lib/danfe/gerarNfceHtml';
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
@@ -86,7 +87,12 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
           uf: dadosCompletos.dbclien?.uf,
           cep: dadosCompletos.dbclien?.cep,
           email: dadosCompletos.dbclien?.email,
-          fone: dadosCompletos.dbclien?.contato || dadosCompletos.dbclien?.fone || '',
+          fone: extrairTelefone(
+            dadosCompletos.dbclien?.contato ??
+              dadosCompletos.dbclien?.fone ??
+              dadosCompletos.dbclien?.telefone ??
+              '',
+          ),
           iest: dadosCompletos.dbclien?.iest || '',
           // Data da fatura/venda para exibição de data/hora de saída
           data: dadosCompletos.dbfatura?.data || dadosCompletos.dbvenda?.data || new Date().toISOString(),

@@ -3,6 +3,7 @@
 // Padrão alinhado com detalhes-venda.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { montarTextoDuplicata } from '@/lib/danfe/duplicata';
 
 export default async function handler(
   req: NextApiRequest,
@@ -191,6 +192,31 @@ export default async function handler(
       cfop1: firstRow.cfop1,
       cfop2: firstRow.cfop2,
     };
+
+    // FATURA / DUPLICATA para o preview (mesma regra da emissão): parcelas reais
+    // conforme a forma de pagamento, filtrando órfãos legados por dt_emissao.
+    try {
+      const parc = await client.query(
+        `SELECT r.dt_venc,
+                (SELECT frmfat FROM dbfatura WHERE codfat = $1) AS frmfat
+           FROM dbreceb r
+          WHERE r.cod_fat = $1
+            AND (r.cancel IS NULL OR r.cancel <> 'S')
+            AND (r.nro_doc IS NULL OR substr(r.nro_doc, 1, 2) <> 'GP')
+            AND r.dt_emissao = (
+              SELECT MAX(dt_emissao) FROM dbreceb
+               WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
+            )
+          ORDER BY r.dt_venc`,
+        [codfat],
+      );
+      (dbfatura as any).dupTexto = montarTextoDuplicata(
+        parc.rows[0]?.frmfat,
+        parc.rows.map((r: any) => ({ vencimento: r.dt_venc })),
+      );
+    } catch (e) {
+      console.warn('⚠️ Falha ao montar dupTexto (preview):', e);
+    }
 
     const dbclien = {
       codcli: firstRow.codcli,

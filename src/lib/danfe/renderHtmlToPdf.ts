@@ -3,6 +3,23 @@
 // Usado tanto pelo "Salvar PDF" do preview quanto (futuramente) pela emissão,
 // garantindo a orientação correta — o print do navegador não respeita @page.
 import type { Buffer as NodeBuffer } from 'buffer';
+import { existsSync } from 'fs';
+
+// Resolve o executável do Chromium: prioriza PUPPETEER_EXECUTABLE_PATH; se não
+// existir, tenta os caminhos comuns do Alpine; senão devolve undefined (dev usa
+// o Chromium que o próprio puppeteer baixou).
+function resolveChromium(): string | undefined {
+  const envPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (envPath && existsSync(envPath)) return envPath;
+  for (const p of [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/lib/chromium/chromium',
+  ]) {
+    if (existsSync(p)) return p;
+  }
+  return undefined;
+}
 
 export async function renderHtmlToPdf(
   html: string,
@@ -11,9 +28,17 @@ export async function renderHtmlToPdf(
   const landscape = opts.landscape ?? true; // paisagem = padrão (DANFE)
   // import dinâmico para não pesar bundles que não usam puppeteer
   const puppeteer = (await import('puppeteer')).default;
+  // Em produção (Alpine) usamos o Chromium do sistema; no dev, o baixado pelo puppeteer.
+  const executablePath = resolveChromium();
   const browser = await puppeteer.launch({
-    headless: 'new' as any,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    headless: true,
+    executablePath,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage', // evita crash por /dev/shm pequeno em container
+      '--disable-gpu',
+    ],
   });
   try {
     const page = await browser.newPage();

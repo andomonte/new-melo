@@ -7,6 +7,8 @@ import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assina
 import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
 import { adicionarQRCodeNFCe } from '@/utils/adicionarQRCodeNFCe';
 import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
+import { extrairTelefone } from '@/utils/extrairTelefone';
+import { montarTextoDuplicata } from '@/lib/danfe/duplicata';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
@@ -545,8 +547,33 @@ export default async function handler(
       const numeroNFe = dbfatura.nroform || '1';
       const serieNFe = dbfatura.serie || '1';
 
+      // FATURA / DUPLICATA: parcelas reais conforme a forma de pagamento
+      // (dbreceb, filtrando órfãos legados por dt_emissao mais recente).
+      let dupTextoFatura = '';
+      try {
+        const parcRes = await getPgPool().query(
+          `SELECT dt_venc FROM db_manaus.dbreceb
+            WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
+              AND (nro_doc IS NULL OR substr(nro_doc, 1, 2) <> 'GP')
+              AND dt_emissao = (
+                SELECT MAX(dt_emissao) FROM db_manaus.dbreceb
+                 WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
+              )
+            ORDER BY dt_venc`,
+          [codfat],
+        );
+        dupTextoFatura = montarTextoDuplicata(
+          dbfatura.frmfat,
+          parcRes.rows.map((r: any) => ({ vencimento: r.dt_venc })),
+        );
+      } catch (e) {
+        console.warn('⚠️ Falha ao montar texto da duplicata:', e);
+      }
+
       const faturaParaPdf = {
         ...dbfatura,
+        // Texto do campo FATURA / DUPLICATA (parcelas reais por forma de pgto).
+        dupTexto: dupTextoFatura,
         // DANFE mostra a MESMA natureza do XML (o gerarPreviewNF lê fatura.natureza).
         natureza: naturezaOperacao,
         nomefant: dbclien?.nomefant || dbclien?.nome || '',
@@ -557,7 +584,11 @@ export default async function handler(
         cidade: dbclien?.cidade || '',
         uf: dbclien?.uf || '',
         cep: dbclien?.cep || '',
-        fone: dbclien?.fone || '',
+        // Extrai só o número — dbclien.contato é um objeto (telefones/vendedores/
+        // formas/entrega); sem isso o JSON cru vazaria pro campo FONE do DANFE.
+        fone: extrairTelefone(
+          dbclien?.fone ?? dbclien?.telefone ?? dbclien?.contato ?? '',
+        ),
         iest: dbclien?.iest || '',
       };
 
@@ -590,7 +621,7 @@ export default async function handler(
         console.warn('⚠️ HTML→PDF falhou (emitir-faturado), usando jsPDF (fallback):', errHtml);
         const pdfDoc = isPessoaFisica
           ? await gerarPreviewCupomFiscal(faturaParaPdf, produtos, dbvenda || {}, emitente, 'valida', dadosNFe)
-          : await gerarNotaFiscalValida(faturaParaPdf, produtos, dbvenda || {}, emitente, dadosNFe);
+          : await gerarNotaFiscalValida(faturaParaPdf, produtos, dbvenda || {}, emitente, dadosNFe, { homologacao: isHomologacao });
         pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
       }
 

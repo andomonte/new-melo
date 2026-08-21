@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import https from 'https';
+import { extrairTelefone } from '@/utils/extrairTelefone';
+import { montarTextoDuplicata } from '@/lib/danfe/duplicata';
 import { parseStringPromise } from 'xml2js';
 import { gerarXMLNFe } from '@/components/services/sefazNfe/gerarXml';
 import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assinarXml';
@@ -887,6 +889,37 @@ export default async function handler(
         // Calcular impostos se não estão na fatura
         const impostosCalculados = calcularImpostos(produtosParaPdf);
 
+        // FATURA / DUPLICATA: monta o texto conforme a forma de pagamento e as
+        // parcelas REAIS da fatura (dbreceb, filtrando órfãos legados por
+        // dt_emissao mais recente). Boleto/Carteira → "Parc N. Venc ...".
+        let dupTextoFatura = '';
+        try {
+          const codfatDup = dados?.codfat || dados?.dbfatura?.codfat;
+          if (codfatDup) {
+            const q = await getPgPool().query(
+              `SELECT r.dt_venc,
+                      (SELECT frmfat FROM dbfatura WHERE codfat = $1) AS frmfat
+                 FROM dbreceb r
+                WHERE r.cod_fat = $1
+                  AND (r.cancel IS NULL OR r.cancel <> 'S')
+                  AND (r.nro_doc IS NULL OR substr(r.nro_doc, 1, 2) <> 'GP')
+                  AND r.dt_emissao = (
+                    SELECT MAX(dt_emissao) FROM dbreceb
+                     WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
+                  )
+                ORDER BY r.dt_venc`,
+              [codfatDup],
+            );
+            const frmfatDup = q.rows[0]?.frmfat ?? dados?.dbfatura?.frmfat;
+            dupTextoFatura = montarTextoDuplicata(
+              frmfatDup,
+              q.rows.map((r: any) => ({ vencimento: r.dt_venc })),
+            );
+          }
+        } catch (e) {
+          console.warn('⚠️ Falha ao montar texto da duplicata:', e);
+        }
+
         // Usar os dados corretos do payload
         const faturaParaPdf = {
           ...dados.dbfatura,
@@ -915,11 +948,6 @@ export default async function handler(
             dados.dbfatura?.cidade ||
             '',
           uf: dados.dbclien?.uf || dados.dbfatura?.uf || '',
-          fone:
-            dados.dbclien?.fone ||
-            dados.dbclien?.telefone ||
-            dados.dbfatura?.fone ||
-            '',
           iest:
             dados.dbclien?.iest ||
             dados.dbclien?.inscricaoestadual ||
@@ -929,6 +957,17 @@ export default async function handler(
           ...impostosCalculados,
           // Sobrescrever com valores da fatura se existirem
           ...(dados.dbfatura || {}),
+          // Reaplica o FONE limpo POR ÚLTIMO — o spread de dbfatura acima pode
+          // reintroduzir o objeto contato no fone (foi assim que o JSON vazou).
+          fone: extrairTelefone(
+            dados.dbfatura?.fone ??
+              dados.dbclien?.fone ??
+              dados.dbclien?.telefone ??
+              dados.dbclien?.contato ??
+              '',
+          ),
+          // Texto do campo FATURA / DUPLICATA (parcelas reais por forma de pgto).
+          dupTexto: dupTextoFatura,
         };
 
         console.log('� Impostos calculados:', impostosCalculados);
@@ -965,6 +1004,7 @@ export default async function handler(
             vendaParaPdf,
             empresaParaPdf,
             dadosNFe,
+            { homologacao: ambienteSefaz === 'HOMOLOGACAO' },
           );
           pdfBuffer = Buffer.from(pdfDoc.output('arraybuffer'));
           console.log('✅ PDF (jsPDF fallback) gerado com sucesso');
