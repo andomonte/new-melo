@@ -323,7 +323,11 @@ export function useContasReceber() {
     }
   };
 
-  const cancelarConta = async (cod_receb: string, motivo?: string) => {
+  const cancelarConta = async (
+    cod_receb: string,
+    motivo?: string,
+    usuario?: string,
+  ) => {
     setErro(null);
 
     try {
@@ -332,7 +336,7 @@ export function useContasReceber() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cod_receb, motivo }),
+        body: JSON.stringify({ cod_receb, motivo, usuario }),
       });
 
       if (!response.ok) {

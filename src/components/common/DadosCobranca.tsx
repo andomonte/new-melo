@@ -6,6 +6,7 @@ import { FaMoneyBill } from 'react-icons/fa6';
 import { FileSymlink } from 'lucide-react';
 import { TrashIcon } from '@radix-ui/react-icons';
 import { toast } from 'sonner';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import {
   carregarFeriados,
   getProximoDiaUtil,
@@ -72,6 +73,7 @@ export default function DadosCobranca({
   // Intervalo + quantidade (mesmo mecanismo da tela de faturar V2).
   const [intervaloDias, setIntervaloDias] = useState<string>('30');
   const [qtdParcelas, setQtdParcelas] = useState<string>('');
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
 
   // Carrega feriados (para o ajuste de dia útil de getProximoDiaUtil).
   useEffect(() => {
@@ -95,6 +97,29 @@ export default function DadosCobranca({
     const qtd = parseInt(qtdParcelas) || 0;
     if (prazo <= 0 || qtd <= 0) {
       toast.error('Informe um intervalo e uma quantidade válidos.');
+      return;
+    }
+    // Limita o parcelamento a no máximo 12 meses a contar de hoje. Valida ANTES de gerar
+    // e informa o usuário (a última parcela não pode passar de hoje + 12 meses).
+    const hoje = new Date();
+    const limite12m = new Date(hoje);
+    limite12m.setMonth(limite12m.getMonth() + 12);
+    const ultimoVencRaw = new Date(hoje.getTime());
+    ultimoVencRaw.setDate(ultimoVencRaw.getDate() + prazo * qtd);
+    const ultimoVenc = getProximoDiaUtil(ultimoVencRaw);
+    if (ultimoVenc.getTime() > limite12m.getTime()) {
+      const br = (d: Date) => d.toLocaleDateString('pt-BR');
+      pedirConfirmacao(() => {}, {
+        title: 'Parcelamento acima de 12 meses',
+        message: `Com ${qtd} parcela(s) a cada ${prazo} dia(s), a última venceria em ${br(
+          ultimoVenc,
+        )}, ultrapassando o limite de 12 meses (${br(
+          limite12m,
+        )}). Reduza a quantidade de parcelas ou o intervalo de dias.`,
+        type: 'warning',
+        confirmText: 'Entendi',
+        somenteOk: true,
+      });
       return;
     }
     const total = Number(totalNota) || 0;
@@ -146,6 +171,7 @@ export default function DadosCobranca({
   if (statusVenda.cobranca !== 'S') return null;
 
   return (
+    <>
     <SecaoCollapse
       titulo="DADOS DE COBRANÇA"
       icone={<FaMoneyBill />}
@@ -375,5 +401,7 @@ export default function DadosCobranca({
         </fieldset>
       </div>
     </SecaoCollapse>
+    {ConfirmacaoSalvarModal}
+    </>
   );
 }

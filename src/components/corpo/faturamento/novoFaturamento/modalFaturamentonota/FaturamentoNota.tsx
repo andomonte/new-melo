@@ -14,6 +14,7 @@ import AutocompletePessoa from '@/components/common/AutoCompletePessoa';
 import SecaoCollapse from '@/components/common/SecaoCollapse';
 import AbaProdutos from './AbaProdutos';
 import FaturamentoNotaV2 from '../v2/FaturamentoNotaV2';
+import DadosCobranca from '@/components/common/DadosCobranca';
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { Textarea } from '@/components/ui/textarea';
@@ -286,6 +287,8 @@ export default function FaturamentoNota({
   // Inscrição Estadual usada no recálculo (04/07). Pré-selecionada pela IE da empresa,
   // mas selecionável na tela (como no Delphi). A venda continua fixa em '04'.
   const [inscFat, setInscFat] = useState<'04' | '07'>('04');
+  // Número da Inscrição Estadual que vem da venda (dbvenda.ie_empresa) — exibido na tela.
+  const [ieEmpresaVenda, setIeEmpresaVenda] = useState<string>('');
   // Operações por movimentação (literais EXATOS do fonte Delphi — preservar grafia).
   const OPERACOES_SAIDA = [
     { value: 'VENDA', label: 'Venda' },
@@ -754,6 +757,27 @@ export default function FaturamentoNota({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formCobranca.tipoFatura]);
 
+  // Semeia UMA vez o estado editável `parcelas` com as parcelas SALVAS na venda
+  // (parcelasPagamento). Sem isso a tela mostrava as parcelas da venda mas os handlers
+  // de editar/excluir/adicionar (que mexem em `parcelas`) não as alcançavam → travadas.
+  const parcelasSeededRef = useRef(false);
+  useEffect(() => {
+    if (parcelasSeededRef.current) return;
+    if (parcelasPagamento.length > 0 && parcelas.length === 0) {
+      parcelasSeededRef.current = true;
+      setParcelas(
+        parcelasPagamento.map((p: any) => {
+          const v = p.vencimento ?? p.data;
+          return {
+            dias: Number(p.dias ?? p.dia) || 0,
+            vencimento: v ? new Date(v).toISOString() : new Date().toISOString(),
+          };
+        }),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parcelasPagamento]);
+
   // Usar dados calculados da API se disponíveis, senão usar cálculos hardcoded como fallback
   const dadosResumoFinanceiro = vendaData?.resumoFinanceiro;
 
@@ -779,7 +803,7 @@ export default function FaturamentoNota({
   const previewParcelas = useMemo<ParcelaPreview[]>(() => {
     // Usa parcelasPagamento (do hook) se disponível, senão usa parcelas (estado local)
     const parcelasParaUsar =
-      parcelasPagamento.length > 0 ? parcelasPagamento : parcelas;
+      parcelas /* semeado com as parcelas da venda; ver parcelasSeededRef */;
 
     if (parcelasParaUsar.length === 0) return [];
 
@@ -788,7 +812,7 @@ export default function FaturamentoNota({
       parcelasParaUsar.length > 0 ? valorLiquido / parcelasParaUsar.length : 0;
     const parcelasCalculadas = parcelasParaUsar.map((p, index) => {
       // Suporta ambos os formatos: ParcelaPagamento (dia) e parcela local (dias)
-      const diasPrazo = 'dia' in p ? p.dia : 'dias' in p ? p.dias : 0;
+      const diasPrazo = Number((p as any).dias ?? (p as any).dia ?? 0);
 
       return {
         documento: `NF${nroformulario}${String.fromCharCode(65 + index)}`,
@@ -917,15 +941,8 @@ export default function FaturamentoNota({
 
     const combinedParcelas = parcelas
       .map((p, idx) => ({ ...p, isSaved: false, originalIndex: idx }))
-      .concat(
-        parcelasPagamento.map((p) => ({
-          ...p,
-          isSaved: true,
-          dias: p.dia,
-          vencimento: p.data.split('T')[0],
-          originalIndex: -1,
-        })),
-      )
+      // `parcelas` já contém as parcelas da venda (semeadas) + as adicionadas/editadas;
+      // não concatena parcelasPagamento (evitaria duplicar e usar as antigas/não editadas).
       .sort(
         (a, b) =>
           new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime(),
@@ -1079,15 +1096,8 @@ export default function FaturamentoNota({
         isSaved: false,
         originalIndex: idx,
       }))
-      .concat(
-        parcelasPagamento.map((p) => ({
-          ...p,
-          isSaved: true,
-          dias: p.dia,
-          vencimento: p.data.split('T')[0],
-          originalIndex: -1,
-        })),
-      )
+      // `parcelas` já contém as parcelas da venda (semeadas) + as adicionadas/editadas;
+      // não concatena parcelasPagamento (evitaria duplicar e usar as antigas/não editadas).
       .sort(
         (a, b) =>
           new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime(),
@@ -2920,7 +2930,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
   const handleGerarPreviewBoleto = () => {
     // Verifica se há parcelas no hook ou no estado local
     const parcelasParaGerar =
-      parcelasPagamento.length > 0 ? parcelasPagamento : parcelas;
+      parcelas /* semeado com as parcelas da venda; ver parcelasSeededRef */;
 
     if (parcelasParaGerar.length === 0)
       return toast.error('Adicione parcelas para gerar o boleto.');
@@ -3057,6 +3067,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
               const ieEmpresa = primeiroItem.dbvenda?.ie_empresa;
               if (ieEmpresa) {
                 // Se começa com "07", seleciona 'S' (IE 07), senão mantém 'N' (IE 04)
+                setIeEmpresaVenda(String(ieEmpresa));
                 const insc07Value = ieEmpresa.toString().trim().startsWith('07') ? 'S' : 'N';
                 setStatusVenda(prev => ({ ...prev, insc07: insc07Value }));
                 setInscFat(insc07Value === 'S' ? '07' : '04');
@@ -3601,6 +3612,29 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
     const prazo = parseInt(intervaloDias) || 0;
     const qtd = parseInt(qtdParcelas) || 0;
     if (prazo <= 0 || qtd <= 0) return;
+    // Limita o parcelamento a no máximo 12 meses a contar de hoje. Valida ANTES de gerar
+    // e avisa o usuário (a última parcela não pode passar de hoje + 12 meses).
+    const hojeLim = new Date();
+    const limite12m = new Date(hojeLim);
+    limite12m.setMonth(limite12m.getMonth() + 12);
+    const ultimoVencRaw = new Date(hojeLim.getTime());
+    ultimoVencRaw.setDate(ultimoVencRaw.getDate() + prazo * qtd);
+    const ultimoVenc = getProximoDiaUtil(ultimoVencRaw);
+    if (ultimoVenc.getTime() > limite12m.getTime()) {
+      const br = (d: Date) => d.toLocaleDateString('pt-BR');
+      pedirConfirmacao(() => {}, {
+        title: 'Parcelamento acima de 12 meses',
+        message: `Com ${qtd} parcela(s) a cada ${prazo} dia(s), a última venceria em ${br(
+          ultimoVenc,
+        )}, ultrapassando o limite de 12 meses (${br(
+          limite12m,
+        )}). Reduza a quantidade de parcelas ou o intervalo de dias.`,
+        type: 'warning',
+        confirmText: 'Entendi',
+        somenteOk: true,
+      });
+      return;
+    }
     const novas: { dias: number; vencimento: string }[] = [];
     const base = new Date();
     let acum = 0;
@@ -3728,11 +3762,21 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
     }
   };
 
+  // Número da IE que vem da venda (dbvenda.ie_empresa) — resolvido no RENDER (a tela
+  // abre antes da emissão, então não dá pra depender do estado setado no emitir).
+  const ieEmpresaDisplay =
+    (Array.isArray(dadosVenda)
+      ? dadosVenda[0]?.ie_empresa
+      : dadosVenda?.ie_empresa) ||
+    vendaData?.dbvenda?.ie_empresa ||
+    ieEmpresaVenda ||
+    '';
+
   const ctxV2 = {
     f: {
       naturezaOperacao, cfop, tipoMovimentacao, operacaoFiscal, origem,
       zerarIpi, zerarIcms, zerarSubstituicao, descontoSuframa, impostoAntecipado, mvaAntecipado,
-      inscFat, nfeAmbiente, nfeFinalidade, nfeFormaEmissao, infoComplementares, informarNoCorpoNF,
+      inscFat, inscEstadualNumero: ieEmpresaDisplay, nfeAmbiente, nfeFinalidade, nfeFormaEmissao, infoComplementares, informarNoCorpoNF,
       vendedor, transportadora, pedido, observacoes, modalidadeTransporte, frete,
       especie, marca, numero, pesoBruto, pesoLiquido, quantidade,
       tipodoc: statusVenda.tipodoc, cobranca: statusVenda.cobranca,
@@ -3778,7 +3822,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       parcelas: (() => {
         // Exibe as parcelas SALVAS na venda (dbprazo_pagamento, via hook) quando existirem;
         // senão as geradas localmente. Normaliza dia/data → dias/vencimento.
-        const lista = (parcelasPagamento.length > 0 ? parcelasPagamento : parcelas) || [];
+        const lista = (parcelas /* semeado com as parcelas da venda; ver parcelasSeededRef */) || [];
         const n = lista.length;
         const liquido = getTotalLiquidoCobranca(); // total - entrada
         // base truncada a 2 casas; a ÚLTIMA parcela absorve os centavos p/ somar exato.
@@ -3828,6 +3872,62 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
           onClose={() => setIsMensagemModalOpen(false)}
           onSave={handleSalvarNovaMensagem}
         />
+        {renderModalEmissao()}
+        {ConfirmacaoSalvarModal}
+      </>
+    );
+  }
+
+  // AGRUPAMENTO: mostra só o cabeçalho com as faturas + a parte de COBRANÇA (reusa o
+  // DadosCobranca, o mesmo do "Ações → Gerar Cobrança"). Sem os campos fiscais da NF.
+  if (agrupandoFaturas) {
+    const totalGrupo = faturasParaExibir.reduce(
+      (s: number, f: any) => s + Number(f.totalnf || f.total || f.totalprod || 0),
+      0,
+    );
+    return (
+      <>
+        <div className="flex flex-col h-full bg-white dark:bg-zinc-900 text-black dark:text-white">
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 flex-shrink-0">
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-[#347ab6] truncate">
+                FATURAS AGRUPADAS · {faturasParaExibir.length} fatura(s)
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-300 truncate">
+                Faturas: {codigosFaturas} · Cliente:{' '}
+                {cliente?.nome || faturasParaExibir[0]?.cliente?.nome || '—'}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => handleProcessoCompleto(faturasAgrupadas)}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-semibold"
+              >
+                Gerar Cobrança
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 text-gray-500 hover:text-red-500"
+                title="Fechar"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-4">
+            <DadosCobranca
+              statusVenda={{ cobranca: 'S' }}
+              bancos={bancos}
+              formCobranca={formCobranca as any}
+              setFormCobranca={setFormCobranca as any}
+              parcelas={parcelas as any}
+              setParcelas={setParcelas as any}
+              opcoesTipoFatura={opcoesTipoFatura}
+              totalNota={totalGrupo || totalNF}
+              padraoAberto
+            />
+          </div>
+        </div>
         {renderModalEmissao()}
         {ConfirmacaoSalvarModal}
       </>

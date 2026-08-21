@@ -197,6 +197,9 @@ export default function ConsultaFaturasPage() {
       filtrosLimpos.push({ campo: 'cobranca', tipo: 'igual', valor: 'S' });
     } else if (filtroCobrancaParam === 'sem') {
       filtrosLimpos.push({ campo: 'cobranca', tipo: 'igual', valor: 'N' });
+      // Faturas AGRUPADAS têm cobrança (a agrupada) — não são "sem cobrança".
+      // A classificação prioriza Agrupado sobre Sem cobrança; exclui via codgp NULL.
+      filtrosLimpos.push({ campo: 'grupo_pagamento', tipo: 'nulo', valor: '' });
     }
 
     console.log('🔍 Frontend - Enviando filtros para API:', filtrosLimpos);

@@ -166,8 +166,8 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                     <select value={f.tipodoc} onChange={(e) => set('tipodoc', e.target.value)} disabled>
                       <option value="N">Nota fiscal</option><option value="F">FAG</option></select></div>
                   <div className="fat-c3"><label>Insc. estadual (AM)</label>
-                    <select value={f.inscFat} onChange={(e) => set('inscFat', e.target.value)} disabled title="Definida pela venda/empresa">
-                      <option value="04">Inscrição estadual 04</option><option value="07">Inscrição estadual 07</option></select></div>
+                    <input type="text" readOnly title="Definida pela venda/empresa"
+                      value={f.inscEstadualNumero || (f.inscFat === '07' ? 'Inscrição estadual 07' : 'Inscrição estadual 04')} /></div>
                   <div className="fat-c3"><label>Tipo de movimentação</label>
                     <select value={f.tipoMovimentacao} onChange={(e) => set('tipoMovimentacao', e.target.value)}>
                       <option value="SAIDA">Saída</option><option value="ENTRADA">Entrada</option></select></div>
@@ -222,13 +222,13 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                       <div className="fat-rd">
                         <label><input type="radio" name="d" checked={(f.descRadio ?? 'N') === 'N'} onChange={() => set('descRadio', 'N')} /> Não</label>
                         <label><input type="radio" name="d" checked={f.descRadio === 'S'} onChange={() => set('descRadio', 'S')} /> Sim</label></div></div>
-                    <div className="fat-c6"><label>Desconto %</label><input type="text" value={f.percDesconto ?? ''} onChange={(e) => set('percDesconto', e.target.value)} /></div>
+                    <div className="fat-c6"><label>Desconto %</label><input type="text" value={f.descRadio === 'S' ? (f.percDesconto ?? '') : ''} onChange={(e) => set('percDesconto', e.target.value)} disabled={f.descRadio !== 'S'} /></div>
                     <div className="fat-c6"><label>Desconto R$</label><input type="text" value={typeof f.desconto === 'number' ? money(f.desconto) : (f.desconto ?? '0,00')} readOnly /></div>
                     <div className="fat-c12"><label>Acréscimo</label>
                       <div className="fat-rd">
                         <label><input type="radio" name="a" checked={(f.acresRadio ?? 'N') === 'N'} onChange={() => set('acresRadio', 'N')} /> Não</label>
                         <label><input type="radio" name="a" checked={f.acresRadio === 'S'} onChange={() => set('acresRadio', 'S')} /> Sim</label></div></div>
-                    <div className="fat-c6"><label>Acréscimo %</label><input type="text" value={f.percAcrescimo ?? ''} onChange={(e) => set('percAcrescimo', e.target.value)} /></div>
+                    <div className="fat-c6"><label>Acréscimo %</label><input type="text" value={f.acresRadio === 'S' ? (f.percAcrescimo ?? '') : ''} onChange={(e) => set('percAcrescimo', e.target.value)} disabled={f.acresRadio !== 'S'} /></div>
                     <div className="fat-c6"><label>Acréscimo R$</label><input type="text" value={typeof f.acrescimo === 'number' ? money(f.acrescimo) : (f.acrescimo ?? '0,00')} readOnly /></div>
                   </div>
                 </div>

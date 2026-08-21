@@ -11,11 +11,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await pool.connect();
 
   try {
-    const { cod_receb, motivo } = req.body;
+    const { cod_receb, motivo, usuario } = req.body;
 
     if (!cod_receb) {
       return res.status(400).json({ erro: 'cod_receb é obrigatório' });
     }
+
+    // Motivo obrigatório para o histórico (registro na dbacao — quem/quando/motivo).
+    const motivoTxt = String(motivo ?? '').trim();
+    if (motivoTxt.length < 5) {
+      return res
+        .status(400)
+        .json({ erro: 'Informe o motivo do cancelamento (mínimo 5 caracteres).' });
+    }
+    const usuarioTxt = String(usuario ?? '').trim() || 'DESCONHECIDO';
 
     // Validar se o título existe e não está já cancelado
     const verificarQuery = `
@@ -93,8 +102,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await client.query(historicoQuery, [
       cod_receb,
-      motivo || 'Cancelamento via sistema'
+      motivoTxt
     ]);
+
+    // Histórico de ação do usuário — espelha USUARIO.Inc_Acao_Usr do Delphi
+    // (Insert Into DbAcao(codusr,acao,tabela,obs,data)). Registra QUEM cancelou,
+    // QUANDO e o MOTIVO (obs). Mesmo padrão do cancelar cobrança.
+    await client.query(
+      `INSERT INTO db_manaus.dbacao (codusr, acao, tabela, obs, data)
+       VALUES ($1, 'CANCEL.TITULO', 'DBRECEB', $2, now())`,
+      [
+        usuarioTxt.substring(0, 60),
+        `COD:${cod_receb} | MOTIVO: ${motivoTxt}`.substring(0, 255),
+      ],
+    );
 
     await client.query('COMMIT');
 

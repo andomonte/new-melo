@@ -1,6 +1,7 @@
 // Handler para emissão de nota fiscal
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useContext } from 'react';
+import { AuthContext } from '@/contexts/authContexts';
 import DataTable from '@/components/common/DataTablePadrao';
 import { Meta } from '@/data/common/meta';
 import axios from 'axios';
@@ -102,6 +103,8 @@ export default function DataTableFaturasAvancado({
   const [faturasSelecionadas, setFaturasSelecionadas] = useState<string[]>([]);
   // Modal de confirmação padrão (substitui window.confirm) — usado no cancelar cobrança.
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  // Usuário logado — para registrar QUEM cancelou a cobrança (histórico dbacao).
+  const { user } = useContext(AuthContext) as any;
   const getVendedorSelecionado = () => {
     if (faturasSelecionadas.length === 0) return null;
     const fatura = faturas.find(f => f.codfat === faturasSelecionadas[0]);
@@ -128,6 +131,34 @@ export default function DataTableFaturasAvancado({
     }
   };
   
+  // Desagrupar uma GP (regras do Delphi AGRUPAMENTO.GP_DESAGRUPAR): libera as faturas
+  // (codgp=NULL, agp='N'), cancela a cobrança agrupada e remove a fatura-GP sintética.
+  const handleDesagrupar = (codgp: any) => {
+    pedirConfirmacao(
+      async () => {
+        const tId = toast.loading('Desagrupando GP...');
+        try {
+          const { data } = await axios.post('/api/faturamento/desagrupar-grupo', { codgp });
+          toast.success(
+            `GP ${codgp} desagrupada — ${data.faturasDesagrupadas} fatura(s) liberada(s).`,
+            { id: tId },
+          );
+          setFaturasSelecionadas([]);
+          onAtualizarLista?.();
+        } catch (err: any) {
+          toast.error(err?.response?.data?.erro || 'Erro ao desagrupar a GP.', { id: tId });
+        }
+      },
+      {
+        title: 'Desagrupar GP',
+        message: `Deseja realmente DESAGRUPAR a GP ${codgp}? As faturas serão liberadas e a cobrança agrupada, cancelada.`,
+        type: 'warning',
+        confirmText: 'Sim, desagrupar',
+        cancelText: 'Cancelar',
+      },
+    );
+  };
+
   const handleCriarGrupoPagamento = async () => {
     if (faturasSelecionadas.length === 0) {
       toast.info('Selecione pelo menos uma fatura para criar um grupo de pagamento.');
@@ -657,29 +688,74 @@ export default function DataTableFaturasAvancado({
     }
   };
 
-  // Executa de fato o cancelamento (após confirmação no modal padrão).
-  const executarCancelarCobranca = async (fatura: any) => {
+  // Modal de cancelamento de COBRANÇA (com motivo obrigatório p/ histórico dbacao).
+  const [modalCancelCobrancaAberto, setModalCancelCobrancaAberto] = useState(false);
+  const [faturaCancelCobranca, setFaturaCancelCobranca] = useState<any | null>(null);
+  const [motivoCancelCobranca, setMotivoCancelCobranca] = useState('');
+  const [isCancelandoCobranca, setIsCancelandoCobranca] = useState(false);
+
+  // Abre o modal do motivo (não cancela direto — registra QUEM/QUANDO/MOTIVO).
+  const handleCancelarCobranca = (fatura: any) => {
+    setFaturaCancelCobranca(fatura);
+    setMotivoCancelCobranca('');
+    setModalCancelCobrancaAberto(true);
+  };
+
+  // Executa de fato o cancelamento (após o motivo ser informado no modal).
+  const executarCancelarCobranca = async () => {
+    if (!faturaCancelCobranca) return;
+    if (motivoCancelCobranca.trim().length < 5) {
+      toast.error('Informe o motivo do cancelamento (mínimo 5 caracteres).');
+      return;
+    }
+    setIsCancelandoCobranca(true);
     try {
       await axios.post('/api/faturamento/cancelar-cobranca', {
-        codfat: fatura.codfat,
+        codfat: faturaCancelCobranca.codfat,
+        usuario: user?.usuario || user?.codusr || '',
+        motivo: motivoCancelCobranca.trim(),
       });
       toast.success('Cobrança cancelada com sucesso.');
+      setModalCancelCobrancaAberto(false);
       onAtualizarLista?.();
     } catch (err: any) {
       // Surfacar o motivo real (ex.: 409 "já possui parcela(s) paga(s)").
       const msg = err?.response?.data?.error || 'Erro ao cancelar cobrança.';
       toast.error(msg);
       console.error(err);
+    } finally {
+      setIsCancelandoCobranca(false);
     }
   };
 
-  // Abre o modal de confirmação estilizado (padrão do projeto) antes de cancelar.
-  const handleCancelarCobranca = (fatura: any) => {
-    pedirConfirmacao(() => executarCancelarCobranca(fatura), {
-      title: 'Cancelar cobrança',
-      message: `Deseja realmente cancelar a cobrança da fatura ${fatura.codfat}?`,
+  // Fechar Fatura — espelha o Fechar_Venda do Delphi (venda → status 'F').
+  // Abre alerta de confirmação estilizado; se confirmar, chama o endpoint.
+  const executarFecharFatura = async (fatura: any) => {
+    try {
+      const { data } = await axios.post('/api/faturamento/fechar-fatura', {
+        codfat: fatura.codfat,
+        usuario: user?.usuario || user?.codusr || '',
+      });
+      toast.success(
+        `Fatura fechada com sucesso. Venda(s) marcada(s) como faturada (status 'F').`,
+      );
+      onAtualizarLista?.();
+      return data;
+    } catch (err: any) {
+      const msg = err?.response?.data?.erro || 'Erro ao fechar a fatura.';
+      toast.error(msg);
+      console.error(err);
+    }
+  };
+
+  const handleFecharFatura = (fatura: any) => {
+    pedirConfirmacao(() => executarFecharFatura(fatura), {
+      title: 'Fechar fatura',
+      message:
+        `Deseja realmente fechar a fatura ${fatura.codfat}? ` +
+        `A(s) venda(s) vinculada(s) será(ão) marcada(s) como faturada (status 'F').`,
       type: 'warning',
-      confirmText: 'Sim, cancelar',
+      confirmText: 'Sim, fechar',
       cancelText: 'Não',
     });
   };
@@ -1143,10 +1219,25 @@ const handleCancelarNota = async () => {
                 console.log('✅ Fatura tem cobrança mas sem pagamentos, pode ser agrupada');
               }
               console.log('✅ Adicionando fatura à seleção');
-              setFaturasSelecionadas(prev => [...prev, f.codfat]);
+              setFaturasSelecionadas(prev => {
+                // Fatura de um grupo (codgp) → seleciona TODAS as faturas do mesmo grupo.
+                const doGrupo = f.codgp
+                  ? faturas.filter((x: any) => x.codgp && String(x.codgp) === String(f.codgp)).map((x: any) => x.codfat)
+                  : [f.codfat];
+                return Array.from(new Set([...prev, ...doGrupo]));
+              });
             } else {
               console.log('❌ Removendo fatura da seleção');
-              setFaturasSelecionadas(prev => prev.filter(cod => cod !== f.codfat));
+              setFaturasSelecionadas(prev => {
+                // Desmarcar uma do grupo remove todas do mesmo grupo.
+                if (f.codgp) {
+                  const doGrupo = new Set(
+                    faturas.filter((x: any) => x.codgp && String(x.codgp) === String(f.codgp)).map((x: any) => x.codfat),
+                  );
+                  return prev.filter((cod) => !doGrupo.has(cod));
+                }
+                return prev.filter((cod) => cod !== f.codfat);
+              });
             }
           }}
         />
@@ -1171,6 +1262,7 @@ const handleCancelarNota = async () => {
         }}
         onEditarClick={() => setFaturaParaEdicao(f)}
         onCancelarCobranca={() => handleCancelarCobranca(f)}
+        onFecharFatura={() => handleFecharFatura(f)}
         onEmailDanfeClick={() => setEmaildanfeModalAberto(f)}
         onenviarCobrancaClick={() => setCobrancaEnviada(f)}
         onVisualizarBoletosClick={() => handleVisualizarBoletos(f)}
@@ -1277,15 +1369,36 @@ const handleCancelarNota = async () => {
         {/* Botão para criar grupo de pagamento */}
         {faturasSelecionadas.length > 0 && (
           <div className="mb-2 p-2 bg-blue-100 dark:bg-blue-900 rounded flex items-center justify-between">
-            <span className="text-blue-800 dark:text-blue-200">
-              {faturasSelecionadas.length} fatura(s) selecionada(s) para agrupamento
-            </span>
-            <button
-              onClick={handleCriarGrupoPagamento}
-              className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-            >
-             Gerar Cobrança
-            </button>
+            {(() => {
+              // GP das faturas selecionadas (se alguma vier de um grupo).
+              const selGp = faturas.find(
+                (x: any) => faturasSelecionadas.includes(x.codfat) && x.codgp,
+              )?.codgp;
+              return (
+                <>
+                  <span className="text-blue-800 dark:text-blue-200">
+                    {selGp
+                      ? `${faturasSelecionadas.length} fatura(s) do grupo GP ${selGp} selecionada(s)`
+                      : `${faturasSelecionadas.length} fatura(s) selecionada(s) para agrupamento`}
+                  </span>
+                  {selGp ? (
+                    <button
+                      onClick={() => handleDesagrupar(selGp)}
+                      className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+                    >
+                      Desagrupar GP {selGp}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCriarGrupoPagamento}
+                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                    >
+                      Gerar Cobrança
+                    </button>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
   
@@ -1415,6 +1528,70 @@ const handleCancelarNota = async () => {
     </div>
   </DialogContent>
 </Dialog>
+
+        {/* Modal de Cancelamento de COBRANÇA (motivo obrigatório → histórico dbacao) */}
+        <Dialog
+          open={modalCancelCobrancaAberto}
+          onOpenChange={setModalCancelCobrancaAberto}
+        >
+          <DialogContent className="max-w-md w-full bg-white dark:bg-zinc-900">
+            <DialogHeader>
+              <DialogTitle>Cancelar Cobrança</DialogTitle>
+              <DialogDescription>
+                Informe o motivo do cancelamento da cobrança da fatura{' '}
+                {faturaCancelCobranca?.codfat}. Será registrado quem cancelou,
+                data/hora e o motivo.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="w-full">
+              <textarea
+                className="w-full min-h-[80px] border rounded p-2 text-black dark:text-white bg-gray-100 dark:bg-zinc-800 disabled:opacity-70"
+                value={motivoCancelCobranca}
+                onChange={(e) => setMotivoCancelCobranca(e.target.value)}
+                placeholder="Ex.: Cliente desistiu da compra / erro na venda..."
+                autoFocus
+                disabled={isCancelandoCobranca}
+                maxLength={200}
+              />
+              <p
+                className={`mt-1 text-xs text-right ${
+                  motivoCancelCobranca.trim().length < 5
+                    ? 'text-red-500 font-semibold'
+                    : 'text-green-600'
+                }`}
+              >
+                {motivoCancelCobranca.trim().length} / 5 caracteres mínimos
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-300 dark:bg-zinc-700 text-black dark:text-white hover:bg-gray-400 dark:hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setModalCancelCobrancaAberto(false)}
+                disabled={isCancelandoCobranca}
+              >
+                Fechar
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 flex items-center justify-center min-w-[160px] disabled:cursor-not-allowed disabled:bg-red-800"
+                onClick={executarCancelarCobranca}
+                disabled={
+                  isCancelandoCobranca || motivoCancelCobranca.trim().length < 5
+                }
+              >
+                {isCancelandoCobranca ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  'Cancelar Cobrança'
+                )}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Carta de Correção Eletrônica (CC-e) */}
         <Dialog open={modalCartaCorrecaoAberto} onOpenChange={setModalCartaCorrecaoAberto}>

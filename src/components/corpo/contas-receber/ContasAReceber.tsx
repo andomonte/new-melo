@@ -740,7 +740,11 @@ export default function ContasAReceber() {
     if (!contaSelecionada) return;
 
     try {
-      await cancelarConta(contaSelecionada.cod_receb, motivo);
+      await cancelarConta(
+        contaSelecionada.cod_receb,
+        motivo,
+        user?.usuario || user?.codusr || '',
+      );
       toast.success('Título cancelado com sucesso!');
       setModalCancelarAberto(false);
       

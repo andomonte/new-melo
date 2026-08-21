@@ -16,6 +16,7 @@ import {
   Mail,
   MailCheck,
   List,
+  Lock,
 } from 'lucide-react';
 //veroficar
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
   onCobrancaClick: () => void;
   onEditarClick: () => void;
   onCancelarCobranca: () => void;
+  onFecharFatura: () => void;
   onEmailDanfeClick: () => void;
   onenviarCobrancaClick: () => void;
   onVisualizarRejeicaoClick: () => void;
@@ -44,6 +46,7 @@ export default function DropdownFatura({
   onCobrancaClick,
   onEditarClick,
   onCancelarCobranca,
+  onFecharFatura,
   onEmailDanfeClick,
   onenviarCobrancaClick,
   onVisualizarRejeicaoClick,
@@ -206,6 +209,28 @@ export default function DropdownFatura({
               : 'text-gray-400'
           }`} />
           Cancelar Cobrança
+        </DropdownMenuItem>
+
+        <DropdownMenuItem
+          onClick={onFecharFatura}
+          disabled={fatura.cancel === 'S'}
+          className={`group flex items-center gap-2 px-2 py-2 transition ${
+            fatura.cancel !== 'S'
+              ? 'hover:bg-emerald-600 hover:text-white'
+              : 'opacity-50 cursor-not-allowed'
+          }`}
+          title={
+            fatura.cancel === 'S'
+              ? 'Fatura cancelada não pode ser fechada'
+              : "Fechar a fatura (marca a venda como faturada, status 'F')"
+          }
+        >
+          <Lock className={`size-4 transition ${
+            fatura.cancel !== 'S'
+              ? 'text-emerald-600 group-hover:text-white'
+              : 'text-gray-400'
+          }`} />
+          Fechar Fatura
         </DropdownMenuItem>
 
         <DropdownMenuItem

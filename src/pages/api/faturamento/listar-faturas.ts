@@ -327,7 +327,10 @@ export default async function listarFaturas(
           SELECT 1 FROM db_manaus.dbreceb r
           WHERE r.cod_fat = f.codfat
             AND (r.cancel IS NULL OR r.cancel <> 'S')
-            AND (r.dt_pgto IS NOT NULL OR (r.valor_pgto IS NOT NULL AND r.valor_pgto > 0))
+            -- Pago de verdade = rec='S' OU dt_pgto preenchido.
+            -- NÃO usar valor_pgto: em títulos em aberto ele guarda o valor
+            -- projetado da parcela (não o valor pago) → falso positivo.
+            AND (r.rec = 'S' OR r.dt_pgto IS NOT NULL)
         ) AS tem_pagamento,
         c.nome AS cliente_nome,
         c.banco AS cliente_banco,
