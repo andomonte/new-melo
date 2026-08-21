@@ -61,9 +61,18 @@ export async function inserirCobranca(
       `O tipo de fatura '${tipofat}' não é válido ou não foi mapeado.`,
     );
   }
-  const codBancoNumerico = parseInt(String(banco), 10);
+  let codBancoNumerico = parseInt(String(banco), 10);
   if (isNaN(codBancoNumerico)) {
-    throw new Error('ID do banco inválido.');
+    // Fallback (mesma regra da UI: banco do cliente, senão MELO='5'): às vezes o
+    // banco não chega do front por corrida de carregamento (opcoes-cobranca ainda
+    // não hidratou formCobranca.banco). Resolve pelo cliente para não derrubar o
+    // faturamento inteiro — dbbanco_cobranca usa códigos 1..9 ('5' = MELO).
+    const rc = await client.query(
+      `SELECT banco FROM dbclien WHERE codcli = $1`,
+      [codcli],
+    );
+    codBancoNumerico = parseInt(String(rc.rows[0]?.banco ?? ''), 10);
+    if (isNaN(codBancoNumerico)) codBancoNumerico = 5; // MELO (padrão da UI)
   }
   const codBancoFormatado = String(codBancoNumerico).padStart(4, '0');
 

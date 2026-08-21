@@ -434,7 +434,24 @@ export default async function handler(
       return s === '' ? null : s;
     };
     const codtranspFinal = nzFk(transportadora);
-    const codvendFinal = nzFk(vendedor);
+
+    // codvend: a tabela dbvend usa código ZERO-PREENCHIDO com 5 dígitos ("00280"),
+    // mas a venda às vezes traz sem padding ("280") → viola a FK
+    // dbfatura.codvend -> dbvend(codvend) (sys_c0015141). Normaliza para a forma
+    // que realmente existir em dbvend; se nenhuma existir, grava NULL (FK aceita)
+    // em vez de derrubar o faturamento.
+    let codvendFinal = nzFk(vendedor);
+    if (codvendFinal) {
+      const paddedVend = /^\d+$/.test(codvendFinal)
+        ? codvendFinal.padStart(5, '0')
+        : codvendFinal;
+      const vendCheck = await client.query(
+        `SELECT codvend FROM dbvend WHERE codvend = $1 OR codvend = $2
+          ORDER BY (codvend = $1) DESC LIMIT 1`,
+        [codvendFinal, paddedVend],
+      );
+      codvendFinal = vendCheck.rows[0]?.codvend ?? null;
+    }
 
     // 🔧 CORREÇÃO CRÍTICA: Adicionar série='2' ao criar fatura
     // Natureza da Operação (cabeçalho) = derivada da OPERAÇÃO (tipo_operacao),
