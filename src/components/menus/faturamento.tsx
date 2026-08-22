@@ -47,7 +47,7 @@ const menus = [
         icon: Barcode,
         subItems: [],
       }
-      
+
     ],
   },
 ];

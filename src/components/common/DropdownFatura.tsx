@@ -17,6 +17,9 @@ import {
   MailCheck,
   List,
   Lock,
+  History,
+  Ban,
+  RefreshCw,
 } from 'lucide-react';
 //veroficar
 interface Props {
@@ -25,14 +28,17 @@ interface Props {
   onCobrancaClick: () => void;
   onEditarClick: () => void;
   onCancelarCobranca: () => void;
+  onAlterarCobranca?: () => void;
   onFecharFatura: () => void;
   onEmailDanfeClick: () => void;
   onenviarCobrancaClick: () => void;
   onVisualizarRejeicaoClick: () => void;
   onCancelarNotaClick: () => void;
+  onCancelarFaturaClick?: () => void;
   onEmitirNotaClick: () => void;
   onVisualizarBoletosClick: () => void;
   onVerProdutosClick?: () => void;
+  onEventoClick?: () => void;
   onCartaCorrecaoClick?: () => void;
   onTermoBateriasClick?: () => void;
   onEstornoClick?: () => void;
@@ -46,14 +52,17 @@ export default function DropdownFatura({
   onCobrancaClick,
   onEditarClick,
   onCancelarCobranca,
+  onAlterarCobranca,
   onFecharFatura,
   onEmailDanfeClick,
   onenviarCobrancaClick,
   onVisualizarRejeicaoClick,
   onCancelarNotaClick,
+  onCancelarFaturaClick,
   onEmitirNotaClick,
   onVisualizarBoletosClick,
   onVerProdutosClick,
+  onEventoClick,
   onCartaCorrecaoClick,
   onTermoBateriasClick,
   onEstornoClick,
@@ -120,6 +129,16 @@ export default function DropdownFatura({
           Vizualizar Nota
         </DropdownMenuItem>
 
+        {onEventoClick && (
+          <DropdownMenuItem
+            onClick={onEventoClick}
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-indigo-600 hover:text-white transition"
+          >
+            <History className="size-4 text-indigo-600 group-hover:text-white transition" />
+            Evento
+          </DropdownMenuItem>
+        )}
+
         {onVerProdutosClick && (
           <DropdownMenuItem
             onClick={onVerProdutosClick}
@@ -147,6 +166,26 @@ export default function DropdownFatura({
           <FileText className="size-4 text-red-700 group-hover:text-white transition" />
           Cancelar Nota Fiscal
         </DropdownMenuItem>
+
+        {onCancelarFaturaClick && (
+          <DropdownMenuItem
+            onClick={onCancelarFaturaClick}
+            disabled={fatura.cancel === 'S'}
+            className={`group flex items-center gap-2 px-2 py-2 transition ${
+              fatura.cancel !== 'S'
+                ? 'hover:bg-red-800 hover:text-white'
+                : 'opacity-50 cursor-not-allowed'
+            }`}
+            title="Cancelar o faturamento (NF-e + fatura + contas a receber + venda)"
+          >
+            <Ban className={`size-4 transition ${
+              fatura.cancel !== 'S'
+                ? 'text-red-800 group-hover:text-white'
+                : 'text-gray-400'
+            }`} />
+            Cancelar Fatura
+          </DropdownMenuItem>
+        )}
 
         {onCartaCorrecaoClick && (
           <DropdownMenuItem
@@ -210,6 +249,43 @@ export default function DropdownFatura({
           }`} />
           Cancelar Cobrança
         </DropdownMenuItem>
+
+        {onAlterarCobranca && (() => {
+          // Fiel ao Delphi + salvaguarda: habilita só com cobrança, sem parcela paga,
+          // NÃO agrupada (membro de GP) e não cancelada/denegada.
+          const podeAlterar =
+            fatura.cobranca === 'S' &&
+            fatura.tem_pagamento !== true &&
+            !fatura.codgp &&
+            fatura.agp !== 'S' &&
+            fatura.cancel !== 'S' &&
+            fatura.denegada !== 'S';
+          return (
+            <DropdownMenuItem
+              onClick={onAlterarCobranca}
+              disabled={!podeAlterar}
+              className={`group flex items-center gap-2 px-2 py-2 transition ${
+                podeAlterar
+                  ? 'hover:bg-amber-600 hover:text-white'
+                  : 'opacity-50 cursor-not-allowed'
+              }`}
+              title={
+                fatura.cobranca !== 'S'
+                  ? 'Sem cobrança para alterar'
+                  : fatura.tem_pagamento === true
+                    ? 'Cobrança com parcela paga não pode ser alterada'
+                    : fatura.codgp || fatura.agp === 'S'
+                      ? 'Fatura agrupada — desagrupe o grupo antes de alterar'
+                      : 'Alterar a cobrança (cancela os títulos atuais e gera novos)'
+              }
+            >
+              <RefreshCw className={`size-4 transition ${
+                podeAlterar ? 'text-amber-600 group-hover:text-white' : 'text-gray-400'
+              }`} />
+              Alterar Cobrança
+            </DropdownMenuItem>
+          );
+        })()}
 
         <DropdownMenuItem
           onClick={onFecharFatura}

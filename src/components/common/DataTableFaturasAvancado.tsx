@@ -28,6 +28,7 @@ import * as XLSX from 'xlsx';
 import { set } from 'zod';
 import AutocompletePessoa from './AutoCompletePessoa';
 import NotaFiscalPreviewModal from '../corpo/faturamento/NotaFiscalPreviewModal';
+import ModalEventosNota from '../corpo/faturamento/ModalEventosNota';
 import { time } from 'console';
 import ModalBoletos from './ModalBoletos';
 import ModalEnviarEmail from '../corpo/faturamento/ConsultaFatura/ModalEnviarEmail';
@@ -370,7 +371,11 @@ export default function DataTableFaturasAvancado({
   // Abre o modal de cobrança para a fatura, filtrando os bancos para: o banco
   // do cliente (dbclien.banco) + MELO (carteira própria). Default = banco do
   // cliente quando existir na lista; caso contrário, MELO.
-  const abrirModalCobranca = (f: any) => {
+  // Modo "Alterar Cobrança" (cancela títulos atuais e gera novos ao salvar).
+  const [alterandoCobranca, setAlterandoCobranca] = useState(false);
+
+  const abrirModalCobranca = (f: any, alterar: boolean = false) => {
+    setAlterandoCobranca(alterar);
     const melo = bancosTodos.find((b) => (b.nome || '').toUpperCase() === 'MELO');
     const bancoCliente = bancosTodos.find(
       (b) => String(b.banco).trim() === String(f.cliente_banco ?? '').trim(),
@@ -392,6 +397,31 @@ export default function DataTableFaturasAvancado({
     });
     setParcelas([]);
     setCobrancaModalAberto(f);
+  };
+
+  // Alterar Cobrança (fiel ao Delphi + salvaguardas): reabre a tela de cobrança;
+  // ao salvar, cancela os títulos atuais e gera os novos.
+  const handleAlterarCobranca = (f: any) => {
+    if (f.codgp || f.agp === 'S') {
+      pedirConfirmacao(() => {}, {
+        somenteOk: true,
+        type: 'warning',
+        title: 'Fatura agrupada',
+        message:
+          'Esta fatura está em um grupo de pagamento. Desagrupe o grupo antes de alterar a cobrança.',
+      });
+      return;
+    }
+    if (f.tem_pagamento === true) {
+      pedirConfirmacao(() => {}, {
+        somenteOk: true,
+        type: 'warning',
+        title: 'Cobrança paga',
+        message: 'Cobrança com parcela paga não pode ser alterada.',
+      });
+      return;
+    }
+    abrirModalCobranca(f, true);
   };
 
   // Função para gerar preview do boleto
@@ -688,6 +718,16 @@ export default function DataTableFaturasAvancado({
     }
   };
 
+  // Modal de EVENTOS (histórico da nota) — aberto pela ação "Evento" do dropdown.
+  const [eventoFatura, setEventoFatura] = useState<any | null>(null);
+  // Modal de CANCELAR FATURA (Delphi Canc_Fatura: NF-e SEFAZ + fatura + títulos + venda).
+  const [modalCancelFaturaAberto, setModalCancelFaturaAberto] = useState(false);
+  const [faturaCancelFatura, setFaturaCancelFatura] = useState<any | null>(null);
+  const [motivoCancelFatura, setMotivoCancelFatura] = useState('');
+  const [cancelarVendasFatura, setCancelarVendasFatura] = useState(false);
+  const [isCancelandoFatura, setIsCancelandoFatura] = useState(false);
+  // NF-e fora do prazo de cancelamento → cancela só o faturamento (NF-e fica válida).
+  const [notaForaPrazo, setNotaForaPrazo] = useState(false);
   // Modal de cancelamento de COBRANÇA (com motivo obrigatório p/ histórico dbacao).
   const [modalCancelCobrancaAberto, setModalCancelCobrancaAberto] = useState(false);
   const [faturaCancelCobranca, setFaturaCancelCobranca] = useState<any | null>(null);
@@ -758,6 +798,77 @@ export default function DataTableFaturasAvancado({
       confirmText: 'Sim, fechar',
       cancelText: 'Não',
     });
+  };
+
+  // Cancelar Fatura (idêntico ao Delphi Canc_Fatura): abre o modal com justificativa
+  // + opção "cancelar vendas". Ao confirmar: cancela a NF-e na SEFAZ (se autorizada)
+  // e depois fatura + contas a receber + venda.
+  const handleCancelarFatura = (fatura: any) => {
+    // Prazo SEFAZ (só se a nota FOI autorizada): NF-e 24h | NFC-e 30 min.
+    // Fiel ao Delphi (Canc_Fatura é DESACOPLADO da NF-e): se o prazo expirou, NÃO
+    // bloqueia — marca `notaForaPrazo` para avisar no modal e cancelar SÓ o
+    // faturamento (a NF-e continua válida na SEFAZ; regularizar com devolução).
+    let foraPrazo = false;
+    const autorizacao = fatura?.nfe_dthrprotocolo;
+    if (autorizacao && fatura?.nfe_status === '100') {
+      const ehNfce = String(fatura?.nfe_modelo || '55') === '65';
+      const limiteMin = ehNfce ? 30 : 24 * 60;
+      const decorridoMin =
+        (Date.now() - new Date(autorizacao).getTime()) / 60000;
+      foraPrazo = Number.isFinite(decorridoMin) && decorridoMin > limiteMin;
+    }
+    setNotaForaPrazo(foraPrazo);
+    setFaturaCancelFatura(fatura);
+    setMotivoCancelFatura('');
+    setCancelarVendasFatura(false);
+    setModalCancelFaturaAberto(true);
+  };
+
+  const executarCancelarFatura = async () => {
+    const fatura = faturaCancelFatura;
+    if (!fatura) return;
+    if (motivoCancelFatura.trim().length < 15) {
+      toast.error('A justificativa deve ter no mínimo 15 caracteres.');
+      return;
+    }
+    setIsCancelandoFatura(true);
+    try {
+      // 1. NF-e autorizada e DENTRO do prazo → cancela na SEFAZ primeiro.
+      //    Fora do prazo (notaForaPrazo): pula a SEFAZ e cancela só o faturamento.
+      const autorizada =
+        fatura.nfe_status === '100' && !fatura.dthrcancelamento;
+      if (autorizada && !notaForaPrazo) {
+        await axios.post('/api/faturamento/cancelar-nfe', {
+          codfat: fatura.codfat,
+          motivo: motivoCancelFatura.trim(),
+        });
+      }
+      // 2. Cancela fatura + contas a receber + venda (banco).
+      //    ignorarNfe=true quando fora do prazo (NF-e permanece válida na SEFAZ).
+      await axios.post('/api/faturamento/cancelar-fatura', {
+        codfat: fatura.codfat,
+        motivo: motivoCancelFatura.trim(),
+        cancelarVendas: cancelarVendasFatura,
+        ignorarNfe: notaForaPrazo,
+        usuario: user?.usuario || user?.codusr || '',
+      });
+      toast.success(
+        notaForaPrazo
+          ? 'Faturamento cancelado (NF-e permanece válida na SEFAZ — regularize com devolução).'
+          : 'Faturamento cancelado com sucesso.',
+      );
+      setModalCancelFaturaAberto(false);
+      onAtualizarLista?.();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.erro ||
+        err?.response?.data?.error ||
+        'Erro ao cancelar o faturamento.';
+      toast.error(msg);
+      console.error(err);
+    } finally {
+      setIsCancelandoFatura(false);
+    }
   };
 
   const handleUpdateFatura = async (dadosAtualizados: any) => {
@@ -1262,7 +1373,10 @@ const handleCancelarNota = async () => {
         }}
         onEditarClick={() => setFaturaParaEdicao(f)}
         onCancelarCobranca={() => handleCancelarCobranca(f)}
+        onAlterarCobranca={() => handleAlterarCobranca(f)}
         onFecharFatura={() => handleFecharFatura(f)}
+        onCancelarFaturaClick={() => handleCancelarFatura(f)}
+        onEventoClick={() => setEventoFatura(f)}
         onEmailDanfeClick={() => setEmaildanfeModalAberto(f)}
         onenviarCobrancaClick={() => setCobrancaEnviada(f)}
         onVisualizarBoletosClick={() => handleVisualizarBoletos(f)}
@@ -1919,6 +2033,103 @@ const handleCancelarNota = async () => {
           />
         )}
 
+        {/* Modal de EVENTOS (histórico da nota) — ação "Evento" do dropdown */}
+        <ModalEventosNota
+          open={!!eventoFatura}
+          onClose={() => setEventoFatura(null)}
+          codfat={eventoFatura?.codfat}
+        />
+
+        {/* Modal CANCELAR FATURA (Delphi Canc_Fatura) */}
+        <Dialog
+          open={modalCancelFaturaAberto}
+          onOpenChange={setModalCancelFaturaAberto}
+        >
+          <DialogContent className="max-w-md w-full bg-white dark:bg-zinc-900">
+            <DialogHeader>
+              <DialogTitle className="text-red-700 dark:text-red-400">
+                Cancelar Faturamento — {faturaCancelFatura?.codfat}
+              </DialogTitle>
+              <DialogDescription>
+                Isto cancela a <strong>NF-e na SEFAZ</strong> (se autorizada e dentro
+                do prazo), a <strong>fatura</strong> e as{' '}
+                <strong>contas a receber</strong>. Informe a justificativa:
+              </DialogDescription>
+            </DialogHeader>
+
+            {notaForaPrazo && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-200">
+                ⚠️ O prazo de cancelamento da NF-e na SEFAZ já expirou. Ao
+                confirmar, será cancelado <strong>apenas o faturamento</strong>{' '}
+                (fatura + contas a receber + venda); a{' '}
+                <strong>NF-e continuará VÁLIDA na SEFAZ</strong> — regularize a
+                operação com uma <strong>devolução</strong>.
+              </div>
+            )}
+
+            <div className="w-full">
+              <textarea
+                className="w-full min-h-[80px] border rounded p-2 text-black dark:text-white bg-gray-100 dark:bg-zinc-800 disabled:opacity-70"
+                value={motivoCancelFatura}
+                onChange={(e) => setMotivoCancelFatura(e.target.value)}
+                placeholder="Justificativa (mínimo 15 caracteres, exigido pela SEFAZ)…"
+                autoFocus
+                disabled={isCancelandoFatura}
+                maxLength={255}
+              />
+              <p
+                className={`mt-1 text-xs text-right ${
+                  motivoCancelFatura.trim().length < 15
+                    ? 'text-red-500 font-semibold'
+                    : 'text-green-600'
+                }`}
+              >
+                {motivoCancelFatura.trim().length} / 15 caracteres mínimos
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 mt-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cancelarVendasFatura}
+                onChange={(e) => setCancelarVendasFatura(e.target.checked)}
+                disabled={isCancelandoFatura}
+                className="size-4"
+              />
+              Cancelar as vendas referentes a este faturamento?
+              <span className="text-xs text-gray-500">
+                (devolve o estoque; senão a venda volta para “Liberada”)
+              </span>
+            </label>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-4 py-2 rounded bg-gray-300 dark:bg-zinc-700 text-black dark:text-white hover:bg-gray-400 dark:hover:bg-zinc-600 disabled:opacity-50"
+                onClick={() => setModalCancelFaturaAberto(false)}
+                disabled={isCancelandoFatura}
+              >
+                Fechar
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800 flex items-center justify-center min-w-[170px] disabled:cursor-not-allowed disabled:bg-red-900"
+                onClick={executarCancelarFatura}
+                disabled={
+                  isCancelandoFatura || motivoCancelFatura.trim().length < 15
+                }
+              >
+                {isCancelandoFatura ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Cancelando…
+                  </>
+                ) : (
+                  'Confirmar cancelamento'
+                )}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Modal Edição */}
         {faturaParaEdicao && (
           <ModalFormulario
@@ -2029,6 +2240,8 @@ const handleCancelarNota = async () => {
                           codcli: cobrancaModalAberto.codcli,
                           banco: formCobranca.banco,
                           tipofat: formCobranca.tipoFatura,
+                          // Alterar = cancela os títulos atuais e gera os novos.
+                          alterar: alterandoCobranca,
                           parcelas: parcelas.map((p) => ({
                             vencimento: p.vencimento,
                             valor: p.valor,
@@ -2038,9 +2251,9 @@ const handleCancelarNota = async () => {
 
                         // Chamar API para salvar cobrança
                         const response = await axios.post('/api/faturamento/salvar-cobranca', dadosCobranca);
-                        
+
                         if (response.status === 200) {
-                          toast.success('Cobrança gerada com sucesso!');
+                          toast.success(alterandoCobranca ? 'Cobrança alterada com sucesso!' : 'Cobrança gerada com sucesso!');
                           setCobrancaModalAberto(null);
                           // Limpar formulário
                           setFormCobranca({
@@ -2059,7 +2272,11 @@ const handleCancelarNota = async () => {
                         }
                       } catch (error: any) {
                         console.error('Erro ao salvar cobrança:', error);
-                        toast.error(error.response?.data?.message || 'Erro ao gerar cobrança');
+                        toast.error(
+                          error.response?.data?.error ||
+                            error.response?.data?.message ||
+                            'Erro ao gerar cobrança',
+                        );
                       }
                     }}
                     className="px-4 py-2 text-white bg-green-600 rounded hover:bg-green-700 transition-colors"

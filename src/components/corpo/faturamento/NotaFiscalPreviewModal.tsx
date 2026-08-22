@@ -7,7 +7,8 @@ import QRCode from 'qrcode';
 import axios from 'axios';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, Printer, X } from 'lucide-react';
+import { Download, Printer, X, History, CheckCircle2, XCircle } from 'lucide-react';
+import ModalEventosNota from './ModalEventosNota';
 
 interface Props {
   isOpen: boolean;
@@ -22,6 +23,11 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
   const [htmlContent, setHtmlContent] = useState<string | null>(null); // NF-e HTML (layout MELO)
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Status da nota (cancelada/denegada) + histórico de eventos.
+  const [statusNota, setStatusNota] = useState<'CANCELADA' | 'DENEGADA' | null>(null);
+  // Resumo da NF-e p/ o banner (chave, protocolo, datas, motivo do cancelamento).
+  const [infoNfe, setInfoNfe] = useState<any | null>(null);
+  const [eventosAbertos, setEventosAbertos] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -36,6 +42,8 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
       setPdfUrl(null);
       setHtmlContent(null);
       setErro(null);
+      setStatusNota(null);
+      setInfoNfe(null);
 
       try {
         console.log('🏢 Buscando dados da empresa...');
@@ -148,6 +156,31 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
           tipoDocumento: isPessoaFisica ? 'NFC-e (Cupom Fiscal)' : 'NF-e'
         });
         
+        // Status da nota → tarja no DANFE + badge no cabeçalho. Uma nota CANCELADA
+        // continua sendo a mesma nota autorizada: mantém chave/protocolo e só ganha
+        // a tarja "CANCELADA".
+        const notaCancelada =
+          !!(faturaCompleta as any).cancelada || fatura?.cancel === 'S';
+        const notaDenegada = fatura?.denegada === 'S';
+        setStatusNota(
+          notaCancelada ? 'CANCELADA' : notaDenegada ? 'DENEGADA' : null,
+        );
+        // Resumo p/ o banner do preview (só quando a nota foi autorizada).
+        const dnfe = (faturaCompleta as any).dadosNFe;
+        if (dnfe?.chaveAcesso) {
+          setInfoNfe({
+            codfat: fatura?.codfat,
+            chave: dnfe.chaveAcesso,
+            protocolo: dnfe.protocolo,
+            tipoDocumento: dnfe.tipoDocumento || 'NF-e',
+            dataAutorizacao: dnfe.dataAutorizacao || dnfe.dataEmissao,
+            cancelada: !!dnfe.cancelada || notaCancelada,
+            nfeValida: !!dnfe.nfeValida,
+            dataCancelamento: dnfe.dataCancelamento,
+            motivoCancelamento: dnfe.motivoCancelamento,
+          });
+        }
+
         if (isPessoaFisica) {
           // Pessoa física - NFC-e em HTML (layout MELO, reconstruído do Rave)
           console.log('📄 Gerando NFC-e (HTML) para pessoa física...');
@@ -193,7 +226,12 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
             dadosCompletos.dbvenda,
             dadosEmpresa,
             dadosNFePrev,
-            { logoSrc: `${window.location.origin}/images/logoPdf.png`, barcodeSvg },
+            {
+              logoSrc: `${window.location.origin}/images/logoPdf.png`,
+              barcodeSvg,
+              cancelada: notaCancelada,
+              marcaDagua: notaDenegada ? 'DENEGADA' : undefined,
+            },
           );
           setHtmlContent(html);
         }
@@ -301,17 +339,35 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
     }
   };
 
+  // Abre o modal de eventos (histórico) da nota — o ModalEventosNota faz o fetch.
+  const abrirEventos = () => {
+    if (!fatura?.codfat) return;
+    setEventosAbertos(true);
+  };
+
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col p-0 gap-0 bg-white dark:bg-zinc-900">
         <DialogHeader className="p-4 border-b border-gray-200 dark:border-zinc-800 flex flex-row items-center justify-between space-y-0">
-          <DialogTitle className="text-xl font-semibold text-gray-800 dark:text-white">
+          <DialogTitle className="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
             Preview da Nota Fiscal - {
-              fatura?.codfat ? `Fatura ${fatura.codfat}` : 
-              venda?.codvenda ? `Venda ${venda.codvenda}` : 
-              venda?.nrovenda ? `Venda ${venda.nrovenda}` : 
+              fatura?.codfat ? `Fatura ${fatura.codfat}` :
+              venda?.codvenda ? `Venda ${venda.codvenda}` :
+              venda?.nrovenda ? `Venda ${venda.nrovenda}` :
               'Sem Código'
             }
+            {statusNota && (
+              <span
+                className={`ml-3 inline-flex items-center rounded-full px-3 py-0.5 text-sm font-semibold ${
+                  statusNota === 'CANCELADA'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                }`}
+              >
+                {statusNota}
+              </span>
+            )}
           </DialogTitle>
           <div className="flex gap-2">
             {pdfUrl && (
@@ -346,6 +402,17 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
                 </Button>
               </>
             )}
+            {fatura?.codfat && (
+              <Button
+                onClick={abrirEventos}
+                variant="secondary"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <History size={16} />
+                Evento
+              </Button>
+            )}
             <Button
               onClick={onClose}
               variant="secondary"
@@ -357,6 +424,52 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
             </Button>
           </div>
         </DialogHeader>
+
+        {/* Resumo da NF-e: dados da autorização e, se cancelada, linha do tempo */}
+        {infoNfe && (
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            {infoNfe.cancelada ? (
+              <>
+                <div className="flex items-center gap-2 text-sm flex-wrap">
+                  <span className="inline-flex items-center gap-1 text-green-600 font-semibold">
+                    <CheckCircle2 size={16} /> Autorizada
+                  </span>
+                  <span className="text-gray-400">→</span>
+                  <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
+                    <XCircle size={16} /> {infoNfe.nfeValida ? 'Faturamento cancelado' : 'Cancelada'}
+                  </span>
+                  {infoNfe.nfeValida && (
+                    <span className="ml-1 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-xs font-semibold">
+                      NF-e permanece VÁLIDA na SEFAZ
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1.5 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0.5 text-xs text-gray-600 dark:text-gray-300">
+                  <div><b>Chave de Acesso:</b> {infoNfe.chave}</div>
+                  <div><b>Protocolo:</b> {infoNfe.protocolo}</div>
+                  <div><b>Autorizada em:</b> {infoNfe.dataAutorizacao ? new Date(infoNfe.dataAutorizacao).toLocaleString('pt-BR') : '—'}</div>
+                  <div><b>Cancelada em:</b> {infoNfe.dataCancelamento ? new Date(infoNfe.dataCancelamento).toLocaleString('pt-BR') : '—'}</div>
+                  {infoNfe.motivoCancelamento && (
+                    <div className="md:col-span-2"><b>Motivo do cancelamento:</b> {infoNfe.motivoCancelamento}</div>
+                  )}
+                  <div><b>Fatura:</b> {infoNfe.codfat}</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1 text-green-600 font-semibold text-sm">
+                  <CheckCircle2 size={16} /> {infoNfe.tipoDocumento} Autorizada
+                </div>
+                <div className="mt-1.5 grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-0.5 text-xs text-gray-600 dark:text-gray-300">
+                  <div className="md:col-span-2"><b>Chave de Acesso:</b> {infoNfe.chave}</div>
+                  <div><b>Protocolo:</b> {infoNfe.protocolo}</div>
+                  <div><b>Autorizada em:</b> {infoNfe.dataAutorizacao ? new Date(infoNfe.dataAutorizacao).toLocaleString('pt-BR') : '—'}</div>
+                  <div><b>Fatura:</b> {infoNfe.codfat}</div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 bg-gray-100 dark:bg-zinc-950 p-4 overflow-hidden relative">
           {isLoading && (
@@ -406,5 +519,13 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Histórico de eventos (autorização, cancelamento, rejeições, cartas de correção) */}
+    <ModalEventosNota
+      open={eventosAbertos}
+      onClose={() => setEventosAbertos(false)}
+      codfat={fatura?.codfat}
+    />
+    </>
   );
 }

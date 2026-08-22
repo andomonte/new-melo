@@ -473,24 +473,64 @@ export default async function handler(
     // com chave, protocolo e código de barras. Padroniza a visualização no layout HTML
     // (em vez de puxar o PDF antigo guardado na emissão).
     try {
+      // Carrega a AUTORIZAÇÃO original (chave + protocolo) INDEPENDENTE do status:
+      // uma nota cancelada (status 'C') continua sendo a mesma nota autorizada — o
+      // DANFE deve mostrar os mesmos dados originais (só com a tarja "CANCELADA").
       const nfeRes = await client.query(
-        `SELECT chave, numprotocolo, nrodoc_fiscal, "data", dthrprotocolo, modelo
+        `SELECT chave, numprotocolo, nrodoc_fiscal, "data", dthrprotocolo, modelo,
+                status, numcancelamento, dthrcancelamento, motivocancelamento
            FROM db_manaus.dbfat_nfe
-          WHERE codfat = $1 AND status = '100'
-          ORDER BY "data" DESC LIMIT 1`,
+          WHERE codfat = $1 AND chave IS NOT NULL AND numprotocolo IS NOT NULL
+          ORDER BY dthrprotocolo DESC NULLS LAST, "data" DESC LIMIT 1`,
         [codfat],
       );
       if (nfeRes.rows.length > 0) {
         const n = nfeRes.rows[0];
+        const nfeSefazCancelada = n.status === 'C' || !!n.numcancelamento;
+
+        // A fatura pode estar cancelada SÓ internamente (fluxo ignorarNfe, prazo
+        // expirado): dbfatura.cancel='S' mas a NF-e continua válida (status 100).
+        // Nesse caso data/motivo do cancelamento estão na dbacao (CANCELAR/DBFATURA).
+        const fcRes = await client.query(
+          `SELECT cancel FROM db_manaus.dbfatura WHERE codfat = $1`,
+          [codfat],
+        );
+        const faturaCancelada = fcRes.rows[0]?.cancel === 'S';
+        let dataCancFat: any = null;
+        let motivoCancFat: any = null;
+        if (faturaCancelada && !nfeSefazCancelada) {
+          const ac = await client.query(
+            `SELECT "data", obs FROM db_manaus.dbacao
+              WHERE acao = 'CANCELAR' AND tabela = 'DBFATURA' AND obs LIKE $1
+              ORDER BY "data" DESC LIMIT 1`,
+            [`COD:${codfat}%`],
+          );
+          dataCancFat = ac.rows[0]?.data ?? null;
+          const obs = String(ac.rows[0]?.obs ?? '');
+          const m = obs.match(/MOTIVO:\s*(.+)$/i);
+          motivoCancFat = m ? m[1].trim() : null;
+        }
+
+        const cancelada = nfeSefazCancelada || faturaCancelada;
         (dbfatura as any).dadosNFe = {
           chaveAcesso: n.chave,
           protocolo: n.numprotocolo,
           numeroNFe: n.nrodoc_fiscal,
           serieNFe: (dbfatura as any).serie,
           dataEmissao: n.dthrprotocolo || n.data,
+          dataAutorizacao: n.dthrprotocolo,
           tipoDocumento: n.modelo === '65' ? 'NFC-e' : 'NF-e',
+          cancelada,
+          nfeSefazCancelada,
+          // NF-e ainda VÁLIDA na SEFAZ mesmo com o faturamento cancelado.
+          nfeValida: n.status === '100' && !nfeSefazCancelada,
+          dataCancelamento: n.dthrcancelamento || dataCancFat,
+          motivoCancelamento: n.motivocancelamento || motivoCancFat,
+          numCancelamento: n.numcancelamento,
         };
         (dbfatura as any).chave_acesso = n.chave;
+        (dbfatura as any).cancelada = cancelada;
+        (dbfatura as any).nfe_status = n.status;
       }
     } catch (eNfe) {
       console.warn('⚠️ Não foi possível anexar autorização da NF-e ao preview:', eNfe);

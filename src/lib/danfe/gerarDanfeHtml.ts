@@ -42,6 +42,7 @@ export interface DanfeHtmlOpts {
   jsBarcodeSrc?: string; // fonte UMD do JsBarcode p/ renderizar no servidor (puppeteer)
   marcaDagua?: string; // tarja diagonal (ex.: 'SEM VALIDADE'); auto quando sem protocolo
   homologacao?: boolean; // ambiente de homologação → força "SEM VALOR FISCAL"
+  cancelada?: boolean; // nota cancelada → tarja "CANCELADA" (mantém os dados originais)
 }
 
 const HOMOLOG_NOME = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -184,14 +185,17 @@ export function gerarDanfeHtmlNFe(
   // Nome do destinatário — em homologação, a SEFAZ exige o marcador padrão
   const nomeDest = opts.homologacao ? HOMOLOG_NOME : getValue(fatura.nomefant);
 
-  // Marca d'água: homologação → "SEM VALOR FISCAL"; sem protocolo (preview) → "SEM VALIDADE"
+  // Marca d'água: cancelada → "CANCELADA" (mantendo os dados originais da nota);
+  // homologação → "SEM VALOR FISCAL"; sem protocolo (preview) → "SEM VALIDADE".
   const marcaDagua =
     opts.marcaDagua ??
-    (opts.homologacao
-      ? 'SEM VALOR FISCAL'
-      : protocolo === 'SEM VALIDADE' || !protocolo
-        ? 'SEM VALIDADE'
-        : '');
+    (opts.cancelada
+      ? 'CANCELADA'
+      : opts.homologacao
+        ? 'SEM VALOR FISCAL'
+        : protocolo === 'SEM VALIDADE' || !protocolo
+          ? 'SEM VALIDADE'
+          : '');
   const marcaHtml = marcaDagua ? `<div class="marca"><span>${esc(marcaDagua)}</span></div>` : '';
 
   return `<!doctype html>
