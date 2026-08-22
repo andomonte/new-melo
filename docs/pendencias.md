@@ -173,3 +173,12 @@
   4. Testar cada endpoint após a mudança
 - **Risco:** Alto — muitas telas referenciam esses caminhos. Fazer com busca global e testar tudo.
 - **Prioridade:** Média — não causa bug mas causa confusão para qualquer desenvolvedor
+
+### 13. Robô 2 — Fila de impressão DANFE (fin_impressao)
+- **O quê:** Inserir na tabela `fin_impressao` quando a NF-e é **autorizada na SEFAZ** (não na finalização da venda)
+- **Tabela:** `fin_impressao` — campos: `imp_aut_id` (número NF-e), `imp_data`, `imp_impresso` (N/S), `imp_fila`
+- **Quando alimentar:** No processo de faturamento, após a NF-e ser autorizada com sucesso
+- **Onde implementar:** APIs de faturamento (`src/pages/api/faturamento/emitir.ts`, `emitir-faturado.ts`, ou similar)
+- **Robô:** Faz polling na `fin_impressao` WHERE `imp_impresso = 'N'`, gera DANFE HTML/PDF e envia para impressora laser
+- **Referência Delphi:** `FIla de Impressao Nfe/UniDtMd.pas` → `tmrSerImpressoTimer` (polling 40s), `spNFE_EXISTE`, `spATUALIZAR_IMPRESSAO`
+- **ATENÇÃO:** NÃO inserir na finalização da venda — a DANFE só existe depois da NF-e autorizada

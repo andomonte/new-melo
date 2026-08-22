@@ -10,6 +10,7 @@ interface SalvarVendaRequest {
   NOMECF: string;
   VALOR: number;
   ARMAZEM: number;
+  MOTIVO?: string;
 }
 
 interface DbservimpRecord {
@@ -52,7 +53,20 @@ export default async function handler(
       NOMECF,
       VALOR,
       ARMAZEM,
+      MOTIVO,
     }: SalvarVendaRequest = req.body;
+
+    // Verificar se já existe na fila de impressão (IMPRESSO = 'N')
+    const filaExistente = await client.query(
+      `SELECT COUNT(*) as qtd FROM dbservimp WHERE "CODIGO" = $1 AND "IMPRESSO" = 'N'`,
+      [CODIGO],
+    );
+    if (Number(filaExistente.rows[0].qtd) > 0) {
+      client.release();
+      return res.status(409).json({
+        error: 'Esta venda já está na fila de impressão aguardando o robô imprimir.',
+      });
+    }
 
     // Validar campos obrigatórios
     if (
@@ -139,10 +153,10 @@ export default async function handler(
     // Inserir registro na tabela dbservimp
     const insertQuery = `
       INSERT INTO dbservimp (
-        "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR", 
-        "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM"
+        "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR",
+        "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM", motivo
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
       ) RETURNING *
     `;
 
@@ -159,6 +173,7 @@ export default async function handler(
       novoRegistro.NROIMP,
       novoRegistro.IMPRESSO,
       novoRegistro.ARMAZEM,
+      (MOTIVO || '').substring(0, 200) || null,
     ];
 
     const insertResult = await executeQuery(

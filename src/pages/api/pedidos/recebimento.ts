@@ -108,12 +108,13 @@ export default async function handler(
     }
 
     const dataQuery = `
-      SELECT 
+      SELECT
         v.codvenda as NrVenda,
         COALESCE(c.nome, 'Cliente não encontrado') as Cliente,
         COALESCE(v.nome, '') as Vendedor,
         v.data as horario,
-        COALESCE(v.statuspedido, '1') as statuspedido
+        COALESCE(v.statuspedido, '1') as statuspedido,
+        EXISTS(SELECT 1 FROM dbservimp s WHERE s."CODIGO" = v.codvenda AND s."IMPRESSO" = 'N') as na_fila
       FROM dbvenda v
       LEFT JOIN dbclien c ON v.codcli = c.codcli
       ${whereClause}
@@ -133,12 +134,13 @@ export default async function handler(
     const total = parseInt(countResult.rows[0].total, 10);
     const lastPage = Math.ceil(total / itemsPerPage);
 
-    const pedidos: PedidoRecebimento[] = dataResult.rows.map((row: any) => ({
+    const pedidos = dataResult.rows.map((row: any) => ({
       NrVenda: row.nrvenda,
       Cliente: row.cliente,
       Vendedor: row.vendedor,
       horario: row.horario,
       status: getStatusDescription(row.statuspedido),
+      naFilaImpressao: row.na_fila,
     }));
 
     return res.status(200).json({

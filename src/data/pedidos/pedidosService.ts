@@ -17,6 +17,7 @@ export interface PedidoRecebimento {
   Vendedor: string;
   horario: string;
   status: string;
+  naFilaImpressao?: boolean;
 }
 
 // Interface para resposta da API compatível com GenericCrudPage

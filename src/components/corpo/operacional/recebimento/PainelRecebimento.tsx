@@ -133,6 +133,7 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
         NOMECF: vendaSelecionada.Cliente.slice(0, 40),
         VALOR: detalhesVenda?.total || 0,
         ARMAZEM: detalhesVenda?.armazem || 1,
+        MOTIVO: motivoSubmitido.trim(),
       };
 
       const response = await fetch('/api/recebimento/salvar-venda', {
@@ -306,12 +307,19 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
 
     action: (
       <div className="flex justify-center">
-        <DefaultButton
-          text="Imprimir"
-          className="px-3 py-1 text-xs h-8 flex items-center gap-1 hover:bg-blue-600 dark:hover:bg-blue-800"
-          icon={<FaPrint className="w-4 h-4" />}
-          onClick={() => abrirModal(pedido.NrVenda)}
-        />
+        {pedido.naFilaImpressao ? (
+          <span className="px-3 py-1 text-xs h-8 flex items-center gap-1 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 font-medium cursor-not-allowed">
+            <FaPrint className="w-4 h-4" />
+            Na fila
+          </span>
+        ) : (
+          <DefaultButton
+            text="Imprimir"
+            className="px-3 py-1 text-xs h-8 flex items-center gap-1 hover:bg-blue-600 dark:hover:bg-blue-800"
+            icon={<FaPrint className="w-4 h-4" />}
+            onClick={() => abrirModal(pedido.NrVenda)}
+          />
+        )}
       </div>
     ),
   }));

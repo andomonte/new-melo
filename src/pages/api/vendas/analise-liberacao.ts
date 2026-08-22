@@ -136,6 +136,19 @@ export default async function handler(
            VALUES ($1, 'LIBERADA', $2, NOW())`,
           [codvenda, usuario || 'SISTEMA'],
         );
+        // Fila de impressão separação
+        try {
+          const vd = vendaInfo.rows[0];
+          if (vd) {
+            const cliData = await client.query('SELECT nome FROM dbclien WHERE codcli = $1', [vendaCodcli]);
+            const armResult = await client.query('SELECT arm_id FROM dbitvenda WHERE codvenda = $1 AND arm_id IS NOT NULL LIMIT 1', [codvenda]);
+            await client.query(
+              `INSERT INTO dbservimp ("CODIGO","NRODOC","TIPODOC","CODCF","NOMECF","NOMEUSR","VALOR","DATA","HORA","NROIMP","IMPRESSO","ARMAZEM")
+               VALUES ($1, $1, 'F', $2, $3, $4, $5, NOW(), to_char(now(),'HH24:MI:SS'), '01', 'N', $6)`,
+              [codvenda, vendaCodcli, (cliData.rows[0]?.nome || '').substring(0, 40), (usuario || 'SISTEMA').substring(0, 10), vendaTotal, armResult.rows[0]?.arm_id ?? null],
+            );
+          }
+        } catch (e: any) { /* não bloqueia */ }
       } else if (resultado === 'NAO_AUTORIZADA') {
         // Cancelar venda e liberar estoque reservado (por armazém)
         const itens = await client.query(

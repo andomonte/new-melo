@@ -235,6 +235,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       [idAnalise],
     );
 
+    // Fila de impressão separação (reimprimir com dados atualizados)
+    try {
+      const vendaData = await client.query(
+        `SELECT v.codvenda, v.codcli, v.total, v.codusr, c.nome
+         FROM dbvenda v LEFT JOIN dbclien c ON v.codcli = c.codcli
+         WHERE v.codvenda = $1`, [codvenda]);
+      const vd = vendaData.rows[0];
+      if (vd) {
+        const armResult = await client.query(
+          `SELECT arm_id FROM dbitvenda WHERE codvenda = $1 AND arm_id IS NOT NULL LIMIT 1`, [codvenda]);
+        await client.query(
+          `INSERT INTO dbservimp ("CODIGO","NRODOC","TIPODOC","CODCF","NOMECF","NOMEUSR","VALOR","DATA","HORA","NROIMP","IMPRESSO","ARMAZEM")
+           VALUES ($1, $1, 'F', $2, $3, $4, $5, NOW(), to_char(now(),'HH24:MI:SS'), '01', 'N', $6)`,
+          [codvenda, vd.codcli, (vd.nome || '').substring(0, 40), (usuario || 'SISTEMA').substring(0, 10), novoTotal, armResult.rows[0]?.arm_id ?? null],
+        );
+      }
+    } catch (e: any) { /* não bloqueia */ }
+
     await client.query('COMMIT');
 
     return res.status(200).json({
