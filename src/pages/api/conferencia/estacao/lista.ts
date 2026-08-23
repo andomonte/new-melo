@@ -26,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          FROM dbvenda v
          LEFT JOIN dbfunc_estoque f ON v.conferente = f.matricula
         WHERE v.statuspedido = '4'
+          AND v.inicioconferencia::date = CURRENT_DATE
         ORDER BY v.inicioconferencia ASC`,
     );
 

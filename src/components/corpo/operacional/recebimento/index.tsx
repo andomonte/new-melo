@@ -1,30 +1,29 @@
-import React, { useState } from 'react';
-import LoginRecebimento from './LoginRecebimento';
+import React, { useContext } from 'react';
+import { useRouter } from 'next/router';
+import { AuthContext } from '@/contexts/authContexts';
 import PainelRecebimento from './PainelRecebimento';
 
-interface Operador {
-  matricula: string;
-  nome: string;
-}
-
+/**
+ * Tela de Recebimento (fila de impressão / separação). Antes tinha um login
+ * próprio por operador (dbfunc_estoque). Agora usa o LOGIN NORMAL DO SISTEMA:
+ * o operador é o usuário logado (AuthContext) — sem login extra.
+ */
 const RecebimentoPage = () => {
-  const [operador, setOperador] = useState<Operador | null>(null);
+  const { user } = useContext(AuthContext);
+  const router = useRouter();
 
-  const handleLoginSuccess = (operadorLogado: Operador) => {
-    setOperador(operadorLogado);
+  const operador = {
+    matricula: String(user?.codusr || user?.usuario || ''),
+    nome: String(user?.usuario || 'Operador'),
   };
 
-  const handleLogout = () => {
-    setOperador(null);
-  };
+  if (!user?.usuario) {
+    return <div className="w-full h-full p-6 text-sm text-gray-500">Carregando…</div>;
+  }
 
   return (
     <div className="w-full h-full">
-      {!operador ? (
-        <LoginRecebimento onLoginSuccess={handleLoginSuccess} />
-      ) : (
-        <PainelRecebimento operador={operador} onLogout={handleLogout} />
-      )}
+      <PainelRecebimento operador={operador} onLogout={() => router.push('/')} />
     </div>
   );
 };

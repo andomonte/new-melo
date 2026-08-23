@@ -26,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          FROM dbvenda v
          LEFT JOIN dbfunc_estoque f ON v.separador = f.matricula
         WHERE v.statuspedido = '2'
+          AND v.inicioseparacao::date = CURRENT_DATE
         ORDER BY v.inicioseparacao ASC`,
     );
 

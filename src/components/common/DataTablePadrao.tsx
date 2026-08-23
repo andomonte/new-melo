@@ -1,5 +1,6 @@
-import React, { ChangeEvent, KeyboardEvent, useState, useRef, useEffect } from 'react';
+import React, { ChangeEvent, KeyboardEvent, useState, useRef, useEffect, useContext } from 'react';
 import { Meta } from '@/data/common/meta';
+import { AuthContext } from '@/contexts/authContexts';
 import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, Filter, FilterX, BarChart3, Check, CheckCheckIcon, Columns3, Eye, EyeOff, GripVertical, Info } from 'lucide-react';
 import { RiFileExcel2Line, RiFilePdf2Line } from 'react-icons/ri';
 import {
@@ -191,6 +192,12 @@ export default function DataTablePadrao({
   filtrarSomenteAoConfirmar,
   rowClassName,
 }: DataTablePadraoProps) {
+  // Usuário para persistência das preferências. Se a tela não passar `userName`,
+  // caímos no usuário logado (AuthContext) — assim QUALQUER tela com `screenKey`
+  // persiste (colunas, ordem, ordenação, qtd. itens, filtro rápido), sem depender
+  // de cada tela lembrar de passar o usuário.
+  const auth = useContext(AuthContext);
+  const userNameEfetivo = userName || auth?.user?.usuario || '';
   // Compatibilidade: aceita 'loading' ou 'carregando'
   const isLoading = loading || carregando || false;
   // Rótulo da coluna: usa override por-tela se houver, senão o mapa global
@@ -229,12 +236,12 @@ export default function DataTablePadrao({
 
   // Carregar preferências do banco ao montar
   useEffect(() => {
-    if (!screenKey || !userName) {
+    if (!screenKey || !userNameEfetivo) {
       setPrefsCarregadas(true);
       return;
     }
 
-    fetch(`/api/userPreferences?user=${encodeURIComponent(userName)}&screen=${encodeURIComponent(screenKey)}`)
+    fetch(`/api/userPreferences?user=${encodeURIComponent(userNameEfetivo)}&screen=${encodeURIComponent(screenKey)}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.preferences) {
@@ -255,11 +262,11 @@ export default function DataTablePadrao({
       })
       .catch((err) => console.error('Erro ao carregar preferências:', err))
       .finally(() => setPrefsCarregadas(true));
-  }, [screenKey, userName]);
+  }, [screenKey, userNameEfetivo]);
 
   // Salvar preferências no banco (com debounce de 1s)
   const salvarPreferencias = (overrides?: Record<string, any>) => {
-    if (!screenKey || !userName) return;
+    if (!screenKey || !userNameEfetivo) return;
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
@@ -277,7 +284,7 @@ export default function DataTablePadrao({
       fetch('/api/userPreferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: userName, screen: screenKey, preferences: prefs }),
+        body: JSON.stringify({ user: userNameEfetivo, screen: screenKey, preferences: prefs }),
       }).catch((err) => console.error('Erro ao salvar preferências:', err));
     }, 1000);
   };

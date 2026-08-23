@@ -3,12 +3,11 @@ import { PedidoRecebimento } from '@/data/pedidos/pedidosService';
 import { enviarParaImpressora } from '@/utils/enviarParaImpressora';
 import { useDebouncedCallback } from 'use-debounce';
 import { FaPrint } from 'react-icons/fa6';
-import DataTable from '@/components/common/DataTable';
+import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import { Meta } from '@/data/common/meta';
 import PrintReasonModal from '@/components/common/PrintReasonModal';
-import { LogOut } from 'lucide-react';
 
 interface Operador {
   matricula: string;
@@ -88,6 +87,31 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
     setPedidoSelecionado(nrVenda);
     setModalMotivoAberto(true);
   };
+
+  // Baixa do supervisor: finaliza separação (2→3) ou conferência (4→5) pendente.
+  const [baixando, setBaixando] = useState<string>('');
+  const darBaixa = async (nrVenda: string, statusLabel: string) => {
+    const ehSep = statusLabel === '2' || statusLabel === 'Em Separação';
+    const oQ = ehSep ? 'separação' : 'conferência';
+    if (!window.confirm(`Dar baixa (finalizar) a ${oQ} do pedido ${nrVenda}?\nA ação fica registrada no seu nome.`)) return;
+    setBaixando(nrVenda);
+    try {
+      const resp = await fetch('/api/recebimento/baixa-supervisor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nrovenda: nrVenda, username: operador.nome }),
+      });
+      const d = await resp.json();
+      if (!resp.ok) throw new Error(d.erro || 'Falha ao dar baixa');
+      toast({ title: 'Baixa efetuada', description: d.mensagem });
+      carregarDados();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    } finally {
+      setBaixando('');
+    }
+  };
+  const STATUS_BAIXAVEL = new Set(['2', '4', 'Em Separação', 'Em Conferência']);
 
   const fecharModal = () => {
     setModalMotivoAberto(false);
@@ -270,107 +294,66 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
     'Acoes',
   ];
 
-  const rows = data.map((pedido) => ({
-    nrVenda: (
-      <span className="font-medium text-gray-900 dark:text-white">
-        {pedido.NrVenda}
-      </span>
-    ),
+  // Linhas como ARRAY (o DataTablePadrao mapeia por índice → alinha com `headers`).
+  const rows = data.map((pedido) => [
+    <span key="nr" className="font-medium text-gray-900 dark:text-white">
+      {pedido.NrVenda}
+    </span>,
 
-    cliente: (
-      <span className="font-medium text-gray-900 dark:text-white">
-        {pedido.Cliente}
-      </span>
-    ),
+    <span key="cli" className="font-medium text-gray-900 dark:text-white">
+      {pedido.Cliente}
+    </span>,
 
-    vendedor: (
-      <span className="text-gray-700 dark:text-gray-300">
-        {pedido.Vendedor || '----'}
-      </span>
-    ),
+    <span key="vend" className="text-gray-700 dark:text-gray-300">
+      {pedido.Vendedor || '----'}
+    </span>,
 
-    horario: (
-      <div className="text-sm">
-        <div className="font-mono">
-          {new Date(pedido.horario).toLocaleDateString('pt-BR')}
-        </div>
-        <div className="text-gray-500 dark:text-gray-400">
-          {new Date(pedido.horario).toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </div>
+    <div key="hor" className="text-sm">
+      <div className="font-mono">
+        {new Date(pedido.horario).toLocaleDateString('pt-BR')}
       </div>
-    ),
-
-    status: getStatusBadge(pedido.status),
-
-    action: (
-      <div className="flex justify-center">
-        {pedido.naFilaImpressao ? (
-          <span className="px-3 py-1 text-xs h-8 flex items-center gap-1 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 font-medium cursor-not-allowed">
-            <FaPrint className="w-4 h-4" />
-            Na fila
-          </span>
-        ) : (
-          <DefaultButton
-            text="Imprimir"
-            className="px-3 py-1 text-xs h-8 flex items-center gap-1 hover:bg-blue-600 dark:hover:bg-blue-800"
-            icon={<FaPrint className="w-4 h-4" />}
-            onClick={() => abrirModal(pedido.NrVenda)}
-          />
-        )}
+      <div className="text-gray-500 dark:text-gray-400">
+        {new Date(pedido.horario).toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}
       </div>
-    ),
-  }));
+    </div>,
+
+    getStatusBadge(pedido.status),
+
+    <div key="act" className="flex justify-center items-center gap-2">
+      {STATUS_BAIXAVEL.has(String(pedido.status)) && (
+        <button
+          type="button"
+          disabled={baixando === pedido.NrVenda}
+          onClick={() => darBaixa(pedido.NrVenda, String(pedido.status))}
+          title="Dar baixa (supervisor) — finaliza a separação/conferência pendente"
+          className="px-3 py-1 text-xs h-8 flex items-center gap-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium disabled:opacity-50"
+        >
+          {baixando === pedido.NrVenda ? '...' : '✓ Dar baixa'}
+        </button>
+      )}
+      {pedido.naFilaImpressao ? (
+        <span className="px-3 py-1 text-xs h-8 flex items-center gap-1 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 font-medium cursor-not-allowed">
+          <FaPrint className="w-4 h-4" />
+          Na fila
+        </span>
+      ) : (
+        <DefaultButton
+          text="Imprimir"
+          className="px-3 py-1 text-xs h-8 flex items-center gap-1 hover:bg-blue-600 dark:hover:bg-blue-800"
+          icon={<FaPrint className="w-4 h-4" />}
+          onClick={() => abrirModal(pedido.NrVenda)}
+        />
+      )}
+    </div>,
+  ]);
 
   return (
     <div className="h-full flex flex-col flex-grow bg-white dark:bg-gray-800">
-      <main className="p-4 w-full">
-        <header className="mb-2">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3 mr-6 ml-6">
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
-                Recebimento
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Operador: <span className="font-medium">{operador.nome}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded-lg border">
-                <label
-                  htmlFor="header-status-filter"
-                  className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap"
-                >
-                  Filtrar por Status:
-                </label>
-                <select
-                  id="header-status-filter"
-                  value={statusFiltro}
-                  onChange={(e) => setStatusFiltro(e.target.value)}
-                  className="min-w-[160px] pl-2 pr-6 py-1 text-sm border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-md dark:bg-gray-700 dark:text-white bg-white shadow-sm font-medium"
-                >
-                  <option value="1">Aguardando</option>
-                  <option value="2">Em Separacao</option>
-                  <option value="3">Separado</option>
-                  <option value="4">Em Conferencia</option>
-                  <option value="5">Conferido</option>
-                  <option value="F">Faturado</option>
-                </select>
-              </div>
-
-              <DefaultButton
-                text="Sair"
-                variant="secondary"
-                size="sm"
-                icon={<LogOut className="w-4 h-4" />}
-                onClick={onLogout}
-              />
-            </div>
-          </div>
-        </header>
+      <main className="flex-1 flex flex-col p-4 overflow-hidden">
+        <div className="flex-1 min-h-20 flex flex-col">
         <DataTable
           headers={headers}
           rows={rows}
@@ -382,7 +365,32 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
             handleSearch();
           }}
           searchInputPlaceholder="Pesquisar por pedido, cliente ou vendedor..."
+          screenKey="recebimento-operacional"
+          searchRightSlot={
+            <div className="flex items-center gap-2 whitespace-nowrap">
+              <label
+                htmlFor="header-status-filter"
+                className="text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Status:
+              </label>
+              <select
+                id="header-status-filter"
+                value={statusFiltro}
+                onChange={(e) => setStatusFiltro(e.target.value)}
+                className="min-w-[150px] pl-2 pr-6 py-1.5 text-sm border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 rounded-md dark:bg-gray-700 dark:text-white bg-white shadow-sm font-medium"
+              >
+                <option value="1">Aguardando</option>
+                <option value="2">Em Separação</option>
+                <option value="3">Separado</option>
+                <option value="4">Em Conferência</option>
+                <option value="5">Conferido</option>
+                <option value="F">Faturado</option>
+              </select>
+            </div>
+          }
         />
+        </div>
       </main>
 
       <PrintReasonModal

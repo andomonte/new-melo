@@ -1151,6 +1151,30 @@ export default function Caixa() {
 
                 {/* Formulário */}
                 <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="col-span-2">
+                    <Label>
+                      Conta Financeira
+                      {formaBucket === 'tarifa' && ' (tarifa → 161, fixa)'}
+                      {formaBucket === 'juros' && ' (juros → 160, fixa)'}
+                    </Label>
+                    <select
+                      value={cofId}
+                      onChange={(e) => setCofId(e.target.value)}
+                      disabled={formaBucket !== 'principal'}
+                      className={`w-full h-10 px-3 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 ${
+                        formaBucket !== 'principal' ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <option value="">SELECIONE A CONTA...</option>
+                      {contasFin.map((cf) => (
+                        <option key={cf.cof_id} value={cf.cof_id}>
+                          {cf.cof_id} — {cf.cof_descricao}
+                          {cf.centro_custo ? ` · ${cf.centro_custo}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {ehCartao && (
                     <>
                       <div className="col-span-2">
@@ -1241,30 +1265,6 @@ export default function Caixa() {
                       </div>
                     </>
                   )}
-
-                  <div className="col-span-2">
-                    <Label>
-                      Conta Financeira
-                      {formaBucket === 'tarifa' && ' (tarifa → 161, fixa)'}
-                      {formaBucket === 'juros' && ' (juros → 160, fixa)'}
-                    </Label>
-                    <select
-                      value={cofId}
-                      onChange={(e) => setCofId(e.target.value)}
-                      disabled={formaBucket !== 'principal'}
-                      className={`w-full h-10 px-3 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 ${
-                        formaBucket !== 'principal' ? 'opacity-70 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      <option value="">SELECIONE A CONTA...</option>
-                      {contasFin.map((cf) => (
-                        <option key={cf.cof_id} value={cf.cof_id}>
-                          {cf.cof_id} — {cf.cof_descricao}
-                          {cf.centro_custo ? ` · ${cf.centro_custo}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
 
                   <div className="col-span-2">
                     <button

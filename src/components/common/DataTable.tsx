@@ -27,6 +27,7 @@ interface DataTableProps {
   searchInputPlaceholder?: string;
   loading?: boolean; // ADICIONADO: Nova prop 'loading'
   noDataMessage?: string; // ADICIONADO: Nova prop para a mensagem de sem dados
+  rightSlot?: React.ReactNode; // conteúdo extra ao lado do campo de busca (ex.: filtro)
 }
 
 export default function DataTable({
@@ -41,6 +42,7 @@ export default function DataTable({
   searchInputPlaceholder,
   loading, // DESESTRUTURANDO: A nova prop 'loading'
   noDataMessage = 'Nenhum dado encontrado.', // DESESTRUTURANDO: A nova prop 'noDataMessage' com valor padrão
+  rightSlot,
 }: DataTableProps) {
   // Usando o nome da interface atualizado
   const handlePreviousPage = () => {
@@ -100,7 +102,7 @@ export default function DataTable({
             {/* Linha do input – cor normal */}
             <TableRow className="bg-white dark:bg-zinc-900">
               <TableCell colSpan={headers.length} className="border-none">
-                <div className="flex justify-between items-center px-2">
+                <div className="flex justify-between items-center gap-3 px-2">
                   <SearchInput
                     placeholder={
                       searchInputPlaceholder ??
@@ -110,6 +112,7 @@ export default function DataTable({
                     onKeyDown={onSearchKeyDown}
                     onBlur={onSearchBlur}
                   />
+                  {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}
                 </div>
               </TableCell>
             </TableRow>
