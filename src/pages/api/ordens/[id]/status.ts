@@ -25,7 +25,7 @@ export default async function handler(
     const client = await pool.connect();
 
     const result = await client.query(
-      'SELECT orc_id, orc_status FROM db_manaus.cmp_ordem_compra WHERE orc_id = $1',
+      'SELECT orc_id, orc_status FROM cmp_ordem_compra WHERE orc_id = $1',
       [ordemId]
     );
 

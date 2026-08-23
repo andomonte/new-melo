@@ -58,9 +58,9 @@ export default async function handle(
         ei.prunit as preco_unitario,
         ei.quantidade,
         e.codfilial as armazem
-      FROM db_manaus.dbentradaitens ei
-      INNER JOIN db_manaus.dbentrada e ON ei.nrodoc = e.nrodoc
-      LEFT JOIN db_manaus.dbfornec f ON e.codfornec = f.codfornec
+      FROM dbentradaitens ei
+      INNER JOIN dbentrada e ON ei.nrodoc = e.nrodoc
+      LEFT JOIN dbfornec f ON e.codfornec = f.codfornec
       WHERE ei.codprod = $1
         AND e.dtentrada >= $2
         AND e.dtentrada <= $3
@@ -86,9 +86,9 @@ export default async function handle(
         vi.prunit as preco_unitario,
         vi.quantidade * -1 as quantidade,
         v.codfilial as armazem
-      FROM db_manaus.dbvendaitens vi
-      INNER JOIN db_manaus.dbvenda v ON vi.numvenda = v.numvenda
-      LEFT JOIN db_manaus.dbcliente c ON v.codcliente = c.codcliente
+      FROM dbvendaitens vi
+      INNER JOIN dbvenda v ON vi.numvenda = v.numvenda
+      LEFT JOIN dbcliente c ON v.codcliente = c.codcliente
       WHERE vi.codprod = $1
         AND v.dtemissao >= $2
         AND v.dtemissao <= $3
@@ -115,8 +115,8 @@ export default async function handle(
         ti.prunit as preco_unitario,
         ti.quantidade * -1 as quantidade,
         t.codfilial as armazem
-      FROM db_manaus.dbtransitens ti
-      INNER JOIN db_manaus.dbtrans t ON ti.numtrans = t.numtrans
+      FROM dbtransitens ti
+      INNER JOIN dbtrans t ON ti.numtrans = t.numtrans
       WHERE ti.codprod = $1
         AND t.dtemissao >= $2
         AND t.dtemissao <= $3
@@ -145,9 +145,9 @@ export default async function handle(
         di.prunit as preco_unitario,
         di.quantidade as quantidade,
         d.codfilial as armazem
-      FROM db_manaus.dbdevolucaoitens di
-      INNER JOIN db_manaus.dbdevolucao d ON di.numdevolucao = d.numdevolucao
-      LEFT JOIN db_manaus.dbcliente c ON d.codcliente = c.codcliente
+      FROM dbdevolucaoitens di
+      INNER JOIN dbdevolucao d ON di.numdevolucao = d.numdevolucao
+      LEFT JOIN dbcliente c ON d.codcliente = c.codcliente
       WHERE di.codprod = $1
         AND d.dtdevolucao >= $2
         AND d.dtdevolucao <= $3
@@ -200,7 +200,7 @@ export default async function handle(
     // Buscar estoque atual
     const queryEstoque = `
       SELECT qtest, qtdreservada
-      FROM db_manaus.dbproduto
+      FROM dbproduto
       WHERE codprod = $1
     `;
     const resultEstoque = await pool.query(queryEstoque, [codprod]);

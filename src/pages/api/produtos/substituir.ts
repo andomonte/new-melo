@@ -42,9 +42,9 @@ function lerUsuario(req: NextApiRequest): UserInfo {
 
 const SEL_PROD = `
   SELECT p.codprod, p.ref, p.codmarca, p.qtest, p.inf,
-         COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m
+         COALESCE((SELECT m.descr FROM dbmarcas m
                     WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
-    FROM db_manaus.dbprod p WHERE p.codprod = $1`;
+    FROM dbprod p WHERE p.codprod = $1`;
 
 async function auditar(
   client: PoolClient,
@@ -55,12 +55,12 @@ async function auditar(
 ) {
   try {
     await client.query(
-      `INSERT INTO db_manaus.xaud_produto_substituir
+      `INSERT INTO xaud_produto_substituir
          (id, codusr, nomeusr, data,
           orig_codprod, orig_ref, orig_marca, orig_qtest, orig_inf,
           subs_codprod, subs_ref, subs_marca, subs_qtest, subs_inf, operacao)
        VALUES (
-          COALESCE((SELECT MAX(id) FROM db_manaus.xaud_produto_substituir), 0) + 1,
+          COALESCE((SELECT MAX(id) FROM xaud_produto_substituir), 0) + 1,
           $1, $2, NOW(),
           $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12, $13)`,
@@ -129,7 +129,7 @@ export default async function handle(
 
     // o substituto não pode já estar envolvido em outra substituição
     const jaEnvolvido = await client.query(
-      `SELECT codprod_orig, codprod_subs FROM db_manaus.dbprod_substituir
+      `SELECT codprod_orig, codprod_subs FROM dbprod_substituir
         WHERE codprod_orig = $1 OR codprod_subs = $1 LIMIT 1`,
       [substituto],
     );
@@ -145,11 +145,11 @@ export default async function handle(
     await client.query('BEGIN');
     // se o original já tinha substituto, atualiza (remove o antigo)
     await client.query(
-      `DELETE FROM db_manaus.dbprod_substituir WHERE codprod_orig = $1`,
+      `DELETE FROM dbprod_substituir WHERE codprod_orig = $1`,
       [original],
     );
     await client.query(
-      `INSERT INTO db_manaus.dbprod_substituir (codprod_orig, codprod_subs)
+      `INSERT INTO dbprod_substituir (codprod_orig, codprod_subs)
        VALUES ($1, $2)`,
       [original, substituto],
     );
@@ -157,7 +157,7 @@ export default async function handle(
     // é bloqueado ao ser adicionado em requisição. Ver memória
     // produto-status-ativo-inativo.
     await client.query(
-      `UPDATE db_manaus.dbprod SET inf = 'S' WHERE codprod = $1`,
+      `UPDATE dbprod SET inf = 'S' WHERE codprod = $1`,
       [original],
     );
     await client.query('COMMIT');

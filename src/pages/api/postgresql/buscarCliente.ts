@@ -23,7 +23,7 @@ export default async function handle(
     client = await pool.connect();
 
     const clienteQuery = `
-      SELECT * FROM db_manaus.dbclien
+      SELECT * FROM dbclien
       WHERE codigo_filial = $1
     `;
 

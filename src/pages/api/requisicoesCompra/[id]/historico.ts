@@ -50,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     // Primeiro, tentar encontrar o req_id real pela requisição
     const reqLookupQuery = `
       SELECT req_id 
-      FROM db_manaus.cmp_requisicao 
+      FROM cmp_requisicao 
       WHERE req_id::text = $1 OR req_id_composto = $1
       LIMIT 1
     `;
@@ -95,7 +95,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
           WHEN 'C' THEN 'Cancelada'
           ELSE h.new_status
         END as status_label_novo
-      FROM db_manaus.cmp_requisicao_historico h
+      FROM cmp_requisicao_historico h
       WHERE h.req_id = $1 ${versao ? 'AND h.req_versao = $2' : ''}
       ORDER BY h.created_at DESC, h.id DESC
     `;

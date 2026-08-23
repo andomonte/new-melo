@@ -70,7 +70,7 @@ export default async function handler(
     const codprods = items.map(i => i.codprod);
     const produtosQuery = `
       SELECT codprod, descr, ref, codmarca as marca
-      FROM db_manaus.dbprod
+      FROM dbprod
       WHERE codprod = ANY($1)
     `;
     const produtosResult = await client.query(produtosQuery, [codprods]);
@@ -84,7 +84,7 @@ export default async function handler(
       const preco_total = item.quantidade * item.preco_unitario;
 
       const insertSql = `
-        INSERT INTO db_manaus.cmp_it_requisicao (
+        INSERT INTO cmp_it_requisicao (
           itr_req_id, itr_req_versao, itr_codprod, itr_quantidade,
           itr_pr_unitario, itr_base_indicacao, itr_quantidade_atendida
         ) VALUES ($1, $2, $3, $4, $5, $6, 0)
@@ -122,7 +122,7 @@ export default async function handler(
     // Buscar status atual da requisição
     const statusQuery = `
       SELECT req_status
-      FROM db_manaus.cmp_requisicao
+      FROM cmp_requisicao
       WHERE req_id = $1 AND req_versao = $2
     `;
     const statusResult = await client.query(statusQuery, [req_id_num, req_versao_num]);
@@ -133,7 +133,7 @@ export default async function handler(
 
     // Inserir UMA ÚNICA entrada no histórico
     const historicoSql = `
-      INSERT INTO db_manaus.cmp_requisicao_historico (
+      INSERT INTO cmp_requisicao_historico (
         req_id, req_versao, previous_status, new_status,
         user_id, user_name, reason, comments, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())

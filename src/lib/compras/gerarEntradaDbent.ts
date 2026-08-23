@@ -77,11 +77,11 @@ const strzero = (n: number, len: number) => String(n).padStart(len, '0');
  */
 export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Promise<ResultadoGeracao> {
   const h = opts.header || {};
-  await client.query('SET LOCAL search_path TO db_manaus, public');
+  await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
   // 1) próximo codent = MAIOR numérico + 1, zero-padded (como ENTRADA_INCLUIR)
   const prox = await client.query(
-    `select coalesce(max(codent::bigint), 0) + 1 as n from db_manaus.dbent where codent ~ '^[0-9]+$'`
+    `select coalesce(max(codent::bigint), 0) + 1 as n from dbent where codent ~ '^[0-9]+$'`
   );
   const codent = strzero(Number(prox.rows[0].n), 9);
 
@@ -89,12 +89,12 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
   const tot = await client.query(
     `select coalesce(vprod,0) vprod, coalesce(vipi,0) vipi, coalesce(vnf,0) vnf,
             coalesce(vicms,0) vicms, coalesce(vbc,0) vbc
-       from db_manaus.dbnfe_ent where codnfe_ent=$1`, [opts.nfeId]);
+       from dbnfe_ent where codnfe_ent=$1`, [opts.nfeId]);
   const t = tot.rows[0] || {};
 
   // 3) INSERT cabeçalho dbent — status 'A' (aberta; custo será feito no Confirmar Preço)
   await client.query(
-    `insert into db_manaus.dbent
+    `insert into dbent
        (codent, cod_credor, codtransp, codcomprador, dtent, status, operacao, cfop,
         custofin, desconto, verba_tmk, acrescimo, temcon, temcusto,
         zerar_ipi, zerar_st,
@@ -115,7 +115,7 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
 
   // 3.1) estado do workflow físico (recebimento/alocação) — tabela companheira
   await client.query(
-    `insert into db_manaus.dbent_recebimento (codent, status) values ($1, 'PENDENTE')
+    `insert into dbent_recebimento (codent, status) values ($1, 'PENDENTE')
      on conflict (codent) do nothing`, [codent]);
 
   // 4) carrega associações + det (imposto) + produto (fiscal) + regra do credor
@@ -124,14 +124,14 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
             a.valor_unitario, a.preco_real, a.preco_unitario_nf, a.meia_nota,
             d.qcom, d.vuncom, d.vprod, d.vicms, d.vicmsst, d.vipi, d.vpis, d.vcofins, d.vicmsdeson,
             p.strib, p.percsubst, p.isentoipi, p.ipi, p.dolar
-       from db_manaus.nfe_item_associacao a
-       left join db_manaus.dbnfe_ent_det d on d.codnfe_ent=a.nfe_id and d.nitem::text=a.nfe_item_id::text
-       left join db_manaus.dbprod p on p.codprod=a.produto_cod
+       from nfe_item_associacao a
+       left join dbnfe_ent_det d on d.codnfe_ent=a.nfe_id and d.nitem::text=a.nfe_item_id::text
+       left join dbprod p on p.codprod=a.produto_cod
       where a.nfe_id=$1 and a.status <> 'ASSOCIADO_TESTE' order by a.id`, [opts.nfeId])).rows;
 
   const regra = opts.codCredor
     ? (await client.query(
-        `select desc_icms_sufra, desc_icms_sufra_importado from db_manaus.cad_credor_regra_faturamento where crf_id=$1`,
+        `select desc_icms_sufra, desc_icms_sufra_importado from cad_credor_regra_faturamento where crf_id=$1`,
         [opts.codCredor])).rows[0] || null
     : null;
 
@@ -139,13 +139,13 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
   const itensOut: LinhaDbitent[] = [];
   for (const a of assocs) {
     const peds = (await client.query(
-      `select req_id, quantidade, valor_unitario from db_manaus.nfe_item_pedido_associacao where nfe_associacao_id=$1`,
+      `select req_id, quantidade, valor_unitario from nfe_item_pedido_associacao where nfe_associacao_id=$1`,
       [a.id])).rows;
     const linhas = montarLinhasDbitent(a, a, { strib: a.strib, percsubst: a.percsubst }, regra, peds);
 
     for (const ln of linhas) {
       await client.query(
-        `insert into db_manaus.dbitent
+        `insert into dbitent
            (codent, codprod, codreq, quant, quantnf, prunit, prunitnf,
             valor_icms, valor_ipi, valor_icms_subst, pis, cofins,
             totalicmsdesconto, fis_icmsdeson, prtransf, qtd_transferido,
@@ -176,11 +176,11 @@ export async function confirmarPrecoEntrada(
   frete = 0,
   opts: { atualizarProdutoOverride?: boolean } = {}
 ): Promise<ResultadoConfirmacao> {
-  await client.query('SET LOCAL search_path TO db_manaus, public');
+  await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
   const ent = (await client.query(
     `select custofin, desconto, verba_tmk, acrescimo, temcusto, temcon, codtransp, nrocon
-       from db_manaus.dbent where codent=$1`, [codent])).rows[0];
+       from dbent where codent=$1`, [codent])).rows[0];
   if (!ent) throw new Error(`Entrada ${codent} não encontrada em dbent`);
   // temcusto='N' (Cálculo do Custo desmarcado) = confirma SEM atualizar média/preço do produto
   // (espelha Confirmar_Sem_Custo do Delphi): calcula só o custo do item.
@@ -200,7 +200,7 @@ export async function confirmarPrecoEntrada(
   let freteFinal = frete;
   if ((ent.temcon ?? 'N') === 'S' && ent.codtransp && ent.nrocon) {
     const con = (await client.query(
-      `select cif, totaltransp, totalcon, stcon from db_manaus.dbconhecimentoent
+      `select cif, totaltransp, totalcon, stcon from dbconhecimentoent
         where codtransp=$1 and nrocon=$2 and coalesce(cancel,'N')<>'S'`,
       [ent.codtransp, ent.nrocon])).rows[0];
     if (con) {
@@ -218,8 +218,8 @@ export async function confirmarPrecoEntrada(
             ie.valor_ipi, ie.valor_icms_subst, ie.pis, ie.cofins, ie.totalicmsdesconto,
             ie.fis_icmsdeson, ie.prtransf,
             p.isentoipi, p.ipi, p.dolar
-       from db_manaus.dbitent ie
-       left join db_manaus.dbprod p on p.codprod=ie.codprod
+       from dbitent ie
+       left join dbprod p on p.codprod=ie.codprod
       where ie.codent=$1 order by ie.codprod`, [codent])).rows;
 
   // 1) custo por item -> grava em dbitent
@@ -228,7 +228,7 @@ export async function confirmarPrecoEntrada(
     const prod = { isentoipi: ie.isentoipi, ipi: ie.ipi, dolar: ie.dolar };
     const custos = calcularCustoItem(ie, header, prod, empresa, freteFinal);
     await client.query(
-      `update db_manaus.dbitent set prcusto=$4, prcusto_zf=$5, prcusto_fe=$6,
+      `update dbitent set prcusto=$4, prcusto_zf=$5, prcusto_fe=$6,
               prcusto_contabil=$7, prtransferencia_liquido=$8, prtransferencia_bruto=$9
        where codent=$1 and codprod=$2 and codreq=$3`,
       [codent, ie.codprod, ie.codreq, custos.prcusto, custos.prcusto_zf, custos.prcusto_fe,
@@ -241,32 +241,32 @@ export async function confirmarPrecoEntrada(
   let produtosAtualizados = 0;
   if (atualizaProduto) for (const it of itensOut) {
     const prodRow = (await client.query(
-      `select prcompra, qtest, qtdreservada, prcompraf, prcomprasemst from db_manaus.dbprod where codprod=$1`, [it.codprod])).rows[0];
+      `select prcompra, qtest, qtdreservada, prcompraf, prcomprasemst from dbprod where codprod=$1`, [it.codprod])).rows[0];
     if (!prodRow) continue;
 
     const custoRow = (await client.query(
-      `select prcusto_zf, prtransferencia_bruto from db_manaus.dbprod_custo where codprod=$1`, [it.codprod])).rows[0];
+      `select prcusto_zf, prtransferencia_bruto from dbprod_custo where codprod=$1`, [it.codprod])).rows[0];
     const contRow = (await client.query(
-      `select prcusto, estoque from db_manaus.dbprod_contabil where codprod=$1`, [it.codprod])).rows[0];
+      `select prcusto, estoque from dbprod_contabil where codprod=$1`, [it.codprod])).rows[0];
 
     const custoEstado = custoRow || { prcusto_zf: 0, prtransferencia_bruto: 0 };
     const contEstado = contRow || { prcusto: 0, estoque: 0 };
     const nc = calcularMedia(prodRow, custoEstado, contEstado, it, it.quant);
 
     await client.query(
-      `update db_manaus.dbprod set prcompra=$2, prcomprasemst=$3, prcompraf=$4, qtdcompra=$5,
+      `update dbprod set prcompra=$2, prcomprasemst=$3, prcompraf=$4, qtdcompra=$5,
               dtprcompra=now(), dtcompra=now() where codprod=$1`,
       [it.codprod, nc.dbprod.prcompra, nc.dbprod.prcomprasemst, nc.dbprod.prcompraf, nc.dbprod.qtdcompra]);
 
     if (custoRow) {
       await client.query(
-        `update db_manaus.dbprod_custo set prcusto=$2, prtransferencia_liquido=$3,
+        `update dbprod_custo set prcusto=$2, prtransferencia_liquido=$3,
                 prtransferencia_bruto=$4, prcusto_zf=$5, prcusto_fe=$6 where codprod=$1`,
         [it.codprod, nc.dbprod_custo.prcusto, nc.dbprod_custo.prtransferencia_liquido,
          nc.dbprod_custo.prtransferencia_bruto, nc.dbprod_custo.prcusto_zf, nc.dbprod_custo.prcusto_fe]);
     } else {
       await client.query(
-        `insert into db_manaus.dbprod_custo (codprod, prcusto, prtransferencia_liquido, prtransferencia_bruto, prcusto_zf, prcusto_fe)
+        `insert into dbprod_custo (codprod, prcusto, prtransferencia_liquido, prtransferencia_bruto, prcusto_zf, prcusto_fe)
          values ($1,$2,$3,$4,$5,$6)`,
         [it.codprod, nc.dbprod_custo.prcusto, nc.dbprod_custo.prtransferencia_liquido,
          nc.dbprod_custo.prtransferencia_bruto, nc.dbprod_custo.prcusto_zf, nc.dbprod_custo.prcusto_fe]);
@@ -274,18 +274,18 @@ export async function confirmarPrecoEntrada(
 
     if (contRow) {
       await client.query(
-        `update db_manaus.dbprod_contabil set prcusto=$2 where codprod=$1`,
+        `update dbprod_contabil set prcusto=$2 where codprod=$1`,
         [it.codprod, nc.dbprod_contabil.prcusto]);
     } else {
       await client.query(
-        `insert into db_manaus.dbprod_contabil (codprod, prcusto, estoque) values ($1,$2,$3)`,
+        `insert into dbprod_contabil (codprod, prcusto, estoque) values ($1,$2,$3)`,
         [it.codprod, nc.dbprod_contabil.prcusto, 0]);
     }
     produtosAtualizados++;
 
     // 3) reprecificação de venda com o novo custo (idempotente; reusa margem+alíquotas)
     try {
-      await recalcularPrecosProduto(client, { codprod: it.codprod, prcompra: nc.dbprod.prcompra }, 'db_manaus');
+      await recalcularPrecosProduto(client, { codprod: it.codprod, prcompra: nc.dbprod.prcompra }, process.env.DB_SCHEMA || 'db_manaus');
     } catch (precoErr: any) {
       console.error(`⚠️ reprecificação falhou p/ ${it.codprod}:`, precoErr?.message || precoErr);
     }
@@ -306,18 +306,18 @@ export async function previewCustosEntrada(
   client: any,
   codent: string,
 ): Promise<Map<string, CustosItemOut>> {
-  await client.query('SET LOCAL search_path TO db_manaus, public');
+  await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
   // Empresa / zona fiscal (igual ao endpoint confirmar-preco)
-  const empRow = (await client.query(`select uf from db_manaus.dadosempresa limit 1`)).rows[0];
+  const empRow = (await client.query(`select uf from dadosempresa limit 1`)).rows[0];
   const uf = empRow?.uf || 'AM';
   const zonaRow = (await client.query(
-    `select "ZONA_ISENTIVADA" as zona from db_manaus.dbuf_n where "UF" = $1`, [uf])).rows[0];
+    `select "ZONA_ISENTIVADA" as zona from dbuf_n where "UF" = $1`, [uf])).rows[0];
   const empresa: EmpresaZona = { uf, zona_isentivada: zonaRow?.zona || 'S' };
 
   const ent = (await client.query(
     `select custofin, desconto, verba_tmk, acrescimo, temcon, codtransp, nrocon
-       from db_manaus.dbent where codent=$1`, [codent])).rows[0];
+       from dbent where codent=$1`, [codent])).rows[0];
   if (!ent) return new Map();
 
   const header = {
@@ -329,7 +329,7 @@ export async function previewCustosEntrada(
   let freteFinal = 0;
   if ((ent.temcon ?? 'N') === 'S' && ent.codtransp && ent.nrocon) {
     const con = (await client.query(
-      `select cif, totaltransp, totalcon, stcon from db_manaus.dbconhecimentoent
+      `select cif, totaltransp, totalcon, stcon from dbconhecimentoent
         where codtransp=$1 and nrocon=$2 and coalesce(cancel,'N')<>'S'`,
       [ent.codtransp, ent.nrocon])).rows[0];
     if (con) {
@@ -347,8 +347,8 @@ export async function previewCustosEntrada(
             ie.valor_ipi, ie.valor_icms_subst, ie.pis, ie.cofins, ie.totalicmsdesconto,
             ie.fis_icmsdeson, ie.prtransf,
             p.isentoipi, p.ipi, p.dolar
-       from db_manaus.dbitent ie
-       left join db_manaus.dbprod p on p.codprod=ie.codprod
+       from dbitent ie
+       left join dbprod p on p.codprod=ie.codprod
       where ie.codent=$1 order by ie.codprod`, [codent])).rows;
 
   const mapa = new Map<string, CustosItemOut>();

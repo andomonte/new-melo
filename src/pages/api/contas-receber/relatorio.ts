@@ -108,7 +108,7 @@ function buildQuery(
         CASE
           WHEN r.nro_doc LIKE '%/%' AND split_part(r.nro_doc, '/', 2) ~ '^[0-9]+$' THEN
             (split_part(r.nro_doc, '/', 2)::int)::text || ' de ' ||
-            (SELECT COUNT(*) FROM db_manaus.dbreceb rr WHERE rr.nro_doc LIKE split_part(r.nro_doc, '/', 1) || '/%')::text
+            (SELECT COUNT(*) FROM dbreceb rr WHERE rr.nro_doc LIKE split_part(r.nro_doc, '/', 1) || '/%')::text
           ELSE ''
         END AS parcela,
         GREATEST(0, CAST(CURRENT_DATE AS DATE) - CAST(r.dt_venc AS DATE)) AS dias,
@@ -129,9 +129,9 @@ function buildQuery(
           WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
           ELSE 'pendente'
         END AS calc_status
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-      LEFT JOIN db_manaus.cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
       WHERE 1=1 ${whereClause}
     )
     SELECT * FROM base
@@ -142,8 +142,8 @@ function buildQuery(
   // Contagem leve para a trava de segurança
   const countSql = `
     SELECT COUNT(*) AS total
-    FROM db_manaus.dbreceb r
-    LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+    FROM dbreceb r
+    LEFT JOIN dbclien c ON c.codcli = r.codcli
     WHERE 1=1 ${whereClause}
   `;
 

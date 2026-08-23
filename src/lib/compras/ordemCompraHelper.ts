@@ -41,7 +41,7 @@ export async function obterCNPJFilial(
   if (filialId) {
     // Buscar CNPJ pela unidade/filial específica
     const result = await client.query(
-      'SELECT unm_cnpj FROM db_manaus.cad_unidade_melo WHERE unm_id = $1',
+      'SELECT unm_cnpj FROM cad_unidade_melo WHERE unm_id = $1',
       [filialId]
     );
 
@@ -53,7 +53,7 @@ export async function obterCNPJFilial(
   } else {
     // Usar filial padrão (MELO MAO - id 1)
     const result = await client.query(
-      'SELECT unm_cnpj FROM db_manaus.cad_unidade_melo WHERE unm_id = 1'
+      'SELECT unm_cnpj FROM cad_unidade_melo WHERE unm_id = 1'
     );
 
     if (result.rows.length === 0) {
@@ -82,7 +82,7 @@ export async function obterProximoSequencial(
   // Buscar maior ID com esse prefixo
   const result = await client.query(
     `SELECT COALESCE(MAX(orc_id), 0) as max_id
-     FROM db_manaus.cmp_ordem_compra
+     FROM cmp_ordem_compra
      WHERE orc_id::TEXT LIKE $1 || '%'`,
     [prefixo]
   );

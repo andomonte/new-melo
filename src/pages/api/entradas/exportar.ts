@@ -45,12 +45,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         -- Dados do emitente (fornecedor)
         emit.cpf_cnpj as fornecedor_cnpj,
         emit.xnome as fornecedor_nome,
-        (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as total_itens,
-        (SELECT COALESCE(SUM(quant*prunit), 0) FROM db_manaus.dbitent WHERE codent = e.codent) as valor_produtos,
-        (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
-      FROM db_manaus.dbent e
-      LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
-      LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
+        (SELECT COUNT(*) FROM dbitent WHERE codent = e.codent) as total_itens,
+        (SELECT COALESCE(SUM(quant*prunit), 0) FROM dbitent WHERE codent = e.codent) as valor_produtos,
+        (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
+      FROM dbent e
+      LEFT JOIN dbnfe_ent nfe ON nfe.chave = e.chave
+      LEFT JOIN dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
       WHERE 1=1
     `;
 

@@ -77,7 +77,7 @@ async function validarArquivoDuplicado(
 ): Promise<boolean> {
   const query = `
     SELECT COUNT(*) as total
-    FROM db_manaus.dbretorno_arquivo
+    FROM dbretorno_arquivo
     WHERE datageracaoarquivo = $1
       AND numerosequencialarquivo = $2
       AND nomebanco = $3
@@ -237,7 +237,7 @@ async function obterDescricaoOcorrencia(codigoOcorrencia: string, banco: string)
   try {
     const query = `
       SELECT descricao
-      FROM db_manaus.dbretorno_ocorrencias
+      FROM dbretorno_ocorrencias
       WHERE codocorrencia = $1
         AND (banco = $2 OR banco = 'TODOS')
       LIMIT 1
@@ -500,7 +500,7 @@ export default async function handler(
 
     // Inserir header do arquivo (ARQUIVO_INC)
     const insertHeaderQuery = `
-      INSERT INTO db_manaus.dbretorno_arquivo (
+      INSERT INTO dbretorno_arquivo (
         banco, data_importacao, nome_arquivo, usuario_importacao,
         qtd_mao, qtd_pvh, qtd_rec, qtd_flz, qtd_cccc, qtd_csac, qtd_jps,
         datageracaoarquivo, numerosequencialarquivo, nomebanco, numerobancocamaracompensacao
@@ -565,7 +565,7 @@ export default async function handler(
       // Tentar buscar o último registro inserido baseado nos dados únicos
       const buscaQuery = `
         SELECT codretorno 
-        FROM db_manaus.dbretorno_arquivo 
+        FROM dbretorno_arquivo 
         WHERE nome_arquivo = $1 
           AND numerosequencialarquivo = $2 
           AND nomebanco = $3 
@@ -592,7 +592,7 @@ export default async function handler(
 
     // Inserir detalhes (DETALHE_INC)
     const insertDetalheQuery = `
-      INSERT INTO db_manaus.dbretorno_detalhe (
+      INSERT INTO dbretorno_detalhe (
         codretorno, codreceb, codcli, nomecli, tipo_empresa, cnpj,
         nro_docbanco, codocorrencia, ocorrencia, nro_doc, dt_ocorrencia,
         dt_venc, valor_titulo, banco_cobrador, agencia_cobradora,
@@ -646,7 +646,7 @@ export default async function handler(
         // Atualizar status do título para 'B' (Baixado) - compatibilidade Oracle
         try {
           await client.query(`
-            UPDATE db_manaus.dbreceb
+            UPDATE dbreceb
             SET bradesco = 'B'
             WHERE cod_receb = $1
           `, [detalhe.nossoNumero]);
@@ -658,7 +658,7 @@ export default async function handler(
         // Baixa manual - também marcar como 'B'
         try {
           await client.query(`
-            UPDATE db_manaus.dbreceb
+            UPDATE dbreceb
             SET bradesco = 'B'
             WHERE cod_receb = $1
           `, [detalhe.nossoNumero]);
@@ -670,7 +670,7 @@ export default async function handler(
         // Título rejeitado - voltar para 'N' (Não enviado) para permitir reenvio
         try {
           await client.query(`
-            UPDATE db_manaus.dbreceb
+            UPDATE dbreceb
             SET bradesco = 'N'
             WHERE cod_receb = $1
           `, [detalhe.nossoNumero]);

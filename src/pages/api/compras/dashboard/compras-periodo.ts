@@ -40,25 +40,25 @@ export default async function handle(
       `
       SELECT
         -- Compras do dia atual
-        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM db_manaus.cmp_ordem_compra
+        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM cmp_ordem_compra
          WHERE orc_data >= $1 AND orc_data < $1::date + interval '1 day'
          AND orc_status IN ('A', 'F')
          AND orc_valor_total < 100000000) AS "comprasDiarias",
 
         -- Compras da semana atual
-        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM db_manaus.cmp_ordem_compra
+        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM cmp_ordem_compra
          WHERE orc_data >= $2 AND orc_data < $2::date + interval '7 days'
          AND orc_status IN ('A', 'F')
          AND orc_valor_total < 100000000) AS "comprasSemanais",
 
         -- Compras do mês atual
-        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM db_manaus.cmp_ordem_compra
+        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM cmp_ordem_compra
          WHERE orc_data >= $3 AND orc_data < $3::date + interval '1 month'
          AND orc_status IN ('A', 'F')
          AND orc_valor_total < 100000000) AS "comprasMensais",
 
         -- Compras do ano atual
-        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM db_manaus.cmp_ordem_compra
+        (SELECT COALESCE(SUM(orc_valor_total), 0) FROM cmp_ordem_compra
          WHERE orc_data >= $4 AND orc_data < $4::date + interval '1 year'
          AND orc_status IN ('A', 'F')
          AND orc_valor_total < 100000000) AS "comprasAnuais"

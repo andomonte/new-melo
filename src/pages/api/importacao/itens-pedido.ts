@@ -20,7 +20,7 @@ import { getPgPool } from '@/lib/pgClient';
 
 const QUERY_RESOLVER_FORNECEDOR = `
   SELECT cod_credor, nome
-  FROM db_manaus.dbcredor
+  FROM dbcredor
   WHERE UPPER(TRIM(nome)) LIKE UPPER(TRIM($1)) || '%'
   ORDER BY cod_credor
   LIMIT 1
@@ -38,11 +38,11 @@ const QUERY_ITENS_PEDIDO = `
     itr.itr_pr_unitario AS preco_unit,
     p.unimed AS unidade,
     p.clasfiscal AS ncm
-  FROM db_manaus.cmp_it_requisicao itr
-  JOIN db_manaus.dbprod p ON p.codprod = itr.itr_codprod
-  JOIN db_manaus.cmp_requisicao req
+  FROM cmp_it_requisicao itr
+  JOIN dbprod p ON p.codprod = itr.itr_codprod
+  JOIN cmp_requisicao req
     ON req.req_id = itr.itr_req_id AND req.req_versao = itr.itr_req_versao
-  JOIN db_manaus.cmp_ordem_compra orc
+  JOIN cmp_ordem_compra orc
     ON orc.orc_req_id = req.req_id AND orc.orc_req_versao = req.req_versao
   WHERE orc.orc_status = 'A'
     AND req.req_cod_credor = $1
@@ -62,11 +62,11 @@ const QUERY_ITENS_PEDIDO_FILTRO = `
     itr.itr_pr_unitario AS preco_unit,
     p.unimed AS unidade,
     p.clasfiscal AS ncm
-  FROM db_manaus.cmp_it_requisicao itr
-  JOIN db_manaus.dbprod p ON p.codprod = itr.itr_codprod
-  JOIN db_manaus.cmp_requisicao req
+  FROM cmp_it_requisicao itr
+  JOIN dbprod p ON p.codprod = itr.itr_codprod
+  JOIN cmp_requisicao req
     ON req.req_id = itr.itr_req_id AND req.req_versao = itr.itr_req_versao
-  JOIN db_manaus.cmp_ordem_compra orc
+  JOIN cmp_ordem_compra orc
     ON orc.orc_req_id = req.req_id AND orc.orc_req_versao = req.req_versao
   WHERE orc.orc_status = 'A'
     AND req.req_cod_credor = $1

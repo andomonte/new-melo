@@ -31,14 +31,14 @@ async function registrarMensagemFatura(
 
     // Verifica se a mensagem já existe na tabela dbmensagens
     const msgExistente = await client.query(
-      'SELECT codigo FROM db_manaus.dbmensagens WHERE codigo = $1',
+      'SELECT codigo FROM dbmensagens WHERE codigo = $1',
       [codigo],
     );
 
     // Se não existe, insere a mensagem
     if (msgExistente.rowCount === 0) {
       await client.query(
-        'INSERT INTO db_manaus.dbmensagens (codigo, mensagem) VALUES ($1, $2)',
+        'INSERT INTO dbmensagens (codigo, mensagem) VALUES ($1, $2)',
         [codigo, mensagem],
       );
       console.log('✅ Mensagem inserida na dbmensagens:', codigo);
@@ -46,14 +46,14 @@ async function registrarMensagemFatura(
 
     // Verifica se a relação fatura-mensagem já existe
     const relacaoExistente = await client.query(
-      'SELECT codfat FROM db_manaus.dbmensagens_fatura WHERE codfat = $1 AND codmsg = $2',
+      'SELECT codfat FROM dbmensagens_fatura WHERE codfat = $1 AND codmsg = $2',
       [codfat, codigo],
     );
 
     // Se não exists, insere a relação
     if (relacaoExistente.rowCount === 0) {
       await client.query(
-        'INSERT INTO db_manaus.dbmensagens_fatura (codfat, codmsg) VALUES ($1, $2)',
+        'INSERT INTO dbmensagens_fatura (codfat, codmsg) VALUES ($1, $2)',
         [codfat, codigo],
       );
       console.log('✅ Relação fatura-mensagem inserida:', codfat, '->', codigo);
@@ -118,8 +118,8 @@ export default async function handler(
       if (codfatRef) {
         const faturaCli = await getPgPool().query(
           `SELECT c.*
-             FROM db_manaus.dbfatura f
-             JOIN db_manaus.dbclien c ON c.codcli = f.codcli
+             FROM dbfatura f
+             JOIN dbclien c ON c.codcli = f.codcli
             WHERE f.codfat = $1
             LIMIT 1`,
           [codfatRef],
@@ -151,7 +151,7 @@ export default async function handler(
       console.log('🔍 Buscando dados da venda para identificar a empresa...');
       try {
         const vendaQuery = await getPgPool().query(
-          `SELECT cnpj_empresa, ie_empresa FROM db_manaus.dbvenda WHERE codvenda = $1`,
+          `SELECT cnpj_empresa, ie_empresa FROM dbvenda WHERE codvenda = $1`,
           [dados.dbvenda.codvenda]
         );
         
@@ -665,7 +665,7 @@ export default async function handler(
           const client = await getPgPool().connect();
           try {
             await client.query(
-              `UPDATE db_manaus.dbfatura SET denegada = NULL WHERE codfat = $1`,
+              `UPDATE dbfatura SET denegada = NULL WHERE codfat = $1`,
               [codfatLimpar],
             );
             console.log(`✅ Campo 'denegada' limpo na fatura ${codfatLimpar} (emissão NF-e bem-sucedida)`);
@@ -1119,7 +1119,7 @@ export default async function handler(
 
         try {
           const result = await client.query(
-            `INSERT INTO db_manaus.dbfat_nfe (
+            `INSERT INTO dbfat_nfe (
               codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, xmlremessa, xmlretorno, status, numprotocolo, dthrprotocolo, motivo, tipo_emissao, modelo, tpemissao, imagem, emailenviado
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
             [
@@ -1173,7 +1173,11 @@ export default async function handler(
       });
 
       // 📧 ENVIO AUTOMÁTICO DE EMAIL PARA O CLIENTE
-      if (codfat && dados.dbclien?.email) {
+      // Regra: só envia em PRODUÇÃO. Em homologação (testes) NÃO envia — evita
+      // spammar o cliente real. Override: forcarEmail=true (checkbox "testar envio").
+      const enviarEmail =
+        ambienteSefaz === 'PRODUCAO' || dados?.forcarEmail === true;
+      if (enviarEmail && codfat && dados.dbclien?.email) {
         const emailCliente = dados.dbclien.email;
         const nomeCliente =
           dados.dbclien.nomefant || dados.dbclien.nome || 'Cliente';
@@ -1290,7 +1294,7 @@ export default async function handler(
             baseRandom.toString().padStart(6, '0') + timestamp;
 
           await client.query(
-            `INSERT INTO db_manaus.dbfat_nfe (
+            `INSERT INTO dbfat_nfe (
               codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, xmlremessa, xmlretorno, 
               status, numprotocolo, dthrprotocolo, motivo, tipo_emissao, modelo, tpemissao, emailenviado
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
@@ -1351,7 +1355,7 @@ export default async function handler(
           const client = await getPgPool().connect();
           try {
             await client.query(
-              `UPDATE db_manaus.dbfatura SET denegada = 'S' WHERE codfat = $1`,
+              `UPDATE dbfatura SET denegada = 'S' WHERE codfat = $1`,
               [codfat],
             );
             console.log(

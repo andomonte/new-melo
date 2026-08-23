@@ -35,7 +35,7 @@ export default async function handler(
 
     const ent = (
       await client.query(
-        `SELECT codent, chave, codtransp, nrocon, temcon FROM db_manaus.dbent WHERE codent = $1`,
+        `SELECT codent, chave, codtransp, nrocon, temcon FROM dbent WHERE codent = $1`,
         [id],
       )
     ).rows[0];
@@ -50,8 +50,8 @@ export default async function handler(
           `SELECT c.codtransp, c.nrocon, c.serie, c.cfop, c.icms, c.baseicms,
                   c.totalcon, c.totaltransp, c.stcon, c.dtcon, c.cif, c.tipocon,
                   tr.nome AS transportadora
-             FROM db_manaus.dbconhecimentoent c
-             LEFT JOIN db_manaus.dbtransp tr ON tr.codtransp = c.codtransp
+             FROM dbconhecimentoent c
+             LEFT JOIN dbtransp tr ON tr.codtransp = c.codtransp
             WHERE c.codtransp = $1 AND c.nrocon = $2`,
           [ent.codtransp, ent.nrocon],
         )
@@ -64,8 +64,8 @@ export default async function handler(
         await client.query(
           `SELECT n.nnf, n.serie, n.chave, n.demi, n.vprod, n.vnf,
                   e.xnome AS emitente, e.cpf_cnpj AS cnpj_emitente
-             FROM db_manaus.dbnfe_ent n
-             LEFT JOIN db_manaus.dbnfe_ent_emit e ON e.codnfe_ent = n.codnfe_ent
+             FROM dbnfe_ent n
+             LEFT JOIN dbnfe_ent_emit e ON e.codnfe_ent = n.codnfe_ent
             WHERE n.chave = $1`,
           [ent.chave],
         )
@@ -82,8 +82,8 @@ export default async function handler(
                   COUNT(*)::int AS itens,
                   SUM(COALESCE(ie.quant,0)) AS qtd_total,
                   ROUND(SUM(COALESCE(ie.quant,0) * COALESCE(ie.prunit,0)), 2) AS valor_total
-             FROM db_manaus.dbitent ie
-             LEFT JOIN db_manaus.cmp_ordem_compra o ON o.orc_id::text = ie.codreq
+             FROM dbitent ie
+             LEFT JOIN cmp_ordem_compra o ON o.orc_id::text = ie.codreq
             WHERE ie.codent = $1
             GROUP BY ie.codreq, o.orc_data, o.orc_status
             ORDER BY ie.codreq`,

@@ -34,7 +34,7 @@ export default async function handle(
     const fieldNames = fields.map((field) => `"${field}"`).join(', ');
 
     const insertVendaQuery = `
-      INSERT INTO db_manaus.dbvenda (${fieldNames})
+      INSERT INTO dbvenda (${fieldNames})
       VALUES (${placeholders})
       RETURNING *
     `;
@@ -45,7 +45,7 @@ export default async function handle(
     if (prazosArray && prazosArray.length > 0) {
       for (const prazo of prazosArray) {
         const insertPrazoQuery = `
-          INSERT INTO db_manaus.prazopagamento (id_venda, data, dia)
+          INSERT INTO prazopagamento (id_venda, data, dia)
           VALUES ($1, $2, $3)
         `;
         // O id_venda será o id da venda principal para relacionar

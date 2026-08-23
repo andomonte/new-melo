@@ -34,13 +34,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         -- Buscar borderô relacionado
         (
           SELECT b.cod_bodero
-          FROM db_manaus.dbboderobb b
+          FROM dbboderobb b
           WHERE b.dtemissao::date = a.dt_geracao::date
             AND b.cancel = 'N'
           ORDER BY b.dtemissao DESC
           LIMIT 1
         ) as cod_bodero
-      FROM db_manaus.dbremessa_arquivo a
+      FROM dbremessa_arquivo a
       WHERE a.cod_arquivo = $1
     `;
 
@@ -79,35 +79,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         -- Verificar se tem retorno
         (
           SELECT ret.codocorrencia
-          FROM db_manaus.dbretorno_detalhe ret
+          FROM dbretorno_detalhe ret
           WHERE ret.codreceb = d.cod_receb::varchar
           ORDER BY ret.codretorno DESC
           LIMIT 1
         ) as codigo_ocorrencia_retorno,
         (
           SELECT ret.ocorrencia
-          FROM db_manaus.dbretorno_detalhe ret
+          FROM dbretorno_detalhe ret
           WHERE ret.codreceb = d.cod_receb::varchar
           ORDER BY ret.codretorno DESC
           LIMIT 1
         ) as descricao_ocorrencia_retorno,
         (
           SELECT ret.dt_ocorrencia
-          FROM db_manaus.dbretorno_detalhe ret
+          FROM dbretorno_detalhe ret
           WHERE ret.codreceb = d.cod_receb::varchar
           ORDER BY ret.codretorno DESC
           LIMIT 1
         ) as data_ocorrencia_retorno,
         (
           SELECT ret.valor_pago
-          FROM db_manaus.dbretorno_detalhe ret
+          FROM dbretorno_detalhe ret
           WHERE ret.codreceb = d.cod_receb::varchar
           ORDER BY ret.codretorno DESC
           LIMIT 1
         ) as valor_pago_retorno
-      FROM db_manaus.dbremessa_detalhe d
-      INNER JOIN db_manaus.dbreceb r ON r.cod_receb = d.cod_receb
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+      FROM dbremessa_detalhe d
+      INNER JOIN dbreceb r ON r.cod_receb = d.cod_receb
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
       WHERE d.cod_arquivo = $1
       ORDER BY d.dt_vencimento, d.cod_receb
     `;

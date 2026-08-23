@@ -41,7 +41,7 @@ export default async function handler(
     client = await pool.connect();
 
     // Configurar schema
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     // Construir filtros dinâmicos
     const whereClauses: string[] = [

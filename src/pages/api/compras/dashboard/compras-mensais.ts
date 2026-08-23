@@ -38,7 +38,7 @@ export default async function handler(
             SELECT
               DATE_TRUNC('${trunc}', orc_data) AS periodo,
               SUM(orc_valor_total) AS total
-            FROM db_manaus.cmp_ordem_compra
+            FROM cmp_ordem_compra
             WHERE orc_status IN ('A', 'F')
               AND orc_data IS NOT NULL
               AND orc_valor_total < 100000000
@@ -64,7 +64,7 @@ export default async function handler(
             SELECT
               DATE_TRUNC('${trunc}', orc_data) AS periodo,
               SUM(orc_valor_total) AS total
-            FROM db_manaus.cmp_ordem_compra
+            FROM cmp_ordem_compra
             WHERE orc_status IN ('A', 'F')
               AND orc_data BETWEEN $1 AND $2
               AND orc_valor_total < 100000000
@@ -74,7 +74,7 @@ export default async function handler(
             SELECT
               DATE_TRUNC('${trunc}', orc_data + interval '${periodDays} days') AS periodo,
               SUM(orc_valor_total) AS total
-            FROM db_manaus.cmp_ordem_compra
+            FROM cmp_ordem_compra
             WHERE orc_status IN ('A', 'F')
               AND orc_data BETWEEN ($1::date - interval '${periodDays} days') AND ($2::date - interval '${periodDays} days')
               AND orc_valor_total < 100000000

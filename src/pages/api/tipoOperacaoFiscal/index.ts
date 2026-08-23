@@ -3,7 +3,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { queryWithRelease } from '@/lib/pg';
 
-const TABLE = 'db_manaus."cad_tipo_operacao_fiscal"';
+const TABLE = '"cad_tipo_operacao_fiscal"';
 
 const filtroParaColunaSQL: Record<string, string> = {
   codigo: '"codigo"',

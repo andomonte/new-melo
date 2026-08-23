@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Só fecha as que ainda estão não faturadas e não canceladas.
       const upd = await client.query(
-        `UPDATE db_manaus.dbvenda
+        `UPDATE dbvenda
             SET status = 'F'
           WHERE codvenda = ANY($1)
             AND status IN ('0','N','I','S','1','D','2','L')
@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Log por venda (espelha inc_acao_usr 'FECHAR VENDA' / 'DBVENDA').
       for (const cv of fechadas) {
         await client.query(
-          `INSERT INTO db_manaus.dbacao (codusr, acao, tabela, obs, data)
+          `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
            VALUES ($1, 'FECHAR VENDA', 'DBVENDA', $2, now())`,
           [usuarioTxt.substring(0, 60), `COD:${cv}`.substring(0, 255)],
         );

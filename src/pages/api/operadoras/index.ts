@@ -29,8 +29,8 @@ export default async function handler(
         o.pzopera,
         o.codcli,
         c.nome as nome_cliente
-      FROM db_manaus.dbopera o
-      LEFT JOIN db_manaus.dbclien c ON o.codcli = c.codcli
+      FROM dbopera o
+      LEFT JOIN dbclien c ON o.codcli = c.codcli
       WHERE COALESCE(o.desativado, 0) = 0
       ORDER BY o.descr
     `;

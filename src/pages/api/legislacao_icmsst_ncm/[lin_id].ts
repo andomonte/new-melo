@@ -59,7 +59,7 @@ const handleGetOne = async (
 
     // ✅ ADAPTADO:
     const query =
-      'SELECT * FROM db_manaus."CAD_LEGISLACAO_ICMSST_NCM" WHERE "LIN_ID" = $1';
+      'SELECT * FROM "CAD_LEGISLACAO_ICMSST_NCM" WHERE "LIN_ID" = $1';
     const result = await client.query(query, [id]);
 
     if (result.rowCount === 0) {
@@ -156,7 +156,7 @@ const handleUpdate = async (
 
     // ✅ ADAPTADO:
     const query = `
-      UPDATE db_manaus."CAD_LEGISLACAO_ICMSST_NCM"
+      UPDATE "CAD_LEGISLACAO_ICMSST_NCM"
       SET ${setClause}
       WHERE "LIN_ID" = $${fields.length + 1}
       RETURNING *;
@@ -202,7 +202,7 @@ const handleDelete = async (
 
     // ✅ ADAPTADO:
     const query =
-      'DELETE FROM db_manaus."CAD_LEGISLACAO_ICMSST_NCM" WHERE "LIN_ID" = $1';
+      'DELETE FROM "CAD_LEGISLACAO_ICMSST_NCM" WHERE "LIN_ID" = $1';
     const result = await client.query(query, [id]);
 
     if (result.rowCount === 0) {

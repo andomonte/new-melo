@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         buc_valor as valor_total,
         buc_valor_utilizado as valor_utilizado,
         buc_valor_pendencia as valor_pendente
-      FROM db_manaus.fin_budget_compra 
+      FROM fin_budget_compra 
       ORDER BY buc_data DESC 
       LIMIT 1
     `;
@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         bua_data,
         bua_req_id,
         bua_codusr_solicitante
-      FROM db_manaus.fin_budget_adicional 
+      FROM fin_budget_adicional 
       WHERE bua_buc_id = $1 
       ORDER BY bua_data DESC 
       LIMIT 10

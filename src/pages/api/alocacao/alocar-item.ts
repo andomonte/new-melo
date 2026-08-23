@@ -47,8 +47,8 @@ interface AlocarItemResponse {
 // Verifica se o operador está ativo na alocação desta entrada.
 const CHECK_OPERADOR_QUERY = `
   SELECT op.id as operacao_id, op.arm_id, eir.codent as numero_entrada
-  FROM db_manaus.entrada_itens_recebimento eir
-  INNER JOIN db_manaus.entrada_operacoes op ON op.codent = eir.codent
+  FROM entrada_itens_recebimento eir
+  INNER JOIN entrada_operacoes op ON op.codent = eir.codent
   WHERE eir.id = $1
     AND op.alocador_matricula = $2
     AND op.status = 'EM_ALOCACAO'
@@ -62,29 +62,29 @@ const GET_ITEM_QUERY = `
     eir.codent as numero_entrada,
     COALESCE(eir.qtd_recebida, ie.quant) as qtd_recebida,
     COALESCE(aloc.qtd_alocada, 0) as qtd_ja_alocada
-  FROM db_manaus.entrada_itens_recebimento eir
-  LEFT JOIN db_manaus.dbitent ie
+  FROM entrada_itens_recebimento eir
+  LEFT JOIN dbitent ie
     ON ie.codent = eir.codent AND ie.codprod = eir.produto_cod
    AND COALESCE(ie.codreq,'') = COALESCE(eir.codreq,'')
   LEFT JOIN (
     SELECT codprod, codent, SUM(qtd) as qtd_alocada
-    FROM db_manaus.dbitent_armazem GROUP BY codprod, codent
+    FROM dbitent_armazem GROUP BY codprod, codent
   ) aloc ON aloc.codprod = eir.produto_cod AND aloc.codent = eir.codent
   WHERE eir.id = $1
 `;
 
 const INSERT_ALOCACAO_QUERY = `
-  INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
+  INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
   VALUES ($1, $2, $3, $4, $5)
 `;
 
 const UPDATE_LOCALIZACAO_QUERY = `
-  UPDATE db_manaus.dbitent_armazem SET localizacao = $1
+  UPDATE dbitent_armazem SET localizacao = $1
   WHERE codent = $2 AND codprod = $3 AND arm_id = $4
 `;
 
 const DELETE_ALOCACOES_ANTERIORES_QUERY = `
-  DELETE FROM db_manaus.dbitent_armazem WHERE codent = $1 AND codprod = $2
+  DELETE FROM dbitent_armazem WHERE codent = $1 AND codprod = $2
 `;
 
 // Helper para verificar se é formato novo

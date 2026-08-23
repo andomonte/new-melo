@@ -20,7 +20,7 @@ export default async function handler(
     
     const result = await client.query<Comprador>(`
       SELECT codcomprador, nome 
-      FROM db_manaus.dbcompradores 
+      FROM dbcompradores 
       ORDER BY nome
     `);
     

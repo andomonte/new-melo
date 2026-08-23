@@ -35,7 +35,7 @@ export default async function handle(
       // Verificar se REF já existe em outro produto
       let query = `
         SELECT codprod, ref, descr
-        FROM db_manaus.dbprod
+        FROM dbprod
         WHERE UPPER(TRIM(ref)) = UPPER(TRIM($1))
       `;
       const params: any[] = [ref];

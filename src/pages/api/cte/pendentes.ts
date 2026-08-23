@@ -53,7 +53,7 @@ export default async function handler(
     let chaveNfeBusca = chavenfe;
     if (nfeId && typeof nfeId === 'string' && !chavenfe) {
       const nfeResult = await client.query(`
-        SELECT chave_nfe FROM db_manaus.cad_nfe_entrada WHERE codnfe_ent = $1
+        SELECT chave_nfe FROM cad_nfe_entrada WHERE codnfe_ent = $1
       `, [nfeId]);
 
       if (nfeResult.rows.length > 0) {
@@ -83,9 +83,9 @@ export default async function handler(
           c.kgcub,
           COALESCE(c.nome_emit, t.nome, 'N/I') as transp_nome,
           COALESCE(c.cnpj_emit, t.cnpj_cpf) as transp_cnpj
-        FROM db_manaus.dbconhecimentoent c
-        LEFT JOIN db_manaus.dbtransp t ON c.codtransp = t.codtransp
-        INNER JOIN db_manaus.dbconhecimentoentnf nf ON (
+        FROM dbconhecimentoent c
+        LEFT JOIN dbtransp t ON c.codtransp = t.codtransp
+        INNER JOIN dbconhecimentoentnf nf ON (
           nf.codtransp = c.codtransp AND nf.nrocon = c.nrocon
         )
         WHERE nf.chavenfe = $1
@@ -106,7 +106,7 @@ export default async function handler(
       // Buscar todas as NFes vinculadas a esse CTe
       const nfesResult = await client.query(`
         SELECT chavenfe
-        FROM db_manaus.dbconhecimentoentnf
+        FROM dbconhecimentoentnf
         WHERE codtransp = $1 AND nrocon = $2
         ORDER BY sequencia
       `, [cte.codtransp, cte.nrocon]);
@@ -172,11 +172,11 @@ export default async function handler(
         COALESCE(c.cnpj_emit, t.cnpj_cpf) as transp_cnpj,
         (
           SELECT COUNT(*)::int
-          FROM db_manaus.dbconhecimentoentnf nf
+          FROM dbconhecimentoentnf nf
           WHERE nf.codtransp = c.codtransp AND nf.nrocon = c.nrocon
         ) as qtd_nfes
-      FROM db_manaus.dbconhecimentoent c
-      LEFT JOIN db_manaus.dbtransp t ON c.codtransp = t.codtransp
+      FROM dbconhecimentoent c
+      LEFT JOIN dbtransp t ON c.codtransp = t.codtransp
       ${whereClause}
       ORDER BY c.dtcon DESC NULLS LAST
       LIMIT 50
@@ -188,7 +188,7 @@ export default async function handler(
       // Buscar NFes vinculadas
       const nfesResult = await client.query(`
         SELECT chavenfe
-        FROM db_manaus.dbconhecimentoentnf
+        FROM dbconhecimentoentnf
         WHERE codtransp = $1 AND nrocon = $2
         ORDER BY sequencia
       `, [cte.codtransp, cte.nrocon]);

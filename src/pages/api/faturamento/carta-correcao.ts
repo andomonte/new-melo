@@ -112,7 +112,7 @@ export default async function handler(
 
       // Última CC-e ACEITA desta fatura (texto cumulativo + próximo nSeqEvento).
       const prev = await client.query(
-        `SELECT xcorrecao, nseqevento FROM db_manaus.fat_cce
+        `SELECT xcorrecao, nseqevento FROM fat_cce
           WHERE codfat = $1 AND status IN ('135','136')
           ORDER BY nseqevento DESC LIMIT 1`,
         [String(nota.codfat)],
@@ -301,7 +301,7 @@ export default async function handler(
       const cliSave = await getPgPool().connect();
       try {
         await cliSave.query(
-          `INSERT INTO db_manaus.fat_cce
+          `INSERT INTO fat_cce
              (codfat, chave, nseqevento, xcorrecao, correcao_nova, protocolo, status, motivo, xml_envio, xml_retorno, usuario)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [

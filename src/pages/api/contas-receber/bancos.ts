@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cod_banco as value,
         CONCAT(cod_banco, ' - ', nome) as label,
         nome
-      FROM db_manaus.dbbanco
+      FROM dbbanco
       WHERE 
         CAST(cod_banco AS TEXT) LIKE $1
         OR UPPER(nome) LIKE UPPER($2)

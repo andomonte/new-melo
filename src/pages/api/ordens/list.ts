@@ -74,12 +74,12 @@ export default async function handler(
     // Query para contar total de registros
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM db_manaus.cmp_ordem_compra o
-      LEFT JOIN db_manaus.cmp_requisicao r 
+      FROM cmp_ordem_compra o
+      LEFT JOIN cmp_requisicao r 
         ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor f 
+      LEFT JOIN dbcredor f 
         ON r.req_cod_credor = f.cod_credor
-      LEFT JOIN db_manaus.dbcompradores c 
+      LEFT JOIN dbcompradores c 
         ON r.req_codcomprador = c.codcomprador
       WHERE 1=1
       ${whereClause.replace('WHERE', 'AND')}
@@ -139,24 +139,24 @@ export default async function handler(
           ELSE NULL
         END as prazo_entrega
 
-      FROM db_manaus.cmp_ordem_compra o
+      FROM cmp_ordem_compra o
 
       -- LEFT JOIN com requisição (pode não existir - dados órfãos)
-      LEFT JOIN db_manaus.cmp_requisicao r
+      LEFT JOIN cmp_requisicao r
         ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
 
       -- LEFT JOINs para dados relacionados
-      LEFT JOIN db_manaus.dbcredor f
+      LEFT JOIN dbcredor f
         ON r.req_cod_credor = f.cod_credor
 
-      LEFT JOIN db_manaus.dbcompradores c
+      LEFT JOIN dbcompradores c
         ON r.req_codcomprador = c.codcomprador
 
       -- LEFT JOINs para locais de entrega (prioriza ordem, fallback para requisição)
-      LEFT JOIN db_manaus.cad_unidade_melo ue
+      LEFT JOIN cad_unidade_melo ue
         ON COALESCE(o.orc_unm_id_entrega, r.req_unm_id_entrega) = ue.unm_id
 
-      LEFT JOIN db_manaus.cad_unidade_melo ud
+      LEFT JOIN cad_unidade_melo ud
         ON COALESCE(o.orc_unm_id_destino, r.req_unm_id_destino) = ud.unm_id
 
       WHERE 1=1

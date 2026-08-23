@@ -131,7 +131,7 @@ export default async function handle(
         COALESCE((SELECT m.descr FROM dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), '') as marca_nome,
         COALESCE((SELECT gf.descr FROM dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), '') as grupo_funcao_nome,
         COALESCE((SELECT gp.descr FROM dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), '') as grupo_produto_nome,
-        COALESCE((SELECT seg.margem_min_venda FROM db_manaus.dbsegmento seg JOIN db_manaus.dbgpprod gp ON gp.codseg::text = seg.codseg::text WHERE gp.codgpp = p.codgpp LIMIT 1), 0) as margem_min_venda,
+        COALESCE((SELECT seg.margem_min_venda FROM dbsegmento seg JOIN dbgpprod gp ON gp.codseg::text = seg.codseg::text WHERE gp.codgpp = p.codgpp LIMIT 1), 0) as margem_min_venda,
         COALESCE((
           SELECT COUNT(DISTINCT cap.arp_arm_id)
           FROM cad_armazem_produto cap
@@ -143,7 +143,7 @@ export default async function handle(
           WHERE cap.arp_codprod = p.codprod
             AND COALESCE(cap.arp_bloqueado, 'N') <> 'S'
         ), 0) as estoque_disponivel
-      FROM db_manaus.dbprod p
+      FROM dbprod p
       ${whereClause}
       ORDER BY ${(() => {
         const allowedCols: Record<string, string> = {
@@ -166,7 +166,7 @@ export default async function handle(
 
     // Contar o total
     const countQuery = `
-      SELECT COUNT(*) as total FROM db_manaus.dbprod p
+      SELECT COUNT(*) as total FROM dbprod p
       ${whereClauseCount}
     `;
 

@@ -98,7 +98,7 @@ export async function registrarHistoricoOrdem(
   console.log(`📝 [Histórico Ordem] Registrando: ${orcId} | ${previousStatus || 'NOVO'} → ${newStatus} | Usuário: ${userName}`);
 
   const query = `
-    INSERT INTO db_manaus.cmp_ordem_historico (
+    INSERT INTO cmp_ordem_historico (
       orc_id,
       previous_status,
       new_status,
@@ -383,7 +383,7 @@ export async function buscarHistoricoOrdem(
         WHEN 'F' THEN 'Fechada'
         ELSE h.new_status
       END as status_label_novo
-    FROM db_manaus.cmp_ordem_historico h
+    FROM cmp_ordem_historico h
     WHERE h.orc_id = $1
     ORDER BY h.created_at DESC, h.id DESC
   `;

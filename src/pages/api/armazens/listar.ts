@@ -36,7 +36,7 @@ export default async function handler(
         arm_status,
         arm_municipio,
         arm_uf
-      FROM db_manaus.cad_armazem
+      FROM cad_armazem
       WHERE arm_status = 'A'
       ORDER BY arm_id
     `);

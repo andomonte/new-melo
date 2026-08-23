@@ -584,7 +584,7 @@ export default async function handler(
 
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo;
-  const schema = 'db_manaus';
+  const schema = process.env.DB_SCHEMA || 'db_manaus';
 
   const body = req.body as Body;
   const h = body.header ?? ({} as NonNullable<Body['header']>);

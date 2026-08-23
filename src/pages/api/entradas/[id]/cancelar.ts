@@ -29,15 +29,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = getPgPool('manaus');
     client = await pool.connect();
     await client.query('BEGIN');
-    await client.query('SET LOCAL search_path TO db_manaus, public');
+    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     const ent = (
       await client.query(
         `SELECT e.codent, e.chave, rec.status AS rec_status,
-                (SELECT natop FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) AS natop,
-                (SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) AS nfe_id
-           FROM db_manaus.dbent e
-           LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+                (SELECT natop FROM dbnfe_ent WHERE chave = e.chave LIMIT 1) AS natop,
+                (SELECT codnfe_ent FROM dbnfe_ent WHERE chave = e.chave LIMIT 1) AS nfe_id
+           FROM dbent e
+           LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
           WHERE e.codent = $1`,
         [id],
       )
@@ -59,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const itens = (
       await client.query(
-        `SELECT codprod, codreq, COALESCE(quant,0) AS quant FROM db_manaus.dbitent WHERE codent = $1`,
+        `SELECT codprod, codreq, COALESCE(quant,0) AS quant FROM dbitent WHERE codent = $1`,
         [id],
       )
     ).rows;
@@ -69,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const q = Number(it.quant);
       if (reservado) {
         await client.query(
-          `UPDATE db_manaus.dbprod
+          `UPDATE dbprod
               SET qtest = GREATEST(COALESCE(qtest,0) - $2, 0),
                   qtdreservada = GREATEST(COALESCE(qtdreservada,0) - $2, 0)
             WHERE codprod = $1`,
@@ -77,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
       } else {
         await client.query(
-          `UPDATE db_manaus.dbprod SET qtest = GREATEST(COALESCE(qtest,0) - $2, 0) WHERE codprod = $1`,
+          `UPDATE dbprod SET qtest = GREATEST(COALESCE(qtest,0) - $2, 0) WHERE codprod = $1`,
           [it.codprod, q],
         );
       }
@@ -86,19 +86,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 2) Romaneio: devolve estoque por armazém e apaga a distribuição
     const romaneio = (
       await client.query(
-        `SELECT codprod, arm_id, COALESCE(qtd,0) AS qtd FROM db_manaus.dbitent_armazem WHERE codent = $1`,
+        `SELECT codprod, arm_id, COALESCE(qtd,0) AS qtd FROM dbitent_armazem WHERE codent = $1`,
         [id],
       )
     ).rows;
     for (const rom of romaneio) {
       await client.query(
-        `UPDATE db_manaus.cad_armazem_produto
+        `UPDATE cad_armazem_produto
             SET arp_qtest = GREATEST(COALESCE(arp_qtest,0) - $3, 0)
           WHERE arp_arm_id = $1 AND arp_codprod = $2`,
         [rom.arm_id, rom.codprod, Number(rom.qtd)],
       );
     }
-    await client.query(`DELETE FROM db_manaus.dbitent_armazem WHERE codent = $1`, [id]);
+    await client.query(`DELETE FROM dbitent_armazem WHERE codent = $1`, [id]);
 
     // 3) Reverte quantidade atendida dos pedidos + reabre ordens fechadas
     //    (não para importação, espelhando o gate do gerar-por-chave)
@@ -107,9 +107,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const codreq = String(it.codreq || '');
         if (!codreq || codreq === 'AUTOMATIC' || codreq.startsWith('99') || codreq.startsWith('FB')) continue;
         await client.query(
-          `UPDATE db_manaus.cmp_it_requisicao ri
+          `UPDATE cmp_it_requisicao ri
               SET itr_quantidade_atendida = GREATEST(COALESCE(ri.itr_quantidade_atendida,0) - $2, 0)
-             FROM db_manaus.cmp_ordem_compra o
+             FROM cmp_ordem_compra o
             WHERE o.orc_id::text = $1
               AND ri.itr_req_id = o.orc_req_id
               AND ri.itr_req_versao = o.orc_req_versao
@@ -126,7 +126,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
       if (codreqs.length > 0) {
         await client.query(
-          `UPDATE db_manaus.cmp_ordem_compra
+          `UPDATE cmp_ordem_compra
               SET orc_status = 'A'
             WHERE orc_id::text = ANY($1) AND orc_status = 'F'`,
           [codreqs],
@@ -135,20 +135,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // 4) Status da entrada = cancelada
-    await client.query(`UPDATE db_manaus.dbent SET status = 'C', est_alocado = 0 WHERE codent = $1`, [id]);
+    await client.query(`UPDATE dbent SET status = 'C', est_alocado = 0 WHERE codent = $1`, [id]);
     await client.query(
-      `INSERT INTO db_manaus.dbent_recebimento (codent, status, observacoes, updated_at)
+      `INSERT INTO dbent_recebimento (codent, status, observacoes, updated_at)
        VALUES ($1, 'CANCELADA', $2, now())
        ON CONFLICT (codent) DO UPDATE SET
          status = 'CANCELADA',
-         observacoes = COALESCE(db_manaus.dbent_recebimento.observacoes, '') || E'\n[CANCELADA] ' || COALESCE(EXCLUDED.observacoes, ''),
+         observacoes = COALESCE(dbent_recebimento.observacoes, '') || E'\n[CANCELADA] ' || COALESCE(EXCLUDED.observacoes, ''),
          updated_at = now()`,
       [id, observacao || ''],
     );
 
     // 5) Reseta a NFe para poder reprocessar
     if (ent.nfe_id) {
-      await client.query(`UPDATE db_manaus.dbnfe_ent SET exec = 'N' WHERE codnfe_ent = $1`, [ent.nfe_id]);
+      await client.query(`UPDATE dbnfe_ent SET exec = 'N' WHERE codnfe_ent = $1`, [ent.nfe_id]);
     }
 
     await client.query('COMMIT');

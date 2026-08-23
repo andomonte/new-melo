@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         parcela,
         coddocumento,
         codautorizacao
-      FROM db_manaus.dbfreceb
+      FROM dbfreceb
       WHERE cod_receb = $1
       ORDER BY cod_freceb DESC, dt_pgto DESC
     `;

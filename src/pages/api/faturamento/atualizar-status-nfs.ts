@@ -45,14 +45,14 @@ export default async function atualizarStatusNFS(
 
         // Verificar se já existe registro em dbfat_nfe
         const checkResult = await client.query(
-          `SELECT codfat FROM db_manaus.dbfat_nfe WHERE codfat = $1`,
+          `SELECT codfat FROM dbfat_nfe WHERE codfat = $1`,
           [codfat]
         );
 
         if (checkResult.rows.length > 0) {
           // Atualizar existente
           await client.query(`
-            UPDATE db_manaus.dbfat_nfe 
+            UPDATE dbfat_nfe 
             SET status = $1, motivo = $2, data = NOW(), modelo = $3
             WHERE codfat = $4
           `, [statusErro, motivo_erro, modelo, codfat]);
@@ -60,7 +60,7 @@ export default async function atualizarStatusNFS(
         } else {
           // Buscar nroform da fatura para usar como nrodoc_fiscal
           const faturaRes = await client.query(
-            'SELECT nroform FROM db_manaus.dbfatura WHERE codfat = $1',
+            'SELECT nroform FROM dbfatura WHERE codfat = $1',
             [codfat]
           );
           const nrodoc = faturaRes.rows[0]?.nroform || '0';
@@ -68,7 +68,7 @@ export default async function atualizarStatusNFS(
           // Inserir novo registro de erro (chave e emailenviado são NOT NULL)
           const chaveErro = `ERRO-${codfat}`;
           await client.query(`
-            INSERT INTO db_manaus.dbfat_nfe (codfat, nrodoc_fiscal, status, motivo, data, modelo, tpemissao, chave, emailenviado)
+            INSERT INTO dbfat_nfe (codfat, nrodoc_fiscal, status, motivo, data, modelo, tpemissao, chave, emailenviado)
             VALUES ($1, $2, $3, $4, NOW(), $5, 1, $6, 'N')
           `, [codfat, nrodoc, statusErro, motivo_erro, modelo, chaveErro]);
           console.log(`✅ dbfat_nfe INSERIDO com erro para fatura ${codfat}`);

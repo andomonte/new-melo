@@ -175,7 +175,7 @@ export async function calcImposto(
   // Subtotal do item (R$)
   const subtotalItem = getSubtotalFromParams(params);
 
-  // Valores em R$ do item vêm DIRETO da API (função PG db_manaus.calcular_imposto_item),
+  // Valores em R$ do item vêm DIRETO da API (função PG calcular_imposto_item),
   // que já calcula para quantidade × valorUnitário. Sem monetização/derivação em JS.
   const valorIPI = toN(data?.valores?.totalipi ?? data?.campos?.totalipi ?? 0);
   const valorICMS = toN(data?.valores?.totalicms ?? data?.campos?.totalicms ?? 0);

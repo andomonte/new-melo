@@ -78,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let chaveNfe = chave || null;
     if (!chaveNfe) {
       const r = await client.query(
-        `SELECT chave FROM db_manaus.dbnfe_ent WHERE codnfe_ent = $1`, [nfeId]);
+        `SELECT chave FROM dbnfe_ent WHERE codnfe_ent = $1`, [nfeId]);
       chaveNfe = r.rows[0]?.chave || null;
     }
 
@@ -86,12 +86,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (temCon) {
       const c = conhecimento!;
       const jaExiste = await client.query(
-        `SELECT 1 FROM db_manaus.dbconhecimentoent WHERE codtransp=$1 AND nrocon=$2`,
+        `SELECT 1 FROM dbconhecimentoent WHERE codtransp=$1 AND nrocon=$2`,
         [c.codtransp, c.nrocon],
       );
       if (jaExiste.rows.length > 0) {
         await client.query(
-          `UPDATE db_manaus.dbconhecimentoent
+          `UPDATE dbconhecimentoent
               SET serie=$3, cfop=$4, icms=$5, baseicms=$6, totalcon=$7, totaltransp=$8,
                   stcon=$9, dtcon=$10, tipocalc=$11, tipocon=$12, cif=$13, cancel='N',
                   kg=$14, kgcub=$15, chave=$16, protocolo=$17, nomebarco=$18, placacarreta=$19
@@ -105,7 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
       } else {
         await client.query(
-          `INSERT INTO db_manaus.dbconhecimentoent
+          `INSERT INTO dbconhecimentoent
              (codtransp, nrocon, serie, cfop, icms, baseicms, totalcon, dtcon, totaltransp,
               stcon, tipocalc, tipocon, cif, cancel, kg, kgcub, chave, protocolo,
               nomebarco, placacarreta, dtcadastro, uname)
@@ -123,7 +123,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // link conhecimento ↔ NFe (PK codtransp+nrocon+chavenfe)
       if (chaveNfe) {
         await client.query(
-          `INSERT INTO db_manaus.dbconhecimentoentnf (codtransp, nrocon, chavenfe, sequencia, dtinclusao)
+          `INSERT INTO dbconhecimentoentnf (codtransp, nrocon, chavenfe, sequencia, dtinclusao)
            VALUES ($1,$2,$3,1, now())
            ON CONFLICT (codtransp, nrocon, chavenfe) DO NOTHING`,
           [c.codtransp, c.nrocon, chaveNfe],
@@ -142,7 +142,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const ch of outras) {
         seq += 1;
         await client.query(
-          `INSERT INTO db_manaus.dbconhecimentoentnf (codtransp, nrocon, chavenfe, sequencia, dtinclusao)
+          `INSERT INTO dbconhecimentoentnf (codtransp, nrocon, chavenfe, sequencia, dtinclusao)
            VALUES ($1,$2,$3,$4, now())
            ON CONFLICT (codtransp, nrocon, chavenfe) DO NOTHING`,
           [c.codtransp, c.nrocon, ch, seq],
@@ -150,21 +150,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Reconhece o conhecimento na NFe correspondente (se ela existir no sistema).
         const nrow = await client.query(
-          `SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = $1`, [ch]);
+          `SELECT codnfe_ent FROM dbnfe_ent WHERE chave = $1`, [ch]);
         const codnfe = nrow.rows[0]?.codnfe_ent;
         if (!codnfe) continue;
 
         const u = await client.query(
-          `UPDATE db_manaus.dbnfe_ent_aux
+          `UPDATE dbnfe_ent_aux
               SET temcon='S', nrocon=$2, codtransp=$3
             WHERE codnfe_ent=$1 AND (temcon IS NULL OR temcon <> 'S')`,
           [codnfe, c.nrocon, c.codtransp]);
         if (u.rowCount === 0) {
           const ex = await client.query(
-            `SELECT 1 FROM db_manaus.dbnfe_ent_aux WHERE codnfe_ent=$1`, [codnfe]);
+            `SELECT 1 FROM dbnfe_ent_aux WHERE codnfe_ent=$1`, [codnfe]);
           if (ex.rowCount === 0) {
             await client.query(
-              `INSERT INTO db_manaus.dbnfe_ent_aux (codnfe_ent, temcon, nrocon, codtransp)
+              `INSERT INTO dbnfe_ent_aux (codnfe_ent, temcon, nrocon, codtransp)
                VALUES ($1,'S',$2,$3)`,
               [codnfe, c.nrocon, c.codtransp]);
           }
@@ -174,7 +174,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2) dbnfe_ent_aux: selo/dtselo/temcon/nrocon/codtransp (aux sem PK → update/insert)
     const upd = await client.query(
-      `UPDATE db_manaus.dbnfe_ent_aux
+      `UPDATE dbnfe_ent_aux
           SET selo=$2, dtselo=$3, temcon=$4, nrocon=$5,
               codtransp=COALESCE($6, codtransp)
         WHERE codnfe_ent=$1`,
@@ -182,7 +182,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     if (upd.rowCount === 0) {
       await client.query(
-        `INSERT INTO db_manaus.dbnfe_ent_aux (codnfe_ent, selo, dtselo, temcon, nrocon, codtransp)
+        `INSERT INTO dbnfe_ent_aux (codnfe_ent, selo, dtselo, temcon, nrocon, codtransp)
          VALUES ($1,$2,$3,$4,$5,$6)`,
         [nfeId, selo || null, dtselo || null, temCon ? 'S' : 'N', nroConFinal, codTranspFinal],
       );

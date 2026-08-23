@@ -59,10 +59,10 @@ export default async function handler(
         ri.itr_pr_unitario,
         COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
         (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel
-      FROM db_manaus.buscar_sugestoes_associacao($1, $2, $3) s
-      INNER JOIN db_manaus.cmp_requisicao r ON s.req_id_sugerido = r.req_id
-      LEFT JOIN db_manaus.cad_fornecedor f ON r.req_cod_credor = f.for_id
-      INNER JOIN db_manaus.cmp_it_requisicao ri ON r.req_id = ri.itr_req_id
+      FROM buscar_sugestoes_associacao($1, $2, $3) s
+      INNER JOIN cmp_requisicao r ON s.req_id_sugerido = r.req_id
+      LEFT JOIN cad_fornecedor f ON r.req_cod_credor = f.for_id
+      INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id
       WHERE ri.itr_codprod = $1
       ORDER BY s.confianca DESC, s.req_id_sugerido DESC
     `, [produtoCod, fornecedorCod, limite]);
@@ -87,9 +87,9 @@ export default async function handler(
           ri.itr_pr_unitario,
           COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
           (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel
-        FROM db_manaus.cmp_requisicao r
-        INNER JOIN db_manaus.cmp_it_requisicao ri ON r.req_id = ri.itr_req_id
-        LEFT JOIN db_manaus.cad_fornecedor f ON r.req_cod_credor = f.for_id
+        FROM cmp_requisicao r
+        INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id
+        LEFT JOIN cad_fornecedor f ON r.req_cod_credor = f.for_id
         WHERE ri.itr_codprod = $1
           AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
           AND r.req_status IN ('P', 'A')

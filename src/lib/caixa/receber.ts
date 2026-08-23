@@ -12,15 +12,23 @@
 
 import type { PoolClient } from 'pg';
 
-export type FormaPagamento = 'dinheiro' | 'pix' | 'credito' | 'debito';
+export type FormaPagamento =
+  | 'dinheiro'
+  | 'pix'
+  | 'credito'
+  | 'debito'
+  | 'deposito'
+  | 'credito_devolucao';
 
 export interface PagamentoInput {
-  forma: FormaPagamento;
+  forma: FormaPagamento; // grupo de comportamento (juros/tarifa/cartão)
   valor: number;
+  tipo?: string; // código real da forma (dbforma_pagto.codfpgt) → dbfreceb.tipo do principal
   codopera?: string; // cartão
   vezes?: number; // cartão (nº de parcelas)
   cvnsu?: string; // cartão CV/NSU
   autorizacao?: string; // cartão autorização
+  cof_id?: number | string | null; // conta financeira escolhida (cad_conta_financeira.cof_id)
 }
 
 export interface ReceberParams {
@@ -29,6 +37,8 @@ export interface ReceberParams {
   cod_conta: string; // conta financeira do operador
   username: string;
   juros?: number; // juros amortizado (0 se em dia) — sempre integral (regra Delphi)
+  /** tarifa bancária do título (de dados-recebimento). Gravada como movimento tarifa (conta 161). */
+  tarifa?: number;
   /** principal pendente (de dados-recebimento). Se os pagamentos cobrirem menos → parcial (rec='N'). */
   principalPendente?: number;
   pagamentos: PagamentoInput[];
@@ -48,6 +58,8 @@ const TIPO_PRINCIPAL: Record<FormaPagamento, string> = {
   pix: '42',
   credito: '04',
   debito: '04',
+  deposito: '09',
+  credito_devolucao: '05',
 };
 // Tipo do movimento de juros por forma primária
 const TIPO_JUROS: Record<FormaPagamento, string> = {
@@ -55,9 +67,24 @@ const TIPO_JUROS: Record<FormaPagamento, string> = {
   pix: '43',
   credito: '23',
   debito: '23',
+  deposito: '18',
+  credito_devolucao: '18',
+};
+// Tipo do movimento de TARIFA por forma primária (Delphi: 06 din / 07 cheque / 08 cartão / 44 pix)
+const TIPO_TARIFA: Record<FormaPagamento, string> = {
+  dinheiro: '06',
+  pix: '44',
+  credito: '08',
+  debito: '08',
+  deposito: '06',
+  credito_devolucao: '06',
 };
 // Tarifas (não reduzem débito do cliente / não somam no título)
 const TIPOS_TARIFA = new Set(['06', '07', '08', '15', '32', '44']);
+
+// Contas financeiras fixas do recebimento (regra Delphi): tarifa→161, juros→160.
+const COF_TARIFA = 161;
+const COF_JUROS = 160;
 
 // Contas bloqueadas para recebimento — porte da lista hardcoded do SysCaixa (bbtnSalvarClick).
 // São contas de operadores desativados. TODO: mover para um flag em dbconta/config no futuro.
@@ -71,7 +98,7 @@ export const CONTAS_BLOQUEADAS = new Set([
 async function validarContaOperador(c: PoolClient, codConta: string): Promise<void> {
   const cod = String(codConta || '').trim();
   if (!cod) throw new Error('Informe a conta do operador.');
-  const r = await c.query('SELECT nro_conta FROM db_manaus.dbconta WHERE cod_conta=$1', [cod.padStart(4, '0')]);
+  const r = await c.query('SELECT nro_conta FROM dbconta WHERE cod_conta=$1', [cod.padStart(4, '0')]);
   if (r.rows.length === 0) throw new Error(`Conta do operador "${cod}" inválida.`);
   if (CONTAS_BLOQUEADAS.has(Number(cod))) {
     throw new Error(`Conta "${cod}" (${r.rows[0].nro_conta}) bloqueada para recebimento.`);
@@ -84,7 +111,7 @@ const lpad = (n: number | string, len: number) => String(n).padStart(len, '0');
 /** Próximo cod_receb global (9 dígitos) — MAX+1 via índice da PK (dígitos fixos). */
 async function proximoCodReceb(c: PoolClient): Promise<string> {
   const r = await c.query(
-    "SELECT cod_receb FROM db_manaus.dbreceb WHERE cod_receb ~ '^[0-9]{9}$' ORDER BY cod_receb DESC LIMIT 1",
+    "SELECT cod_receb FROM dbreceb WHERE cod_receb ~ '^[0-9]{9}$' ORDER BY cod_receb DESC LIMIT 1",
   );
   // cod_receb tem 9 dígitos (máx 999.999.999 < Number.MAX_SAFE_INTEGER) — Number é seguro.
   const max = r.rows[0] ? Number(r.rows[0].cod_receb) : 0;
@@ -94,7 +121,7 @@ async function proximoCodReceb(c: PoolClient): Promise<string> {
 /** Próximo cod_freceb de um título (3 dígitos). */
 async function proximoCodFreceb(c: PoolClient, codReceb: string): Promise<string> {
   const r = await c.query(
-    'SELECT COALESCE(MAX(cod_freceb::int),0)+1 AS n FROM db_manaus.dbfreceb WHERE cod_receb=$1',
+    'SELECT COALESCE(MAX(cod_freceb::int),0)+1 AS n FROM dbfreceb WHERE cod_receb=$1',
     [codReceb],
   );
   return lpad(r.rows[0].n, 3);
@@ -102,17 +129,17 @@ async function proximoCodFreceb(c: PoolClient, codReceb: string): Promise<string
 
 /** Próximo car_id de FIN_CARTAO. */
 async function proximoCarId(c: PoolClient): Promise<string> {
-  const r = await c.query('SELECT COALESCE(MAX(car_id::bigint),0)+1 AS n FROM db_manaus.fin_cartao');
+  const r = await c.query('SELECT COALESCE(MAX(car_id::bigint),0)+1 AS n FROM fin_cartao');
   return String(r.rows[0].n);
 }
 
 async function reduzDebitoCliente(c: PoolClient, codcli: string, valor: number) {
   if (!codcli) return;
-  await c.query('UPDATE db_manaus.dbclien SET debito = COALESCE(debito,0) - $1 WHERE codcli=$2', [valor, codcli]);
+  await c.query('UPDATE dbclien SET debito = COALESCE(debito,0) - $1 WHERE codcli=$2', [valor, codcli]);
 }
 async function adicionaDebitoCliente(c: PoolClient, codcli: string, valor: number) {
   if (!codcli) return;
-  await c.query('UPDATE db_manaus.dbclien SET debito = COALESCE(debito,0) + $1 WHERE codcli=$2', [valor, codcli]);
+  await c.query('UPDATE dbclien SET debito = COALESCE(debito,0) + $1 WHERE codcli=$2', [valor, codcli]);
 }
 
 /** Insere um movimento em dbfreceb (porte de INC_CONTASFR) e reduz o débito do cliente. */
@@ -128,7 +155,8 @@ async function incContasFr(
     dataPgto: string;
     txCartao?: number | null;
     dtCartao?: string | null;
-    codConta: string;
+    codConta: string; // conta do OPERADOR (caixa)
+    contaFinanceira?: number | string | null; // cof_id (classificação): fre_cof_id
     codusr: string | null;
     coddocumento?: string | null;
     codautorizacao?: string | null;
@@ -137,14 +165,17 @@ async function incContasFr(
   },
 ): Promise<string> {
   const codFreceb = await proximoCodFreceb(c, args.codReceb);
+  const cofId = args.contaFinanceira != null && String(args.contaFinanceira).trim() !== ''
+    ? Number(args.contaFinanceira)
+    : null;
   await c.query(
-    `INSERT INTO db_manaus.dbfreceb
+    `INSERT INTO dbfreceb
        (cod_freceb, cod_receb, codopera, dt_cartao, tx_cartao, nome, valor, tipo, sf,
         dt_pgto, dt_venc, dt_emissao, fre_cof_id, codusr, cod_conta, parcela, coddocumento, codautorizacao)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,$10,$11,$12,$13,$14,$15,$16)`,
     [
       codFreceb, args.codReceb, args.codopera || null, args.dtCartao || null, args.txCartao ?? null,
-      args.nome, args.valor, args.tipo, args.sf, args.dataPgto, args.codConta, args.codusr,
+      args.nome, args.valor, args.tipo, args.sf, args.dataPgto, cofId, args.codusr,
       args.codConta, args.parcela || null, args.coddocumento || null, args.codautorizacao || null,
     ],
   );
@@ -171,7 +202,7 @@ async function incluirCartao(
 ) {
   const { pag, dataPgto } = args;
   const opRes = await c.query(
-    'SELECT txopera, pzopera, codcli FROM db_manaus.dbopera WHERE codopera=$1',
+    'SELECT txopera, pzopera, codcli FROM dbopera WHERE codopera=$1',
     [pag.codopera],
   );
   if (opRes.rows.length === 0) throw new Error(`Operadora ${pag.codopera} não encontrada`);
@@ -182,7 +213,7 @@ async function incluirCartao(
   // FIN_CARTAO
   const carId = await proximoCarId(c);
   await c.query(
-    `INSERT INTO db_manaus.fin_cartao
+    `INSERT INTO fin_cartao
        (car_id, car_codcli, car_valor, car_vlrliq, car_nrodocumento, car_nroautorizacao, car_nroparcela, car_data, car_codoperadora)
      VALUES ($1,$2,$3,$4,$5,$6,$7, CURRENT_DATE, $8)`,
     [carId, codcliOpera, pag.valor, vlrliq, pag.cvnsu || null, pag.autorizacao || null, lpad(n, 2), pag.codopera],
@@ -202,7 +233,7 @@ async function incluirCartao(
     const novoCodReceb = await proximoCodReceb(c);
     const nroDoc = `C${pag.cvnsu || ''}-${lpad(i, 2)}`;
     await c.query(
-      `INSERT INTO db_manaus.dbreceb
+      `INSERT INTO dbreceb
          (cod_receb, nro_doc, cod_conta, cod_fat, cod_venda, codcli, valor_pgto, valor_rec,
           dt_venc, dt_pgto, dt_emissao, tipo, rec, cancel, forma_fat, nrocx, venc_ant,
           bradesco, nro_banco, banco, codgp, dtvenc_previsao, rec_cof_id)
@@ -211,12 +242,12 @@ async function incluirCartao(
       [novoCodReceb, nroDoc, codcliOpera, parcelaValor, dtVenc, dataPgto],
     );
     await c.query(
-      "INSERT INTO db_manaus.dbprereceb (cod_receb, dt_pgto, valor_rec, rec, cod_conta) VALUES ($1,NULL,0,'N','0102')",
+      "INSERT INTO dbprereceb (cod_receb, dt_pgto, valor_rec, rec, cod_conta) VALUES ($1,NULL,0,'N','0102')",
       [novoCodReceb],
     );
     // link com a transação de cartão
     await c.query(
-      'INSERT INTO db_manaus.fin_cartao_receb (car_car_id, car_cod_receb, car_parcela) VALUES ($1,$2,$3)',
+      'INSERT INTO fin_cartao_receb (car_car_id, car_cod_receb, car_parcela) VALUES ($1,$2,$3)',
       [carId, novoCodReceb, i],
     );
     // débito da operadora
@@ -228,17 +259,17 @@ async function incluirCartao(
 /** Registra o juros recebido em FIN_RECEB_CONTROLE_JUROS (porte de CONTROLAR_JUROS). */
 async function controlarJuros(c: PoolClient, codReceb: string, data: string, jurosDevido: number, jurosRecebido: number) {
   const ex = await c.query(
-    'SELECT 1 FROM db_manaus.fin_receb_controle_juros WHERE rcj_cod_receb=$1 AND rcj_data=$2',
+    'SELECT 1 FROM fin_receb_controle_juros WHERE rcj_cod_receb=$1 AND rcj_data=$2',
     [codReceb, data],
   );
   if (ex.rows.length > 0) {
     await c.query(
-      'UPDATE db_manaus.fin_receb_controle_juros SET rcj_juros_recebido = rcj_juros_recebido + $1 WHERE rcj_cod_receb=$2 AND rcj_data=$3',
+      'UPDATE fin_receb_controle_juros SET rcj_juros_recebido = rcj_juros_recebido + $1 WHERE rcj_cod_receb=$2 AND rcj_data=$3',
       [jurosRecebido, codReceb, data],
     );
   } else {
     await c.query(
-      'INSERT INTO db_manaus.fin_receb_controle_juros (rcj_cod_receb, rcj_data, rcj_juros, rcj_juros_recebido) VALUES ($1,$2,$3,$4)',
+      'INSERT INTO fin_receb_controle_juros (rcj_cod_receb, rcj_data, rcj_juros, rcj_juros_recebido) VALUES ($1,$2,$3,$4)',
       [codReceb, data, jurosDevido, jurosRecebido],
     );
   }
@@ -259,7 +290,7 @@ export async function executarRecebimento(
 
   // Título (trava)
   const tRes = await c.query(
-    'SELECT cod_receb, codcli, valor_pgto, valor_rec, rec, cancel FROM db_manaus.dbreceb WHERE cod_receb=$1 FOR UPDATE',
+    'SELECT cod_receb, codcli, valor_pgto, valor_rec, rec, cancel FROM dbreceb WHERE cod_receb=$1 FOR UPDATE',
     [p.cod_receb],
   );
   if (tRes.rows.length === 0) throw new Error('Título não encontrado.');
@@ -268,7 +299,7 @@ export async function executarRecebimento(
   if (titulo.rec === 'S') throw new Error('Título já recebido.');
 
   const codcliOriginal = titulo.codcli;
-  const userRes = await c.query('SELECT codusr FROM db_manaus.dbusuario WHERE nomeusr=$1 LIMIT 1', [p.username]);
+  const userRes = await c.query('SELECT codusr FROM dbusuario WHERE nomeusr=$1 LIMIT 1', [p.username]);
   const codusr: string | null = userRes.rows[0]?.codusr ?? null;
 
   const resultado: ReceberResultado = {
@@ -296,7 +327,7 @@ export async function executarRecebimento(
     const tipoJ = TIPO_JUROS[forma0];
     const codF = await incContasFr(c, {
       codReceb: p.cod_receb, codcliOriginal, valor: juros, tipo: tipoJ, sf: 'S',
-      dataPgto: p.dataPgto, codConta: p.cod_conta, codusr, nome: 'JUROS',
+      dataPgto: p.dataPgto, codConta: p.cod_conta, contaFinanceira: COF_JUROS, codusr, nome: 'JUROS',
     });
     await controlarJuros(c, p.cod_receb, p.dataPgto, juros, juros);
     resultado.movimentos.push({ cod_freceb: codF, tipo: tipoJ, valor: juros });
@@ -306,11 +337,12 @@ export async function executarRecebimento(
   let principalRecebido = 0;
   for (const pag of p.pagamentos) {
     const ehCartao = pag.forma === 'credito' || pag.forma === 'debito';
-    const tipo = TIPO_PRINCIPAL[pag.forma];
+    // tipo real da forma (codfpgt da dbforma_pagto); fallback pelo grupo de comportamento.
+    const tipo = (pag.tipo && String(pag.tipo).trim()) || TIPO_PRINCIPAL[pag.forma];
     let txCartao: number | null = null;
     let dtCartao: string | null = null;
     if (ehCartao) {
-      const op = await c.query('SELECT txopera, pzopera FROM db_manaus.dbopera WHERE codopera=$1', [pag.codopera]);
+      const op = await c.query('SELECT txopera, pzopera FROM dbopera WHERE codopera=$1', [pag.codopera]);
       if (op.rows.length === 0) throw new Error(`Operadora ${pag.codopera} não encontrada`);
       txCartao = Number(op.rows[0].txopera);
       const dtc = await c.query("SELECT to_char($1::date + $2::int,'YYYY-MM-DD') dt", [p.dataPgto, op.rows[0].pzopera]);
@@ -319,7 +351,7 @@ export async function executarRecebimento(
     const codF = await incContasFr(c, {
       codReceb: p.cod_receb, codcliOriginal, codopera: ehCartao ? pag.codopera : null,
       valor: pag.valor, tipo, sf: ehCartao ? 'N' : 'S', dataPgto: p.dataPgto,
-      txCartao, dtCartao, codConta: p.cod_conta, codusr,
+      txCartao, dtCartao, codConta: p.cod_conta, contaFinanceira: pag.cof_id ?? null, codusr,
       coddocumento: ehCartao ? pag.cvnsu : null, codautorizacao: ehCartao ? pag.autorizacao : null,
       parcela: ehCartao ? String(pag.vezes || 1) : null, nome: `Recebimento ${pag.forma}`,
     });
@@ -333,6 +365,19 @@ export async function executarRecebimento(
     principalRecebido += pag.valor;
   }
 
+  // 2b) Tarifa bancária do título (regra Delphi): lançamento separado tipo 06/07/08/44,
+  // conta financeira 161 (TARIFA). Não reduz o débito do cliente (TIPOS_TARIFA).
+  const tarifa = Number(p.tarifa || 0);
+  if (tarifa > 0) {
+    const forma0 = p.pagamentos[0].forma;
+    const tipoT = TIPO_TARIFA[forma0];
+    const codFt = await incContasFr(c, {
+      codReceb: p.cod_receb, codcliOriginal, valor: tarifa, tipo: tipoT, sf: 'S',
+      dataPgto: p.dataPgto, codConta: p.cod_conta, contaFinanceira: COF_TARIFA, codusr, nome: 'TARIFA',
+    });
+    resultado.movimentos.push({ cod_freceb: codFt, tipo: tipoT, valor: tarifa });
+  }
+
   // 3) Baixa do título original
   // valor_rec acumula principal + juros (paridade Oracle: JUROS_RECEBIDO depois desconta o juros
   // p/ achar o principal). rec='S' só quando o PRINCIPAL é totalmente coberto — senão parcial ('N').
@@ -344,7 +389,7 @@ export async function executarRecebimento(
       : Math.max(0, Number(titulo.valor_pgto || 0) - Number(titulo.valor_rec || 0));
   const rec = principalRecebido >= principalAlvo - 0.005 ? 'S' : 'N';
   await c.query(
-    'UPDATE db_manaus.dbreceb SET valor_rec=$1, rec=$2, dt_pgto=$3, cod_conta=$4 WHERE cod_receb=$5',
+    'UPDATE dbreceb SET valor_rec=$1, rec=$2, dt_pgto=$3, cod_conta=$4 WHERE cod_receb=$5',
     [novoValorRec, rec, p.dataPgto, p.cod_conta, p.cod_receb],
   );
   resultado.baixa = {
@@ -363,6 +408,7 @@ export interface TituloReceber {
   cod_receb: string;
   principalPendente: number;
   juros: number;
+  tarifa?: number;
 }
 
 export interface ReceberMultiParams {
@@ -416,7 +462,7 @@ export async function executarRecebimentoMulti(
   // Trava (paridade Delphi): todos os títulos devem ser do MESMO cliente.
   if (params.titulos.length > 1) {
     const cli = await c.query(
-      'SELECT DISTINCT codcli FROM db_manaus.dbreceb WHERE cod_receb = ANY($1)',
+      'SELECT DISTINCT codcli FROM dbreceb WHERE cod_receb = ANY($1)',
       [params.titulos.map((t) => t.cod_receb)],
     );
     if (cli.rows.length > 1) {
@@ -433,7 +479,7 @@ export async function executarRecebimentoMulti(
     );
   }
 
-  const userRes = await c.query('SELECT codusr FROM db_manaus.dbusuario WHERE nomeusr=$1 LIMIT 1', [params.username]);
+  const userRes = await c.query('SELECT codusr FROM dbusuario WHERE nomeusr=$1 LIMIT 1', [params.username]);
   const codusr: string | null = userRes.rows[0]?.codusr ?? null;
 
   // 1) FIN_CARTAO + parcelas da operadora: uma vez por cartão (valor total do cartão), à parte da baixa.
@@ -461,6 +507,7 @@ export async function executarRecebimentoMulti(
         cod_conta: params.cod_conta,
         username: params.username,
         juros: slot.titulo.juros,
+        tarifa: slot.titulo.tarifa,
         principalPendente: slot.titulo.principalPendente,
         pagamentos: slot.pagamentos,
       },

@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // PDF da DANFE + XMLs (guardados na emissão)
     const nfe = await client.query(
-      `SELECT nrodoc_fiscal, chave, imagem, modelo, xmlremessa, xmlretorno FROM db_manaus.dbfat_nfe
+      `SELECT nrodoc_fiscal, chave, imagem, modelo, xmlremessa, xmlretorno FROM dbfat_nfe
         WHERE codfat=$1 AND status='100' ORDER BY (status='100') DESC LIMIT 1`,
       [codFat],
     );
@@ -87,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // marca como enviado
     await client
-      .query(`UPDATE db_manaus.dbfat_nfe SET emailenviado='S' WHERE codfat=$1`, [codFat])
+      .query(`UPDATE dbfat_nfe SET emailenviado='S' WHERE codfat=$1`, [codFat])
       .catch(() => {});
 
     return res.status(200).json({

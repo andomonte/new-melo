@@ -51,3 +51,6 @@ next-env.d.ts
 .github/
 overload.js
 maintenance.js_ora_reffab.cjs
+
+# scratch com credenciais (nunca commitar)
+/_*.cjs

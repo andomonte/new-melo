@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await getPgPool().connect();
   try {
     const fat = await client.query(
-      `SELECT cancel FROM db_manaus.dbfatura WHERE codfat = $1`,
+      `SELECT cancel FROM dbfatura WHERE codfat = $1`,
       [String(codfat)],
     );
     if (fat.rows.length === 0) {
@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Canc_Fatura do Delphi, que cancela a fatura de forma desacoplada da NF-e.
     if (!ignorarNfe) {
       const nfeAtiva = await client.query(
-        `SELECT 1 FROM db_manaus.dbfat_nfe
+        `SELECT 1 FROM dbfat_nfe
           WHERE codfat = $1 AND status = '100'
             AND dthrcancelamento IS NULL AND numcancelamento IS NULL
           LIMIT 1`,
@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Vendas do faturamento.
     const vendasRes = await client.query(
-      `SELECT DISTINCT codvenda FROM db_manaus.dbprodfat
+      `SELECT DISTINCT codvenda FROM dbprodfat
         WHERE codfat = $1 AND codvenda IS NOT NULL`,
       [String(codfat)],
     );
@@ -72,13 +72,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // 1. Cancela a fatura.
       await client.query(
-        `UPDATE db_manaus.dbfatura SET cancel = 'S' WHERE codfat = $1`,
+        `UPDATE dbfatura SET cancel = 'S' WHERE codfat = $1`,
         [codfat],
       );
 
       // 2. Cancela contas a receber (exceto títulos de grupo 'GP...').
       await client.query(
-        `UPDATE db_manaus.dbreceb SET cancel = 'S'
+        `UPDATE dbreceb SET cancel = 'S'
           WHERE cod_fat = $1 AND (nro_doc IS NULL OR substr(nro_doc, 1, 2) <> 'GP')`,
         [codfat],
       );
@@ -88,19 +88,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         for (const cv of codVendas) {
           // Devolve o estoque de cada item (reverte a baixa do faturamento).
           const itens = await client.query(
-            `SELECT codprod, qtd, arm_id FROM db_manaus.dbitvenda WHERE codvenda = $1`,
+            `SELECT codprod, qtd, arm_id FROM dbitvenda WHERE codvenda = $1`,
             [cv],
           );
           for (const it of itens.rows) {
             const qtd = Number(it.qtd) || 0;
             if (!qtd || !it.codprod) continue;
             await client.query(
-              `UPDATE db_manaus.dbprod SET qtest = COALESCE(qtest, 0) + $1 WHERE codprod = $2`,
+              `UPDATE dbprod SET qtest = COALESCE(qtest, 0) + $1 WHERE codprod = $2`,
               [qtd, it.codprod],
             );
             if (it.arm_id != null) {
               await client.query(
-                `UPDATE db_manaus.cad_armazem_produto
+                `UPDATE cad_armazem_produto
                     SET arp_qtest = COALESCE(arp_qtest, 0) + $1
                   WHERE arp_codprod = $2 AND arp_arm_id = $3`,
                 [qtd, it.codprod, it.arm_id],
@@ -109,15 +109,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
           // Cancela a venda.
           await client.query(
-            `UPDATE db_manaus.dbvenda SET cancel = 'S' WHERE codvenda = $1`,
+            `UPDATE dbvenda SET cancel = 'S' WHERE codvenda = $1`,
             [cv],
           );
           // Pré-nota (só quando a venda é tipo '1').
           await client
             .query(
-              `UPDATE db_manaus.dbprenota SET cancel = 'S', dtcancel = now()
+              `UPDATE dbprenota SET cancel = 'S', dtcancel = now()
                 WHERE codvenda = $1
-                  AND EXISTS (SELECT 1 FROM db_manaus.dbvenda v WHERE v.codvenda = $1 AND v.tipo = '1')`,
+                  AND EXISTS (SELECT 1 FROM dbvenda v WHERE v.codvenda = $1 AND v.tipo = '1')`,
               [cv],
             )
             .catch(() => {});
@@ -125,14 +125,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } else if (codVendas.length > 0) {
         // Libera as vendas (volta para 'L', disponível p/ refaturar).
         await client.query(
-          `UPDATE db_manaus.dbvenda SET status = 'L' WHERE codvenda = ANY($1)`,
+          `UPDATE dbvenda SET status = 'L' WHERE codvenda = ANY($1)`,
           [codVendas],
         );
       }
 
       // 4. Log da ação (espelha inc_acao_usr 'CANCELAR' / 'DBFATURA').
       await client.query(
-        `INSERT INTO db_manaus.dbacao (codusr, acao, tabela, obs, data)
+        `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
          VALUES ($1, 'CANCELAR', 'DBFATURA', $2, now())`,
         [
           usuarioTxt.substring(0, 60),

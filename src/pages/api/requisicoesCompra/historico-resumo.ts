@@ -62,18 +62,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
           COALESCE(h.total_mudancas, 0) as total_mudancas,
           COALESCE(h.ultima_mudanca, r.req_data_criacao, NOW()) as ultima_mudanca,
           COALESCE(r.req_data_criacao, NOW()) as data_criacao
-        FROM db_manaus.cmp_requisicao r
+        FROM cmp_requisicao r
         LEFT JOIN (
           SELECT 
             req_id,
             req_versao,
             COUNT(*) as total_mudancas,
             MAX(created_at) as ultima_mudanca
-          FROM db_manaus.cmp_requisicao_historico
+          FROM cmp_requisicao_historico
           GROUP BY req_id, req_versao
         ) h ON r.req_id = h.req_id AND r.req_versao = h.req_versao
-        LEFT JOIN db_manaus.fornecedores f ON r.fornecedor_id = f.id
-        LEFT JOIN db_manaus.compradores c ON r.comprador_id = c.id
+        LEFT JOIN fornecedores f ON r.fornecedor_id = f.id
+        LEFT JOIN compradores c ON r.comprador_id = c.id
         WHERE r.req_id IS NOT NULL
       )
       SELECT *

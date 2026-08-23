@@ -243,13 +243,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          
           COALESCE(
             (SELECT SUM(f.valor_pgto) 
-             FROM db_manaus.dbfpgto f 
+             FROM dbfpgto f 
              WHERE f.cod_pgto = p.cod_pgto 
                AND (f.cancel IS NULL OR f.cancel != 'S')
             ), 0
           ) as total_pago_historico,
           (SELECT f.cod_fpgto 
-           FROM db_manaus.dbfpgto f 
+           FROM dbfpgto f 
            WHERE f.cod_pgto = p.cod_pgto 
              AND (f.cancel IS NULL OR f.cancel != 'S')
            ORDER BY f.dt_pgto DESC, f.fpg_cof_id DESC
@@ -259,27 +259,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             WHEN p.cancel = 'S' THEN 'cancelado'
             WHEN COALESCE(
               (SELECT SUM(f.valor_pgto) 
-               FROM db_manaus.dbfpgto f 
+               FROM dbfpgto f 
                WHERE f.cod_pgto = p.cod_pgto 
                  AND (f.cancel IS NULL OR f.cancel != 'S')
               ), 0
             ) >= p.valor_pgto THEN 'pago'
             WHEN COALESCE(
               (SELECT SUM(f.valor_pgto) 
-               FROM db_manaus.dbfpgto f 
+               FROM dbfpgto f 
                WHERE f.cod_pgto = p.cod_pgto 
                  AND (f.cancel IS NULL OR f.cancel != 'S')
               ), 0
             ) > 0 THEN 'pago_parcial'
             ELSE 'pendente'
           END as status
-      FROM db_manaus.dbpgto p
-      LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
-      LEFT JOIN db_manaus.dbtransp t ON t.codtransp = p.cod_transp
-      LEFT JOIN db_manaus.dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
-      LEFT JOIN db_manaus.cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
-      LEFT JOIN db_manaus.dbbanco b ON b.cod_banco = p.banco
-        LEFT JOIN db_manaus.dbcompradores comp ON comp.codcomprador = p.codcomprador
+      FROM dbpgto p
+      LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+      LEFT JOIN dbtransp t ON t.codtransp = p.cod_transp
+      LEFT JOIN dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
+      LEFT JOIN cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
+      LEFT JOIN dbbanco b ON b.cod_banco = p.banco
+        LEFT JOIN dbcompradores comp ON comp.codcomprador = p.codcomprador
         WHERE 1=1 ${whereClause}
       )
       SELECT * FROM contas_com_status
@@ -307,27 +307,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             WHEN p.cancel = 'S' THEN 'cancelado'
             WHEN COALESCE(
               (SELECT SUM(f.valor_pgto) 
-               FROM db_manaus.dbfpgto f 
+               FROM dbfpgto f 
                WHERE f.cod_pgto = p.cod_pgto 
                  AND (f.cancel IS NULL OR f.cancel != 'S')
               ), 0
             ) >= p.valor_pgto THEN 'pago'
             WHEN COALESCE(
               (SELECT SUM(f.valor_pgto) 
-               FROM db_manaus.dbfpgto f 
+               FROM dbfpgto f 
                WHERE f.cod_pgto = p.cod_pgto 
                  AND (f.cancel IS NULL OR f.cancel != 'S')
               ), 0
             ) > 0 THEN 'pago_parcial'
             ELSE 'pendente'
           END as status
-        FROM db_manaus.dbpgto p
-        LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
-        LEFT JOIN db_manaus.dbtransp t ON t.codtransp = p.cod_transp
-        LEFT JOIN db_manaus.dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
-        LEFT JOIN db_manaus.cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
-        LEFT JOIN db_manaus.dbbanco b ON b.cod_banco = p.banco
-        LEFT JOIN db_manaus.dbcompradores comp ON comp.codcomprador = p.codcomprador
+        FROM dbpgto p
+        LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+        LEFT JOIN dbtransp t ON t.codtransp = p.cod_transp
+        LEFT JOIN dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
+        LEFT JOIN cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
+        LEFT JOIN dbbanco b ON b.cod_banco = p.banco
+        LEFT JOIN dbcompradores comp ON comp.codcomprador = p.codcomprador
         WHERE 1=1 ${whereClause}
       )
       SELECT COUNT(*) as total

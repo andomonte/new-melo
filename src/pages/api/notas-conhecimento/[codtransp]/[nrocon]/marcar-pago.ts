@@ -28,7 +28,7 @@ export default async function handler(
 
     // 1. Verificar se a nota de conhecimento existe
     const checkNota = await client.query(
-      `SELECT * FROM db_manaus.dbconhecimentoent 
+      `SELECT * FROM dbconhecimentoent 
        WHERE codtransp = $1 AND nrocon = $2`,
       [codtransp, nrocon]
     );
@@ -54,18 +54,18 @@ export default async function handler(
 
     // 2. Criar registro na tabela dbpgto
     const maxCodResult = await client.query(
-      'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM db_manaus.dbpgto'
+      'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM dbpgto'
     );
     const nextCodPgto = maxCodResult.rows[0].next_cod.toString().padStart(9, '0');
 
     const maxPagCofResult = await client.query(
-      'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM db_manaus.dbpgto'
+      'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM dbpgto'
     );
     const nextPagCofId = maxPagCofResult.rows[0].next_pag_cof_id;
 
     // Inserir pagamento em dbpgto
     await client.query(
-      `INSERT INTO db_manaus.dbpgto (
+      `INSERT INTO dbpgto (
         cod_pgto,
         pag_cof_id,
         tipo,
@@ -97,7 +97,7 @@ export default async function handler(
 
     // 3. Criar relacionamento em dbconhecimento
     await client.query(
-      `INSERT INTO db_manaus.dbconhecimento (codpgto, codtransp, nrocon)
+      `INSERT INTO dbconhecimento (codpgto, codtransp, nrocon)
        VALUES ($1, $2, $3)
        ON CONFLICT (codpgto, codtransp, nrocon) DO NOTHING`,
       [nextCodPgto, codtransp, nrocon]
@@ -105,7 +105,7 @@ export default async function handler(
 
     // 4. Atualizar dbconhecimentoent marcando como pago
     await client.query(
-      `UPDATE db_manaus.dbconhecimentoent 
+      `UPDATE dbconhecimentoent 
        SET pago = 'S'
        WHERE codtransp = $1 AND nrocon = $2`,
       [codtransp, nrocon]

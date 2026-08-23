@@ -22,7 +22,7 @@ export default async function handler(
     // Buscar tipos de documento (formas de pagamento)
     const tiposDocumento = await client.query(`
       SELECT codigo, descricao
-      FROM db_manaus.dbtipo_documento
+      FROM dbtipo_documento
       WHERE ativo = true
       ORDER BY ordem, descricao
     `);
@@ -30,7 +30,7 @@ export default async function handler(
     // Buscar tipos de fatura
     const tiposFatura = await client.query(`
       SELECT codigo, descricao
-      FROM db_manaus.dbtipo_fatura
+      FROM dbtipo_fatura
       WHERE ativo = true
       ORDER BY ordem, descricao
     `);

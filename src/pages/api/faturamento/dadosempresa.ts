@@ -25,7 +25,7 @@ export default async function handler(
     if (inscricaoestadual && !cgc) {
       console.log(`🔍 Buscando CNPJ na db_ie para IE: ${inscricaoestadual}`);
       const ieResult = await client.query(
-        `SELECT cgc FROM db_manaus.db_ie WHERE inscricaoestadual = $1`,
+        `SELECT cgc FROM db_ie WHERE inscricaoestadual = $1`,
         [inscricaoestadual as string]
       );
       

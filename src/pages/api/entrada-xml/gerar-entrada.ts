@@ -40,7 +40,7 @@ export default async function handler(
       // Lock para prevenir concorrência
       const lockResult = await client.query(`
         SELECT codnfe_ent, exec as status, nnf as numero_nf
-        FROM db_manaus.dbnfe_ent
+        FROM dbnfe_ent
         WHERE codnfe_ent = $1
         FOR UPDATE NOWAIT
       `, [nfeId]);
@@ -61,7 +61,7 @@ export default async function handler(
       // Verificar se existem associações salvas
       const associacoesCount = await client.query(`
         SELECT COUNT(*) as count
-        FROM db_manaus.nfe_item_associacao
+        FROM nfe_item_associacao
         WHERE nfe_id = $1 AND status != 'ASSOCIADO_TESTE'
       `, [nfeId]);
 
@@ -74,7 +74,7 @@ export default async function handler(
 
       // Marcar NFe como processada
       await client.query(`
-        UPDATE db_manaus.dbnfe_ent
+        UPDATE dbnfe_ent
         SET exec = 'S'
         WHERE codnfe_ent = $1
       `, [nfeId]);

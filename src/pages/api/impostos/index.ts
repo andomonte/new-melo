@@ -2,7 +2,7 @@
 //
 // API de Cálculo de Impostos — FASE 3 (port PL/pgSQL).
 // Este endpoint NÃO calcula nada em JS: valida a entrada, chama a função
-// db_manaus.calcular_imposto_item (tradução fiel de CALCULO_IMPOSTO do Oracle)
+// calcular_imposto_item (tradução fiel de CALCULO_IMPOSTO do Oracle)
 // e mapeia o retorno. Toda a aritmética fiscal vive no banco.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -85,7 +85,7 @@ export default async function handler(
 
     // Cálculo 100% no banco — sem aritmética fiscal em JS.
     const { rows } = await client.query(
-      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
         String(body.codProd).trim().padStart(6, '0'),
         String(body.codCli).trim(),
@@ -180,7 +180,7 @@ export default async function handler(
         produto: { ncm8: r.ncm },
         mva: { mvaOriginal: num(r.mva) },
         cfop: r.cfop ?? '',
-        observacao: 'port PL/pgSQL: db_manaus.calcular_imposto_item',
+        observacao: 'port PL/pgSQL: calcular_imposto_item',
         ibs_cbs_informativo: true,
       },
     };

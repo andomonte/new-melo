@@ -9,7 +9,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
   const client = await getPgPool().connect();
   try {
-    const r = await client.query('UPDATE db_manaus.dbgpfunc SET descr = $2 WHERE codgpf = $1', [codgpf, descr]);
+    const r = await client.query('UPDATE dbgpfunc SET descr = $2 WHERE codgpf = $1', [codgpf, descr]);
     if (!r.rowCount) return res.status(404).json({ error: 'Grupo de função não encontrado.' });
     res.status(200).json({ data: { codgpf, descr } });
   } catch (e: any) {

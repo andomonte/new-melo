@@ -33,7 +33,7 @@ export default async function handler(
 
     // Verificar se existe
     const existe = await client.query(
-      'SELECT id, nro_di FROM db_manaus.dbent_importacao WHERE id = $1',
+      'SELECT id, nro_di FROM dbent_importacao WHERE id = $1',
       [id],
     );
 
@@ -45,10 +45,10 @@ export default async function handler(
     const nroDi = existe.rows[0].nro_di;
 
     // Excluir na ordem correta (filhos primeiro)
-    await client.query('DELETE FROM db_manaus.dbent_importacao_it_ent WHERE id_importacao = $1', [id]);
-    await client.query('DELETE FROM db_manaus.dbent_importacao_entrada WHERE id_importacao = $1', [id]);
-    await client.query('DELETE FROM db_manaus.dbent_importacao_contratos WHERE id_importacao = $1', [id]);
-    await client.query('DELETE FROM db_manaus.dbent_importacao WHERE id = $1', [id]);
+    await client.query('DELETE FROM dbent_importacao_it_ent WHERE id_importacao = $1', [id]);
+    await client.query('DELETE FROM dbent_importacao_entrada WHERE id_importacao = $1', [id]);
+    await client.query('DELETE FROM dbent_importacao_contratos WHERE id_importacao = $1', [id]);
+    await client.query('DELETE FROM dbent_importacao WHERE id = $1', [id]);
 
     await client.query('COMMIT');
 

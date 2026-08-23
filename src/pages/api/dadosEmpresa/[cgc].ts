@@ -51,7 +51,7 @@ const handleGetOne = async (
     client = await pool.connect();
 
     // ✅ ADAPTADO: Query para buscar uma empresa pelo CGC
-    const query = 'SELECT * FROM db_manaus."dadosempresa" WHERE "cgc" = $1';
+    const query = 'SELECT * FROM "dadosempresa" WHERE "cgc" = $1';
     const result = await client.query(query, [cgc]);
 
     if (result.rowCount === 0) {
@@ -135,7 +135,7 @@ const handleUpdate = async (
 
     // ✅ ADAPTADO: Query de atualização para a tabela dadosempresa
     const query = `
-      UPDATE db_manaus."dadosempresa"
+      UPDATE "dadosempresa"
       SET ${setClause}
       WHERE "cgc" = $${fields.length + 1}
       RETURNING *;
@@ -179,7 +179,7 @@ const handleDelete = async (
     client = await pool.connect();
 
     // ✅ ADAPTADO: Query de deleção para a tabela dadosempresa
-    const query = 'DELETE FROM db_manaus."dadosempresa" WHERE "cgc" = $1';
+    const query = 'DELETE FROM "dadosempresa" WHERE "cgc" = $1';
     const result = await client.query(query, [cgc]);
 
     if (result.rowCount === 0) {

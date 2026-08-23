@@ -47,9 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const sql = `
       SELECT v.codvenda, v.nrovenda, v.data, v.tipo, v.total, v.obs, v.status,
              c.nome AS cliente_nome, vd.nome AS vendedor_nome
-        FROM db_manaus.dbvenda v
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = v.codcli
-        LEFT JOIN db_manaus.dbvend vd ON vd.codvend = v.codvend
+        FROM dbvenda v
+        LEFT JOIN dbclien c ON c.codcli = v.codcli
+        LEFT JOIN dbvend vd ON vd.codvend = v.codvend
        WHERE ${cond.join(' AND ')}
        ORDER BY v.data, v.tipo, v.nrovenda
        LIMIT 2000`;

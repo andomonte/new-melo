@@ -28,7 +28,7 @@ export default async function handler(
           SELECT
             req_status AS status,
             COUNT(*) AS quantidade
-          FROM db_manaus.cmp_requisicao
+          FROM cmp_requisicao
           WHERE req_data BETWEEN $1 AND $2
           GROUP BY req_status
         ),

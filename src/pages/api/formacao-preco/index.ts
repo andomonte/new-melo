@@ -126,12 +126,12 @@ const handleGetListWithFilters = async (
     const whereClause =
       whereGroups.length > 0 ? `WHERE ${whereGroups.join(' AND ')}` : '';
 
-    const totalQuery = `SELECT COUNT(*) FROM db_manaus."DBFORMACAOPRVENDA" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM "DBFORMACAOPRVENDA" ${whereClause}`;
     const totalResult = await client.query(totalQuery, params);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     const dataQuery = `
-      SELECT * FROM db_manaus."DBFORMACAOPRVENDA"
+      SELECT * FROM "DBFORMACAOPRVENDA"
       ${whereClause}
       ORDER BY "CODPROD" ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2};
@@ -184,12 +184,12 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
     const whereClause = search ? `WHERE "CODPROD" ILIKE $3` : '';
     const searchParam = search ? [`%${search}%`] : [];
 
-    const totalQuery = `SELECT COUNT(*) FROM db_manaus."DBFORMACAOPRVENDA" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM "DBFORMACAOPRVENDA" ${whereClause}`;
     const totalResult = await client.query(totalQuery, searchParam);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     const dataQuery = `
-      SELECT * FROM db_manaus."DBFORMACAOPRVENDA"
+      SELECT * FROM "DBFORMACAOPRVENDA"
       ${whereClause}
       ORDER BY "CODPROD" ASC
       LIMIT $1 OFFSET $2;
@@ -309,7 +309,7 @@ const handleCreate = async (req: NextApiRequest, res: NextApiResponse) => {
     client = await pool.connect();
 
     const query = `
-      INSERT INTO db_manaus."DBFORMACAOPRVENDA" (
+      INSERT INTO "DBFORMACAOPRVENDA" (
         "CODPROD", "TIPOPRECO", "MARGEMLIQUIDA", "ICMSDEVOL", "ICMS", "IPI", "PIS",
         "COFINS", "DCI", "COMISSAO", "FATORDESPESAS", "PRECOVENDA", "TAXACARTAO"
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)

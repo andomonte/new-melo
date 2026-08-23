@@ -87,7 +87,7 @@ export default async function handler(
     if (!isTestMode) {
       const nfeResult = await client.query(`
         SELECT fornecedor_id
-        FROM db_manaus.nfe_entrada
+        FROM nfe_entrada
         WHERE numero_nf = $1
         LIMIT 1
       `, [nfeIdFinal]);
@@ -106,11 +106,11 @@ export default async function handler(
 
     // Limpar associações anteriores
     await client.query(`
-      DELETE FROM db_manaus.nfe_item_associacao WHERE nfe_id = $1
+      DELETE FROM nfe_item_associacao WHERE nfe_id = $1
     `, [nfeIdFinal]);
 
     await client.query(`
-      DELETE FROM db_manaus.nfe_item_pedido_associacao WHERE nfe_id = $1
+      DELETE FROM nfe_item_pedido_associacao WHERE nfe_id = $1
     `, [nfeIdFinal]);
 
     // 🔒 PRÉ-VALIDAÇÃO: Agrupar quantidades por OC/Produto para validar SOMA TOTAL
@@ -141,11 +141,11 @@ export default async function handler(
       const validacaoResult = await client.query(`
         SELECT
           (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel
-        FROM db_manaus.cmp_ordem_compra o
-        INNER JOIN db_manaus.cmp_requisicao r
+        FROM cmp_ordem_compra o
+        INNER JOIN cmp_requisicao r
           ON o.orc_req_id = r.req_id
           AND o.orc_req_versao = r.req_versao
-        INNER JOIN db_manaus.cmp_it_requisicao ri
+        INNER JOIN cmp_it_requisicao ri
           ON r.req_id = ri.itr_req_id
           AND r.req_versao = ri.itr_req_versao
           AND ri.itr_codprod = $2
@@ -187,9 +187,9 @@ export default async function handler(
         // 🔧 Buscar códigos sinônimos do produto (ex: 414182 e 001620 são o mesmo produto)
         const codigosSinonimosResult = await client.query(`
           SELECT DISTINCT codprod
-          FROM db_manaus.dbprod
+          FROM dbprod
           WHERE descr = (
-            SELECT descr FROM db_manaus.dbprod WHERE codprod = $1 LIMIT 1
+            SELECT descr FROM dbprod WHERE codprod = $1 LIMIT 1
           )
         `, [item.produtoId]);
 
@@ -212,11 +212,11 @@ export default async function handler(
             ri.itr_codprod as codigo_produto_na_oc,
             COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
             (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel
-          FROM db_manaus.cmp_ordem_compra o
-          INNER JOIN db_manaus.cmp_requisicao r
+          FROM cmp_ordem_compra o
+          INNER JOIN cmp_requisicao r
             ON o.orc_req_id = r.req_id
             AND o.orc_req_versao = r.req_versao
-          INNER JOIN db_manaus.cmp_it_requisicao ri
+          INNER JOIN cmp_it_requisicao ri
             ON r.req_id = ri.itr_req_id
             AND r.req_versao = ri.itr_req_versao
             AND ri.itr_codprod = ANY($2::text[])
@@ -302,7 +302,7 @@ export default async function handler(
       });
 
       const itemResult = await client.query(`
-        INSERT INTO db_manaus.nfe_item_associacao (
+        INSERT INTO nfe_item_associacao (
           nfe_id,
           nfe_item_id,
           produto_cod,
@@ -346,7 +346,7 @@ export default async function handler(
         });
 
         await client.query(`
-          INSERT INTO db_manaus.nfe_item_pedido_associacao (
+          INSERT INTO nfe_item_pedido_associacao (
             nfe_associacao_id,
             nfe_id,
             req_id,
@@ -373,7 +373,7 @@ export default async function handler(
     // exec: 'N' = Recebida, 'C' = Associada, 'S' = Entrada Gerada (processada)
     // IMPORTANTE: Usar nfeId ORIGINAL para UPDATE, não nfeIdFinal (que é '1' para testes)
     await client.query(`
-      UPDATE db_manaus.dbnfe_ent
+      UPDATE dbnfe_ent
       SET exec = 'C'
       WHERE codnfe_ent = $1
     `, [nfeId]);
@@ -382,7 +382,7 @@ export default async function handler(
 
     // Registrar historico de conclusao de associacao
     if (userId && userName) {
-      await client.query('SET search_path TO db_manaus');
+      await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
       await registrarHistoricoNfe(client, {
         codNfeEnt: parseInt(nfeId),
         tipoAcao: 'ASSOCIACAO_CONCLUIDA',
@@ -412,9 +412,9 @@ export default async function handler(
       // Buscar código do fornecedor da NFe (cod_credor com 5 dígitos)
       const nfeDataResult = await client.query(`
         SELECT c.cod_credor
-        FROM db_manaus.dbnfe_ent nfe
-        LEFT JOIN db_manaus.dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
-        LEFT JOIN db_manaus.dbcredor c ON (
+        FROM dbnfe_ent nfe
+        LEFT JOIN dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
+        LEFT JOIN dbcredor c ON (
           emit.cpf_cnpj = c.cpf_cgc OR
           UPPER(TRIM(emit.xnome)) = UPPER(TRIM(c.nome))
         )
@@ -438,7 +438,7 @@ export default async function handler(
               // Se a marca veio como nome (ex: "BALDWIN") ao invés de código, buscar o código
               if (codMarcaProduto && codMarcaProduto.length > 5) {
                 const marcaResult = await client.query(
-                  'SELECT codmarca FROM db_manaus.dbmarcas WHERE UPPER(descr) = UPPER($1) LIMIT 1',
+                  'SELECT codmarca FROM dbmarcas WHERE UPPER(descr) = UPPER($1) LIMIT 1',
                   [codMarcaProduto]
                 );
                 if (marcaResult.rows.length > 0) {
@@ -454,7 +454,7 @@ export default async function handler(
               // Se não foi informada, buscar do produto
               if (!codMarcaProduto) {
                 const prodResult = await client.query(
-                  'SELECT codmarca FROM db_manaus.dbprod WHERE codprod = $1',
+                  'SELECT codmarca FROM dbprod WHERE codprod = $1',
                   [item.produtoId]
                 );
                 if (prodResult.rows.length > 0) {
@@ -465,7 +465,7 @@ export default async function handler(
               // Verificar se a marca existe na tabela dbmarcas antes de inserir
               if (codMarcaProduto) {
                 const marcaExiste = await client.query(
-                  'SELECT 1 FROM db_manaus.dbmarcas WHERE codmarca = $1',
+                  'SELECT 1 FROM dbmarcas WHERE codmarca = $1',
                   [codMarcaProduto]
                 );
                 if (marcaExiste.rows.length === 0) {
@@ -478,7 +478,7 @@ export default async function handler(
               let codId: number;
               const checkRef = await client.query(`
                 SELECT cod_id
-                FROM db_manaus.dbref_fabrica
+                FROM dbref_fabrica
                 WHERE referencia = $1
                   AND codcredor = $2
                   AND codmarca = $3
@@ -490,12 +490,12 @@ export default async function handler(
               } else {
                 // Criar nova referência
                 const maxIdResult = await client.query(
-                  'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM db_manaus.dbref_fabrica'
+                  'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica'
                 );
                 codId = maxIdResult.rows[0].next_id;
 
                 await client.query(`
-                  INSERT INTO db_manaus.dbref_fabrica (cod_id, codmarca, referencia, codcredor)
+                  INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor)
                   VALUES ($1, $2, $3, $4)
                 `, [codId, codMarcaProduto || '', item.referenciaNFe, codCredor]);
 
@@ -505,13 +505,13 @@ export default async function handler(
               // Verificar se já existe o relacionamento produto-referência
               const checkProdRef = await client.query(`
                 SELECT 1
-                FROM db_manaus.dbprod_ref_fabrica
+                FROM dbprod_ref_fabrica
                 WHERE codprod = $1 AND cod_id = $2
               `, [item.produtoId, codId]);
 
               if (checkProdRef.rows.length === 0) {
                 await client.query(`
-                  INSERT INTO db_manaus.dbprod_ref_fabrica (codprod, cod_id)
+                  INSERT INTO dbprod_ref_fabrica (codprod, cod_id)
                   VALUES ($1, $2)
                 `, [item.produtoId, codId]);
 

@@ -320,12 +320,12 @@ export default async function handler(
           THEN EXTRACT(DAY FROM (COALESCE(o.orc_previsao_chegada, r.req_previsao_chegada) - o.orc_data))::INTEGER
           ELSE NULL
         END as prazo_entrega
-      FROM db_manaus.cmp_ordem_compra o
-      LEFT JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
-      LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
-      LEFT JOIN db_manaus.cad_unidade_melo ue ON COALESCE(o.orc_unm_id_entrega, r.req_unm_id_entrega) = ue.unm_id
-      LEFT JOIN db_manaus.cad_unidade_melo ud ON COALESCE(o.orc_unm_id_destino, r.req_unm_id_destino) = ud.unm_id
+      FROM cmp_ordem_compra o
+      LEFT JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+      LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
+      LEFT JOIN dbcompradores c ON r.req_codcomprador = c.codcomprador
+      LEFT JOIN cad_unidade_melo ue ON COALESCE(o.orc_unm_id_entrega, r.req_unm_id_entrega) = ue.unm_id
+      LEFT JOIN cad_unidade_melo ud ON COALESCE(o.orc_unm_id_destino, r.req_unm_id_destino) = ud.unm_id
       ${whereString}
       ${orderByClause}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
@@ -341,12 +341,12 @@ export default async function handler(
     // Query para contar total
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM db_manaus.cmp_ordem_compra o
-      LEFT JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
-      LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
-      LEFT JOIN db_manaus.cad_unidade_melo ue ON COALESCE(o.orc_unm_id_entrega, r.req_unm_id_entrega) = ue.unm_id
-      LEFT JOIN db_manaus.cad_unidade_melo ud ON COALESCE(o.orc_unm_id_destino, r.req_unm_id_destino) = ud.unm_id
+      FROM cmp_ordem_compra o
+      LEFT JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+      LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
+      LEFT JOIN dbcompradores c ON r.req_codcomprador = c.codcomprador
+      LEFT JOIN cad_unidade_melo ue ON COALESCE(o.orc_unm_id_entrega, r.req_unm_id_entrega) = ue.unm_id
+      LEFT JOIN cad_unidade_melo ud ON COALESCE(o.orc_unm_id_destino, r.req_unm_id_destino) = ud.unm_id
       ${whereString}
     `;
 

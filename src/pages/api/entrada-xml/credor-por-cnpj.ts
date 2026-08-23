@@ -39,14 +39,14 @@ export default async function handler(
       SELECT
         codtransp AS cod_credor, nome, nomefant AS nome_fant, cpfcgc AS cpf_cgc,
         iest, uf, cidade, ender AS endereco, tipo
-      FROM db_manaus.dbtransp
+      FROM dbtransp
       WHERE regexp_replace(upper(COALESCE(cpfcgc, '')), '[^0-9A-Z]', '', 'g') = $1
       ORDER BY codtransp
       LIMIT 50`
       : `
       SELECT
         cod_credor, nome, nome_fant, cpf_cgc, iest, uf, cidade, endereco, tipo
-      FROM db_manaus.dbcredor
+      FROM dbcredor
       WHERE regexp_replace(upper(COALESCE(cpf_cgc, '')), '[^0-9A-Z]', '', 'g') = $1
       ORDER BY cod_credor
       LIMIT 50`;

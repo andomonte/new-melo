@@ -60,13 +60,13 @@ const ENTRADAS_QUERY = `
     op.inicio_recebimento,
     rec.data_confirmacao_preco IS NOT NULL as preco_confirmado,
     rec.data_confirmacao_preco
-  FROM db_manaus.dbent e
-  JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
-  LEFT JOIN db_manaus.dbnfe_ent n ON n.chave = e.chave
-  LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
-  LEFT JOIN db_manaus.entrada_operacoes op ON op.codent = e.codent
+  FROM dbent e
+  JOIN dbent_recebimento rec ON rec.codent = e.codent
+  LEFT JOIN dbnfe_ent n ON n.chave = e.chave
+  LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
+  LEFT JOIN entrada_operacoes op ON op.codent = e.codent
   LEFT JOIN (
-    SELECT codent, COUNT(*) as total FROM db_manaus.dbitent GROUP BY codent
+    SELECT codent, COUNT(*) as total FROM dbitent GROUP BY codent
   ) item_count ON item_count.codent = e.codent
   WHERE
     rec.status IN ('AGUARDANDO_RECEBIMENTO', 'EM_RECEBIMENTO')

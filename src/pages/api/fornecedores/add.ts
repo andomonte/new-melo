@@ -35,7 +35,7 @@ export default async function handle(
       ) nums
       WHERE num NOT IN (
         SELECT CAST(cod_credor AS INTEGER) 
-        FROM db_manaus.dbcredor 
+        FROM dbcredor 
         WHERE cod_credor ~ '^[0-9]+$'
       )
     `);
@@ -81,7 +81,7 @@ export default async function handle(
     const values = Object.values(fornecedorData);
 
     const insertQuery = `
-      INSERT INTO db_manaus.dbcredor (${columns}) 
+      INSERT INTO dbcredor (${columns}) 
       VALUES (${placeholders}) 
       RETURNING *;
     `;

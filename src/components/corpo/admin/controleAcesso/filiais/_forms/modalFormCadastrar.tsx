@@ -98,6 +98,23 @@ const FormFilialContainer: React.FC<FormFilialContainerProps> = ({
                   <option value="Europe/Lisbon">Europe/Lisboa (UTC+0)</option>
                 </select>
               </div>
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Código de acesso (telas soltas)
+                </label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  style={{ textTransform: 'none' }}
+                  value={(filial as any).codigo_acesso || ''}
+                  placeholder="deixe vazio para não exigir código"
+                  onChange={(e) => handleFilialChange({ ...filial, codigo_acesso: e.target.value } as any)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Segredo compartilhado do setor, pedido ao abrir Separação / Conferência / TV. Vazio = filial sem código.
+                </p>
+              </div>
             </div>
           )}
         </div>

@@ -11,9 +11,9 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
   const client = await getPgPool().connect();
   try {
-    const existe = await client.query('SELECT 1 FROM db_manaus.dbinformativo WHERE simbolo = $1', [simbolo]);
+    const existe = await client.query('SELECT 1 FROM dbinformativo WHERE simbolo = $1', [simbolo]);
     if (existe.rowCount) return res.status(409).json({ error: `Já existe o informativo "${simbolo}".` });
-    await client.query('INSERT INTO db_manaus.dbinformativo (simbolo, descr) VALUES ($1, $2)', [simbolo, descr]);
+    await client.query('INSERT INTO dbinformativo (simbolo, descr) VALUES ($1, $2)', [simbolo, descr]);
     res.status(201).json({ data: { simbolo, descr } });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

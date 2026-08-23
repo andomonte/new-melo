@@ -58,7 +58,7 @@ export default async function handler(
 
     // Verificar se a requisição existe
     const checkReq = await client.query(
-      `SELECT req_id, req_versao, req_status FROM db_manaus.cmp_requisicao
+      `SELECT req_id, req_versao, req_status FROM cmp_requisicao
        WHERE req_id = $1 AND req_versao = $2`,
       [reqId, reqVersao]
     );
@@ -88,7 +88,7 @@ export default async function handler(
     for (const item of itens) {
       // Verificar se produto existe
       const checkProd = await client.query(
-        `SELECT codprod, descr, ref FROM db_manaus.dbprod WHERE codprod = $1 AND excluido = 0`,
+        `SELECT codprod, descr, ref FROM dbprod WHERE codprod = $1 AND excluido = 0`,
         [item.codprod]
       );
 
@@ -101,7 +101,7 @@ export default async function handler(
 
       // Verificar se item já existe na requisição
       const checkItem = await client.query(
-        `SELECT itr_codprod FROM db_manaus.cmp_it_requisicao
+        `SELECT itr_codprod FROM cmp_it_requisicao
          WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3`,
         [reqId, reqVersao, item.codprod]
       );
@@ -113,7 +113,7 @@ export default async function handler(
 
       // Inserir item
       await client.query(
-        `INSERT INTO db_manaus.cmp_it_requisicao (
+        `INSERT INTO cmp_it_requisicao (
           itr_req_id,
           itr_req_versao,
           itr_codprod,

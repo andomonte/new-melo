@@ -13,14 +13,14 @@ import { getPgPool } from '@/lib/pg';
 async function getOrCreateAnalise(client: any, codvenda: string, usuario: string): Promise<number> {
   // Buscar análise EM_ANALISE existente
   const existing = await client.query(
-    `SELECT id FROM db_manaus.dbanalise_liberacao WHERE codvenda = $1 AND resultado = 'EM_ANALISE' ORDER BY id DESC LIMIT 1`,
+    `SELECT id FROM dbanalise_liberacao WHERE codvenda = $1 AND resultado = 'EM_ANALISE' ORDER BY id DESC LIMIT 1`,
     [codvenda]
   );
   if (existing.rows.length > 0) return existing.rows[0].id;
 
   // Criar nova análise + snapshot dos itens originais
   const insert = await client.query(
-    `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario) VALUES ($1, 'EM_ANALISE', $2) RETURNING id`,
+    `INSERT INTO dbanalise_liberacao (codvenda, resultado, usuario) VALUES ($1, 'EM_ANALISE', $2) RETURNING id`,
     [codvenda, usuario]
   );
   const idAnalise = insert.rows[0].id;
@@ -32,7 +32,7 @@ async function getOrCreateAnalise(client: any, codvenda: string, usuario: string
   );
   for (const item of itens.rows) {
     await client.query(
-      `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
+      `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
        VALUES ($1, $2, 'ORIGINAL', $3)`,
       [idAnalise, item.codprod, `qtd:${item.qtd} pr:${Number(item.prunit).toFixed(2)} custo:${Number(item.prcompra || 0).toFixed(2)}`]
     );
@@ -85,13 +85,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const codgpe = prodResult.rows[0]?.codgpe || '';
       const origem = prodResult.rows[0]?.origem || 'N';
 
-      // Calcular impostos via função PostgreSQL db_manaus.calcular_imposto_item
+      // Calcular impostos via função PostgreSQL calcular_imposto_item
       // (tradução fiel de CALCULO_IMPOSTO do Oracle). Sem aritmética fiscal em JS;
       // mesmos parâmetros do /api/impostos e do finalizarVenda → display = persistência.
       let campos: Record<string, any> = {};
       try {
         const { rows } = await client.query(
-          `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
           [
             String(codprod).trim().padStart(6, '0'),
             String(codcli ?? '').trim(),
@@ -180,14 +180,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Registrar alterações
         if (qtdAnterior !== quantidade) {
           await client.query(
-            `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, campo, valor_anterior, valor_novo)
+            `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, campo, valor_anterior, valor_novo)
              VALUES ($1, $2, 'ALTERAR', 'qtd', $3, $4)`,
             [idAnalise, codprod, String(qtdAnterior), String(quantidade)]
           );
         }
         if (Math.abs(prunitAnterior - valorUnitario) > 0.001) {
           await client.query(
-            `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, campo, valor_anterior, valor_novo)
+            `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, campo, valor_anterior, valor_novo)
              VALUES ($1, $2, 'ALTERAR', 'prunit', $3, $4)`,
             [idAnalise, codprod, prunitAnterior.toFixed(2), valorUnitario.toFixed(2)]
           );
@@ -231,7 +231,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Registrar adição
         await client.query(
-          `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, valor_novo)
+          `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, valor_novo)
            VALUES ($1, $2, 'ADICIONAR', $3)`,
           [idAnalise, codprod, `qtd:${quantidade} pr:${valorUnitario.toFixed(2)} ref:${(ref || '').substring(0, 20)}`]
         );
@@ -277,7 +277,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Registrar remoção
       await client.query(
-        `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
+        `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
          VALUES ($1, $2, 'REMOVER', $3)`,
         [idAnalise, codprod, `qtd:${qtdDel} pr:${prDel.toFixed(2)} ref:${refDel}`]
       );

@@ -42,16 +42,16 @@ export default async function handler(
       SELECT
         e.codent as id,
         e.codent as numero_entrada,
-        (SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) as nfe_id,
+        (SELECT codnfe_ent FROM dbnfe_ent WHERE chave = e.chave LIMIT 1) as nfe_id,
         e.cod_credor as fornecedor_cod,
         c.nome as fornecedor_nome,
         e.totalnf as valor_total,
-        (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as total_itens,
+        (SELECT COUNT(*) FROM dbitent WHERE codent = e.codent) as total_itens,
         e.dtent as created_at,
         EXTRACT(DAY FROM (NOW() - e.dtent))::INTEGER as dias_pendente
-      FROM db_manaus.dbent e
-      LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
-      LEFT JOIN db_manaus.dbcredor c ON e.cod_credor = c.cod_credor
+      FROM dbent e
+      LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
+      LEFT JOIN dbcredor c ON e.cod_credor = c.cod_credor
       WHERE COALESCE(rec.status, 'PENDENTE') = 'PENDENTE'
         AND COALESCE(e.est_alocado, 0) = 0
       ORDER BY e.dtent ASC

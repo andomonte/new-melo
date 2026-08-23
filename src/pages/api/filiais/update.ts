@@ -24,13 +24,20 @@ export default async function handle(
     const pool = getPgPool();
     client = await pool.connect();
 
-    const updateQuery = timezone
-      ? `UPDATE tb_filial SET nome_filial = $1, timezone = $3 WHERE codigo_filial = $2 RETURNING *`
-      : `UPDATE tb_filial SET nome_filial = $1 WHERE codigo_filial = $2 RETURNING *`;
+    // SET dinâmico: só atualiza codigo_acesso quando o campo é enviado
+    // (evita apagar o código ao editar sem tocar nele).
+    const temCodigo = Object.prototype.hasOwnProperty.call(req.body, 'codigo_acesso');
+    const codigoAcesso = temCodigo
+      ? String((req.body as any).codigo_acesso ?? '').trim() || null
+      : null;
 
-    const params = timezone
-      ? [nome_filial, codigo_filial, timezone]
-      : [nome_filial, codigo_filial];
+    const sets: string[] = ['nome_filial = $1'];
+    const params: (string | number | null)[] = [nome_filial];
+    let i = 2;
+    if (timezone) { sets.push(`timezone = $${i++}`); params.push(timezone); }
+    if (temCodigo) { sets.push(`codigo_acesso = $${i++}`); params.push(codigoAcesso); }
+    params.push(codigo_filial);
+    const updateQuery = `UPDATE tb_filial SET ${sets.join(', ')} WHERE codigo_filial = $${i} RETURNING *`;
 
     const result = await client.query(updateQuery, params);
 

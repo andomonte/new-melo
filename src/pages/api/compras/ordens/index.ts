@@ -67,7 +67,7 @@ async function handleGetOrders(
     client = await pool.connect();
     
     // Construir query com filtros - usando estrutura real do banco
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     let query = `
       SELECT
@@ -193,9 +193,9 @@ async function handleCreateOrder(
     await client.query('BEGIN');
     
     // Verificar se a requisição existe e está aprovada
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
     const requisitionResult = await client.query(
-      'SELECT req_id, req_versao, req_status FROM db_manaus.cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
+      'SELECT req_id, req_versao, req_status FROM cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
       [req_id, req_versao]
     );
     
@@ -219,7 +219,7 @@ async function handleCreateOrder(
     
     // Verificar se já existe ordem de compra para esta requisição
     const existingOrderResult = await client.query(
-      'SELECT orc_id FROM db_manaus.cmp_ordem_compra WHERE orc_req_id = $1 AND orc_req_versao = $2',
+      'SELECT orc_id FROM cmp_ordem_compra WHERE orc_req_id = $1 AND orc_req_versao = $2',
       [req_id, req_versao]
     );
     
@@ -233,7 +233,7 @@ async function handleCreateOrder(
     
     // Calcular valor total dos itens
     const itemsResult = await client.query(
-      'SELECT SUM(itr_quantidade * itr_pr_unitario) as valor_total FROM db_manaus.cmp_it_requisicao WHERE itr_req_id = $1 AND itr_req_versao = $2',
+      'SELECT SUM(itr_quantidade * itr_pr_unitario) as valor_total FROM cmp_it_requisicao WHERE itr_req_id = $1 AND itr_req_versao = $2',
       [req_id, req_versao]
     );
     
@@ -241,13 +241,13 @@ async function handleCreateOrder(
     
     // Gerar próximo ID da ordem
     const maxIdResult = await client.query(
-      'SELECT COALESCE(MAX(orc_id), 0) + 1 as next_id FROM db_manaus.cmp_ordem_compra'
+      'SELECT COALESCE(MAX(orc_id), 0) + 1 as next_id FROM cmp_ordem_compra'
     );
     const nextOrderId = maxIdResult.rows[0].next_id;
     
     // Criar ordem de compra
     const insertResult = await client.query(
-      `INSERT INTO db_manaus.cmp_ordem_compra
+      `INSERT INTO cmp_ordem_compra
        (orc_id, orc_req_id, orc_req_versao, orc_data, orc_status, orc_observacao, orc_valor_total, created_at, updated_at)
        VALUES ($1, $2, $3, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Manaus')::date, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        RETURNING *`,

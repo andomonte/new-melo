@@ -26,9 +26,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cf.cof_descricao,
         cc.cec_descricao as centro_custo_descricao,
         gcc.gcc_descricao as grupo_centro_custo_descricao
-      FROM db_manaus.cad_conta_financeira cf
-      LEFT JOIN db_manaus.cad_centro_custo cc ON cc.cec_id = cf.cof_cec_id
-      LEFT JOIN db_manaus.cad_grupo_centro_custo gcc ON gcc.gcc_id = cc.cec_gcc_id
+      FROM cad_conta_financeira cf
+      LEFT JOIN cad_centro_custo cc ON cc.cec_id = cf.cof_cec_id
+      LEFT JOIN cad_grupo_centro_custo gcc ON gcc.gcc_id = cc.cec_gcc_id
       ${whereClause}
       ORDER BY cf.cof_id
       LIMIT 100

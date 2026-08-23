@@ -70,8 +70,8 @@ export default async function handler(
     // 1. NFe pela chave
     const nfeResult = await client.query(
       `SELECT n.codnfe_ent, n.nnf, n.serie, n.demi, n.vnf as valor_total, emit.xnome as fornecedor
-         FROM db_manaus.dbnfe_ent n
-         LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
+         FROM dbnfe_ent n
+         LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
         WHERE n.chave = $1 LIMIT 1`, [chaveLimpa]);
     if (nfeResult.rows.length === 0) {
       return res.status(404).json({ error: 'NFe nao encontrada com esta chave de acesso. Verifique se a nota foi processada.' });
@@ -84,13 +84,13 @@ export default async function handler(
               COALESCE(e.totalnf, 0) as valor_total,
               e.dtent as data_entrada,
               rec.status as workflow_status,
-              (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as qtd_itens,
+              (SELECT COUNT(*) FROM dbitent WHERE codent = e.codent) as qtd_itens,
               COALESCE(op.id, 0) as operacao_id,
               op.status as op_status,
               op.recebedor_nome, op.inicio_recebimento
-         FROM db_manaus.dbent e
-         LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
-         LEFT JOIN db_manaus.entrada_operacoes op ON op.codent = e.codent
+         FROM dbent e
+         LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
+         LEFT JOIN entrada_operacoes op ON op.codent = e.codent
         WHERE e.chave = $1 LIMIT 1`, [chaveLimpa]);
     if (entradaResult.rows.length === 0) {
       return res.status(404).json({ error: 'Nenhuma entrada encontrada para esta NFe.' });
@@ -127,7 +127,7 @@ export default async function handler(
 
     // 4. Operador já tem outro recebimento ativo?
     const ativoResult = await client.query(
-      `SELECT codent FROM db_manaus.entrada_operacoes WHERE recebedor_matricula = $1 AND status = 'EM_RECEBIMENTO' LIMIT 1`,
+      `SELECT codent FROM entrada_operacoes WHERE recebedor_matricula = $1 AND status = 'EM_RECEBIMENTO' LIMIT 1`,
       [matriculaRecebedor]);
     if (ativoResult.rows.length > 0) {
       return res.status(400).json({ error: 'Voce ja possui um recebimento em andamento. Finalize-o primeiro.' });
@@ -137,7 +137,7 @@ export default async function handler(
     await client.query('BEGIN');
 
     const operacaoResult = await client.query(
-      `INSERT INTO db_manaus.entrada_operacoes (codent, status, recebedor_matricula, recebedor_nome, inicio_recebimento, created_at, updated_at)
+      `INSERT INTO entrada_operacoes (codent, status, recebedor_matricula, recebedor_nome, inicio_recebimento, created_at, updated_at)
        VALUES ($1, 'EM_RECEBIMENTO', $2, $3, NOW(), NOW(), NOW())
        ON CONFLICT (codent) DO UPDATE SET
          status = 'EM_RECEBIMENTO', recebedor_matricula = $2, recebedor_nome = $3,
@@ -148,19 +148,19 @@ export default async function handler(
 
     // itens de conferência a partir de dbitent (por codent/produto/codreq)
     await client.query(
-      `INSERT INTO db_manaus.entrada_itens_recebimento
+      `INSERT INTO entrada_itens_recebimento
          (entrada_operacao_id, codent, codreq, produto_cod, qtd_esperada, status_item, created_at, updated_at)
        SELECT $1, ie.codent, ie.codreq, ie.codprod, ie.quant, 'PENDENTE', NOW(), NOW()
-         FROM db_manaus.dbitent ie
+         FROM dbitent ie
         WHERE ie.codent = $2
           AND NOT EXISTS (
-            SELECT 1 FROM db_manaus.entrada_itens_recebimento r
+            SELECT 1 FROM entrada_itens_recebimento r
              WHERE r.entrada_operacao_id = $1 AND r.produto_cod = ie.codprod
                AND COALESCE(r.codreq,'') = COALESCE(ie.codreq,''))`,
       [operacaoId, codent]);
 
     await client.query(
-      `UPDATE db_manaus.dbent_recebimento SET status = 'EM_RECEBIMENTO', updated_at = now() WHERE codent = $1`,
+      `UPDATE dbent_recebimento SET status = 'EM_RECEBIMENTO', updated_at = now() WHERE codent = $1`,
       [codent]);
 
     await client.query('COMMIT');

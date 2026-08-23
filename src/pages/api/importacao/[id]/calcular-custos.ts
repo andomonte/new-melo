@@ -34,7 +34,7 @@ export default async function handler(
 
     // 1. Ler cabeçalho da DI
     const cabResult = await client.query(`
-      SELECT * FROM db_manaus.dbent_importacao WHERE id = $1 FOR UPDATE
+      SELECT * FROM dbent_importacao WHERE id = $1 FOR UPDATE
     `, [id]);
 
     if (cabResult.rows.length === 0) {
@@ -70,7 +70,7 @@ export default async function handler(
     // 2. Calcular TxDolarMedio dos contratos: SUM(taxa * vl_merc) / SUM(vl_merc)
     const contratosResult = await client.query(`
       SELECT taxa_dolar, vl_merc_dolar
-      FROM db_manaus.dbent_importacao_contratos
+      FROM dbent_importacao_contratos
       WHERE id_importacao = $1
     `, [id]);
 
@@ -100,7 +100,7 @@ export default async function handler(
     // 4. Buscar itens com codprod
     const itensResult = await client.query(`
       SELECT id, codprod, qtd, proforma_unit, proforma_total, invoice_unit, invoice_total, id_fatura
-      FROM db_manaus.dbent_importacao_it_ent
+      FROM dbent_importacao_it_ent
       WHERE id_importacao = $1 AND codprod IS NOT NULL
       ORDER BY id
     `, [id]);
@@ -157,7 +157,7 @@ export default async function handler(
 
       // 5. UPDATE item com campos calculados
       await client.query(`
-        UPDATE db_manaus.dbent_importacao_it_ent SET
+        UPDATE dbent_importacao_it_ent SET
           real_unit = $2,
           real_total = $3,
           despesa_perc = $4,

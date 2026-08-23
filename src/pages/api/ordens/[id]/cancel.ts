@@ -50,7 +50,7 @@ export default async function handler(
     // Verificar se há financeiro pago antes de cancelar
     const pagamentoResult = await client.query(
       `SELECT cod_pgto, valor_pago
-       FROM db_manaus.dbpgto
+       FROM dbpgto
        WHERE ordem_compra = $1
          AND paga = 'S'
          AND (cancel IS NULL OR cancel != 'S')

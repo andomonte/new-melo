@@ -38,7 +38,7 @@ export default async function handler(
     // Resolve a chave a partir do nfeId quando não veio explícita (o hub usa nfeId).
     if (!chaveNFe && nfeIdBody) {
       const r = await client.query(
-        `SELECT chave FROM db_manaus.dbnfe_ent WHERE codnfe_ent = $1`, [nfeIdBody]);
+        `SELECT chave FROM dbnfe_ent WHERE codnfe_ent = $1`, [nfeIdBody]);
       if (r.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'NFe não encontrada para o nfeId informado.' });
@@ -56,7 +56,7 @@ export default async function handler(
     // 1. NFe pela chave
     const nfeResult = await client.query(`
       SELECT codnfe_ent, exec as status, nnf as numero_nf, chave, natop, infcpl
-      FROM db_manaus.dbnfe_ent
+      FROM dbnfe_ent
       WHERE chave = $1
       FOR UPDATE NOWAIT
     `, [chaveLimpa]);
@@ -79,7 +79,7 @@ export default async function handler(
 
     // 3. Já existe entrada (dbent) para esta chave?
     const entradaExistente = await client.query(
-      `SELECT codent FROM db_manaus.dbent WHERE chave = $1 LIMIT 1`, [chaveLimpa]);
+      `SELECT codent FROM dbent WHERE chave = $1 LIMIT 1`, [chaveLimpa]);
     if (entradaExistente.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: `Já existe entrada gerada para esta NFe: ${entradaExistente.rows[0].codent}` });
@@ -90,8 +90,8 @@ export default async function handler(
       SELECT
         nia.produto_cod, nia.quantidade_associada,
         ARRAY_AGG(json_build_object('pedidoId', nipa.req_id, 'quantidade', nipa.quantidade)) as associacoes
-      FROM db_manaus.nfe_item_associacao nia
-      LEFT JOIN db_manaus.nfe_item_pedido_associacao nipa ON nia.id = nipa.nfe_associacao_id
+      FROM nfe_item_associacao nia
+      LEFT JOIN nfe_item_pedido_associacao nipa ON nia.id = nipa.nfe_associacao_id
       WHERE nia.nfe_id = $1 AND nia.status != 'ASSOCIADO_TESTE'
       GROUP BY nia.id, nia.produto_cod, nia.quantidade_associada
     `, [nfeId]);
@@ -132,8 +132,8 @@ export default async function handler(
       const batchCheckResult = await client.query(`
         SELECT o.orc_id as pedido_id, ri.itr_codprod as produto_cod,
                ri.itr_quantidade, COALESCE(ri.itr_quantidade_atendida, 0) as itr_quantidade_atendida
-        FROM db_manaus.cmp_it_requisicao ri
-        INNER JOIN db_manaus.cmp_ordem_compra o ON (o.orc_req_id = ri.itr_req_id AND o.orc_req_versao = ri.itr_req_versao)
+        FROM cmp_it_requisicao ri
+        INNER JOIN cmp_ordem_compra o ON (o.orc_req_id = ri.itr_req_id AND o.orc_req_versao = ri.itr_req_versao)
         WHERE (o.orc_id, ri.itr_codprod) IN (${placeholders})
       `, params);
 
@@ -160,27 +160,27 @@ export default async function handler(
     }
 
     // 7. Empresa/zona + credor/header (da confirmação da nota)
-    const empRow = await client.query(`SELECT uf FROM db_manaus.dadosempresa LIMIT 1`);
+    const empRow = await client.query(`SELECT uf FROM dadosempresa LIMIT 1`);
     const uf = empRow.rows[0]?.uf || 'AM';
-    const zonaRow = await client.query(`SELECT "ZONA_ISENTIVADA" AS zona FROM db_manaus.dbuf_n WHERE "UF" = $1`, [uf]);
+    const zonaRow = await client.query(`SELECT "ZONA_ISENTIVADA" AS zona FROM dbuf_n WHERE "UF" = $1`, [uf]);
     const empresa = { uf, zona_isentivada: zonaRow.rows[0]?.zona || 'S' };
 
     const auxRow = await client.query(
       `SELECT codcredor, codtransp, codcomprador, operacao, cfop, custofin, desconto, acrescimo,
               verba_tmk, temcusto, zerar_ipi, zerar_st, selo, dtselo, temcon, nrocon
-         FROM db_manaus.dbnfe_ent_aux WHERE codnfe_ent = $1`, [nfeId]);
+         FROM dbnfe_ent_aux WHERE codnfe_ent = $1`, [nfeId]);
     const aux = auxRow.rows[0] || {};
 
     let codCredor: string | null = aux.codcredor || null;
     if (!codCredor) {
       const emitRow = await client.query(
-        `SELECT regexp_replace(COALESCE(cpf_cnpj,''),'[^0-9]','','g') AS cnpj FROM db_manaus.dbnfe_ent_emit WHERE codnfe_ent = $1`, [nfeId]);
+        `SELECT regexp_replace(COALESCE(cpf_cnpj,''),'[^0-9]','','g') AS cnpj FROM dbnfe_ent_emit WHERE codnfe_ent = $1`, [nfeId]);
       const cnpjEmit = emitRow.rows[0]?.cnpj;
       if (cnpjEmit) {
         // Determinístico: com vários cadastros no mesmo CNPJ e sem escolha fixada em
         // dbnfe_ent_aux, pega o de MENOR cod_credor (evita seleção aleatória).
         const credorRow = await client.query(
-          `SELECT cod_credor FROM db_manaus.dbcredor WHERE regexp_replace(COALESCE(cpf_cgc,''),'[^0-9]','','g') = $1 ORDER BY cod_credor LIMIT 1`, [cnpjEmit]);
+          `SELECT cod_credor FROM dbcredor WHERE regexp_replace(COALESCE(cpf_cgc,''),'[^0-9]','','g') = $1 ORDER BY cod_credor LIMIT 1`, [cnpjEmit]);
         codCredor = credorRow.rows[0]?.cod_credor || null;
       }
     }
@@ -216,7 +216,7 @@ export default async function handler(
     // Marca a NFe como PROCESSADA ('S') SÓ agora que o dbent existe (geração
     // atômica na mesma transação). Se algo acima falhar, o rollback mantém a
     // NFe como Associada ('C') — sem estado órfão.
-    await client.query(`UPDATE db_manaus.dbnfe_ent SET exec = 'S' WHERE codnfe_ent = $1`, [nfeId]);
+    await client.query(`UPDATE dbnfe_ent SET exec = 'S' WHERE codnfe_ent = $1`, [nfeId]);
 
     // 9. Atualizar quantidade atendida nos pedidos + auto-finalizar ordens
     const isImp = nfe.natop === 'ENTRADA_IMPORTACAO';
@@ -229,9 +229,9 @@ export default async function handler(
       await Promise.all(Array.from(updatesAgrupados.entries()).map(([key, quantidade]) => {
         const [pedidoId, produtoCod] = key.split('|');
         return client.query(`
-          UPDATE db_manaus.cmp_it_requisicao ri
+          UPDATE cmp_it_requisicao ri
           SET itr_quantidade_atendida = COALESCE(itr_quantidade_atendida, 0) + $1
-          FROM db_manaus.cmp_ordem_compra o
+          FROM cmp_ordem_compra o
           WHERE o.orc_id = $2 AND ri.itr_req_id = o.orc_req_id
             AND ri.itr_req_versao = o.orc_req_versao AND ri.itr_codprod = $3
         `, [quantidade, pedidoId, produtoCod]);
@@ -241,16 +241,16 @@ export default async function handler(
       for (const assoc of associacoesParaValidar) if (assoc.pedidoId) pedidosDistintos.add(assoc.pedidoId);
       for (const pedidoId of pedidosDistintos) {
         const ordemResult = await client.query(
-          `SELECT orc_id, orc_req_id, orc_req_versao, orc_status FROM db_manaus.cmp_ordem_compra WHERE orc_id = $1`, [pedidoId]);
+          `SELECT orc_id, orc_req_id, orc_req_versao, orc_status FROM cmp_ordem_compra WHERE orc_id = $1`, [pedidoId]);
         if (ordemResult.rows.length === 0 || ordemResult.rows[0].orc_status !== 'A') continue;
         const ordem = ordemResult.rows[0];
         const pendentesResult = await client.query(
-          `SELECT COUNT(*) as count FROM db_manaus.cmp_it_requisicao
+          `SELECT COUNT(*) as count FROM cmp_it_requisicao
             WHERE itr_req_id = $1 AND itr_req_versao = $2
               AND (itr_quantidade - COALESCE(itr_quantidade_atendida, 0) - COALESCE(itr_quantidade_fechada, 0)) > 0`,
           [ordem.orc_req_id, ordem.orc_req_versao]);
         if (Number(pendentesResult.rows[0].count) === 0) {
-          await client.query(`UPDATE db_manaus.cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`, [pedidoId]);
+          await client.query(`UPDATE cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`, [pedidoId]);
           await registrarHistoricoOrdem(client, {
             orcId: Number(pedidoId), previousStatus: 'A', newStatus: 'F',
             userId: 'SISTEMA', userName: 'Sistema (Entrada NFe)',
@@ -265,7 +265,7 @@ export default async function handler(
     // 10. Atualizar estoque (reserva a quantidade que entrou)
     await Promise.all(Array.from(estoquesParaAtualizar.entries()).map(([codprod, quantidade]) =>
       client.query(`
-        UPDATE db_manaus.dbprod
+        UPDATE dbprod
         SET qtest = COALESCE(qtest, 0) + $1, qtdreservada = COALESCE(qtdreservada, 0) + $1
         WHERE codprod = $2
       `, [quantidade, codprod])));
@@ -278,7 +278,7 @@ export default async function handler(
         const faturaId = parseInt(parts[2]);
         if (faturaId && importacaoId) {
           await client.query(
-            `UPDATE db_manaus.dbent_importacao_entrada SET codent = $1 WHERE id = $2 AND id_importacao = $3`,
+            `UPDATE dbent_importacao_entrada SET codent = $1 WHERE id = $2 AND id_importacao = $3`,
             [codent, faturaId, importacaoId]);
         }
       }

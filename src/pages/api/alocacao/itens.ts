@@ -55,14 +55,14 @@ const ITENS_QUERY = `
       ELSE 'PENDENTE'
     END as status_alocacao,
     COALESCE(p.unimed, 'UN') as unidade
-  FROM db_manaus.dbitent ie
-  LEFT JOIN db_manaus.entrada_itens_recebimento eir
+  FROM dbitent ie
+  LEFT JOIN entrada_itens_recebimento eir
     ON eir.codent = ie.codent AND eir.produto_cod = ie.codprod
    AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
-  LEFT JOIN db_manaus.dbprod p ON p.codprod = ie.codprod
+  LEFT JOIN dbprod p ON p.codprod = ie.codprod
   LEFT JOIN (
     SELECT codprod, SUM(qtd) as qtd_alocada
-    FROM db_manaus.dbitent_armazem WHERE codent = $1 GROUP BY codprod
+    FROM dbitent_armazem WHERE codent = $1 GROUP BY codprod
   ) aloc ON aloc.codprod = ie.codprod
   WHERE ie.codent = $1
   ORDER BY ie.codprod
@@ -73,9 +73,9 @@ const ROMANEIO_QUERY = `
   SELECT
     da.codprod as produto_cod, da.arm_id, ca.arm_descricao, da.qtd,
     loc.apl_descricao as localizacao_existente
-  FROM db_manaus.dbitent_armazem da
-  INNER JOIN db_manaus.cad_armazem ca ON ca.arm_id = da.arm_id
-  LEFT JOIN db_manaus.cad_armazem_produto_locacao loc
+  FROM dbitent_armazem da
+  INNER JOIN cad_armazem ca ON ca.arm_id = da.arm_id
+  LEFT JOIN cad_armazem_produto_locacao loc
     ON loc.apl_arm_id = da.arm_id AND loc.apl_codprod = da.codprod
   WHERE da.codent = $1
   ORDER BY da.codprod, da.arm_id

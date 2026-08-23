@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // a entrada existe?
     const ent = await client.query(
-      `SELECT codent, dtent FROM db_manaus.dbent WHERE codent = $1`,
+      `SELECT codent, dtent FROM dbent WHERE codent = $1`,
       [codent],
     );
     if (ent.rows.length === 0) {
@@ -33,9 +33,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               (COALESCE(i.quant,0) - COALESCE(i.qtd_transferido,0)) AS qtd_disponivel,
               COALESCE(i.prtransferencia_bruto, i.prunit, 0) AS pr_transf,
               i.prunit
-         FROM db_manaus.dbitent i
-         LEFT JOIN db_manaus.dbprod p ON p.codprod = i.codprod
-         LEFT JOIN db_manaus.dbmarcas m ON m.codmarca = p.codmarca
+         FROM dbitent i
+         LEFT JOIN dbprod p ON p.codprod = i.codprod
+         LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
         WHERE i.codent = $1
         ORDER BY p.descr`,
       [codent],

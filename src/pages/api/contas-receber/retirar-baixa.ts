@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         rec,
         cancel,
         valor_rec
-      FROM db_manaus.dbreceb
+      FROM dbreceb
       WHERE cod_receb = $1
     `;
     
@@ -49,7 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Reverter recebimento
     const updateQuery = `
-      UPDATE db_manaus.dbreceb
+      UPDATE dbreceb
       SET 
         rec = NULL,
         dt_pgto = NULL,
@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Opcional: registrar no histórico a reversão
     const historicoQuery = `
-      INSERT INTO db_manaus.dbfreceb (
+      INSERT INTO dbfreceb (
         cod_freceb,
         cod_receb,
         valor,
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sf,
         nome
       ) VALUES (
-        (SELECT COALESCE(MAX(CAST(cod_freceb AS INTEGER)), 0) + 1 FROM db_manaus.dbfreceb WHERE cod_receb = $1),
+        (SELECT COALESCE(MAX(CAST(cod_freceb AS INTEGER)), 0) + 1 FROM dbfreceb WHERE cod_receb = $1),
         $1,
         0,
         CURRENT_DATE,

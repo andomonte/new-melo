@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const r = await client.query(
       `SELECT codcli, sigla, nome, nomefant, cpfcgc, cidade, uf, status
-         FROM db_manaus.dbclien_filial
+         FROM dbclien_filial
         ORDER BY sigla`,
     );
     return res.status(200).json({

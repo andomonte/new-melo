@@ -22,7 +22,7 @@ export default async function handle(
     const fieldNames = fields.map((field) => `"${field}"`).join(', ');
 
     const insertQuery = `
-      INSERT INTO db_manaus.dbitvenda (${fieldNames})
+      INSERT INTO dbitvenda (${fieldNames})
       VALUES (${placeholders})
       RETURNING *
     `;

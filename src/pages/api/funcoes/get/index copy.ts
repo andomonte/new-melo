@@ -23,7 +23,7 @@ export default async function handle(
     console.time(labelQuery);
     const funcoesResult = await client.query(`
       SELECT id_functions, descricao, sigla, usadoEm
-      FROM db_manaus.tb_login_functions;
+      FROM tb_login_functions;
     `);
     console.timeEnd(labelQuery);
 

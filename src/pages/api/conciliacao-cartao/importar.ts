@@ -42,7 +42,7 @@ export default async function handler(
     const tabelaExiste = await client.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
-        WHERE table_schema = 'db_manaus' 
+        WHERE table_schema = current_schema() 
         AND table_name = 'fin_cartao_receb_import'
       )
     `);
@@ -50,7 +50,7 @@ export default async function handler(
     if (!tabelaExiste.rows[0].exists) {
       // Criar tabela se não existir
       await client.query(`
-        CREATE TABLE db_manaus.fin_cartao_receb_import (
+        CREATE TABLE fin_cartao_receb_import (
           id SERIAL PRIMARY KEY,
           loja VARCHAR(10),
           filial VARCHAR(20),
@@ -257,12 +257,12 @@ export default async function handler(
         if (!valAuto) {
           // Se autorizacao for vazia, verifica se tem com NULL ou VAZIO
           checkDuplicado = await client.query(`
-              SELECT id FROM db_manaus.fin_cartao_receb_import
+              SELECT id FROM fin_cartao_receb_import
               WHERE nsu = $1 AND (autorizacao = '' OR autorizacao IS NULL) AND parcela = $2
             `, [valNsu, valParcela]);
         } else {
           checkDuplicado = await client.query(`
-              SELECT id FROM db_manaus.fin_cartao_receb_import
+              SELECT id FROM fin_cartao_receb_import
               WHERE nsu = $1 AND autorizacao = $2 AND parcela = $3
             `, [valNsu, valAuto, valParcela]);
         }
@@ -275,7 +275,7 @@ export default async function handler(
 
         // Inserir registro
         const insertQuery = `
-          INSERT INTO db_manaus.fin_cartao_receb_import (
+          INSERT INTO fin_cartao_receb_import (
             loja, filial, nsu, dt_transacao, hora_transacao,
             bandeira, tipo_transacao, parcela,
             valor_bruto, taxa, valor_liquido,

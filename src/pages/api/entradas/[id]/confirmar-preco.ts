@@ -55,13 +55,13 @@ export default async function handler(
     const pool = getPgPool(filial);
     client = await pool.connect();
     await client.query('BEGIN');
-    await client.query('SET LOCAL search_path TO db_manaus, public');
+    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     // Entrada + estado do workflow
     const entResult = await client.query(
       `SELECT e.codent, e.status, rec.status AS rec_status
-         FROM db_manaus.dbent e
-         LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+         FROM dbent e
+         LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
         WHERE e.codent = $1`,
       [id]
     );
@@ -78,25 +78,25 @@ export default async function handler(
       for (const item of itensEditados) {
         if (!item.produto_cod || item.preco_unitario == null) continue;
         await client.query(
-          `UPDATE db_manaus.dbitent SET prunit = $3, prunitnf = $3
+          `UPDATE dbitent SET prunit = $3, prunitnf = $3
              WHERE codent = $1 AND codprod = $2`,
           [id, item.produto_cod, Number(item.preco_unitario)]
         );
         if (item.unidade_venda) {
-          await client.query(`UPDATE db_manaus.dbprod SET unimed = $2 WHERE codprod = $1`, [item.produto_cod, item.unidade_venda]);
+          await client.query(`UPDATE dbprod SET unimed = $2 WHERE codprod = $1`, [item.produto_cod, item.unidade_venda]);
         }
       }
     }
 
     // Empresa / zona fiscal
-    const empRow = await client.query(`SELECT uf FROM db_manaus.dadosempresa LIMIT 1`);
+    const empRow = await client.query(`SELECT uf FROM dadosempresa LIMIT 1`);
     const uf = empRow.rows[0]?.uf || 'AM';
-    const zonaRow = await client.query(`SELECT "ZONA_ISENTIVADA" AS zona FROM db_manaus.dbuf_n WHERE "UF" = $1`, [uf]);
+    const zonaRow = await client.query(`SELECT "ZONA_ISENTIVADA" AS zona FROM dbuf_n WHERE "UF" = $1`, [uf]);
     const empresa = { uf, zona_isentivada: zonaRow.rows[0]?.zona || 'S' };
 
     // "Sem Custo" (Delphi): registra temcusto='N' e NÃO atualiza média/preço do produto.
     if (semCusto) {
-      await client.query(`UPDATE db_manaus.dbent SET temcusto = 'N' WHERE codent = $1`, [id]);
+      await client.query(`UPDATE dbent SET temcusto = 'N' WHERE codent = $1`, [id]);
     }
 
     // Motor de custo: custo por item (+ média/reprecificação, exceto quando "sem custo")
@@ -105,9 +105,9 @@ export default async function handler(
     });
 
     // Fecha a entrada (custo feito) e avança o workflow físico
-    await client.query(`UPDATE db_manaus.dbent SET status = 'F' WHERE codent = $1`, [id]);
+    await client.query(`UPDATE dbent SET status = 'F' WHERE codent = $1`, [id]);
     await client.query(
-      `INSERT INTO db_manaus.dbent_recebimento (codent, status, data_confirmacao_preco, observacao_preco, updated_at)
+      `INSERT INTO dbent_recebimento (codent, status, data_confirmacao_preco, observacao_preco, updated_at)
        VALUES ($1, 'PRECO_CONFIRMADO', now(), $2, now())
        ON CONFLICT (codent) DO UPDATE SET
          status = 'PRECO_CONFIRMADO', data_confirmacao_preco = now(),

@@ -16,7 +16,7 @@ import type { ParamsCusto, ResultadoCusto } from './calcularCustoMercadoria';
  * de CALCULO_IMPOSTO (LEGISLACAO_ICMS, PROTOCOLO_1785, MVA_PRODUTO_LEGISLACAO).
  */
 
-const S = 'db_manaus';
+const S = process.env.DB_SCHEMA || 'db_manaus';
 
 function so(v: any): string {
   return String(v ?? '').replace(/\D/g, '');

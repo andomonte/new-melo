@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const nfe = await client.query(
       `SELECT nrodoc_fiscal, chave, status, numprotocolo, dthrprotocolo, "data",
               numcancelamento, dthrcancelamento, motivocancelamento, usuariocancelamento, motivo, modelo
-         FROM db_manaus.dbfat_nfe
+         FROM dbfat_nfe
         WHERE codfat = $1
         ORDER BY dthrprotocolo NULLS LAST, "data"`,
       [codfat],
@@ -70,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const cce = await client.query(
         `SELECT id, nseqevento, xcorrecao, correcao_nova, protocolo, status, data, usuario, chave
-           FROM db_manaus.fat_cce
+           FROM fat_cce
           WHERE codfat = $1
           ORDER BY nseqevento, data`,
         [codfat],

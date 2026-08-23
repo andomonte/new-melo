@@ -12,27 +12,27 @@ import type { PoolClient } from 'pg';
 
 const QUERY_CABECALHO = `
   SELECT *
-  FROM db_manaus.dbent_importacao
+  FROM dbent_importacao
   WHERE id = $1
 `;
 
 const QUERY_CONTRATOS = `
   SELECT *
-  FROM db_manaus.dbent_importacao_contratos
+  FROM dbent_importacao_contratos
   WHERE id_importacao = $1
   ORDER BY id
 `;
 
 const QUERY_ENTRADAS = `
   SELECT *
-  FROM db_manaus.dbent_importacao_entrada
+  FROM dbent_importacao_entrada
   WHERE id_importacao = $1
   ORDER BY id
 `;
 
 const QUERY_ITENS = `
   SELECT *
-  FROM db_manaus.dbent_importacao_it_ent
+  FROM dbent_importacao_it_ent
   WHERE id_importacao = $1
   ORDER BY numero_adicao, codprod
 `;
@@ -40,7 +40,7 @@ const QUERY_ITENS = `
 // --- PUT Queries ---
 
 const UPDATE_CABECALHO = `
-  UPDATE db_manaus.dbent_importacao SET
+  UPDATE dbent_importacao SET
     nro_di = $2,
     data_di = $3,
     tipo_die = $4,
@@ -78,18 +78,18 @@ const UPDATE_CABECALHO = `
 `;
 
 const DELETE_CONTRATOS = `
-  DELETE FROM db_manaus.dbent_importacao_contratos
+  DELETE FROM dbent_importacao_contratos
   WHERE id_importacao = $1
 `;
 
 const INSERT_CONTRATO = `
-  INSERT INTO db_manaus.dbent_importacao_contratos (
+  INSERT INTO dbent_importacao_contratos (
     id_importacao, contrato, data, taxa_dolar, vl_merc_dolar, vl_reais, moeda, id_titulo_pagar
   ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `;
 
 const UPDATE_ENTRADA = `
-  UPDATE db_manaus.dbent_importacao_entrada SET
+  UPDATE dbent_importacao_entrada SET
     cod_credor = $2,
     fornecedor_nome = $3,
     cod_cliente = $4,
@@ -98,19 +98,19 @@ const UPDATE_ENTRADA = `
 `;
 
 const INSERT_ENTRADA = `
-  INSERT INTO db_manaus.dbent_importacao_entrada (
+  INSERT INTO dbent_importacao_entrada (
     id_importacao, cod_credor, fornecedor_nome, cod_cliente, cod_comprador
   ) VALUES ($1, $2, $3, $4, $5)
   RETURNING id
 `;
 
 const DELETE_ITENS_BY_FATURA = `
-  DELETE FROM db_manaus.dbent_importacao_it_ent
+  DELETE FROM dbent_importacao_it_ent
   WHERE id_importacao = $1 AND id_fatura = $2
 `;
 
 const INSERT_ITEM = `
-  INSERT INTO db_manaus.dbent_importacao_it_ent (
+  INSERT INTO dbent_importacao_it_ent (
     id_importacao, id_fatura, codprod, descricao, qtd,
     proforma_unit, proforma_total, invoice_unit, invoice_total,
     ncm, unidade, numero_adicao, id_orc
@@ -180,7 +180,7 @@ async function handlePut(pool: any, id: number, req: NextApiRequest, res: NextAp
 
     // Verificar se a importação existe e está editável (status = 'N')
     const check = await client.query(
-      'SELECT id, status FROM db_manaus.dbent_importacao WHERE id = $1',
+      'SELECT id, status FROM dbent_importacao WHERE id = $1',
       [id],
     );
 

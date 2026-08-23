@@ -67,9 +67,9 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
         r.req_codcomprador,
         f.cod_credor as for_cod,
         f.cpf_cgc as fornecedor_cnpj
-      FROM db_manaus.cmp_ordem_compra orc
-      LEFT JOIN db_manaus.cmp_requisicao r ON orc.orc_req_id = r.req_id AND orc.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
+      FROM cmp_ordem_compra orc
+      LEFT JOIN cmp_requisicao r ON orc.orc_req_id = r.req_id AND orc.orc_req_versao = r.req_versao
+      LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
       WHERE orc.orc_id = $1`,
       [orcId]
     );
@@ -108,7 +108,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
     // 2. Atualizar a Ordem de Compra
     await client.query(
-      `UPDATE db_manaus.cmp_ordem_compra
+      `UPDATE cmp_ordem_compra
        SET
          orc_status = $1,
          orc_pagamento_configurado = $2,
@@ -122,27 +122,27 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
     // 3. Deletar TODOS os registros antigos (parcelas, contas, pagamentos)
     // 3.1. Buscar códigos de pagamento existentes para deletar
     const pgtoAntigos = await client.query(
-      `SELECT cod_pgto FROM db_manaus.ordem_pagamento_conta WHERE orc_id = $1`,
+      `SELECT cod_pgto FROM ordem_pagamento_conta WHERE orc_id = $1`,
       [orcId]
     );
 
     // 3.2. Deletar pagamentos em dbpgto
     for (const row of pgtoAntigos.rows) {
       await client.query(
-        `DELETE FROM db_manaus.dbpgto WHERE cod_pgto = $1`,
+        `DELETE FROM dbpgto WHERE cod_pgto = $1`,
         [row.cod_pgto]
       );
     }
 
     // 3.3. Deletar ligações ordem_pagamento_conta
     await client.query(
-      `DELETE FROM db_manaus.ordem_pagamento_conta WHERE orc_id = $1`,
+      `DELETE FROM ordem_pagamento_conta WHERE orc_id = $1`,
       [orcId]
     );
 
     // 3.4. Deletar parcelas antigas
     await client.query(
-      `DELETE FROM db_manaus.ordem_pagamento_parcelas WHERE orc_id = $1`,
+      `DELETE FROM ordem_pagamento_parcelas WHERE orc_id = $1`,
       [orcId]
     );
 
@@ -168,7 +168,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
     // 4.3. Criar as novas parcelas de pagamento
     for (const parcela of todasParcelas) {
       await client.query(
-        `INSERT INTO db_manaus.ordem_pagamento_parcelas
+        `INSERT INTO ordem_pagamento_parcelas
          (orc_id, banco, tipo_documento, numero_parcela, valor_parcela, dias, data_vencimento, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
@@ -190,7 +190,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
       `SELECT
         COALESCE(MAX(CAST(cod_pgto AS INTEGER)), 0) + 1 as proximo_cod,
         COALESCE(MAX(pag_cof_id), 0) + 1 as proximo_pag_cof_id
-      FROM db_manaus.dbpgto
+      FROM dbpgto
       WHERE cod_pgto ~ '^[0-9]+$'`
     );
 
@@ -235,7 +235,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
       // Inserir em dbpgto (conta a pagar)
       await client.query(
-        `INSERT INTO db_manaus.dbpgto
+        `INSERT INTO dbpgto
          (cod_pgto, cod_credor, cod_conta, cod_ccusto, dt_venc, dt_emissao,
           valor_pgto, valor_pago, nro_nf, obs, tem_nota, tipo, paga, cancel,
           codcomprador, valor_juros, pag_cof_id, banco, ordem_compra, nro_dup)
@@ -266,7 +266,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
       // Inserir em ordem_pagamento_conta (ligação ordem x conta a pagar)
       await client.query(
-        `INSERT INTO db_manaus.ordem_pagamento_conta
+        `INSERT INTO ordem_pagamento_conta
          (orc_id, cod_pgto, numero_parcela, valor_parcela, data_vencimento, status)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [

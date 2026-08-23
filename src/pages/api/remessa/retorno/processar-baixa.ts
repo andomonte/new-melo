@@ -8,7 +8,7 @@ const pool = getPgPool();
  * 
  * Busca títulos classificados para baixa automática (Ocorrência 06)
  * Localiza o título correspondente em dbpgto pelo nro_dup
- * Registra o pagamento em db_manaus.dbfpgto
+ * Registra o pagamento em dbfpgto
  * Atualiza o status da conta em dbpgto
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -35,8 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         rd.juros_multa,
         rd.nome_sacado,
         rd.codcli
-      FROM db_manaus.dbretorno_detalhe rd
-      INNER JOIN db_manaus.dbretorno_situacao rs ON rd.coddetalhe = rs.coddetalhe
+      FROM dbretorno_detalhe rd
+      INNER JOIN dbretorno_situacao rs ON rd.coddetalhe = rs.coddetalhe
       WHERE rd.codretorno = $1
         AND rs.baixa_auto = 'S'
         AND rd.cod_ocor = '06'
@@ -102,7 +102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // 2.2. Verificar se já está totalmente pago
         const queryHistorico = `
           SELECT COALESCE(SUM(valor_pgto), 0) as total_pago
-          FROM db_manaus.dbfpgto
+          FROM dbfpgto
           WHERE cod_pgto = $1
             AND (cancel IS NULL OR cancel != 'S')
         `;
@@ -130,13 +130,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // 2.4. Gerar próximo fpg_cof_id
         const maxFpgResult = await pool.query(
-          'SELECT COALESCE(MAX(fpg_cof_id), 0) + 1 as next_id FROM db_manaus.dbfpgto'
+          'SELECT COALESCE(MAX(fpg_cof_id), 0) + 1 as next_id FROM dbfpgto'
         );
         const nextFpgCofId = maxFpgResult.rows[0].next_id;
 
         // 2.5. Registrar pagamento no histórico (dbfpgto)
         const insertHistoricoQuery = `
-          INSERT INTO db_manaus.dbfpgto (
+          INSERT INTO dbfpgto (
             cod_pgto,
             cod_fpgto,
             fpg_cof_id,

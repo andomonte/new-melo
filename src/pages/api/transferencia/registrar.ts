@@ -23,11 +23,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await getPgPool().connect();
   try {
     await client.query('BEGIN');
-    const idr = await client.query(`SELECT COALESCE(MAX(tra_id),0)+1 AS n FROM db_manaus.arm_transferencia`);
+    const idr = await client.query(`SELECT COALESCE(MAX(tra_id),0)+1 AS n FROM arm_transferencia`);
     const traId = Number(idr.rows[0].n);
 
     await client.query(
-      `INSERT INTO db_manaus.arm_transferencia
+      `INSERT INTO arm_transferencia
          (tra_id, tra_arm_id_origem, tra_arm_id_destino, tra_codusr_emissao, tra_data,
           tra_transp, tra_pedido, tra_obs, tra_status, tra_cancel,
           tra_codent, tra_codcli_destino, tra_codfat, tra_vlr_frete, tra_codtptransp)
@@ -38,12 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     for (const it of itens) {
       await client.query(
-        `INSERT INTO db_manaus.arm_it_transferencia (itt_tra_id, itt_codprod, itt_qtd, itt_codent, itt_prunit)
+        `INSERT INTO arm_it_transferencia (itt_tra_id, itt_codprod, itt_qtd, itt_codent, itt_prunit)
          VALUES ($1,$2,$3,$4,$5)`,
         [traId, it.codprod, Number(it.qtd || 0), codent, Number(it.pr_transf || 0)],
       );
       await client.query(
-        `UPDATE db_manaus.dbitent
+        `UPDATE dbitent
             SET qtd_transferido = COALESCE(qtd_transferido,0) + $1
           WHERE codent=$2 AND codprod=$3`,
         [Number(it.qtd || 0), codent, it.codprod],

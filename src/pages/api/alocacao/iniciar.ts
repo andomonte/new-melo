@@ -29,7 +29,7 @@ interface IniciarResponse {
 // Verificar se operador ja tem alocacao ativa
 const CHECK_ATIVO_QUERY = `
   SELECT id, codent
-  FROM db_manaus.entrada_operacoes
+  FROM entrada_operacoes
   WHERE alocador_matricula = $1 AND status = 'EM_ALOCACAO'
   LIMIT 1
 `;
@@ -37,13 +37,13 @@ const CHECK_ATIVO_QUERY = `
 // Verificar se entrada esta pronta para alocacao
 const CHECK_ENTRADA_QUERY = `
   SELECT id, status, alocador_nome
-  FROM db_manaus.entrada_operacoes
+  FROM entrada_operacoes
   WHERE codent = $1
 `;
 
 // Atualizar operacao para iniciar alocacao
 const INICIAR_ALOCACAO_QUERY = `
-  UPDATE db_manaus.entrada_operacoes
+  UPDATE entrada_operacoes
   SET status = 'EM_ALOCACAO', alocador_matricula = $2, alocador_nome = $3,
       arm_id = $4, inicio_alocacao = NOW(), updated_at = NOW()
   WHERE codent = $1 AND status = 'RECEBIDO'
@@ -121,7 +121,7 @@ export default async function handler(
 
     // Avança o workflow físico
     await client.query(
-      `UPDATE db_manaus.dbent_recebimento SET status = 'EM_ALOCACAO', updated_at = now() WHERE codent = $1`,
+      `UPDATE dbent_recebimento SET status = 'EM_ALOCACAO', updated_at = now() WHERE codent = $1`,
       [entradaId]);
 
     console.log('Alocacao iniciada:', {

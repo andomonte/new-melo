@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const pool = getPgPool(filial);
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus, public');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     // Produto (custo base + atributos p/ o divisor "fora do estado")
     const prodRes = await client.query(

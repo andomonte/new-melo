@@ -152,8 +152,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.dt_venc as dt_venc,
         r.dt_pgto as dt_pgto,
         r.valor_pgto as valor_pgto
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
       WHERE r.dt_pgto BETWEEN $1 AND $2
         AND r.cancel = 'N'
         AND r.rec = 'S'
@@ -240,7 +240,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const valorTotal = result.rows.reduce((total, row) => total + parseFloat(row.valor_pgto), 0);
       await pool.query(`
-        INSERT INTO db_manaus.historico_remessa_equifax
+        INSERT INTO historico_remessa_equifax
         (periodo_inicio, periodo_fim, tipo_envio, email_destino, registros_enviados, valor_total, nome_arquivo, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [dataIni, dataFim, 'email', emailDestino, result.rows.length, valorTotal, nomeArquivo, 'pendente']);
@@ -279,7 +279,7 @@ Sistema Melo`,
     // Atualizar status do histórico para sucesso
     try {
       await pool.query(`
-        UPDATE db_manaus.historico_remessa_equifax
+        UPDATE historico_remessa_equifax
         SET status = 'sucesso'
         WHERE periodo_inicio = $1 AND periodo_fim = $2 AND tipo_envio = 'email'
         AND email_destino = $3 AND status = 'pendente'
@@ -308,7 +308,7 @@ Sistema Melo`,
     // Atualizar status do histórico para erro
     try {
       await pool.query(`
-        UPDATE db_manaus.historico_remessa_equifax
+        UPDATE historico_remessa_equifax
         SET status = 'erro', erro_descricao = $1
         WHERE periodo_inicio = $2 AND periodo_fim = $3 AND tipo_envio = 'email'
         AND email_destino = $4 AND status = 'pendente'

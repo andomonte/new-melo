@@ -11,7 +11,7 @@ export async function getFilialTimezone(
 ): Promise<string> {
   try {
     const result = await client.query(
-      `SELECT timezone FROM db_manaus.tb_filial WHERE nome_filial = $1 LIMIT 1`,
+      `SELECT timezone FROM tb_filial WHERE nome_filial = $1 LIMIT 1`,
       [filial],
     );
     return result.rows[0]?.timezone || 'America/Manaus';

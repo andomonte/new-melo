@@ -34,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         p.nro_dup,
         COALESCE(
           (SELECT SUM(f.valor_pgto) 
-           FROM db_manaus.dbfpgto f 
+           FROM dbfpgto f 
            WHERE f.cod_pgto = p.cod_pgto 
              AND (f.cancel IS NULL OR f.cancel != 'S')
           ), 0

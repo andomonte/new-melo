@@ -54,7 +54,7 @@ export default async function handler(
     // Buscar registros pendentes de conciliação
     const registrosPendentes = await client.query(`
       SELECT *
-      FROM db_manaus.fin_cartao_receb_import
+      FROM fin_cartao_receb_import
       WHERE status = 'PENDENTE'
       ORDER BY dt_transacao, nsu, parcela
     `);
@@ -91,7 +91,7 @@ export default async function handler(
         if (!tipo) {
           // Bandeira não mapeada para operadora conhecida
           await client.query(`
-            UPDATE db_manaus.fin_cartao_receb_import
+            UPDATE fin_cartao_receb_import
             SET status = 'NAO_LOCALIZADO',
                 observacao = 'Bandeira não mapeada para operadora CIELO/SANTANDER'
             WHERE id = $1
@@ -184,7 +184,7 @@ export default async function handler(
 
           // Atualizar registro como conciliado
           await client.query(`
-            UPDATE db_manaus.fin_cartao_receb_import
+            UPDATE fin_cartao_receb_import
             SET status = 'CONCILIADO',
                 cod_receb = $1,
                 cod_freceb = $2,
@@ -262,7 +262,7 @@ Analise: ${debugMsg}
           }
 
           await client.query(`
-            UPDATE db_manaus.fin_cartao_receb_import
+            UPDATE fin_cartao_receb_import
             SET status = 'NAO_LOCALIZADO',
                 observacao = $2
             WHERE id = $1
@@ -283,7 +283,7 @@ Analise: ${debugMsg}
 
         // Marcar como erro
         await client.query(`
-          UPDATE db_manaus.fin_cartao_receb_import
+          UPDATE fin_cartao_receb_import
           SET status = 'ERRO',
               observacao = $1
           WHERE id = $2

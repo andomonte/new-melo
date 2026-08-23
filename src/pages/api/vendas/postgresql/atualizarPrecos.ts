@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const placeholders = codprods.map((_: any, i: number) => `$${i + 2}`).join(',');
     const result = await client.query(
-      `SELECT "CODPROD", "PRECOVENDA" FROM db_manaus.dbformacaoprvenda WHERE "TIPOPRECO" = $1 AND "CODPROD" IN (${placeholders})`,
+      `SELECT "CODPROD", "PRECOVENDA" FROM dbformacaoprvenda WHERE "TIPOPRECO" = $1 AND "CODPROD" IN (${placeholders})`,
       [tipo, ...codprods.map(String)]
     );
 

@@ -18,7 +18,7 @@ const TIPOS_JUROS = ['18', '20', '21', '22', '23', '25', '26'];
 
 async function getTaxaJuros(client: any): Promise<number> {
   try {
-    const r = await client.query('SELECT txcart FROM db_manaus.dbcalc LIMIT 1');
+    const r = await client.query('SELECT txcart FROM dbcalc LIMIT 1');
     const v = Number(r.rows?.[0]?.txcart);
     return Number.isFinite(v) && v > 0 ? v : TXCART_FALLBACK;
   } catch {
@@ -32,7 +32,7 @@ async function getFeriados(client: any): Promise<Feriados> {
   const moveis = new Set<string>();
   try {
     const r = await client.query(
-      "SELECT fixo, to_char(data,'MM-DD') AS md, to_char(data,'YYYY-MM-DD') AS ymd FROM db_manaus.dbferiado WHERE tipo='N'",
+      "SELECT fixo, to_char(data,'MM-DD') AS md, to_char(data,'YYYY-MM-DD') AS ymd FROM dbferiado WHERE tipo='N'",
     );
     for (const x of r.rows) {
       if (x.fixo === 'S') fixos.add(x.md);
@@ -71,8 +71,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               to_char(r.dt_venc,'YYYY-MM-DD') AS dt_venc,
               to_char(r.dt_pgto,'YYYY-MM-DD') AS dt_pgto,
               r.forma_fat, r.rec, r.cancel
-       FROM db_manaus.dbreceb r
-       LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+       FROM dbreceb r
+       LEFT JOIN dbclien c ON c.codcli = r.codcli
        WHERE r.cod_receb = ANY($1)`,
       [ids],
     );
@@ -84,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const [jpRes, jaRes, jlRes] = await Promise.all([
       client.query(
         `SELECT cod_receb, COALESCE(SUM(valor),0) AS juros_pago
-         FROM db_manaus.dbfreceb
+         FROM dbfreceb
          WHERE cod_receb = ANY($1) AND tipo = ANY($2) AND sf <> 'C'
          GROUP BY cod_receb`,
         [ids, TIPOS_JUROS],
@@ -92,14 +92,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       client.query(
         `SELECT DISTINCT ON (rcj_cod_receb) rcj_cod_receb,
                 (rcj_juros - rcj_juros_recebido) AS juros_aberto
-         FROM db_manaus.fin_receb_controle_juros
+         FROM fin_receb_controle_juros
          WHERE rcj_cod_receb = ANY($1)
          ORDER BY rcj_cod_receb, rcj_data DESC`,
         [ids],
       ),
       client.query(
         `SELECT lij_cod_receb, MIN(lij_taxa_liberada) AS taxa
-         FROM db_manaus.fin_libera_juros
+         FROM fin_libera_juros
          WHERE lij_cod_receb = ANY($1) AND lij_utilizada = 0
          GROUP BY lij_cod_receb`,
         [ids],
@@ -115,7 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (fats.length) {
       try {
         const fr = await client.query(
-          `SELECT cod_fat FROM db_manaus.dbfatura
+          `SELECT cod_fat FROM dbfatura
            WHERE cod_fat = ANY($1) AND data >= (CURRENT_DATE - INTERVAL '1 day')`,
           [fats],
         );

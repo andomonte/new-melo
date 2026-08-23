@@ -30,14 +30,14 @@ export default async function handle(
 
     const query = `
 SELECT login_perfil_name
-FROM db_manaus.tb_login_perfil
+FROM tb_login_perfil
 WHERE LOWER(login_perfil_name) LIKE $1
 LIMIT $2 OFFSET $3
 `;
 
     const countQuery = `
 SELECT COUNT(*) AS total
-FROM db_manaus.tb_login_perfil
+FROM tb_login_perfil
 WHERE LOWER(login_perfil_name) LIKE $1
 `;
 

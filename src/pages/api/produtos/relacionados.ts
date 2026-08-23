@@ -44,9 +44,9 @@ export default async function handle(
         p.prvenda,
         p.prcompra,
         p.prcustoatual
-      FROM db_manaus.dbprodrelacionado pr
-      INNER JOIN db_manaus.dbproduto p ON pr.codrelacionado = p.codprod
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      FROM dbprodrelacionado pr
+      INNER JOIN dbproduto p ON pr.codrelacionado = p.codprod
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       WHERE pr.codprod = $1
         AND p.excluido = 0
       ORDER BY p.ref
@@ -69,9 +69,9 @@ export default async function handle(
             p.prvenda,
             p.prcompra,
             p.prcustoatual
-          FROM db_manaus.dbprodutorelacionado pr
-          INNER JOIN db_manaus.dbproduto p ON pr.codrelacionado = p.codprod
-          LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+          FROM dbprodutorelacionado pr
+          INNER JOIN dbproduto p ON pr.codrelacionado = p.codprod
+          LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
           WHERE pr.codprod = $1
             AND p.excluido = 0
           ORDER BY p.ref

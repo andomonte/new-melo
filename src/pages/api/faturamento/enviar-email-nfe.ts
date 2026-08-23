@@ -53,11 +53,11 @@ export default async function handler(
         -- Dados da empresa na venda
         v.cnpj_empresa,
         v.ie_empresa
-      FROM db_manaus.dbfatura f
-      LEFT JOIN db_manaus.dbfat_nfe nfe ON f.codfat = nfe.codfat
-      LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
-      LEFT JOIN db_manaus.fatura_venda fv ON f.codfat = fv.codfat
-      LEFT JOIN db_manaus.dbvenda v ON fv.codvenda = v.codvenda
+      FROM dbfatura f
+      LEFT JOIN dbfat_nfe nfe ON f.codfat = nfe.codfat
+      LEFT JOIN dbclien c ON f.codcli = c.codcli
+      LEFT JOIN fatura_venda fv ON f.codfat = fv.codfat
+      LEFT JOIN dbvenda v ON fv.codvenda = v.codvenda
       WHERE f.codfat = $1
     `;
 
@@ -114,11 +114,11 @@ export default async function handler(
         COALESCE(i.baseipi, 0)::numeric as baseipi,
         COALESCE(i.totalipi, 0)::numeric as totalipi,
         COALESCE(i.ipi, 0)::numeric as ipi
-      FROM db_manaus.dbfatura f
-      JOIN db_manaus.fatura_venda fv ON fv.codfat = f.codfat
-      JOIN db_manaus.dbvenda v ON v.codvenda = fv.codvenda
-      JOIN db_manaus.dbitvenda i ON i.codvenda = v.codvenda
-      LEFT JOIN db_manaus.dbprod p ON p.codprod = i.codprod
+      FROM dbfatura f
+      JOIN fatura_venda fv ON fv.codfat = f.codfat
+      JOIN dbvenda v ON v.codvenda = fv.codvenda
+      JOIN dbitvenda i ON i.codvenda = v.codvenda
+      LEFT JOIN dbprod p ON p.codprod = i.codprod
       WHERE f.codfat = $1
       ORDER BY i.ref, p.descr
     `;
@@ -340,7 +340,7 @@ export default async function handler(
             r.banco,
             r.nro_banco as linha_digitavel,
             r.bradesco as codigobarras
-          FROM db_manaus.dbreceb r
+          FROM dbreceb r
           WHERE r.cod_fat = $1
           AND r.forma_fat = 'B'
           ORDER BY r.dt_venc
@@ -364,8 +364,8 @@ export default async function handler(
             SELECT
               db.*,
               bc.nome as nome_banco
-            FROM db_manaus.dbdados_banco db
-            LEFT JOIN db_manaus.dbbanco_cobranca bc ON db.banco = bc.banco::text
+            FROM dbdados_banco db
+            LEFT JOIN dbbanco_cobranca bc ON db.banco = bc.banco::text
             WHERE db.banco = $1
             LIMIT 1
           `;
@@ -376,7 +376,7 @@ export default async function handler(
           if (!dadosBanco.nome_banco && parcelasResult.rows[0].banco) {
             const queryBancoFallback = `
               SELECT nome, banco as codigo
-              FROM db_manaus.dbbanco_cobranca
+              FROM dbbanco_cobranca
               WHERE banco = $1 OR banco::text = $1
               LIMIT 1
             `;
@@ -400,7 +400,7 @@ export default async function handler(
           const nomeBancoFinal = dadosBanco.nome_banco || mapaBancos[parcelasResult.rows[0].banco] || 'BANCO';
           
           const queryCliente = `
-            SELECT * FROM db_manaus.dbclien 
+            SELECT * FROM dbclien 
             WHERE codcli = $1 
             LIMIT 1
           `;
@@ -458,7 +458,7 @@ export default async function handler(
                 r.banco,
                 r.nro_banco as linha_digitavel,
                 r.bradesco as codigobarras
-              FROM db_manaus.dbreceb r
+              FROM dbreceb r
               WHERE cod_fat = $1 AND forma_fat = 'B'
               ORDER BY dt_venc
             `;
@@ -946,7 +946,7 @@ export default async function handler(
     // Atualizar flag de email enviado na NFe
     const clientUpdate = await getPgPool().connect();
     await clientUpdate.query(
-      'UPDATE db_manaus.dbfat_nfe SET emailenviado = $1 WHERE codfat = $2',
+      'UPDATE dbfat_nfe SET emailenviado = $1 WHERE codfat = $2',
       ['S', codfat],
     );
     clientUpdate.release();

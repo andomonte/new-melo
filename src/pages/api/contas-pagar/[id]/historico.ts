@@ -57,7 +57,7 @@ export default async function handler(
         COALESCE(f.multa, 0) / 100.0 as multa,
         COALESCE(f.desconto, 0) / 100.0 as desconto,
         f.username
-      FROM db_manaus.dbfpgto f
+      FROM dbfpgto f
       WHERE f.cod_pgto = $1
       ORDER BY f.dt_pgto DESC, f.fpg_cof_id DESC
     `;

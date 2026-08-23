@@ -24,11 +24,11 @@ export default async function handler(
       const result = await client.query(
         `SELECT GREATEST(
            COALESCE((SELECT MAX(CAST(f.nroform AS INTEGER))
-                       FROM db_manaus.dbfatura f
+                       FROM dbfatura f
                       WHERE f.serie = $1 AND COALESCE(f.insc07,'N') = $2
                         AND f.nroform ~ '^[0-9]+$'), 0),
            COALESCE((SELECT MAX(CAST(substring(n.chave,26,9) AS INTEGER))
-                       FROM db_manaus.dbfat_nfe n
+                       FROM dbfat_nfe n
                       WHERE length(n.chave) = 44 AND substring(n.chave,23,3) = $3
                         AND n.status IN ('100','150','301','302','303')), 0)
          ) AS ultimo_numero`,

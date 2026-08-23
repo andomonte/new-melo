@@ -40,7 +40,7 @@ export default async function handler(
   // em dbcredor. Antes o endpoint ignorava o "tipo" e sempre buscava dbcredor — por
   // isso a busca de transportadora não encontrava nada.
   const isTransp = tipo === 'transportadora';
-  const tabela = isTransp ? 'db_manaus.dbtransp' : 'db_manaus.dbcredor';
+  const tabela = isTransp ? 'dbtransp' : 'dbcredor';
   const colCod = isTransp ? 'codtransp' : 'cod_credor';
   const colFant = isTransp ? 'nomefant' : 'nome_fant';
   const colDoc = isTransp ? 'cpfcgc' : 'cpf_cgc';

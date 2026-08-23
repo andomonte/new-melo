@@ -2,7 +2,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { queryWithRelease } from '@/lib/pg';
 
-const TABLE = 'db_manaus."cad_tipo_operacao_fiscal"';
+const TABLE = '"cad_tipo_operacao_fiscal"';
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;

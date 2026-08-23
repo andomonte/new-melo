@@ -15,7 +15,7 @@ export default async function handler(
 
     let query = `
       SELECT cod_transp, nome, cnpj
-      FROM db_manaus.dbtransp
+      FROM dbtransp
     `;
     
     const params: any[] = [];

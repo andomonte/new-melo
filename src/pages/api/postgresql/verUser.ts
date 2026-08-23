@@ -33,7 +33,7 @@ export default async function handle(
     //   o login em caixa diferente da armazenada. A SENHA continua case-sensitive
     //   (bcrypt), como deve ser.
     const result = await client.query(
-      'SELECT * FROM db_manaus.tb_login_user WHERE UPPER(login_user_login) = UPPER($1)',
+      'SELECT * FROM tb_login_user WHERE UPPER(login_user_login) = UPPER($1)',
       [userLogin],
     );
     const user = result.rows[0]; // Pega o primeiro resultado

@@ -23,7 +23,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
       SELECT
         cod_banco as banco,
         nome
-      FROM db_manaus.dbbanco
+      FROM dbbanco
     `;
 
     const params: string[] = [];

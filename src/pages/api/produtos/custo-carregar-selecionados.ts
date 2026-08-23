@@ -30,7 +30,7 @@ export default async function handle(
     const r = await client.query(
       `SELECT codprod, ref, descr, aplic_extendida, prfabr, preconf, precosnf,
               clasfiscal, ipi, pis, cofins
-         FROM db_manaus.dbprod
+         FROM dbprod
         WHERE codprod = ANY($1) AND excluido = 0`,
       [codprods],
     );

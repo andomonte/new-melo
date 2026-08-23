@@ -53,10 +53,10 @@ export default async function handler(
           p.nro_nf,
           cc.descr as descricao_ccusto,
           co.nro_conta as descricao_conta
-        FROM db_manaus.dbpgto p
-        LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
-        LEFT JOIN db_manaus.dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
-        LEFT JOIN db_manaus.dbconta co ON co.cod_conta = p.cod_conta
+        FROM dbpgto p
+        LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+        LEFT JOIN dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
+        LEFT JOIN dbconta co ON co.cod_conta = p.cod_conta
         WHERE p.cod_pgto = $1
       `;
 

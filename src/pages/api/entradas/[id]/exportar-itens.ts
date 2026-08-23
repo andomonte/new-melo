@@ -72,9 +72,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const headRes = await client.query(
       `SELECT e.codent, e.dtent, e.totalnf, e.cod_credor, nfe.nnf AS nfe_numero,
               COALESCE(emit.xnome, 'SISTEMA') AS fornecedor_nome
-         FROM db_manaus.dbent e
-         LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
-         LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
+         FROM dbent e
+         LEFT JOIN dbnfe_ent nfe ON nfe.chave = e.chave
+         LEFT JOIN dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
         WHERE e.codent = $1`,
       [id]
     );
@@ -98,13 +98,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          COALESCE(p.unimed, 'UN') AS unimed,
          (
            SELECT STRING_AGG(ca.arm_descricao || ': ' || ia.qtd::text, ', ' ORDER BY ca.arm_descricao)
-           FROM db_manaus.dbitent_armazem ia
-           JOIN db_manaus.cad_armazem ca ON ca.arm_id = ia.arm_id
+           FROM dbitent_armazem ia
+           JOIN cad_armazem ca ON ca.arm_id = ia.arm_id
            WHERE ia.codent = ie.codent AND ia.codprod = ie.codprod
              AND COALESCE(ia.codreq,'') = COALESCE(ie.codreq,'')
          ) AS armazens
-       FROM db_manaus.dbitent ie
-       LEFT JOIN db_manaus.dbprod p ON ie.codprod = p.codprod
+       FROM dbitent ie
+       LEFT JOIN dbprod p ON ie.codprod = p.codprod
        WHERE ie.codent = $1
        ORDER BY ie.codprod ASC`,
       [id]

@@ -23,10 +23,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               t.tra_codcli_destino, t.tra_codfat, t.tra_vlr_frete,
               f.sigla, f.nomefant AS destino_nome, f.uf AS destino_uf,
               nfe.nrodoc_fiscal, nfe.status AS nfe_status,
-              (SELECT count(*) FROM db_manaus.arm_it_transferencia i WHERE i.itt_tra_id = t.tra_id) AS qtd_itens
-         FROM db_manaus.arm_transferencia t
-         LEFT JOIN db_manaus.dbclien_filial f ON f.codcli = t.tra_codcli_destino
-         LEFT JOIN db_manaus.dbfat_nfe nfe ON nfe.codfat = t.tra_codfat AND nfe.status='100'
+              (SELECT count(*) FROM arm_it_transferencia i WHERE i.itt_tra_id = t.tra_id) AS qtd_itens
+         FROM arm_transferencia t
+         LEFT JOIN dbclien_filial f ON f.codcli = t.tra_codcli_destino
+         LEFT JOIN dbfat_nfe nfe ON nfe.codfat = t.tra_codfat AND nfe.status='100'
          ${whereSQL}
         ORDER BY t.tra_id DESC
         LIMIT 100`,

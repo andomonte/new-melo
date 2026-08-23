@@ -40,7 +40,7 @@ export default async function handle(
       const ref = String(rawRef ?? '').trim();
       if (!ref) continue;
       const r = await client.query(
-        `SELECT codprod, descr FROM db_manaus.dbprod
+        `SELECT codprod, descr FROM dbprod
           WHERE UPPER(ref) = UPPER($1) AND codmarca = $2 AND excluido = 0`,
         [ref, codmarca],
       );

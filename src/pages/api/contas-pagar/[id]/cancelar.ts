@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         p.nro_dup,
         COALESCE(
           (SELECT SUM(f.valor_pgto) 
-           FROM db_manaus.dbfpgto f 
+           FROM dbfpgto f 
            WHERE f.cod_pgto = p.cod_pgto 
              AND (f.cancel IS NULL OR f.cancel != 'S')
           ), 0
@@ -70,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // para que as notas voltem ao status "SEM TITULO"
     try {
       await pool.query(
-        'DELETE FROM db_manaus.dbconhecimento WHERE codpgto = $1',
+        'DELETE FROM dbconhecimento WHERE codpgto = $1',
         [id]
       );
     } catch (e) {

@@ -33,26 +33,26 @@ async function registrarMensagemCupom(
     await client.query('BEGIN');
     
     const msgExistente = await client.query(
-      'SELECT codigo FROM db_manaus.dbmensagens WHERE codigo = $1',
+      'SELECT codigo FROM dbmensagens WHERE codigo = $1',
       [codigo],
     );
     
     if (msgExistente.rowCount === 0) {
       await client.query(
-        'INSERT INTO db_manaus.dbmensagens (codigo, mensagem) VALUES ($1, $2)',
+        'INSERT INTO dbmensagens (codigo, mensagem) VALUES ($1, $2)',
         [codigo, mensagem],
       );
       console.log('✅ Mensagem inserida na dbmensagens:', codigo);
     }
     
     const relacaoExistente = await client.query(
-      'SELECT codfat FROM db_manaus.dbmensagens_fatura WHERE codfat = $1 AND codmsg = $2',
+      'SELECT codfat FROM dbmensagens_fatura WHERE codfat = $1 AND codmsg = $2',
       [codfat, codigo],
     );
     
     if (relacaoExistente.rowCount === 0) {
       await client.query(
-        'INSERT INTO db_manaus.dbmensagens_fatura (codfat, codmsg) VALUES ($1, $2)',
+        'INSERT INTO dbmensagens_fatura (codfat, codmsg) VALUES ($1, $2)',
         [codfat, codigo],
       );
       console.log('✅ Relação fatura-mensagem inserida');
@@ -109,7 +109,7 @@ export default async function handler(
       console.log('⚠️ dbfatura não encontrado no payload. Buscando do banco com codfat:', dados.codfat);
       try {
         const result = await pool.query(
-          'SELECT * FROM db_manaus.dbfatura WHERE codfat = $1 LIMIT 1',
+          'SELECT * FROM dbfatura WHERE codfat = $1 LIMIT 1',
           [dados.codfat]
         );
         
@@ -181,7 +181,7 @@ export default async function handler(
           `SELECT MAX(numero) as ultimo_numero
            FROM (
              SELECT CAST(f.nroform AS INTEGER) as numero
-             FROM db_manaus.dbfatura f
+             FROM dbfatura f
              WHERE f.serie = $1
                AND f.nroform IS NOT NULL
                AND f.nroform != ''
@@ -190,8 +190,8 @@ export default async function handler(
              UNION ALL
              
              SELECT CAST(nfe.nrodoc_fiscal AS INTEGER)
-             FROM db_manaus.dbfat_nfe nfe
-             INNER JOIN db_manaus.dbfatura f ON f.codfat = nfe.codfat
+             FROM dbfat_nfe nfe
+             INNER JOIN dbfatura f ON f.codfat = nfe.codfat
              WHERE f.serie = $1
                AND nfe.nrodoc_fiscal IS NOT NULL
                AND nfe.nrodoc_fiscal != ''
@@ -255,7 +255,7 @@ export default async function handler(
         uf,
         cep,
         crt
-      FROM db_manaus.dadosempresa 
+      FROM dadosempresa 
       WHERE "certificadoKey" IS NOT NULL 
         AND "certificadoKey" != '' 
         AND "certificadoCrt" IS NOT NULL 
@@ -730,7 +730,7 @@ export default async function handler(
           const client = await pool.connect();
           try {
             await client.query(
-              `UPDATE db_manaus.dbfatura SET denegada = NULL WHERE codfat = $1`,
+              `UPDATE dbfatura SET denegada = NULL WHERE codfat = $1`,
               [codfat],
             );
             console.log(`✅ Campo 'denegada' limpo na fatura ${codfat} (emissão bem-sucedida)`);
@@ -819,7 +819,7 @@ export default async function handler(
           try {
        
             await client.query(
-              `INSERT INTO db_manaus.dbfat_nfe (
+              `INSERT INTO dbfat_nfe (
                 codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, 
                 xmlremessa, xmlretorno, status, numprotocolo, dthrprotocolo, motivo, 
                 tipo_emissao, modelo, tpemissao, imagem, emailenviado
@@ -853,11 +853,14 @@ export default async function handler(
         }
       }
 
-      // ✅ CORREÇÃO: Enviar email NFC-e automaticamente para o cliente
+      // ✅ Enviar email NFC-e automaticamente para o cliente
+      // Regra: só em PRODUÇÃO. Em homologação (testes) NÃO envia — evita spammar o
+      // cliente real. Override: forcarEmail=true (checkbox "testar envio").
       const emailCliente = dados.dbclien?.email;
       const nomeCliente = dados.dbclien?.nome || dados.dbclien?.nomefant || 'Cliente';
+      const enviarEmail = !isHomologacao || dados?.forcarEmail === true;
 
-      if (emailCliente && emailCliente.trim() !== '') {
+      if (enviarEmail && emailCliente && emailCliente.trim() !== '') {
         try {
           console.log('🚀 Enviando email NFC-e em background para o cliente...');
 
@@ -936,7 +939,7 @@ export default async function handler(
         const client = await getPgPool().connect();
         try {
           await client.query(
-            `INSERT INTO db_manaus.dbfat_nfe (
+            `INSERT INTO dbfat_nfe (
               codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, 
               xmlremessa, xmlretorno, status, numprotocolo, dthrprotocolo, motivo, 
               tipo_emissao, modelo, tpemissao, emailenviado
@@ -980,7 +983,7 @@ export default async function handler(
           const client = await pool.connect();
           try {
             await client.query(
-              `UPDATE db_manaus.dbfatura SET denegada = 'S' WHERE codfat = $1`,
+              `UPDATE dbfatura SET denegada = 'S' WHERE codfat = $1`,
               [codfat],
             );
             console.log(

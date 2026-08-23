@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     const { search } = req.query;
 

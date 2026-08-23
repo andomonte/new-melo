@@ -77,14 +77,14 @@ export default async function handler(
         COALESCE(p.unimed, 'UN') as unimed,
         (
           SELECT STRING_AGG(ca.arm_descricao || ': ' || ia.qtd::text, ', ' ORDER BY ca.arm_descricao)
-          FROM db_manaus.dbitent_armazem ia
-          JOIN db_manaus.cad_armazem ca ON ca.arm_id = ia.arm_id
+          FROM dbitent_armazem ia
+          JOIN cad_armazem ca ON ca.arm_id = ia.arm_id
           WHERE ia.codent = ie.codent
             AND ia.codprod = ie.codprod
             AND COALESCE(ia.codreq,'') = COALESCE(ie.codreq,'')
         ) as armazens
-      FROM db_manaus.dbitent ie
-      LEFT JOIN db_manaus.dbprod p ON ie.codprod = p.codprod
+      FROM dbitent ie
+      LEFT JOIN dbprod p ON ie.codprod = p.codprod
       WHERE ie.codent = $1
       ORDER BY ie.codprod ASC
     `;

@@ -38,7 +38,7 @@ export default async function handler(
   let client;
   try {
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     // Query - req_id contém o código completo (ex: 12002010079), req_id_composto é só o sufixo (79)
     const query = `

@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // Verificar se o item original existe
     const checkItemQuery = `
-      SELECT itr_codprod as codprod FROM db_manaus.cmp_it_requisicao
+      SELECT itr_codprod as codprod FROM cmp_it_requisicao
       WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3
     `;
 
@@ -77,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // 1. Buscar o item original completo para copiar campos obrigatórios
     const fetchOriginalQuery = `
-      SELECT * FROM db_manaus.cmp_it_requisicao
+      SELECT * FROM cmp_it_requisicao
       WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3
     `;
 
@@ -99,7 +99,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // 2. Deletar o item original
     const deleteQuery = `
-      DELETE FROM db_manaus.cmp_it_requisicao
+      DELETE FROM cmp_it_requisicao
       WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3
       RETURNING *
     `;
@@ -125,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // 3. Verificar se o produto substituto já existe na requisição
     const checkNovoQuery = `
-      SELECT * FROM db_manaus.cmp_it_requisicao
+      SELECT * FROM cmp_it_requisicao
       WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3
     `;
     const checkNovoResult = await client.query(checkNovoQuery, [req_id, req_versao, novo_produto.codprod]);
@@ -136,7 +136,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       // Produto substituto já existe - fazer UPDATE somando quantidade
       console.log(`⚠️ Produto ${novo_produto.codprod} já existe na requisição. Fazendo UPDATE...`);
       const updateQuery = `
-        UPDATE db_manaus.cmp_it_requisicao
+        UPDATE cmp_it_requisicao
         SET itr_quantidade = itr_quantidade + $4,
             itr_pr_unitario = $5
         WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3
@@ -152,7 +152,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     } else {
       // Produto substituto não existe - fazer INSERT
       const insertQuery = `
-        INSERT INTO db_manaus.cmp_it_requisicao
+        INSERT INTO cmp_it_requisicao
           (itr_req_id, itr_req_versao, itr_codprod, itr_quantidade, itr_pr_unitario,
            itr_base_indicacao, itr_quantidade_atendida, itr_quantidade_sugerida,
            itr_data_sugestao, itr_quantidade_fechada)
@@ -189,7 +189,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     // Buscar informações dos produtos para histórico detalhado
     const produtosQuery = `
       SELECT codprod, descr
-      FROM db_manaus.dbprod
+      FROM dbprod
       WHERE codprod IN ($1, $2)
     `;
     const produtosResult = await client.query(produtosQuery, [codprod_original, novo_produto.codprod]);
@@ -218,7 +218,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     // Get current requisition status
     const statusQuery = `
       SELECT req_status
-      FROM db_manaus.cmp_requisicao
+      FROM cmp_requisicao
       WHERE req_id = $1 AND req_versao = $2
     `;
     const statusResult = await client.query(statusQuery, [req_id, req_versao]);
@@ -228,7 +228,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     try {
       await client.query('SAVEPOINT historico_requisicao');
       await client.query(
-        `INSERT INTO db_manaus.cmp_requisicao_historico
+        `INSERT INTO cmp_requisicao_historico
          (req_id, req_versao, previous_status, new_status, user_id, user_name, created_at, reason, comments)
          VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)`,
         [
@@ -253,7 +253,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     try {
       await client.query('SAVEPOINT historico_ordem');
       const ordemQuery = `
-        SELECT orc_id, orc_status FROM db_manaus.cmp_ordem_compra
+        SELECT orc_id, orc_status FROM cmp_ordem_compra
         WHERE orc_req_id = $1 AND orc_req_versao = $2
       `;
       const ordemResult = await client.query(ordemQuery, [req_id, req_versao]);
@@ -287,7 +287,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // Verificar ANTES do commit
     const verificacaoAntes = await client.query(
-      `SELECT itr_codprod, itr_quantidade FROM db_manaus.cmp_it_requisicao
+      `SELECT itr_codprod, itr_quantidade FROM cmp_it_requisicao
        WHERE itr_req_id = $1 AND itr_req_versao = $2
        ORDER BY itr_codprod`,
       [req_id, req_versao]
@@ -301,7 +301,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     // Verificar DEPOIS do commit (nova query fora da transação)
     const verificacaoDepois = await client.query(
-      `SELECT itr_codprod, itr_quantidade FROM db_manaus.cmp_it_requisicao
+      `SELECT itr_codprod, itr_quantidade FROM cmp_it_requisicao
        WHERE itr_req_id = $1 AND itr_req_versao = $2
        ORDER BY itr_codprod`,
       [req_id, req_versao]

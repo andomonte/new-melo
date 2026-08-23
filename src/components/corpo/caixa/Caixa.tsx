@@ -55,7 +55,7 @@ interface Titulo {
   parcelaLabel?: string; // ex: "1/3" (derivado no front)
 }
 
-type Forma = 'dinheiro' | 'credito' | 'debito' | 'pix';
+type Forma = 'dinheiro' | 'credito' | 'debito' | 'pix' | 'deposito' | 'credito_devolucao';
 
 // mapeia a forma do recebimento → forma do movimento da sessão de caixa
 const MAP_FORMA_SESSAO: Record<Forma, FormaPagamentoSessao> = {
@@ -63,7 +63,28 @@ const MAP_FORMA_SESSAO: Record<Forma, FormaPagamentoSessao> = {
   credito: 'CREDITO',
   debito: 'DEBITO',
   pix: 'PIX',
+  deposito: 'OUTRO',
+  credito_devolucao: 'OUTRO',
 };
+
+// mapeia o código real da dbforma_pagto → comportamento interno da UI.
+// (04 CARTAO cai em crédito por padrão; a UI oferece o toggle crédito/débito.)
+const CAT_POR_CODFPGT: Record<string, Forma> = {
+  '01': 'dinheiro',
+  '04': 'credito',
+  '05': 'credito_devolucao',
+  '09': 'deposito',
+  '42': 'pix',
+};
+
+// Baldes do recebimento por código de forma (rateio do SysCaixa):
+const TIPOS_TARIFA_FPGT = ['06', '07', '08', '15', '32', '44'];
+const TIPOS_JUROS_FPGT = ['18', '20', '21', '22', '23', '25', '26', '43'];
+function bucketDaForma(codfpgt?: string): 'tarifa' | 'juros' | 'principal' {
+  if (codfpgt && TIPOS_TARIFA_FPGT.includes(codfpgt)) return 'tarifa';
+  if (codfpgt && TIPOS_JUROS_FPGT.includes(codfpgt)) return 'juros';
+  return 'principal';
+}
 
 interface Passada {
   id: number;
@@ -75,6 +96,9 @@ interface Passada {
   valor: number; // valor bruto passado
   cvnsu?: string;
   autorizacao?: string;
+  cofId?: number; // conta financeira (cad_conta_financeira.cof_id)
+  cofDescricao?: string;
+  codfpgt?: string; // código real da forma (dbforma_pagto.codfpgt) → dbfreceb.tipo
 }
 
 const FORMAS: { key: Forma; label: string; icon: React.ElementType }[] = [
@@ -145,6 +169,16 @@ export default function Caixa() {
   const [cvnsu, setCvnsu] = useState('');
   const [autorizacao, setAutorizacao] = useState('');
 
+  // ---- Estado: contas financeiras (classificação do recebimento) ----
+  type ContaFin = { cof_id: number; cof_descricao: string; centro_custo: string | null };
+  const [contasFin, setContasFin] = useState<ContaFin[]>([]);
+  const [cofId, setCofId] = useState(''); // conta financeira escolhida p/ o pagamento (principal)
+
+  // ---- Estado: formas de pagamento (combo data-driven — tabela real dbforma_pagto) ----
+  type FormaCat = { codfpgt: string; descricao: string };
+  const [formasPag, setFormasPag] = useState<FormaCat[]>([]);
+  const [codFpgt, setCodFpgt] = useState('01'); // código da forma selecionado no combo
+
   // ---- Estado: passadas / salvar ----
   const [passadas, setPassadas] = useState<Passada[]>([]);
   const [salvando, setSalvando] = useState(false);
@@ -159,6 +193,7 @@ export default function Caixa() {
   const [previa, setPrevia] = useState<any | null>(null); // resultado do dry-run
 
   const ehCartao = forma === 'credito' || forma === 'debito';
+  const formaBucket = bucketDaForma(codFpgt); // 'principal' | 'tarifa' | 'juros'
 
   // Conta do operador vem do login (user.cod_conta = tb_user_perfil.cod_conta da filial).
   // Fallback: se a sessão ainda não trouxe o cod_conta (login feito antes do campo),
@@ -194,6 +229,30 @@ export default function Caixa() {
         if (Array.isArray(data)) setOperadoras(data);
       })
       .catch((err) => console.error('Erro ao carregar operadoras:', err));
+  }, []);
+
+  // Carregar contas financeiras (classificação do recebimento)
+  useEffect(() => {
+    fetch('/api/caixa/contas-financeiras')
+      .then((r) => (r.ok ? r.json() : { contas: [] }))
+      .then((d) => setContasFin(Array.isArray(d?.contas) ? d.contas : []))
+      .catch((err) => console.error('Erro ao carregar contas financeiras:', err));
+  }, []);
+
+  // Carregar formas de pagamento (combo)
+  useEffect(() => {
+    fetch('/api/caixa/formas-pagamento')
+      .then((r) => (r.ok ? r.json() : { formas: [] }))
+      .then((d) => {
+        const fs: FormaCat[] = Array.isArray(d?.formas) ? d.formas : [];
+        setFormasPag(fs);
+        if (fs.length) {
+          setCodFpgt(fs[0].codfpgt);
+          setForma(CAT_POR_CODFPGT[fs[0].codfpgt] ?? 'dinheiro');
+        }
+      })
+      .catch((err) => console.error('Erro ao carregar formas de pagamento:', err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Ao (des)selecionar títulos, busca juros/dias/valor a receber de TODOS (motor validado)
@@ -274,14 +333,30 @@ export default function Caixa() {
     () => selecionados.reduce((s, t) => s + Number(dadosMap[t.cod_receb]?.tarifa || 0), 0),
     [selecionados, dadosMap],
   );
-  const totalReceber = principalPend + jurosVal + tarifaVal; // "A receber" (exibição)
+  const totalReceber = principalPend + jurosVal + tarifaVal; // "A receber" (Total = principal + juros + tarifa)
 
-  // As passadas cobrem o PRINCIPAL; o juros é cobrado à parte (sempre integral).
-  const recebido = useMemo(() => passadas.reduce((s, p) => s + p.valor, 0), [passadas]);
-  const falta = Math.max(0, principalPend - recebido);
-  const quitado = principalPend > 0 && recebido >= principalPend - 0.005;
-  const parcial = recebido > 0 && recebido < principalPend - 0.005;
-  const podeReceber = recebido > 0;
+  // Rateio do SysCaixa: cada forma cai num balde (principal / tarifa / juros).
+  // A Falta conta a partir do Total a Receber (título + juros + tarifa).
+  const recTitulos = useMemo(
+    () => passadas.filter((p) => bucketDaForma(p.codfpgt) === 'principal').reduce((s, p) => s + p.valor, 0),
+    [passadas],
+  );
+  const recTarifa = useMemo(
+    () => passadas.filter((p) => bucketDaForma(p.codfpgt) === 'tarifa').reduce((s, p) => s + p.valor, 0),
+    [passadas],
+  );
+  const recJuros = useMemo(
+    () => passadas.filter((p) => bucketDaForma(p.codfpgt) === 'juros').reduce((s, p) => s + p.valor, 0),
+    [passadas],
+  );
+  const recebido = recTitulos; // principal recebido (base da baixa/guard)
+  const recebidoTotal = recTitulos + recTarifa + recJuros;
+  const falta = Math.max(0, totalReceber - recebidoTotal);
+  const faltaTarifa = Math.max(0, tarifaVal - recTarifa);
+  const faltaJuros = Math.max(0, jurosVal - recJuros);
+  const quitado = totalReceber > 0 && recebidoTotal >= totalReceber - 0.005;
+  const parcial = recTitulos > 0 && recTitulos < principalPend - 0.005;
+  const podeReceber = recebidoTotal > 0;
 
   // ---- Buscar título ----
   const buscar = async () => {
@@ -380,19 +455,33 @@ export default function Caixa() {
       toast.error('Selecione a operadora do cartão.');
       return;
     }
+    // Regra Delphi: conta financeira é obrigatória em toda forma de pagamento.
+    if (!cofId) {
+      toast.error('Selecione a Conta Financeira.');
+      return;
+    }
     // Regra Delphi: com Depósito marcado, dinheiro é bloqueado (só cartão/PIX/depósito/boleto).
     if (deposito && forma === 'dinheiro') {
       toast.error('Com Depósito marcado não dá pra receber em dinheiro — use cartão, PIX ou depósito.');
       return;
     }
-    // Não permitir receber mais que o principal pendente (as passadas cobrem o principal).
-    const restante = principalPend - recebido;
-    if (restante <= 0.005) {
-      toast.error('O principal já está totalmente coberto.');
+    // Rateio do SysCaixa: cada balde (principal/tarifa/juros) tem seu próprio saldo.
+    const bucket = bucketDaForma(codFpgt);
+    const limite =
+      bucket === 'tarifa' ? faltaTarifa : bucket === 'juros' ? faltaJuros : principalPend - recTitulos;
+    const nomeBucket = bucket === 'tarifa' ? 'a tarifa' : bucket === 'juros' ? 'o juros' : 'o principal';
+    const nomeBucketCap = bucket === 'tarifa' ? 'A tarifa' : bucket === 'juros' ? 'O juros' : 'O principal';
+    // Tarifa: só depois de existir um pagamento principal (regra Delphi).
+    if (bucket === 'tarifa' && recTitulos <= 0.005) {
+      toast.error('Adicione o pagamento do título antes da tarifa.');
       return;
     }
-    if (valor > restante + 0.005) {
-      toast.error(`Valor acima do saldo a receber. Máximo: ${formatarBRL(restante)}.`);
+    if (limite <= 0.005) {
+      toast.error(`${nomeBucketCap} já está coberto.`);
+      return;
+    }
+    if (valor > limite + 0.005) {
+      toast.error(`Valor acima do saldo de ${nomeBucket}. Máximo: ${formatarBRL(limite)}.`);
       return;
     }
 
@@ -409,6 +498,9 @@ export default function Caixa() {
         valor,
         cvnsu: ehCartao ? cvnsu.trim() || undefined : undefined,
         autorizacao: ehCartao ? autorizacao.trim() || undefined : undefined,
+        cofId: Number(cofId),
+        cofDescricao: contasFin.find((cf) => String(cf.cof_id) === String(cofId))?.cof_descricao,
+        codfpgt: codFpgt,
       },
     ]);
     // limpar campos da passada
@@ -435,14 +527,33 @@ export default function Caixa() {
     setSalvando(true);
     setPrevia(null);
     try {
-      const titulosPayload = selecionados.map((t) => ({
-        cod_receb: t.cod_receb,
-        principalPendente: Number(
-          dadosMap[t.cod_receb]?.principalPendente ??
-            Math.max(0, Number(t.valor_original || 0) - Number(t.valor_recebido || 0)),
-        ),
-        juros: Number(dadosMap[t.cod_receb]?.juros || 0),
-      }));
+      // juros/tarifa efetivamente lançados (baldes) rateados por título (proporcional ao valor de cada um).
+      const titulosPayload = selecionados.map((t) => {
+        const dTarifa = Number(dadosMap[t.cod_receb]?.tarifa || 0);
+        const dJuros = Number(dadosMap[t.cod_receb]?.juros || 0);
+        return {
+          cod_receb: t.cod_receb,
+          principalPendente: Number(
+            dadosMap[t.cod_receb]?.principalPendente ??
+              Math.max(0, Number(t.valor_original || 0) - Number(t.valor_recebido || 0)),
+          ),
+          juros: jurosVal > 0 ? Math.round(dJuros * (recJuros / jurosVal) * 100) / 100 : 0,
+          tarifa: tarifaVal > 0 ? Math.round(dTarifa * (recTarifa / tarifaVal) * 100) / 100 : 0,
+        };
+      });
+      // pagamentos = SÓ as formas de principal (tarifa/juros vão pelos escalares acima).
+      const pagamentosPrincipal = passadas
+        .filter((p) => bucketDaForma(p.codfpgt) === 'principal')
+        .map((p) => ({
+          forma: p.forma,
+          valor: p.valor,
+          codopera: p.codopera,
+          vezes: p.vezes,
+          cvnsu: p.cvnsu,
+          autorizacao: p.autorizacao,
+          cof_id: p.cofId,
+          tipo: p.codfpgt,
+        }));
       const resp = await fetch('/api/caixa/receber', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -452,14 +563,7 @@ export default function Caixa() {
           cod_conta: codConta.trim(),
           username,
           dryRun: simular,
-          pagamentos: passadas.map((p) => ({
-            forma: p.forma,
-            valor: p.valor,
-            codopera: p.codopera,
-            vezes: p.vezes,
-            cvnsu: p.cvnsu,
-            autorizacao: p.autorizacao,
-          })),
+          pagamentos: pagamentosPrincipal,
         }),
       });
       const data = await resp.json();
@@ -615,14 +719,18 @@ export default function Caixa() {
           cod_conta: codConta.trim(),
           username,
           principalPendente: r.valorTitulo,
-          pagamentos: passadas.map((p) => ({
-            forma: p.forma,
-            valor: p.valor,
-            codopera: p.codopera,
-            vezes: p.vezes,
-            cvnsu: p.cvnsu,
-            autorizacao: p.autorizacao,
-          })),
+          pagamentos: passadas
+            .filter((p) => bucketDaForma(p.codfpgt) === 'principal')
+            .map((p) => ({
+              forma: p.forma,
+              valor: p.valor,
+              codopera: p.codopera,
+              vezes: p.vezes,
+              cvnsu: p.cvnsu,
+              autorizacao: p.autorizacao,
+              cof_id: p.cofId,
+              tipo: p.codfpgt,
+            })),
         }),
       });
       const dr = await resp.json();
@@ -1007,35 +1115,63 @@ export default function Caixa() {
                 <Landmark size={14} /> Recebimento
               </h2>
               <div className="p-4">
-                {/* Segmented forma de pagamento */}
-                <div className="flex gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-1">
-                  {FORMAS.map((f) => {
-                    const Icon = f.icon;
-                    const ativo = forma === f.key;
-                    // Depósito bloqueia dinheiro (regra Delphi)
-                    const bloqueado = deposito && f.key === 'dinheiro';
-                    return (
-                      <button
-                        key={f.key}
-                        disabled={bloqueado}
-                        title={bloqueado ? 'Depósito não aceita dinheiro' : undefined}
-                        onClick={() => !bloqueado && setForma(f.key)}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-[13px] font-semibold transition-colors ${
-                          ativo
-                            ? 'bg-blue-600 text-white shadow'
-                            : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
-                        } ${bloqueado ? 'opacity-40 cursor-not-allowed' : ''}`}
-                      >
-                        <Icon size={15} /> {f.label}
-                      </button>
-                    );
-                  })}
+                {/* Combo de forma de pagamento (tabela real dbforma_pagto — buscável por código e nome) */}
+                <div>
+                  <Label>Forma de Pagamento</Label>
+                  <SelectPadrao
+                    searchable
+                    value={codFpgt}
+                    onValueChange={(cod) => {
+                      // grupo de comportamento p/ juros/tarifa/cartão (o tipo real = codfpgt)
+                      const cat: Forma = cod === '04' ? 'credito' : cod === '42' ? 'pix' : 'dinheiro';
+                      // Depósito bloqueia dinheiro (regra Delphi)
+                      if (deposito && cod === '01') {
+                        toast.error('Com Depósito marcado não dá pra receber em dinheiro.');
+                        return;
+                      }
+                      setCodFpgt(cod);
+                      setForma(cat);
+                      // Tarifa/juros: valor travado no restante e conta financeira fixa (161/160), igual ao SysCaixa
+                      const b = bucketDaForma(cod);
+                      if (b === 'tarifa') {
+                        setValorPassada(formatarDecimalBR(faltaTarifa));
+                        setCofId('161');
+                      } else if (b === 'juros') {
+                        setValorPassada(formatarDecimalBR(faltaJuros));
+                        setCofId('160');
+                      }
+                    }}
+                    placeholder="Selecione a forma..."
+                    options={formasPag.map((f) => ({
+                      value: f.codfpgt,
+                      label: `${f.codfpgt} — ${f.descricao}`,
+                    }))}
+                  />
                 </div>
 
                 {/* Formulário */}
                 <div className="grid grid-cols-2 gap-3 mt-4">
                   {ehCartao && (
                     <>
+                      <div className="col-span-2">
+                        <Label>Tipo do cartão</Label>
+                        <div className="flex gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-1">
+                          {(['credito', 'debito'] as const).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setForma(t)}
+                              className={`flex-1 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${
+                                forma === t
+                                  ? 'bg-blue-600 text-white shadow'
+                                  : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                              }`}
+                            >
+                              {t === 'credito' ? 'Crédito' : 'Débito'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="col-span-2">
                         <Label>Operadora de Cartão</Label>
                         <SelectPadrao
@@ -1064,13 +1200,17 @@ export default function Caixa() {
                   )}
 
                   <div className={ehCartao ? '' : 'col-span-2'}>
-                    <Label>Valor principal (R$)</Label>
+                    <Label>
+                      {formaBucket === 'tarifa' ? 'Valor da tarifa (R$)' : formaBucket === 'juros' ? 'Valor do juros (R$)' : 'Valor principal (R$)'}
+                    </Label>
                     <Input
                       value={valorPassada}
                       onChange={(e) => setValorPassada(mascaraInputBRL(e.target.value))}
                       onKeyDown={(e) => e.key === 'Enter' && adicionarPassada()}
                       placeholder="0,00"
-                      className="text-right font-mono tabular-nums"
+                      readOnly={formaBucket === 'tarifa'}
+                      title={formaBucket === 'tarifa' ? 'Tarifa é valor fixo do título (não editável)' : undefined}
+                      className={`text-right font-mono tabular-nums ${formaBucket === 'tarifa' ? 'bg-gray-100 dark:bg-slate-800' : ''}`}
                       inputMode="decimal"
                     />
                   </div>
@@ -1103,6 +1243,30 @@ export default function Caixa() {
                   )}
 
                   <div className="col-span-2">
+                    <Label>
+                      Conta Financeira
+                      {formaBucket === 'tarifa' && ' (tarifa → 161, fixa)'}
+                      {formaBucket === 'juros' && ' (juros → 160, fixa)'}
+                    </Label>
+                    <select
+                      value={cofId}
+                      onChange={(e) => setCofId(e.target.value)}
+                      disabled={formaBucket !== 'principal'}
+                      className={`w-full h-10 px-3 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 ${
+                        formaBucket !== 'principal' ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <option value="">SELECIONE A CONTA...</option>
+                      {contasFin.map((cf) => (
+                        <option key={cf.cof_id} value={cf.cof_id}>
+                          {cf.cof_id} — {cf.cof_descricao}
+                          {cf.centro_custo ? ` · ${cf.centro_custo}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-2">
                     <button
                       type="button"
                       onClick={adicionarPassada}
@@ -1123,8 +1287,20 @@ export default function Caixa() {
                           key={p.id}
                           className="grid grid-cols-[auto_1fr_auto_auto] gap-2.5 items-center bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2"
                         >
-                          <span className="px-2 py-1 rounded bg-blue-700 text-white text-[9px] font-black uppercase">
-                            {p.forma === 'credito'
+                          <span
+                            className={`px-2 py-1 rounded text-white text-[9px] font-black uppercase ${
+                              bucketDaForma(p.codfpgt) === 'tarifa'
+                                ? 'bg-purple-700'
+                                : bucketDaForma(p.codfpgt) === 'juros'
+                                ? 'bg-amber-700'
+                                : 'bg-blue-700'
+                            }`}
+                          >
+                            {bucketDaForma(p.codfpgt) === 'tarifa'
+                              ? 'TAR'
+                              : bucketDaForma(p.codfpgt) === 'juros'
+                              ? 'JUR'
+                              : p.forma === 'credito'
                               ? 'CRÉD'
                               : p.forma === 'debito'
                               ? 'DÉB'
@@ -1146,7 +1322,10 @@ export default function Caixa() {
                                 </small>
                               </>
                             ) : (
-                              <>{p.forma === 'pix' ? 'PIX' : 'Dinheiro'}</>
+                              <>
+                                {formasPag.find((f) => f.codfpgt === p.codfpgt)?.descricao ??
+                                  (p.forma === 'pix' ? 'PIX' : 'Dinheiro')}
+                              </>
                             )}
                           </span>
                           <span className="font-mono tabular-nums font-semibold">
@@ -1169,39 +1348,61 @@ export default function Caixa() {
                   </div>
                 )}
 
-                {/* Totais */}
-                <div className="mt-4 border-t border-gray-200 dark:border-slate-700 pt-3 space-y-1.5">
+                {/* Composição do recebimento — igual ao SysCaixa:
+                    Valor Principal + Juros = Total do Título + Tarifa = Total a Receber */}
+                <div className="mt-4 border-t border-gray-200 dark:border-slate-700 pt-3">
                   {selecionados.length > 0 && (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Principal ({selecionados.length} tít.)</span>
+                    <div className="rounded-lg bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 p-3 space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Valor Principal ({selecionados.length} tít.)</span>
                         <span className="font-mono tabular-nums">{formatarBRL(principalPend)}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Juros{jurosVal > 0 ? '' : ' (em dia)'}</span>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">+ Juros{jurosVal > 0 ? '' : ' (em dia)'}</span>
                         <span className={`font-mono tabular-nums ${jurosVal > 0 ? 'text-amber-600' : ''}`}>
                           {formatarBRL(jurosVal)}
                         </span>
                       </div>
-                      {tarifaVal > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Tarifa</span>
-                          <span className="font-mono tabular-nums">{formatarBRL(tarifaVal)}</span>
-                        </div>
-                      )}
-                    </>
+                      <div className="flex justify-between border-t border-gray-200 dark:border-slate-700 pt-1 font-semibold">
+                        <span>= Total do Título</span>
+                        <span className="font-mono tabular-nums">{formatarBRL(principalPend + jurosVal)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">+ Tarifa bancária</span>
+                        <span className="font-mono tabular-nums">{formatarBRL(tarifaVal)}</span>
+                      </div>
+                      <div className="flex justify-between border-t-2 border-gray-300 dark:border-slate-600 pt-1 font-bold text-base">
+                        <span>= Total a Receber</span>
+                        <span className="font-mono tabular-nums text-blue-700 dark:text-blue-400">
+                          {formatarBRL(totalReceber)}
+                        </span>
+                      </div>
+                    </div>
                   )}
-                  <div className="flex justify-between text-sm border-t border-gray-200 dark:border-slate-700 pt-1.5">
-                    <span className="text-gray-500 font-semibold">Total a receber</span>
-                    <span className="font-mono tabular-nums font-semibold">{formatarBRL(totalReceber)}</span>
+
+                  {/* Valor Recebido (Títulos / Tarifa / Juros) — igual ao SysCaixa.
+                      Tarifa e juros só contam como recebidos quando o principal é coberto
+                      (são lançados automaticamente ao confirmar). */}
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[
+                      { l: 'Títulos', v: recTitulos },
+                      { l: 'Tarifa', v: recTarifa },
+                      { l: 'Juros', v: recJuros },
+                    ].map((x) => (
+                      <div
+                        key={x.l}
+                        className="rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5 text-center"
+                      >
+                        <div className="text-[10px] uppercase tracking-wide text-gray-400">Recebido {x.l}</div>
+                        <div className="font-mono tabular-nums font-semibold text-sm">{formatarBRL(x.v)}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Recebido (principal)</span>
-                    <span className="font-mono tabular-nums font-semibold">{formatarBRL(recebido)}</span>
-                  </div>
-                  <div className="flex justify-between items-baseline">
+
+                  {/* Falta = Total a Receber − recebido (rateio do SysCaixa) */}
+                  <div className="flex justify-between items-baseline mt-3">
                     <span className="uppercase tracking-wide text-xs font-bold">
-                      Falta (principal){parcial ? ' — parcial' : ''}
+                      Falta (a receber){parcial ? ' — parcial' : ''}
                     </span>
                     <span
                       className={`font-mono tabular-nums text-2xl font-bold ${
@@ -1211,10 +1412,22 @@ export default function Caixa() {
                       {formatarBRL(falta)}
                     </span>
                   </div>
+                  {selecionados.length > 0 && (faltaTarifa > 0.005 || faltaJuros > 0.005) && (
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      Ainda falta lançar:{' '}
+                      {[
+                        faltaTarifa > 0.005 ? `tarifa ${formatarBRL(faltaTarifa)}` : '',
+                        faltaJuros > 0.005 ? `juros ${formatarBRL(faltaJuros)}` : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' e ')}
+                      {' '}(escolha a forma de tarifa/juros no combo).
+                    </div>
+                  )}
                   {parcial && (
-                    <div className="text-[11px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1">
-                      Recebimento <b>parcial</b>: o título fica <b>em aberto</b> no restante ({formatarBRL(falta)}); o
-                      juros será recalculado sobre esse saldo no próximo pagamento.
+                    <div className="text-[11px] text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-1 mt-2">
+                      Principal <b>parcial</b>: o título fica <b>em aberto</b> no restante; o juros será recalculado
+                      sobre esse saldo no próximo pagamento.
                     </div>
                   )}
                 </div>

@@ -22,15 +22,15 @@ interface FinalizarResponse {
 
 const GET_ALOCACOES_QUERY = `
   SELECT da.codprod as cod_produto, da.arm_id, da.qtd, da.localizacao, arm.arm_descricao
-  FROM db_manaus.dbitent_armazem da
-  LEFT JOIN db_manaus.cad_armazem arm ON arm.arm_id = da.arm_id
+  FROM dbitent_armazem da
+  LEFT JOIN cad_armazem arm ON arm.arm_id = da.arm_id
   WHERE da.codent = $1
   ORDER BY da.codprod, da.arm_id
 `;
 const GET_ALOCACOES_FALLBACK_QUERY = `
   SELECT da.codprod as cod_produto, da.arm_id, da.qtd, NULL as localizacao, arm.arm_descricao
-  FROM db_manaus.dbitent_armazem da
-  LEFT JOIN db_manaus.cad_armazem arm ON arm.arm_id = da.arm_id
+  FROM dbitent_armazem da
+  LEFT JOIN cad_armazem arm ON arm.arm_id = da.arm_id
   WHERE da.codent = $1
   ORDER BY da.codprod, da.arm_id
 `;
@@ -57,7 +57,7 @@ export default async function handler(
     client = await pool.connect();
 
     const checkResult = await client.query(
-      `SELECT id FROM db_manaus.entrada_operacoes
+      `SELECT id FROM entrada_operacoes
         WHERE codent = $1 AND alocador_matricula = $2 AND status = 'EM_ALOCACAO'`,
       [entradaId, matricula]);
     if (checkResult.rows.length === 0) {
@@ -65,10 +65,10 @@ export default async function handler(
     }
 
     await client.query('BEGIN');
-    await client.query('SET LOCAL search_path TO db_manaus, public');
+    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     const finalizarResult = await client.query(
-      `UPDATE db_manaus.entrada_operacoes
+      `UPDATE entrada_operacoes
           SET status = 'ALOCADO', fim_alocacao = NOW(),
               observacao = COALESCE($2, observacao), updated_at = NOW()
         WHERE codent = $1 AND status = 'EM_ALOCACAO' RETURNING id`,
@@ -79,9 +79,9 @@ export default async function handler(
     }
 
     // Entrada disponível para venda
-    await client.query(`UPDATE db_manaus.dbent SET est_alocado = 1 WHERE codent = $1`, [entradaId]);
+    await client.query(`UPDATE dbent SET est_alocado = 1 WHERE codent = $1`, [entradaId]);
     await client.query(
-      `UPDATE db_manaus.dbent_recebimento SET status = 'DISPONIVEL_VENDA', updated_at = now() WHERE codent = $1`,
+      `UPDATE dbent_recebimento SET status = 'DISPONIVEL_VENDA', updated_at = now() WHERE codent = $1`,
       [entradaId]);
 
     // Estoque nos armazéns a partir do romaneio (dbitent_armazem)
@@ -102,18 +102,18 @@ export default async function handler(
 
       // 1. Libera reserva no produto geral
       await client.query(
-        `UPDATE db_manaus.dbprod SET qtdreservada = GREATEST(COALESCE(qtdreservada, 0) - $1, 0) WHERE codprod = $2`,
+        `UPDATE dbprod SET qtdreservada = GREATEST(COALESCE(qtdreservada, 0) - $1, 0) WHERE codprod = $2`,
         [quantidade, cod_produto]);
 
       // 2. Garante registro no armazém
       await client.query(
-        `INSERT INTO db_manaus.cad_armazem_produto (arp_arm_id, arp_codprod, arp_qtest, arp_qtest_reservada, arp_bloqueado)
+        `INSERT INTO cad_armazem_produto (arp_arm_id, arp_codprod, arp_qtest, arp_qtest_reservada, arp_bloqueado)
          VALUES ($1, $2, 0, 0, 'N') ON CONFLICT (arp_arm_id, arp_codprod) DO NOTHING`,
         [arm_id, cod_produto]);
 
       // 3. Incrementa estoque do armazém
       await client.query(
-        `UPDATE db_manaus.cad_armazem_produto SET arp_qtest = COALESCE(arp_qtest, 0) + $1
+        `UPDATE cad_armazem_produto SET arp_qtest = COALESCE(arp_qtest, 0) + $1
           WHERE arp_arm_id = $2 AND arp_codprod = $3`,
         [quantidade, arm_id, cod_produto]);
 
@@ -121,18 +121,18 @@ export default async function handler(
       if (localizacao && localizacao.trim() !== '') {
         const locTrimmed = localizacao.trim();
         const existingLoc = await client.query(
-          `SELECT apl_id FROM db_manaus.cad_armazem_produto_locacao WHERE apl_arm_id = $1 AND apl_codprod = $2 LIMIT 1`,
+          `SELECT apl_id FROM cad_armazem_produto_locacao WHERE apl_arm_id = $1 AND apl_codprod = $2 LIMIT 1`,
           [arm_id, cod_produto]);
         if (existingLoc.rows.length > 0) {
           await client.query(
-            `UPDATE db_manaus.cad_armazem_produto_locacao SET apl_descricao = $1 WHERE apl_arm_id = $2 AND apl_codprod = $3`,
+            `UPDATE cad_armazem_produto_locacao SET apl_descricao = $1 WHERE apl_arm_id = $2 AND apl_codprod = $3`,
             [locTrimmed, arm_id, cod_produto]);
         } else {
           const nextIdResult = await client.query(
-            `SELECT COALESCE(MAX(apl_id), 0) + 1 as next_id FROM db_manaus.cad_armazem_produto_locacao WHERE apl_arm_id = $1 AND apl_codprod = $2`,
+            `SELECT COALESCE(MAX(apl_id), 0) + 1 as next_id FROM cad_armazem_produto_locacao WHERE apl_arm_id = $1 AND apl_codprod = $2`,
             [arm_id, cod_produto]);
           await client.query(
-            `INSERT INTO db_manaus.cad_armazem_produto_locacao (apl_arm_id, apl_codprod, apl_id, apl_descricao) VALUES ($1, $2, $3, $4)`,
+            `INSERT INTO cad_armazem_produto_locacao (apl_arm_id, apl_codprod, apl_id, apl_descricao) VALUES ($1, $2, $3, $4)`,
             [arm_id, cod_produto, nextIdResult.rows[0].next_id, locTrimmed]);
         }
       }

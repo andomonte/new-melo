@@ -14,6 +14,7 @@ export default async function handle(
   const saveData = {
     nome_filial: data.nome_filial,
     timezone: (data as any).timezone || 'America/Manaus',
+    codigo_acesso: (String((data as any).codigo_acesso ?? '').trim() || null),
   };
 
   try {
@@ -21,14 +22,15 @@ export default async function handle(
     client = await pool.connect();
 
     const insertQuery = `
-      INSERT INTO tb_filial (nome_filial, timezone)
-      VALUES ($1, $2)
+      INSERT INTO tb_filial (nome_filial, timezone, codigo_acesso)
+      VALUES ($1, $2, $3)
       RETURNING *;
     `;
 
     const filialResult = await client.query(insertQuery, [
       saveData.nome_filial,
       saveData.timezone,
+      saveData.codigo_acesso,
     ]);
     const filial = filialResult.rows[0];
 

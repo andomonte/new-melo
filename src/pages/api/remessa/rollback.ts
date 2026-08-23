@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           a.banco,
           a.nome_arquivo,
           a.data_gerado
-        FROM db_manaus.dbremessa_arquivo a
+        FROM dbremessa_arquivo a
         WHERE a.codremessa = $1
       `, [codremessa]);
 
@@ -64,7 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           a.banco,
           a.nome_arquivo,
           a.data_gerado
-        FROM db_manaus.dbremessa_arquivo a
+        FROM dbremessa_arquivo a
         WHERE a.codbodero = $1
       `, [codbodero]);
 
@@ -86,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         d."VALOR" as valor,
         r.bradesco,
         r.situacao
-      FROM db_manaus.dbremessa_detalhe d
+      FROM dbremessa_detalhe d
       LEFT JOIN (
         -- Identificar situação original
         SELECT 
@@ -94,13 +94,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           bradesco,
           CASE
             WHEN EXISTS (
-              SELECT 1 FROM db_manaus.dbdocbodero_baixa_banco b 
+              SELECT 1 FROM dbdocbodero_baixa_banco b 
               WHERE b.cod_receb = dbreceb.cod_receb
             ) THEN 'BAIXA'
             WHEN venc_ant IS NOT NULL AND dt_venc <> venc_ant THEN 'PRORROGACAO'
             ELSE 'REMESSA'
           END as situacao
-        FROM db_manaus.dbreceb
+        FROM dbreceb
       ) r ON r.cod_receb = d."CODRECEB"::varchar
       WHERE d."CODREMESSA" = $1
     `, [remessaInfo.codremessa]);
@@ -114,7 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (titulo.situacao === 'BAIXA') {
         // Reverter export=1 para export=0
         await pool.query(`
-          UPDATE db_manaus.dbdocbodero_baixa_banco
+          UPDATE dbdocbodero_baixa_banco
           SET export = 0
           WHERE cod_receb = $1
         `, [titulo.cod_receb]);
@@ -124,7 +124,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } else {
         // Limpar bradesco='S' -> bradesco='N'
         await pool.query(`
-          UPDATE db_manaus.dbreceb
+          UPDATE dbreceb
           SET bradesco = 'N'
           WHERE cod_receb = $1
         `, [titulo.cod_receb]);
@@ -135,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 4. Deletar detalhes da remessa
     await pool.query(`
-      DELETE FROM db_manaus.dbremessa_detalhe
+      DELETE FROM dbremessa_detalhe
       WHERE "CODREMESSA" = $1
     `, [remessaInfo.codremessa]);
 
@@ -143,7 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 5. Deletar arquivo da remessa
     await pool.query(`
-      DELETE FROM db_manaus.dbremessa_arquivo
+      DELETE FROM dbremessa_arquivo
       WHERE codremessa = $1
     `, [remessaInfo.codremessa]);
 

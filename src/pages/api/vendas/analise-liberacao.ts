@@ -132,7 +132,7 @@ export default async function handler(
         );
         // Registrar auditoria
         await client.query(
-          `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
+          `INSERT INTO dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
            VALUES ($1, 'LIBERADA', $2, NOW())`,
           [codvenda, usuario || 'SISTEMA'],
         );
@@ -178,7 +178,7 @@ export default async function handler(
         }
         // Registrar auditoria
         await client.query(
-          `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
+          `INSERT INTO dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
            VALUES ($1, 'NAO_AUTORIZADA', $2, NOW())`,
           [codvenda, usuario || 'SISTEMA'],
         );
@@ -276,8 +276,8 @@ export default async function handler(
         COALESCE(i.totalsubst_trib, 0) as val_st,
         COALESCE(i.totalproduto, 0) as total_com_imposto,
         CASE WHEN EXISTS (
-          SELECT 1 FROM db_manaus.dbanalise_liberacao_itens ali
-          JOIN db_manaus.dbanalise_liberacao al ON al.id = ali.id_analise
+          SELECT 1 FROM dbanalise_liberacao_itens ali
+          JOIN dbanalise_liberacao al ON al.id = ali.id_analise
           WHERE al.codvenda = i.codvenda AND ali.codprod = i.codprod AND ali.acao = 'ADICIONAR'
         ) THEN true ELSE false END as is_novo
       FROM dbitvenda i
@@ -285,8 +285,8 @@ export default async function handler(
       LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
       WHERE i.codvenda = $1
       ORDER BY CASE WHEN EXISTS (
-        SELECT 1 FROM db_manaus.dbanalise_liberacao_itens ali
-        JOIN db_manaus.dbanalise_liberacao al ON al.id = ali.id_analise
+        SELECT 1 FROM dbanalise_liberacao_itens ali
+        JOIN dbanalise_liberacao al ON al.id = ali.id_analise
         WHERE al.codvenda = i.codvenda AND ali.codprod = i.codprod AND ali.acao = 'ADICIONAR'
       ) THEN 0 ELSE 1 END, i.codprod
     `;

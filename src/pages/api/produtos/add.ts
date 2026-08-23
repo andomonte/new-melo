@@ -60,7 +60,7 @@ export default async function handle(
     // Filtra pelas colunas REAIS de dbprod para evitar "column does not exist".
     const colsRes = await client.query(
       `SELECT column_name FROM information_schema.columns
-        WHERE table_schema = 'db_manaus' AND table_name = 'dbprod'`,
+        WHERE table_schema = current_schema() AND table_name = 'dbprod'`,
     );
     const colunasReais = new Set<string>(
       colsRes.rows.map((r: any) => r.column_name),

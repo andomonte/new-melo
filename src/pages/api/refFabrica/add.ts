@@ -14,17 +14,17 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   try {
     await client.query('BEGIN');
     const dup = await client.query(
-      `SELECT cod_id FROM db_manaus.dbref_fabrica WHERE referencia=$1 AND codmarca=$2 AND COALESCE(codcredor,'')=$3 LIMIT 1`,
+      `SELECT cod_id FROM dbref_fabrica WHERE referencia=$1 AND codmarca=$2 AND COALESCE(codcredor,'')=$3 LIMIT 1`,
       [referencia, codmarca, codcredor],
     );
     if (dup.rowCount) {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Já existe essa referência para essa marca/fornecedor.' });
     }
-    const maxRes = await client.query('SELECT COALESCE(MAX(cod_id),0)+1 AS next_id FROM db_manaus.dbref_fabrica');
+    const maxRes = await client.query('SELECT COALESCE(MAX(cod_id),0)+1 AS next_id FROM dbref_fabrica');
     const codId = maxRes.rows[0].next_id;
     const r = await client.query(
-      `INSERT INTO db_manaus.dbref_fabrica (cod_id, codmarca, referencia, codcredor)
+      `INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor)
        VALUES ($1,$2,$3,$4) RETURNING cod_id, referencia, codmarca, codcredor`,
       [codId, codmarca, referencia, codcredor],
     );

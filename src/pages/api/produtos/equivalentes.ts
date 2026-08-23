@@ -33,7 +33,7 @@ export default async function handle(
     // Buscar o grupo de equivalência do produto (CODGPE)
     const queryGrupo = `
       SELECT codgpe
-      FROM db_manaus.dbprodequi
+      FROM dbprodequi
       WHERE codprod = $1
       LIMIT 1
     `;
@@ -62,9 +62,9 @@ export default async function handle(
         p.prcompra,
         p.prcustoatual,
         p.prfabr
-      FROM db_manaus.dbprodequi pe
-      INNER JOIN db_manaus.dbproduto p ON pe.codprod = p.codprod
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      FROM dbprodequi pe
+      INNER JOIN dbproduto p ON pe.codprod = p.codprod
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       WHERE pe.codgpe = $1
         AND pe.codprod != $2
         AND p.excluido = 0

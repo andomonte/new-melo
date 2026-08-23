@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Verificar se já tem feriados do ano no cache
     const cached = await client.query(
-      `SELECT COUNT(*) FROM db_manaus.tb_feriados WHERE ano = $1 AND tipo = 'NACIONAL'`,
+      `SELECT COUNT(*) FROM tb_feriados WHERE ano = $1 AND tipo = 'NACIONAL'`,
       [anoNum]
     );
 
@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const feriados = await response.json();
           for (const f of feriados) {
             await client.query(
-              `INSERT INTO db_manaus.tb_feriados (data, nome, tipo, ano) VALUES ($1, $2, 'NACIONAL', $3) ON CONFLICT (data, tipo, uf) DO NOTHING`,
+              `INSERT INTO tb_feriados (data, nome, tipo, ano) VALUES ($1, $2, 'NACIONAL', $3) ON CONFLICT (data, tipo, uf) DO NOTHING`,
               [f.date, f.name, anoNum]
             );
           }
@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Buscar todos os feriados do ano (nacionais + estaduais da UF)
-    let query = `SELECT data, nome, tipo, uf FROM db_manaus.tb_feriados WHERE ano = $1 AND (tipo = 'NACIONAL' OR tipo = 'MANUAL'`;
+    let query = `SELECT data, nome, tipo, uf FROM tb_feriados WHERE ano = $1 AND (tipo = 'NACIONAL' OR tipo = 'MANUAL'`;
     const params: any[] = [anoNum];
 
     if (ufStr) {

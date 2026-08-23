@@ -34,10 +34,10 @@ export default async function handler(
         -- Dados da empresa na venda
         v.cnpj_empresa,
         v.ie_empresa
-      FROM db_manaus.dbfatura f
-      LEFT JOIN db_manaus.dbfat_nfe nfe ON f.codfat = nfe.codfat
-      LEFT JOIN db_manaus.fatura_venda fv ON f.codfat = fv.codfat
-      LEFT JOIN db_manaus.dbvenda v ON fv.codvenda = v.codvenda
+      FROM dbfatura f
+      LEFT JOIN dbfat_nfe nfe ON f.codfat = nfe.codfat
+      LEFT JOIN fatura_venda fv ON f.codfat = fv.codfat
+      LEFT JOIN dbvenda v ON fv.codvenda = v.codvenda
       WHERE f.codfat = $1
     `;
 
@@ -120,7 +120,7 @@ export default async function handler(
 
     // Marcar como enviado no banco
     await client.query(
-      'UPDATE db_manaus.dbfat_nfe SET emailenviado = $1 WHERE codfat = $2',
+      'UPDATE dbfat_nfe SET emailenviado = $1 WHERE codfat = $2',
       ['S', codfat],
     );
 

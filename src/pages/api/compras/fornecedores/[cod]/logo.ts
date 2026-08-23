@@ -34,7 +34,7 @@ export default async function handler(
     // ---- SERVIR a imagem (para preview / <img src>) ----
     if (req.method === 'GET') {
       const r = await client.query(
-        `SELECT imagem, mime FROM db_manaus.cad_credor_logo WHERE cod_credor = $1`,
+        `SELECT imagem, mime FROM cad_credor_logo WHERE cod_credor = $1`,
         [cod],
       );
       if (!r.rows.length) {
@@ -69,7 +69,7 @@ export default async function handler(
       }
 
       await client.query(
-        `INSERT INTO db_manaus.cad_credor_logo (cod_credor, imagem, mime, largura, altura, atualizado_em)
+        `INSERT INTO cad_credor_logo (cod_credor, imagem, mime, largura, altura, atualizado_em)
          VALUES ($1, $2, 'image/png', $3, $4, now())
          ON CONFLICT (cod_credor)
          DO UPDATE SET imagem = EXCLUDED.imagem, mime = EXCLUDED.mime,
@@ -82,7 +82,7 @@ export default async function handler(
 
     // ---- REMOVER ----
     if (req.method === 'DELETE') {
-      await client.query(`DELETE FROM db_manaus.cad_credor_logo WHERE cod_credor = $1`, [cod]);
+      await client.query(`DELETE FROM cad_credor_logo WHERE cod_credor = $1`, [cod]);
       return res.status(200).json({ success: true });
     }
 

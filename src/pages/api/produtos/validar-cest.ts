@@ -44,7 +44,7 @@ export default async function handle(
       // 1. Verificar se NCM existe
       const ncmResult = await client.query(`
         SELECT COUNT(*) as count
-        FROM db_manaus.dbnmcfiscal
+        FROM dbnmcfiscal
         WHERE ncm = $1
       `, [ncm]);
 
@@ -60,7 +60,7 @@ export default async function handle(
       // 2. Verificar se CEST é compatível com NCM
       const cestResult = await client.query(`
         SELECT COUNT(*) as count
-        FROM db_manaus.cest
+        FROM cest
         WHERE cest = $1 AND ncm = $2
       `, [cest, ncm]);
 

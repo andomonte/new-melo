@@ -20,7 +20,7 @@ export default async function handler(
     
     const result = await client.query<Filial>(`
       SELECT unm_id, unm_nome 
-      FROM db_manaus.cad_unidade_melo 
+      FROM cad_unidade_melo 
       ORDER BY unm_nome
     `);
     

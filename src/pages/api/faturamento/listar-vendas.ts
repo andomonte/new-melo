@@ -170,7 +170,7 @@ export default async function handler(
              r.usuario AS reservado_por, r.usuario_nome AS reservado_por_nome
       FROM dbvenda v
       LEFT JOIN dbclien c ON v.codcli = c.codcli
-      LEFT JOIN db_manaus.fat_reserva_venda r
+      LEFT JOIN fat_reserva_venda r
         ON r.codvenda = v.codvenda AND r.expira_em > now()
       ${whereSQL}
       ORDER BY v.data DESC, v.codvenda DESC

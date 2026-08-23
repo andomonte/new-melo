@@ -37,7 +37,7 @@ export default async function handler(
     
     // Verificar se a requisição existe e está aprovada
     const checkResult = await client.query(
-      'SELECT req_status, req_id_composto, req_observacao, req_previsao_chegada FROM db_manaus.cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
+      'SELECT req_status, req_id_composto, req_observacao, req_previsao_chegada FROM cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
       [requisitionId, version]
     );
     
@@ -62,7 +62,7 @@ export default async function handler(
     
     // Verificar se já existe ordem para esta requisição
     const existingOrder = await client.query(
-      'SELECT orc_id FROM db_manaus.cmp_ordem_compra WHERE orc_req_id = $1 AND orc_req_versao = $2',
+      'SELECT orc_id FROM cmp_ordem_compra WHERE orc_req_id = $1 AND orc_req_versao = $2',
       [requisitionId, version]
     );
 
@@ -76,7 +76,7 @@ export default async function handler(
 
     // Buscar local de entrega da requisição para gerar ID correto
     const reqEntregaQuery = await client.query(
-      'SELECT req_unm_id_entrega FROM db_manaus.cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
+      'SELECT req_unm_id_entrega FROM cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
       [requisitionId, version]
     );
     const localEntrega = reqEntregaQuery.rows[0]?.req_unm_id_entrega;
@@ -89,7 +89,7 @@ export default async function handler(
     if (!calculatedValorTotal) {
       const valorResult = await client.query(
         `SELECT COALESCE(SUM(itr_quantidade * itr_pr_unitario), 0) as total_itens
-         FROM db_manaus.cmp_it_requisicao
+         FROM cmp_it_requisicao
          WHERE itr_req_id = $1 AND itr_req_versao = $2`,
         [requisitionId, version]
       );
@@ -99,7 +99,7 @@ export default async function handler(
     // Criar ordem de compra usando a observação e previsão originais da requisição
     // Status inicial = 'A' (Aberta) - conforme sistema legado Oracle
     const insertResult = await client.query(
-      `INSERT INTO db_manaus.cmp_ordem_compra (
+      `INSERT INTO cmp_ordem_compra (
         orc_id, orc_req_id, orc_req_versao, orc_data, orc_status,
         orc_valor_total, orc_observacao, orc_previsao_chegada
       ) VALUES ($1, $2, $3, (CURRENT_TIMESTAMP AT TIME ZONE 'America/Manaus')::date, 'A', $4, $5, $6)

@@ -479,7 +479,7 @@ export default async function handler(
       const nfeRes = await client.query(
         `SELECT chave, numprotocolo, nrodoc_fiscal, "data", dthrprotocolo, modelo,
                 status, numcancelamento, dthrcancelamento, motivocancelamento
-           FROM db_manaus.dbfat_nfe
+           FROM dbfat_nfe
           WHERE codfat = $1 AND chave IS NOT NULL AND numprotocolo IS NOT NULL
           ORDER BY dthrprotocolo DESC NULLS LAST, "data" DESC LIMIT 1`,
         [codfat],
@@ -492,7 +492,7 @@ export default async function handler(
         // expirado): dbfatura.cancel='S' mas a NF-e continua válida (status 100).
         // Nesse caso data/motivo do cancelamento estão na dbacao (CANCELAR/DBFATURA).
         const fcRes = await client.query(
-          `SELECT cancel FROM db_manaus.dbfatura WHERE codfat = $1`,
+          `SELECT cancel FROM dbfatura WHERE codfat = $1`,
           [codfat],
         );
         const faturaCancelada = fcRes.rows[0]?.cancel === 'S';
@@ -500,7 +500,7 @@ export default async function handler(
         let motivoCancFat: any = null;
         if (faturaCancelada && !nfeSefazCancelada) {
           const ac = await client.query(
-            `SELECT "data", obs FROM db_manaus.dbacao
+            `SELECT "data", obs FROM dbacao
               WHERE acao = 'CANCELAR' AND tabela = 'DBFATURA' AND obs LIKE $1
               ORDER BY "data" DESC LIMIT 1`,
             [`COD:${codfat}%`],

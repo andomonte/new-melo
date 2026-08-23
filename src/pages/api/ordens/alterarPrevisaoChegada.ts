@@ -49,7 +49,7 @@ export default async function handler(
     
     // Verificar se a ordem existe
     const checkResult = await client.query(
-      'SELECT orc_id, orc_previsao_chegada, orc_status FROM db_manaus.cmp_ordem_compra WHERE orc_id = $1',
+      'SELECT orc_id, orc_previsao_chegada, orc_status FROM cmp_ordem_compra WHERE orc_id = $1',
       [ordemId]
     );
     
@@ -68,7 +68,7 @@ export default async function handler(
 
     // Atualizar previsão de chegada
     const updateResult = await client.query(
-      `UPDATE db_manaus.cmp_ordem_compra 
+      `UPDATE cmp_ordem_compra 
        SET 
          orc_previsao_chegada = $1,
          orc_usuario_responsavel = $2

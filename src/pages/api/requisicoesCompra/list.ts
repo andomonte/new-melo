@@ -81,7 +81,7 @@ export default async function handler(
         r.req_status as "statusRequisicao",
         r.req_observacao as observacao,
         r.req_tipo as "tipoSigla",
-        COALESCE((SELECT tr.ret_descricao FROM db_manaus.cmp_requisicao_tipo tr WHERE tr.ret_id = r.req_tipo LIMIT 1), r.req_tipo) as tipo,
+        COALESCE((SELECT tr.ret_descricao FROM cmp_requisicao_tipo tr WHERE tr.ret_id = r.req_tipo LIMIT 1), r.req_tipo) as tipo,
         r.req_cod_credor as "fornecedorCodigo",
         r.req_codcomprador as "compradorCodigo",
         CAST(f.cod_credor AS TEXT) as "fornecedorCodigoReal",
@@ -115,22 +115,22 @@ export default async function handler(
         usr.nomeusr as "usuario",
         COALESCE((
           SELECT SUM(itr_quantidade * itr_pr_unitario)
-          FROM db_manaus.cmp_it_requisicao
+          FROM cmp_it_requisicao
           WHERE itr_req_id = r.req_id
         ), 0) as "valorTotal"
-      FROM db_manaus.cmp_requisicao r
-      LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
-      LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
-      LEFT JOIN db_manaus.cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
-      LEFT JOIN db_manaus.cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
-      LEFT JOIN db_manaus.dbusuario usr ON r.req_codusr = usr.codusr
-      LEFT JOIN db_manaus.cmp_venda_casada vc ON (r.req_id = vc.vec_req_id AND r.req_versao = vc.vec_req_versao)
-      LEFT JOIN db_manaus.dbclien cli ON vc.vec_codcli = cli.codcli
-      LEFT JOIN db_manaus.dbvend v ON vc.vec_codvend = v.codvend
+      FROM cmp_requisicao r
+      LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
+      LEFT JOIN dbcompradores c ON r.req_codcomprador = c.codcomprador
+      LEFT JOIN cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
+      LEFT JOIN cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
+      LEFT JOIN dbusuario usr ON r.req_codusr = usr.codusr
+      LEFT JOIN cmp_venda_casada vc ON (r.req_id = vc.vec_req_id AND r.req_versao = vc.vec_req_versao)
+      LEFT JOIN dbclien cli ON vc.vec_codcli = cli.codcli
+      LEFT JOIN dbvend v ON vc.vec_codvend = v.codvend
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id, orc_data, orc_status
-        FROM db_manaus.cmp_ordem_compra
+        FROM cmp_ordem_compra
         WHERE orc_data >= '2020-01-01'
         ORDER BY orc_req_id, orc_req_versao, orc_id DESC
       ) oc ON (r.req_id = oc.orc_req_id AND r.req_versao = oc.orc_req_versao)
@@ -219,15 +219,15 @@ export default async function handler(
     // Query para contar com JOINs
     let countQuery = `
       SELECT COUNT(*) as total
-      FROM db_manaus.cmp_requisicao r
-      LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
-      LEFT JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
-      LEFT JOIN db_manaus.cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
-      LEFT JOIN db_manaus.cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
+      FROM cmp_requisicao r
+      LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
+      LEFT JOIN dbcompradores c ON r.req_codcomprador = c.codcomprador
+      LEFT JOIN cad_unidade_melo ue ON r.req_unm_id_entrega = ue.unm_id
+      LEFT JOIN cad_unidade_melo ud ON r.req_unm_id_destino = ud.unm_id
       LEFT JOIN (
         SELECT DISTINCT ON (orc_req_id, orc_req_versao)
                orc_req_id, orc_req_versao, orc_id, orc_data, orc_status
-        FROM db_manaus.cmp_ordem_compra
+        FROM cmp_ordem_compra
         WHERE orc_data >= '2020-01-01'
         ORDER BY orc_req_id, orc_req_versao, orc_id DESC
       ) oc ON (r.req_id = oc.orc_req_id AND r.req_versao = oc.orc_req_versao)

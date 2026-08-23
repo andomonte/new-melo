@@ -131,7 +131,7 @@ export default async function handle(
     // Construir query de UPDATE
     // Usar ANY($2::text[]) para fazer update em múltiplos produtos
     const updateQuery = `
-      UPDATE db_manaus.dbprod
+      UPDATE dbprod
       SET ${campo} = $1
       WHERE codprod = ANY($2::text[])
     `;

@@ -46,7 +46,7 @@ const handleGetOne = async (
     client = await pool.connect();
 
     const query =
-      'SELECT * FROM db_manaus."DBFORMACAOPRVENDA" WHERE "CODPROD" = $1';
+      'SELECT * FROM "DBFORMACAOPRVENDA" WHERE "CODPROD" = $1';
     const result = await client.query(query, [codprod]);
 
     if (result.rowCount === 0) {
@@ -135,7 +135,7 @@ const handleUpdate = async (
     client = await pool.connect();
 
     const query = `
-      UPDATE db_manaus."DBFORMACAOPRVENDA"
+      UPDATE "DBFORMACAOPRVENDA"
       SET ${setClause}
       WHERE "CODPROD" = $${fields.length + 1}
       RETURNING *;
@@ -180,7 +180,7 @@ const handleDelete = async (
     client = await pool.connect();
 
     const query =
-      'DELETE FROM db_manaus."DBFORMACAOPRVENDA" WHERE "CODPROD" = $1';
+      'DELETE FROM "DBFORMACAOPRVENDA" WHERE "CODPROD" = $1';
     const result = await client.query(query, [codprod]);
 
     if (result.rowCount === 0) {

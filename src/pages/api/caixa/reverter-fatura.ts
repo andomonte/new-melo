@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // trava: não reverter fatura com NF autorizada
     const nfeAut = await client.query(
-      `SELECT 1 FROM db_manaus.dbfat_nfe WHERE codfat = $1 AND status = '100' LIMIT 1`,
+      `SELECT 1 FROM dbfat_nfe WHERE codfat = $1 AND status = '100' LIMIT 1`,
       [codfat],
     );
     if (nfeAut.rows.length > 0) {
@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const vendasR = await client.query(
-      `SELECT codvenda FROM db_manaus.fatura_venda WHERE codfat = $1`,
+      `SELECT codvenda FROM fatura_venda WHERE codfat = $1`,
       [codfat],
     );
     const vendas: string[] = vendasR.rows.map((r) => r.codvenda);
@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 1) restaura estoque de cada item das vendas (inverso da baixa do salvar.ts)
     for (const codvenda of vendas) {
       const itens = await client.query(
-        `SELECT codprod, qtd, arm_id FROM db_manaus.dbitvenda WHERE codvenda = $1`,
+        `SELECT codprod, qtd, arm_id FROM dbitvenda WHERE codvenda = $1`,
         [codvenda],
       );
       for (const it of itens.rows) {
@@ -54,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (qtd <= 0 || !it.codprod) continue;
         if (it.arm_id) {
           await client.query(
-            `UPDATE db_manaus.cad_armazem_produto
+            `UPDATE cad_armazem_produto
                 SET arp_qtest = COALESCE(arp_qtest,0) + $1,
                     arp_qtest_reservada = COALESCE(arp_qtest_reservada,0) + $1
               WHERE arp_codprod = $2 AND arp_arm_id = $3`,
@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           );
         }
         await client.query(
-          `UPDATE db_manaus.dbprod SET qtest = COALESCE(qtest,0) + $1 WHERE codprod = $2`,
+          `UPDATE dbprod SET qtest = COALESCE(qtest,0) + $1 WHERE codprod = $2`,
           [qtd, it.codprod],
         );
       }
@@ -70,27 +70,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2) cobrança: parcelas + títulos
     if (vendas.length > 0) {
-      await client.query(`DELETE FROM db_manaus.dbprazo_pagamento WHERE codvenda = ANY($1)`, [vendas]);
+      await client.query(`DELETE FROM dbprazo_pagamento WHERE codvenda = ANY($1)`, [vendas]);
     }
-    const delReceb = await client.query(`DELETE FROM db_manaus.dbreceb WHERE cod_fat = $1`, [codfat]);
+    const delReceb = await client.query(`DELETE FROM dbreceb WHERE cod_fat = $1`, [codfat]);
 
     // 3) itens da fatura
-    await client.query(`DELETE FROM db_manaus.dbprodfat WHERE codfat = $1`, [codfat]);
+    await client.query(`DELETE FROM dbprodfat WHERE codfat = $1`, [codfat]);
 
     // 4) NF-e rejeitadas/pendentes gravadas
-    await client.query(`DELETE FROM db_manaus.dbfat_nfe WHERE codfat = $1`, [codfat]);
+    await client.query(`DELETE FROM dbfat_nfe WHERE codfat = $1`, [codfat]);
 
     // 5) associação + volta a venda para pré-venda
-    await client.query(`DELETE FROM db_manaus.fatura_venda WHERE codfat = $1`, [codfat]);
+    await client.query(`DELETE FROM fatura_venda WHERE codfat = $1`, [codfat]);
     if (vendas.length > 0) {
       await client.query(
-        `UPDATE db_manaus.dbvenda SET status = 'N' WHERE codvenda = ANY($1)`,
+        `UPDATE dbvenda SET status = 'N' WHERE codvenda = ANY($1)`,
         [vendas],
       );
     }
 
     // 6) a fatura
-    await client.query(`DELETE FROM db_manaus.dbfatura WHERE codfat = $1`, [codfat]);
+    await client.query(`DELETE FROM dbfatura WHERE codfat = $1`, [codfat]);
 
     await client.query('COMMIT');
     return res.status(200).json({

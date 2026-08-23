@@ -107,7 +107,7 @@ export default async function handle(
 
       params.push(codprod);
       const r = await client.query(
-        `UPDATE db_manaus.dbprod SET ${sets.join(', ')} WHERE codprod = $${++i}`,
+        `UPDATE dbprod SET ${sets.join(', ')} WHERE codprod = $${++i}`,
         params,
       );
       atualizados += r.rowCount || 0;

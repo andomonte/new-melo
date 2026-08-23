@@ -33,14 +33,14 @@ export default async function handle(
 
     const dataQuery = `
       SELECT codcomprador, nome 
-      FROM db_manaus.dbcompradores
+      FROM dbcompradores
       ${whereClause}
       ORDER BY nome ASC
       LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
     `;
     const dataParams = [...queryParams, perPageNumber, offset];
 
-    const countQuery = `SELECT COUNT(*) FROM db_manaus.dbcompradores ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) FROM dbcompradores ${whereClause}`;
     const countParams = [...queryParams];
 
     const [dataResult, countResult] = await Promise.all([

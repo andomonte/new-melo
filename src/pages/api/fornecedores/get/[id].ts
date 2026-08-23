@@ -34,9 +34,9 @@ export default async function handle(
           c.*, -- Todas as colunas da tabela principal de credores (fornecedores)
           rf.* -- Todas as colunas das regras de faturamento
         FROM 
-          db_manaus.dbcredor c
+          dbcredor c
         LEFT JOIN 
-          db_manaus.cad_credor_regra_faturamento rf ON c.cod_credor = rf.crf_id
+          cad_credor_regra_faturamento rf ON c.cod_credor = rf.crf_id
         WHERE 
           c.cod_credor = $1;
       `;
@@ -68,7 +68,7 @@ export default async function handle(
       const values = Object.values(dataToUpdate);
 
       const query = `
-        UPDATE db_manaus.dbcredor 
+        UPDATE dbcredor 
         SET ${setClause}
         WHERE cod_credor = $${keys.length + 1}
         RETURNING *

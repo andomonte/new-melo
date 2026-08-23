@@ -81,8 +81,8 @@ export default async function handler(
           COALESCE(p.qtest, 0) - COALESCE(p.qtdreservada, 0) as estoque,
           p.tipo as tipo,
           COALESCE(p.local, 'MERCADORIA') as localizacao
-        FROM db_manaus.dbprod p
-        LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+        FROM dbprod p
+        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
         WHERE ${cond.join(' AND ')}
         ORDER BY p.descr
         LIMIT 20
@@ -101,8 +101,8 @@ export default async function handler(
         COALESCE(p.qtest, 0) - COALESCE(p.qtdreservada, 0) as estoque,
         p.tipo as tipo,
         COALESCE(p.local, 'MERCADORIA') as localizacao
-      FROM db_manaus.dbprod p
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      FROM dbprod p
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       WHERE p.codbar = $1
       ORDER BY p.descr
       LIMIT 5
@@ -128,8 +128,8 @@ export default async function handler(
           COALESCE(p.qtest, 0) - COALESCE(p.qtdreservada, 0) as estoque,
           p.tipo as tipo,
           COALESCE(p.local, 'MERCADORIA') as localizacao
-        FROM db_manaus.dbprod p
-        LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+        FROM dbprod p
+        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
         WHERE (
           LOWER(p.descr) LIKE LOWER($${searchParams.length + 1})
           OR LOWER(p.codprod) LIKE LOWER($${searchParams.length + 1})

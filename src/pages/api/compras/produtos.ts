@@ -142,12 +142,12 @@ export default async function handler(
       const idx = paramCounter;
       whereConditions.push(`(
         NOT EXISTS (
-          SELECT 1 FROM db_manaus.dbref_fabrica rf
+          SELECT 1 FROM dbref_fabrica rf
           WHERE lpad(trim(rf.codcredor), 5, '0') = lpad(trim($${idx}), 5, '0')
             AND rf.codmarca IS NOT NULL AND trim(rf.codmarca) <> ''
         )
         OR trim(p.codmarca) IN (
-          SELECT trim(rf.codmarca) FROM db_manaus.dbref_fabrica rf
+          SELECT trim(rf.codmarca) FROM dbref_fabrica rf
           WHERE lpad(trim(rf.codcredor), 5, '0') = lpad(trim($${idx}), 5, '0')
         )
       )`);
@@ -185,8 +185,8 @@ export default async function handler(
         COALESCE(p.multiplocompra, p.multiplo, 1) as multiplocompra,
         p.codgpp as grupoproduto,
         p.unimed
-      FROM db_manaus.dbprod p
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      FROM dbprod p
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       ${whereSQL}
       ${whereConditions.length > 0 ? 'AND' : 'WHERE'} LENGTH(p.codprod) = 6
       ORDER BY p.descr
@@ -197,8 +197,8 @@ export default async function handler(
     // por m.descr, o nome da marca).
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM db_manaus.dbprod p
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      FROM dbprod p
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       ${whereSQL}
       ${whereConditions.length > 0 ? 'AND' : 'WHERE'} LENGTH(p.codprod) = 6
     `;

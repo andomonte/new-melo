@@ -30,7 +30,7 @@ export default async function handle(
       // 1. Atualizar o nome do perfil (opcional, mantendo o mesmo por padrão)
       await client.query(
         `
-          UPDATE db_manaus.tb_login_perfil
+          UPDATE tb_login_perfil
           SET login_perfil_name = $1
           WHERE login_perfil_name = $2
         `,
@@ -40,7 +40,7 @@ export default async function handle(
       // 2. Remover as permissões de tela existentes
       await client.query(
         `
-          DELETE FROM db_manaus."tb_grupo_Permissao"
+          DELETE FROM "tb_grupo_Permissao"
           WHERE "grupoId" = $1
         `,
         [login_perfil_name],
@@ -75,7 +75,7 @@ export default async function handle(
           .join(', ');
         await client.query(
           `
-            INSERT INTO db_manaus."tb_grupo_Permissao" ("grupoId", tela, cadastrar, editar, remover, exportar)
+            INSERT INTO "tb_grupo_Permissao" ("grupoId", tela, cadastrar, editar, remover, exportar)
             VALUES ${placeholders}
           `,
           values,
@@ -85,7 +85,7 @@ export default async function handle(
       // 4. Remover as funções de acesso existentes
       await client.query(
         `
-          DELETE FROM db_manaus.tb_login_access_perfil
+          DELETE FROM tb_login_access_perfil
           WHERE login_perfil_name = $1
         `,
         [login_perfil_name],
@@ -107,7 +107,7 @@ export default async function handle(
           .join(', ');
         await client.query(
           `
-            INSERT INTO db_manaus.tb_login_access_perfil (login_perfil_name, id_functions)
+            INSERT INTO tb_login_access_perfil (login_perfil_name, id_functions)
             VALUES ${placeholders}
           `,
           values,

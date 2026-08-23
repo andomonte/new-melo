@@ -32,7 +32,7 @@ export default async function handle(
               margem, margempromo,
               clasfiscal, pis, cofins, percsubst, cest,
               strib, isentoipi, naotemst, hanan
-         FROM db_manaus.dbprod
+         FROM dbprod
         WHERE codprod = ANY($1::text[])
         ORDER BY descr`,
       [ids],

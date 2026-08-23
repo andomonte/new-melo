@@ -53,7 +53,7 @@ export default async function handler(
     // Verificar se a requisição existe e está em status que permite aprovação
     // Busca por req_id (formato completo ex: 12002010068) que é o que o frontend envia
     const checkResult = await client.query(
-      'SELECT req_id, req_status FROM db_manaus.cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
+      'SELECT req_id, req_status FROM cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
       [requisitionId.toString(), version]
     );
     
@@ -79,7 +79,7 @@ export default async function handler(
 
     // Atualizar status para Aprovada (A)
     updateResult = await client.query(
-      `UPDATE db_manaus.cmp_requisicao
+      `UPDATE cmp_requisicao
        SET req_status = 'A'
        WHERE req_id = $1 AND req_versao = $2
        RETURNING req_id, req_versao, req_status`,
@@ -89,7 +89,7 @@ export default async function handler(
     // Registrar histórico da mudança
     try {
       await client.query(
-        `INSERT INTO db_manaus.cmp_requisicao_historico 
+        `INSERT INTO cmp_requisicao_historico 
          (req_id, req_versao, previous_status, new_status, user_id, user_name, reason, comments)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
@@ -111,8 +111,8 @@ export default async function handler(
     // Buscar dados da requisição para gerar ordem
     const requisitionData = await client.query(
       `SELECT r.*, f.nome as fornecedor_nome
-       FROM db_manaus.cmp_requisicao r
-       LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
+       FROM cmp_requisicao r
+       LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
        WHERE r.req_id = $1 AND r.req_versao = $2`,
       [requisitionId.toString(), version]
     );
@@ -125,7 +125,7 @@ export default async function handler(
       // Calcular valor total dos itens da requisição
       const valorTotalResult = await client.query(
         `SELECT COALESCE(SUM(itr_quantidade * itr_pr_unitario), 0) as total_itens
-         FROM db_manaus.cmp_it_requisicao
+         FROM cmp_it_requisicao
          WHERE itr_req_id = $1 AND itr_req_versao = $2`,
         [checkResult.rows[0].req_id, version]
       );
@@ -151,7 +151,7 @@ export default async function handler(
         });
 
         const ordemResult = await client.query(
-          `INSERT INTO db_manaus.cmp_ordem_compra (
+          `INSERT INTO cmp_ordem_compra (
             orc_id, orc_req_id, orc_req_versao, orc_data, orc_status,
             orc_valor_total, orc_previsao_chegada, orc_unm_id_entrega, orc_unm_id_destino, orc_observacao
           ) VALUES (
@@ -184,7 +184,7 @@ export default async function handler(
         try {
           const fallbackIdOrdem = await gerarProximoIdOrdem(client, req.req_unm_id_entrega);
           const ordemSimples = await client.query(
-            `INSERT INTO db_manaus.cmp_ordem_compra (
+            `INSERT INTO cmp_ordem_compra (
               orc_id, orc_req_id, orc_req_versao, orc_data, orc_status,
               orc_valor_total, orc_previsao_chegada, orc_unm_id_entrega, orc_unm_id_destino
             ) VALUES (

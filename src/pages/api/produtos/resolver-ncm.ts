@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 
 /**
- * Resolve um NCM na tabela db_manaus.dbclassificacao_fiscal e devolve PIS,
+ * Resolve um NCM na tabela dbclassificacao_fiscal e devolve PIS,
  * COFINS e AGREGADO (MVA) — usado pelo "Aplicar a todos" da Classificação
  * Fiscal em "Alterar Campos Lista" (equivale ao dmConsulta.Consulta_Codigo(26)
  * do Delphi, que preenche PIS/COFINS/PercSubst a partir do NCM).
@@ -25,7 +25,7 @@ export default async function handle(
     // compara só os dígitos, tolerando NCM gravado com ou sem pontuação
     const r = await client.query(
       `SELECT ncm, ipi, pis, cofins, agregado, descricao
-         FROM db_manaus.dbclassificacao_fiscal
+         FROM dbclassificacao_fiscal
         WHERE regexp_replace(ncm, '\\D', '', 'g') = $1
         LIMIT 1`,
       [ncmDigitos],

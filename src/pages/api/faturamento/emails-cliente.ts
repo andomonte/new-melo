@@ -19,17 +19,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await getPgPool().connect();
   try {
     if (!codcli && codfat) {
-      const r = await client.query(`SELECT codcli FROM db_manaus.dbfatura WHERE codfat=$1`, [codfat]);
+      const r = await client.query(`SELECT codcli FROM dbfatura WHERE codfat=$1`, [codfat]);
       codcli = r.rows[0]?.codcli || '';
       if (!codcli) return res.status(404).json({ erro: 'Fatura não encontrada.' });
     }
 
     const cli = await client.query(
-      `SELECT nome, email, emailnfe FROM db_manaus.dbclien WHERE codcli=$1`,
+      `SELECT nome, email, emailnfe FROM dbclien WHERE codcli=$1`,
       [codcli],
     );
     const sec = await client.query(
-      `SELECT email FROM db_manaus.dbclien_email WHERE codcli=$1 ORDER BY email`,
+      `SELECT email FROM dbclien_email WHERE codcli=$1 ORDER BY email`,
       [codcli],
     );
 

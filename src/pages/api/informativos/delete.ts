@@ -13,7 +13,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
   const client = await getPgPool().connect();
   try {
-    const r = await client.query('DELETE FROM db_manaus.dbinformativo WHERE simbolo = $1', [simbolo]);
+    const r = await client.query('DELETE FROM dbinformativo WHERE simbolo = $1', [simbolo]);
     if (!r.rowCount) return res.status(404).json({ error: 'Informativo não encontrado.' });
     res.status(200).json({ ok: true });
   } catch (e: any) {

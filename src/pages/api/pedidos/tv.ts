@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { parseCookies } from 'nookies';
+import { poolDaFilial } from '@/lib/estacaoDb';
 
 interface PedidoTV {
   NrVenda: string;
@@ -36,7 +37,8 @@ export default async function handler(
   const sortField = sortBy as string;
   const sortDirection = (sortOrder as string).toUpperCase();
 
-  const pool = getPgPool();
+  const filial = String((req.query?.filial as string) || parseCookies({ req }).filial_melo || 'MANAUS');
+  const pool = poolDaFilial(filial);
   const client = await pool.connect();
 
   try {

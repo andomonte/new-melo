@@ -133,7 +133,7 @@ export const getDynamicTrunc = async (
   if (range === 'todo_periodo') {
     const comprasSpanResult = await client.query(
       `SELECT MIN(orc_data) as "firstCompra", MAX(orc_data) as "lastCompra"
-       FROM db_manaus.cmp_ordem_compra
+       FROM cmp_ordem_compra
        WHERE orc_data IS NOT NULL AND orc_status IN ('A', 'F')`,
     );
     const comprasSpan = comprasSpanResult.rows[0];

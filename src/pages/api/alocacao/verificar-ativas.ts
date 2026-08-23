@@ -44,17 +44,17 @@ const ATIVAS_QUERY = `
     COALESCE(n.serie::text, '') as nfe_serie,
     COALESCE(emit.xnome, 'Fornecedor nao identificado') as fornecedor,
     COALESCE(e.totalnf, 0) as valor_total,
-    COALESCE((SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent), 0) as qtd_itens,
+    COALESCE((SELECT COUNT(*) FROM dbitent WHERE codent = e.codent), 0) as qtd_itens,
     op.fim_recebimento as data_recebimento,
     op.status,
     'Em Alocacao' as status_label,
     op.alocador_nome,
     op.inicio_alocacao,
     COALESCE(op.tem_divergencia, false) as tem_divergencia
-  FROM db_manaus.entrada_operacoes op
-  INNER JOIN db_manaus.dbent e ON e.codent = op.codent
-  LEFT JOIN db_manaus.dbnfe_ent n ON n.chave = e.chave
-  LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
+  FROM entrada_operacoes op
+  INNER JOIN dbent e ON e.codent = op.codent
+  LEFT JOIN dbnfe_ent n ON n.chave = e.chave
+  LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
   WHERE op.alocador_matricula = $1
     AND op.status = 'EM_ALOCACAO'
   ORDER BY op.inicio_alocacao DESC

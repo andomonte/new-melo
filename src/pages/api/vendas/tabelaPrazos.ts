@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const result = await client.query(`
       SELECT id, valor_min, valor_max, dias_medio, opcoes_prazo, categoria
-      FROM db_manaus.tb_tabela_prazos
+      FROM tb_tabela_prazos
       WHERE ativo = TRUE
         AND categoria = $1
         AND valor_min <= $2

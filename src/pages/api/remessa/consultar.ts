@@ -53,9 +53,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           END as status_titulo,
           -- Informações adicionais
           b.nome as nome_banco
-        FROM db_manaus.dbreceb r
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-        LEFT JOIN db_manaus.dbbanco b ON b.cod_banco = r.banco
+        FROM dbreceb r
+        LEFT JOIN dbclien c ON c.codcli = r.codcli
+        LEFT JOIN dbbanco b ON b.cod_banco = r.banco
         WHERE r.dt_venc BETWEEN $1 AND $2
           AND r.cancel = 'N'
           AND r.rec = 'N'
@@ -120,8 +120,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               AND v.cancel = 'N'
               AND v.status <> 'CANCELADO'
           ) as ultima_venda
-        FROM db_manaus.dbreceb r
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+        FROM dbreceb r
+        LEFT JOIN dbclien c ON c.codcli = r.codcli
         WHERE r.dt_pgto BETWEEN $1 AND $2
           AND r.cancel = 'N'
           AND r.rec = 'S'

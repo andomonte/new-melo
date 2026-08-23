@@ -31,10 +31,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const q = `
       SELECT v.codvenda, v.nrovenda, v.data, v.codvend, v.codcli, v.tipo, v.status,
              c.nome AS nome_cliente, c.cpfcgc,
-             COALESCE((SELECT SUM(i.totalproduto) FROM db_manaus.dbitvenda i WHERE i.codvenda = v.codvenda), 0)
+             COALESCE((SELECT SUM(i.totalproduto) FROM dbitvenda i WHERE i.codvenda = v.codvenda), 0)
                + COALESCE(v.vlrfrete, 0) AS total
-        FROM db_manaus.dbvenda v
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = v.codcli
+        FROM dbvenda v
+        LEFT JOIN dbclien c ON c.codcli = v.codcli
        WHERE v.status NOT IN ('F','B','C')
          AND COALESCE(v.cancel,'N') = 'N'
          AND ${filtro}
@@ -47,10 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const qEmitidas = `
       SELECT v.nrovenda, v.codcli, v.data, c.nome AS nome_cliente,
              fv.codfat, nfe.nrodoc_fiscal, nfe.chave, nfe.modelo
-        FROM db_manaus.dbvenda v
-        JOIN db_manaus.fatura_venda fv ON fv.codvenda = v.codvenda AND fv.status = 'ativo'
-        JOIN db_manaus.dbfat_nfe nfe ON nfe.codfat = fv.codfat AND nfe.status = '100'
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = v.codcli
+        FROM dbvenda v
+        JOIN fatura_venda fv ON fv.codvenda = v.codvenda AND fv.status = 'ativo'
+        JOIN dbfat_nfe nfe ON nfe.codfat = fv.codfat AND nfe.status = '100'
+        LEFT JOIN dbclien c ON c.codcli = v.codcli
        WHERE ${filtro}
        ORDER BY v.data DESC, v.nrovenda DESC
        LIMIT 20`;

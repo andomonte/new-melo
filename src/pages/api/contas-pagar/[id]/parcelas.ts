@@ -103,7 +103,7 @@ export default async function handler(
         // Buscar total pago no histórico
         const historico = await client.query(
           `SELECT COALESCE(SUM(valor_pgto), 0) as total_pago
-           FROM db_manaus.dbfpgto
+           FROM dbfpgto
            WHERE cod_pgto = $1 
              AND (cancel != 'S' OR cancel IS NULL)`,
           [parcela.cod_pgto]

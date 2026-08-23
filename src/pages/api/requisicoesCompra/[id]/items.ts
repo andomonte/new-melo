@@ -44,9 +44,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           m.descr as produto_marca_nome,
           COALESCE(p.multiplo, 1) as multiplo,
           COALESCE(p.multiplocompra, p.multiplo, 1) as multiplo_compra
-        FROM db_manaus.cmp_it_requisicao ri
-        LEFT JOIN db_manaus.dbprod p ON ri.itr_codprod = p.codprod
-        LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+        FROM cmp_it_requisicao ri
+        LEFT JOIN dbprod p ON ri.itr_codprod = p.codprod
+        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
         WHERE ri.itr_req_id = $1
         ORDER BY ri.itr_codprod
       `, [requisitionId]);
@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Vamos verificar se existe algum item na tabela para debug
         const debugResult = await client.query(`
           SELECT itr_req_id as req_id, COUNT(*) as total
-          FROM db_manaus.cmp_it_requisicao
+          FROM cmp_it_requisicao
           GROUP BY itr_req_id
           ORDER BY itr_req_id DESC
           LIMIT 10
@@ -118,14 +118,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         // Delete existing items
         await client.query(
-          'DELETE FROM db_manaus.cmp_it_requisicao WHERE itr_req_id = $1',
+          'DELETE FROM cmp_it_requisicao WHERE itr_req_id = $1',
           [requisitionId]
         );
 
         // Insert new items
         if (items.length > 0) {
           const insertQuery = `
-            INSERT INTO db_manaus.cmp_it_requisicao 
+            INSERT INTO cmp_it_requisicao 
             (itr_req_id, itr_req_versao, itr_codprod, itr_quantidade, itr_pr_unitario, itr_base_indicacao, itr_quantidade_atendida)
             VALUES ($1, 1, $2, $3, $4, $5, 0)
           `;

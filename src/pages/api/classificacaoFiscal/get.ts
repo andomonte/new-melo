@@ -12,12 +12,12 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
     const params: any[] = search ? [`%${search}%`] : [];
     const data = await client.query(
       `SELECT id, ncm, ipi, pis, cofins, agregado, descricao
-         FROM db_manaus.dbclassificacao_fiscal ${where}
+         FROM dbclassificacao_fiscal ${where}
         ORDER BY ncm LIMIT ${limit} OFFSET ${offset}`,
       params,
     );
     const count = await client.query(
-      `SELECT COUNT(*) AS total FROM db_manaus.dbclassificacao_fiscal ${where}`,
+      `SELECT COUNT(*) AS total FROM dbclassificacao_fiscal ${where}`,
       params,
     );
     const total = parseInt(count.rows[0].total, 10);

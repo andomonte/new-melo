@@ -28,7 +28,7 @@ export default async function handler(
 
   const client = await getPgPool().connect();
   try {
-    await client.query('SET search_path TO db_manaus, public');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     const reservadas: string[] = [];
     const falhou: string[] = [];

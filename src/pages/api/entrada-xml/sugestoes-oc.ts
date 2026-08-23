@@ -90,7 +90,7 @@ export default async function handler(
   try {
     const pool = getPgPool('manaus');
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     console.log('🔍 Iniciando busca de sugestões inteligentes para fornecedor:', fornecedor_cnpj);
     console.log('📦 Quantidade de itens na NFe:', itens_nfe.length);

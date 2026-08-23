@@ -76,32 +76,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         -- Calcular quantidade de registros (ambos numeric/bigint, comparação direta)
         COALESCE((
           SELECT COUNT(*)
-          FROM db_manaus.dbremessa_detalhe d
+          FROM dbremessa_detalhe d
           WHERE d."CODREMESSA" = a.codremessa
         ), 0) as registros_enviados,
         -- Calcular valor total
         COALESCE((
           SELECT SUM(d."VALOR")
-          FROM db_manaus.dbremessa_detalhe d
+          FROM dbremessa_detalhe d
           WHERE d."CODREMESSA" = a.codremessa
         ), 0) as valor_total,
         -- Contar títulos liquidados (CODRECEB é varchar, cod_receb é varchar)
         COALESCE((
           SELECT COUNT(DISTINCT d."CODRECEB")
-          FROM db_manaus.dbremessa_detalhe d
-          INNER JOIN db_manaus.dbreceb r ON r.cod_receb = d."CODRECEB"
+          FROM dbremessa_detalhe d
+          INNER JOIN dbreceb r ON r.cod_receb = d."CODRECEB"
           WHERE d."CODREMESSA" = a.codremessa
             AND r.bradesco = 'B'
         ), 0) as titulos_liquidados,
         -- Contar títulos pendentes
         COALESCE((
           SELECT COUNT(DISTINCT d."CODRECEB")
-          FROM db_manaus.dbremessa_detalhe d
-          INNER JOIN db_manaus.dbreceb r ON r.cod_receb = d."CODRECEB"
+          FROM dbremessa_detalhe d
+          INNER JOIN dbreceb r ON r.cod_receb = d."CODRECEB"
           WHERE d."CODREMESSA" = a.codremessa
             AND r.bradesco = 'S'
         ), 0) as titulos_pendentes
-      FROM db_manaus.dbremessa_arquivo a
+      FROM dbremessa_arquivo a
       ${whereClause}
       ORDER BY a.data_gerado DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -114,7 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Query de contagem total
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM db_manaus.dbremessa_arquivo a
+      FROM dbremessa_arquivo a
       ${whereClause}
     `;
 

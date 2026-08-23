@@ -28,16 +28,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = getPgPool('manaus');
     client = await pool.connect();
     await client.query('BEGIN');
-    await client.query('SET LOCAL search_path TO db_manaus, public');
+    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     // 1) Próximo codent (maior numérico + 1, 9 dígitos) — como no Delphi
     const maxRow = await client.query(
-      `SELECT COALESCE(MAX(codent::bigint), 0) AS mx FROM db_manaus.dbent WHERE codent ~ '^[0-9]+$'`,
+      `SELECT COALESCE(MAX(codent::bigint), 0) AS mx FROM dbent WHERE codent ~ '^[0-9]+$'`,
     );
     const codent = String(Number(maxRow.rows[0].mx) + 1).padStart(9, '0');
 
     // Romaneio já executado se só existe um armazém
-    const armRow = await client.query(`SELECT COUNT(*) AS n FROM db_manaus.cad_armazem`);
+    const armRow = await client.query(`SELECT COUNT(*) AS n FROM cad_armazem`);
     const romaneio = Number(armRow.rows[0].n) === 1 ? 'S' : 'N';
 
     const temcon = b.temcon === 'S' || b.temcon === true ? 'S' : 'N';
@@ -47,12 +47,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (temcon === 'S' && b.codtransp && b.conhecimento?.nrocon) {
       const c = b.conhecimento;
       const ja = await client.query(
-        `SELECT 1 FROM db_manaus.dbconhecimentoent WHERE codtransp=$1 AND nrocon=$2`,
+        `SELECT 1 FROM dbconhecimentoent WHERE codtransp=$1 AND nrocon=$2`,
         [b.codtransp, c.nrocon],
       );
       if (ja.rows.length > 0) {
         await client.query(
-          `UPDATE db_manaus.dbconhecimentoent
+          `UPDATE dbconhecimentoent
               SET serie=$3, cfop=$4, icms=$5, baseicms=$6, totalcon=$7, totaltransp=$8,
                   stcon=$9, dtcon=$10, tipocalc=$11, tipocon=$12, cif=$13, cancel='N'
             WHERE codtransp=$1 AND nrocon=$2`,
@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
       } else {
         await client.query(
-          `INSERT INTO db_manaus.dbconhecimentoent
+          `INSERT INTO dbconhecimentoent
              (codtransp, nrocon, serie, cfop, icms, baseicms, totalcon, dtcon, totaltransp,
               stcon, tipocalc, tipocon, cif, cancel, dtcadastro)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'N', now())`,
@@ -75,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 3) Cabeçalho dbent (status 'A')
     await client.query(
-      `INSERT INTO db_manaus.dbent
+      `INSERT INTO dbent
          (codent, cod_credor, codtransp, nrocon, nroform, selo, serie,
           icms, baseicms, totalprod, totalipi, totalnf, dtent, dtselo, dtnota, nrodi, dtdi,
           custofin, desconto, valordolar, cfop, origem, obs, codusr, status,
@@ -99,7 +99,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 4) Workflow físico
     await client.query(
-      `INSERT INTO db_manaus.dbent_recebimento (codent, status) VALUES ($1, 'PENDENTE')
+      `INSERT INTO dbent_recebimento (codent, status) VALUES ($1, 'PENDENTE')
        ON CONFLICT (codent) DO NOTHING`,
       [codent],
     );

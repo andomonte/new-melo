@@ -37,10 +37,10 @@ export default async function handle(
         ie.quant as quantidade,
         ie.prunit as preco_unitario,
         e.status
-      FROM db_manaus.dbitent ie
-      INNER JOIN db_manaus.dbent e ON ie.codent = e.codent
-      LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
-      LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
+      FROM dbitent ie
+      INNER JOIN dbent e ON ie.codent = e.codent
+      LEFT JOIN dbnfe_ent nfe ON nfe.chave = e.chave
+      LEFT JOIN dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
       WHERE ie.codprod = $1
         AND e.dtent >= NOW() - INTERVAL '12 months'
       ORDER BY e.dtent DESC
@@ -73,10 +73,10 @@ export default async function handle(
           WHEN o.orc_status = 'F' THEN 'FINALIZADO'
           ELSE 'OUTRO'
         END as status_descricao
-      FROM db_manaus.cmp_requisicao_item ri
-      INNER JOIN db_manaus.cmp_requisicao r ON ri.req_id = r.req_id AND ri.req_versao = r.req_versao
-      INNER JOIN db_manaus.cmp_ordem_compra o ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
-      LEFT JOIN db_manaus.dbcredor cr ON r.req_cod_credor = cr.cod_credor
+      FROM cmp_requisicao_item ri
+      INNER JOIN cmp_requisicao r ON ri.req_id = r.req_id AND ri.req_versao = r.req_versao
+      INNER JOIN cmp_ordem_compra o ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
+      LEFT JOIN dbcredor cr ON r.req_cod_credor = cr.cod_credor
       WHERE ri.codprod = $1
         AND o.orc_status NOT IN ('C', 'F')
       ORDER BY o.orc_data DESC
@@ -119,8 +119,8 @@ export default async function handle(
       SELECT
         COALESCE(SUM(ie.quant), 0) as total_entradas_12m,
         COUNT(DISTINCT e.codent) as qtd_entradas_12m
-      FROM db_manaus.dbitent ie
-      INNER JOIN db_manaus.dbent e ON ie.codent = e.codent
+      FROM dbitent ie
+      INNER JOIN dbent e ON ie.codent = e.codent
       WHERE ie.codprod = $1
         AND e.dtent >= NOW() - INTERVAL '12 months'
     `;

@@ -46,6 +46,7 @@ export async function getPedidosParaTVPaginado(params: {
   perPage: number;
   search: string;
   filtros: Filtro[];
+  filial?: string;
 }): Promise<ListApiResponse<PedidoTV>> {
   try {
     const response = await api.get('/api/pedidos/tv', {
@@ -55,6 +56,7 @@ export async function getPedidosParaTVPaginado(params: {
         search: params.search,
         sortBy: 'dtupdate',
         sortOrder: 'DESC',
+        ...(params.filial ? { filial: params.filial } : {}),
       },
     });
 
@@ -155,9 +157,11 @@ export interface ContagensPedidos {
 /**
  * Busca as contagens de pedidos por status
  */
-export async function getContagensPedidos(): Promise<ContagensPedidos> {
+export async function getContagensPedidos(filial?: string): Promise<ContagensPedidos> {
   try {
-    const response = await api.get('/api/pedidos/tv/contagens');
+    const response = await api.get('/api/pedidos/tv/contagens', {
+      params: filial ? { filial } : {},
+    });
     return response.data;
   } catch (error) {
     console.error('Erro ao buscar contagens de pedidos:', error);

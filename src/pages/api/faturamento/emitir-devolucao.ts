@@ -25,14 +25,14 @@ export default async function handler(
   const pool = getPgPool();
   try {
     // 1. DI (fatura de devolução) + validação de que é uma DI e ainda não foi emitida.
-    const fatRes = await pool.query('SELECT * FROM db_manaus.dbfatura WHERE codfat = $1', [String(codfat)]);
+    const fatRes = await pool.query('SELECT * FROM dbfatura WHERE codfat = $1', [String(codfat)]);
     if (fatRes.rowCount === 0) return res.status(404).json({ erro: 'DI não encontrada.' });
     const dbfatura = fatRes.rows[0];
     if (!dbfatura.codfatrel) {
       return res.status(400).json({ erro: 'Esta fatura não é uma DI de devolução (sem codfatrel).' });
     }
     const jaEmitida = await pool.query(
-      "SELECT 1 FROM db_manaus.dbfat_nfe WHERE codfat = $1 AND status = '100' LIMIT 1",
+      "SELECT 1 FROM dbfat_nfe WHERE codfat = $1 AND status = '100' LIMIT 1",
       [String(codfat)],
     );
     if (jaEmitida.rowCount) {
@@ -41,7 +41,7 @@ export default async function handler(
 
     // 2. Chave da NF-e ORIGINAL (para o refNFe) via codfatrel.
     const origRes = await pool.query(
-      "SELECT chave FROM db_manaus.dbfat_nfe WHERE codfat = $1 AND status = '100' ORDER BY dthrprotocolo DESC LIMIT 1",
+      "SELECT chave FROM dbfat_nfe WHERE codfat = $1 AND status = '100' ORDER BY dthrprotocolo DESC LIMIT 1",
       [String(dbfatura.codfatrel)],
     );
     const chaveOriginal = origRes.rows[0]?.chave;
@@ -50,11 +50,11 @@ export default async function handler(
     }
 
     // 3. Cliente da DI.
-    const cliRes = await pool.query('SELECT * FROM db_manaus.dbclien WHERE codcli = $1', [dbfatura.codcli]);
+    const cliRes = await pool.query('SELECT * FROM dbclien WHERE codcli = $1', [dbfatura.codcli]);
     const dbclien = cliRes.rows[0] || {};
 
     // 4. Itens da DI (dbprodfat) → shape que o normalizarPayloadNFe espera (como dbitvenda).
-    const itRes = await pool.query('SELECT * FROM db_manaus.dbprodfat WHERE codfat = $1', [String(codfat)]);
+    const itRes = await pool.query('SELECT * FROM dbprodfat WHERE codfat = $1', [String(codfat)]);
     if (itRes.rowCount === 0) return res.status(400).json({ erro: 'DI sem itens.' });
     const dbitvenda = itRes.rows.map((r: any) => ({
       ...r,
@@ -64,7 +64,7 @@ export default async function handler(
 
     // 5. Empresa + certificado (emitente real da emissão).
     const empRes = await pool.query(
-      `SELECT * FROM db_manaus.dadosempresa
+      `SELECT * FROM dadosempresa
         WHERE "certificadoKey" IS NOT NULL AND "certificadoCrt" IS NOT NULL LIMIT 1`,
     );
     if (empRes.rowCount === 0) return res.status(400).json({ erro: 'Nenhuma empresa com certificado configurado.' });
@@ -158,7 +158,7 @@ export default async function handler(
     if (status === '100') {
       const chaveAut = retEnviNFe.protNFe?.infProt?.chNFe || chaveDevolucao;
       await pool.query(
-        `INSERT INTO db_manaus.dbfat_nfe
+        `INSERT INTO dbfat_nfe
            (codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, xmlremessa, xmlretorno,
             status, numprotocolo, dthrprotocolo, motivo, tipo_emissao, modelo, tpemissao, emailenviado)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
@@ -195,7 +195,7 @@ export default async function handler(
     // Rejeitada: registra a tentativa (histórico) e devolve o motivo.
     await pool
       .query(
-        `INSERT INTO db_manaus.dbfat_nfe
+        `INSERT INTO dbfat_nfe
            (codfat, nrodoc_fiscal, "data", chave, versao, xmlremessa, xmlretorno, status, motivo, modelo, emailenviado)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [String(codfat), dbfatura.nroform || '', new Date(), chaveDevolucao, '4.00', xmlAssinado, xmlResposta, status, motivo, '55', 'N'],

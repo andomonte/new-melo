@@ -11,9 +11,9 @@ import { getPgPool } from '@/lib/pg';
 const SEL = `
   SELECT p.codprod, p.ref, p.descr, p.aplic_extendida, p.codmarca, p.qtest,
          p.local,
-         COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m
+         COALESCE((SELECT m.descr FROM dbmarcas m
                     WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
-    FROM db_manaus.dbprod p`;
+    FROM dbprod p`;
 
 export default async function handle(
   req: NextApiRequest,

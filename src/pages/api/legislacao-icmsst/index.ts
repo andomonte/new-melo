@@ -51,13 +51,13 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
     const searchParam = search ? [`%${search}%`] : [];
 
     // ✅ ADAPTADO:
-    const totalQuery = `SELECT COUNT(*) FROM db_manaus."CAD_LEGISLACAO_ICMSST" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM "CAD_LEGISLACAO_ICMSST" ${whereClause}`;
     const totalResult = await client.query(totalQuery, searchParam);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     // ✅ ADAPTADO:
     const dataQuery = `
-      SELECT * FROM db_manaus."CAD_LEGISLACAO_ICMSST"
+      SELECT * FROM "CAD_LEGISLACAO_ICMSST"
       ${whereClause}
       ORDER BY "LEI_ID" DESC
       LIMIT $1 OFFSET $2;
@@ -184,12 +184,12 @@ const handleGetListWithFilters = async (
     const whereClause =
       whereGroups.length > 0 ? `WHERE ${whereGroups.join(' AND ')}` : '';
 
-    const totalQuery = `SELECT COUNT(*) FROM db_manaus."CAD_LEGISLACAO_ICMSST" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM "CAD_LEGISLACAO_ICMSST" ${whereClause}`;
     const totalResult = await client.query(totalQuery, params);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     const dataQuery = `
-      SELECT * FROM db_manaus."CAD_LEGISLACAO_ICMSST"
+      SELECT * FROM "CAD_LEGISLACAO_ICMSST"
       ${whereClause}
       ORDER BY "LEI_ID" DESC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2};
@@ -251,7 +251,7 @@ const handleCreate = async (req: NextApiRequest, res: NextApiResponse) => {
 
     // ✅ ADAPTADO:
     const query = `
-      INSERT INTO db_manaus."CAD_LEGISLACAO_ICMSST" (
+      INSERT INTO "CAD_LEGISLACAO_ICMSST" (
         "LEI_ID", "LEI_PROTOCOLO", "LEI_DATA_CADASTRO", "LEI_STATUS", "LEI_DATA_VIGENCIA",
         "LEI_DATA_PUBLICACAO", "LEI_MVA_AJUSTADA", "LEI_TIPO"
       ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7)

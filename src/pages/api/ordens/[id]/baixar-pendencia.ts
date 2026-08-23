@@ -56,7 +56,7 @@ export default async function handler(
     // 1. Buscar dados da ordem
     const ordemResult = await client.query(
       `SELECT orc_id, orc_req_id, orc_req_versao, orc_status
-       FROM db_manaus.cmp_ordem_compra
+       FROM cmp_ordem_compra
        WHERE orc_id = $1`,
       [id]
     );
@@ -90,7 +90,7 @@ export default async function handler(
          itr_quantidade_atendida,
          COALESCE(itr_quantidade_fechada, 0) as itr_quantidade_fechada,
          itr_pr_unitario
-       FROM db_manaus.cmp_it_requisicao
+       FROM cmp_it_requisicao
        WHERE itr_req_id = $1
          AND itr_req_versao = $2
          AND itr_codprod = $3`,
@@ -143,7 +143,7 @@ export default async function handler(
 
     // 7. Buscar referência do produto para o log
     const prodResult = await client.query(
-      `SELECT ref, descr FROM db_manaus.dbprod WHERE codprod = $1`,
+      `SELECT ref, descr FROM dbprod WHERE codprod = $1`,
       [codprod]
     );
     const prodRef = prodResult.rows[0]?.ref || codprod;
@@ -153,7 +153,7 @@ export default async function handler(
     // quantidade_fechada += quantidade_baixar
     // quantidade -= quantidade_baixar
     await client.query(
-      `UPDATE db_manaus.cmp_it_requisicao SET
+      `UPDATE cmp_it_requisicao SET
          itr_quantidade_fechada = COALESCE(itr_quantidade_fechada, 0) + $4,
          itr_quantidade = itr_quantidade - $4
        WHERE itr_req_id = $1

@@ -103,7 +103,7 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
 
       -- Product data
       p.descr as produto_descr,
-      COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), p.codmarca) as produto_marca,
+      COALESCE((SELECT m.descr FROM dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), p.codmarca) as produto_marca,
       p.ref as produto_ref,
       '' as produto_aplicacao,
       COALESCE(p.qtest, 0) as produto_estoque,
@@ -111,8 +111,8 @@ async function handleGet(req: NextApiRequest, res: NextApiResponse) {
       COALESCE(p.prvenda, 0) as produto_prvenda,
       p.unimed as produto_unimed
 
-    FROM db_manaus.cmp_it_requisicao ri
-    LEFT JOIN db_manaus.dbprod p ON p.codprod = ri.itr_codprod
+    FROM cmp_it_requisicao ri
+    LEFT JOIN dbprod p ON p.codprod = ri.itr_codprod
     WHERE ri.itr_req_id = $1 AND ri.itr_req_versao = $2
     ORDER BY ri.itr_codprod ASC
   `;
@@ -227,7 +227,7 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
   const preco_total = quantidade_num * preco_unitario_num;
   
   const sql = `
-    INSERT INTO db_manaus.cmp_it_requisicao (
+    INSERT INTO cmp_it_requisicao (
       itr_req_id, itr_req_versao, itr_codprod, itr_quantidade, 
       itr_pr_unitario, itr_base_indicacao, itr_quantidade_atendida
     ) VALUES ($1, $2, $3, $4, $5, $6, 0)
@@ -255,7 +255,7 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
     // Fetch product info for history
     const produtoQuery = `
       SELECT descr, codmarca as marca
-      FROM db_manaus.dbprod
+      FROM dbprod
       WHERE codprod = $1
     `;
     const produtoResult = await client.query(produtoQuery, [codprod]);
@@ -274,7 +274,7 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
     // Get current requisition status
     const statusQuery = `
       SELECT req_status
-      FROM db_manaus.cmp_requisicao
+      FROM cmp_requisicao
       WHERE req_id = $1 AND req_versao = $2
     `;
     const statusResult = await client.query(statusQuery, [req_id_num, req_versao_num]);
@@ -282,7 +282,7 @@ async function handlePost(req: NextApiRequest, res: NextApiResponse) {
 
     // Insert history record
     const historicoSql = `
-      INSERT INTO db_manaus.cmp_requisicao_historico (
+      INSERT INTO cmp_requisicao_historico (
         req_id, req_versao, previous_status, new_status,
         user_id, user_name, reason, comments, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
@@ -364,8 +364,8 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse) {
         ri.itr_pr_unitario as preco_unitario,
         ri.itr_base_indicacao as observacao,
         p.descr as descr
-      FROM db_manaus.cmp_it_requisicao ri
-      LEFT JOIN db_manaus.dbprod p ON p.codprod = ri.itr_codprod
+      FROM cmp_it_requisicao ri
+      LEFT JOIN dbprod p ON p.codprod = ri.itr_codprod
       WHERE ri.itr_req_id = $1 AND ri.itr_req_versao = $2 AND ri.itr_codprod = $3
     `;
     const currentResult = await client.query(currentQuery, [req_id, req_versao, codprod]);
@@ -408,7 +408,7 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse) {
     values.push(req_id, req_versao, codprod);
 
     const sql = `
-      UPDATE db_manaus.cmp_it_requisicao
+      UPDATE cmp_it_requisicao
       SET ${updates.join(', ')}
       WHERE itr_req_id = $${valueIndex++}
         AND itr_req_versao = $${valueIndex++}
@@ -454,7 +454,7 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse) {
       // Get current requisition status
       const statusQuery = `
         SELECT req_status
-        FROM db_manaus.cmp_requisicao
+        FROM cmp_requisicao
         WHERE req_id = $1 AND req_versao = $2
       `;
       const statusResult = await client.query(statusQuery, [req_id, req_versao]);
@@ -462,7 +462,7 @@ async function handlePut(req: NextApiRequest, res: NextApiResponse) {
 
       // Insert history record
       const historicoSql = `
-        INSERT INTO db_manaus.cmp_requisicao_historico (
+        INSERT INTO cmp_requisicao_historico (
           req_id, req_versao, previous_status, new_status,
           user_id, user_name, reason, comments, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
@@ -515,8 +515,8 @@ async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
         ri.itr_pr_unitario as preco_unitario,
         (ri.itr_quantidade * ri.itr_pr_unitario) as preco_total,
         p.descr as descr
-      FROM db_manaus.cmp_it_requisicao ri
-      LEFT JOIN db_manaus.dbprod p ON p.codprod = ri.itr_codprod
+      FROM cmp_it_requisicao ri
+      LEFT JOIN dbprod p ON p.codprod = ri.itr_codprod
       WHERE ri.itr_req_id = $1 AND ri.itr_req_versao = $2 AND ri.itr_codprod = $3
     `;
     const itemResult = await client.query(itemQuery, [req_id, req_versao, codprod]);
@@ -531,7 +531,7 @@ async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
 
     // Delete the item
     const deleteSql = `
-      DELETE FROM db_manaus.cmp_it_requisicao
+      DELETE FROM cmp_it_requisicao
       WHERE itr_req_id = $1 AND itr_req_versao = $2 AND itr_codprod = $3
       RETURNING *
     `;
@@ -550,7 +550,7 @@ async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
     // Get current requisition status
     const statusQuery = `
       SELECT req_status
-      FROM db_manaus.cmp_requisicao
+      FROM cmp_requisicao
       WHERE req_id = $1 AND req_versao = $2
     `;
     const statusResult = await client.query(statusQuery, [req_id, req_versao]);
@@ -558,7 +558,7 @@ async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
 
     // Insert history record
     const historicoSql = `
-      INSERT INTO db_manaus.cmp_requisicao_historico (
+      INSERT INTO cmp_requisicao_historico (
         req_id, req_versao, previous_status, new_status,
         user_id, user_name, reason, comments, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())

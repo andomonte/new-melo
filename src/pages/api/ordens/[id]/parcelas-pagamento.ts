@@ -31,7 +31,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
         orc_banco,
         orc_tipo_documento,
         orc_valor_entrada
-      FROM db_manaus.cmp_ordem_compra
+      FROM cmp_ordem_compra
       WHERE orc_id = $1`,
       [orcId]
     );
@@ -53,7 +53,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
         status,
         created_at,
         updated_at
-      FROM db_manaus.ordem_pagamento_parcelas
+      FROM ordem_pagamento_parcelas
       WHERE orc_id = $1
       ORDER BY numero_parcela ASC`,
       [orcId]

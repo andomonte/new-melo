@@ -47,11 +47,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         p.cancel as pagamento_cancelado,
         p.obs as observacao_pagamento
 
-      FROM db_manaus.ordem_pagamento_parcelas opp
-      LEFT JOIN db_manaus.ordem_pagamento_conta opc
+      FROM ordem_pagamento_parcelas opp
+      LEFT JOIN ordem_pagamento_conta opc
         ON opp.orc_id = opc.orc_id
         AND opp.numero_parcela = opc.numero_parcela
-      LEFT JOIN db_manaus.dbpgto p
+      LEFT JOIN dbpgto p
         ON opc.cod_pgto = p.cod_pgto
       WHERE opp.orc_id = $1
       ORDER BY opp.numero_parcela`,

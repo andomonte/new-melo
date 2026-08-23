@@ -44,13 +44,13 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
     const searchParam = search ? [`%${search}%`] : [];
 
     // ✅ ADAPTADO: Contagem total de empresas
-    const totalQuery = `SELECT COUNT(*) FROM db_manaus."dadosempresa" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM "dadosempresa" ${whereClause}`;
     const totalResult = await client.query(totalQuery, searchParam);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     // ✅ ADAPTADO: Busca paginada de empresas
     const dataQuery = `
-      SELECT * FROM db_manaus."dadosempresa"
+      SELECT * FROM "dadosempresa"
       ${whereClause}
       ORDER BY "nomecontribuinte" ASC
       LIMIT $1 OFFSET $2;
@@ -129,7 +129,7 @@ const handleCreate = async (req: NextApiRequest, res: NextApiResponse) => {
 
     // ✅ ADAPTADO: Query de inserção para a tabela dadosempresa
     const query = `
-      INSERT INTO db_manaus."dadosempresa" (
+      INSERT INTO "dadosempresa" (
         "cgc", "inscricaoestadual", "nomecontribuinte", "municipio", "uf", "fax",
         "codigoconvenio", "codigonatureza", "codigofinalidade", "logradouro",
         "numero", "complemento", "bairro", "cep", "contato", "telefone", "suframa", "email",

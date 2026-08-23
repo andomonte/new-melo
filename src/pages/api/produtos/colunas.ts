@@ -21,7 +21,7 @@ export default async function handler(
     const r = await pool.query(
       `SELECT column_name
          FROM information_schema.columns
-        WHERE table_schema = 'db_manaus'
+        WHERE table_schema = current_schema()
           AND table_name = 'dbprod'
         ORDER BY ordinal_position`,
     );

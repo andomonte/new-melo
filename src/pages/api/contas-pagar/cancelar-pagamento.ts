@@ -28,7 +28,7 @@ export default async function handler(
         valor_pgto,
         cancel,
         dt_pgto
-      FROM db_manaus.dbfpgto
+      FROM dbfpgto
       WHERE cod_pgto = $1 AND fpg_cof_id = $2
     `, [cod_pgto, fpg_cof_id]);
 
@@ -44,7 +44,7 @@ export default async function handler(
 
     // 2. Cancelar o pagamento (marcar cancel = 'S')
     await pool.query(`
-      UPDATE db_manaus.dbfpgto
+      UPDATE dbfpgto
       SET cancel = 'S'
       WHERE cod_pgto = $1 AND fpg_cof_id = $2
     `, [cod_pgto, fpg_cof_id]);
@@ -54,7 +54,7 @@ export default async function handler(
     // 3. Recalcular o total pago do título (soma apenas pagamentos não cancelados)
     const totalPagoResult = await pool.query(`
       SELECT COALESCE(SUM(valor_pgto), 0) as total_pago
-      FROM db_manaus.dbfpgto
+      FROM dbfpgto
       WHERE cod_pgto = $1 
         AND (cancel IS NULL OR cancel != 'S')
     `, [cod_pgto]);
@@ -64,7 +64,7 @@ export default async function handler(
     // 4. Buscar valor original do título
     const tituloResult = await pool.query(`
       SELECT valor_pgto
-      FROM db_manaus.dbpgto
+      FROM dbpgto
       WHERE cod_pgto = $1
     `, [cod_pgto]);
 
@@ -83,7 +83,7 @@ export default async function handler(
     }
 
     await pool.query(`
-      UPDATE db_manaus.dbpgto
+      UPDATE dbpgto
       SET paga = $1
       WHERE cod_pgto = $2
     `, [novoPaga, cod_pgto]);

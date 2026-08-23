@@ -19,7 +19,7 @@ export default async function handle(
     // 1. Criar o Perfil
     const perfilResult = await client.query(
       `
-      INSERT INTO db_manaus.tb_login_perfil (login_perfil_name)
+      INSERT INTO tb_login_perfil (login_perfil_name)
       VALUES ($1)
       RETURNING login_perfil_name
     `,
@@ -49,7 +49,7 @@ export default async function handle(
     if (permissoesGruposValues.length > 0) {
       await client.query(
         `
-        INSERT INTO db_manaus."tb_grupo_Permissao" (editar, cadastrar, remover, exportar, "grupoId", tela)
+        INSERT INTO "tb_grupo_Permissao" (editar, cadastrar, remover, exportar, "grupoId", tela)
         VALUES ${permissoesGruposValues
           .map(
             (_, index) =>
@@ -78,10 +78,10 @@ export default async function handle(
       for (const [idFunction, perfilName] of funcoesPerfisValues) {
         await client.query(
           `
-      INSERT INTO db_manaus.tb_login_access_perfil (id_functions, login_perfil_name)
+      INSERT INTO tb_login_access_perfil (id_functions, login_perfil_name)
       SELECT $1, $2
       WHERE NOT EXISTS (
-        SELECT 1 FROM db_manaus.tb_login_access_perfil
+        SELECT 1 FROM tb_login_access_perfil
         WHERE id_functions = $1 AND login_perfil_name = $2
       )
       `,

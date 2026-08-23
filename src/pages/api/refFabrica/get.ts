@@ -16,15 +16,15 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
       `SELECT rf.cod_id, rf.referencia, rf.codmarca,
               CASE WHEN m.descr IS NOT NULL THEN rf.codmarca || ' - ' || m.descr ELSE rf.codmarca END AS marca,
               rf.codcredor
-         FROM db_manaus.dbref_fabrica rf
-         LEFT JOIN db_manaus.dbmarcas m ON m.codmarca = rf.codmarca
+         FROM dbref_fabrica rf
+         LEFT JOIN dbmarcas m ON m.codmarca = rf.codmarca
          ${where}
         ORDER BY rf.referencia LIMIT ${limit} OFFSET ${offset}`,
       params,
     );
     const count = await client.query(
-      `SELECT COUNT(*) AS total FROM db_manaus.dbref_fabrica rf
-         LEFT JOIN db_manaus.dbmarcas m ON m.codmarca = rf.codmarca ${where}`,
+      `SELECT COUNT(*) AS total FROM dbref_fabrica rf
+         LEFT JOIN dbmarcas m ON m.codmarca = rf.codmarca ${where}`,
       params,
     );
     const total = parseInt(count.rows[0].total, 10);

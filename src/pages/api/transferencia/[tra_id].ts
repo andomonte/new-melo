@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await getPgPool().connect();
   try {
     const cur = await client.query(
-      `SELECT tra_status, tra_codfat FROM db_manaus.arm_transferencia WHERE tra_id=$1`,
+      `SELECT tra_status, tra_codfat FROM arm_transferencia WHERE tra_id=$1`,
       [traId],
     );
     if (cur.rows.length === 0) return res.status(404).json({ erro: 'Transferência não encontrada.' });
@@ -22,14 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'PUT') {
       if (st !== 'ENVIADO') return res.status(409).json({ erro: `Só recebe transferência ENVIADA (status ${st}).` });
       await client.query(
-        `UPDATE db_manaus.arm_transferencia
+        `UPDATE arm_transferencia
             SET tra_status='RECEBIDO', tra_codusr_recebimento=$2, tra_data_recebimento=NOW()
           WHERE tra_id=$1`,
         [traId, String(req.body?.username || '')],
       ).catch(async () => {
         // fallback: coluna tra_data_recebimento pode não existir
         await client.query(
-          `UPDATE db_manaus.arm_transferencia SET tra_status='RECEBIDO', tra_codusr_recebimento=$2 WHERE tra_id=$1`,
+          `UPDATE arm_transferencia SET tra_status='RECEBIDO', tra_codusr_recebimento=$2 WHERE tra_id=$1`,
           [traId, String(req.body?.username || '')],
         );
       });
@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'DELETE') {
       if (st === 'RECEBIDO') return res.status(409).json({ erro: 'Transferência já recebida — não pode cancelar.' });
       const nfe = await client.query(
-        `SELECT 1 FROM db_manaus.dbfat_nfe WHERE codfat=$1 AND status='100' LIMIT 1`,
+        `SELECT 1 FROM dbfat_nfe WHERE codfat=$1 AND status='100' LIMIT 1`,
         [cur.rows[0].tra_codfat],
       );
       if (nfe.rows.length > 0) {
@@ -49,8 +49,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
       await client.query('BEGIN');
-      await client.query(`DELETE FROM db_manaus.arm_it_transferencia WHERE itt_tra_id=$1`, [traId]);
-      await client.query(`DELETE FROM db_manaus.arm_transferencia WHERE tra_id=$1`, [traId]);
+      await client.query(`DELETE FROM arm_it_transferencia WHERE itt_tra_id=$1`, [traId]);
+      await client.query(`DELETE FROM arm_transferencia WHERE tra_id=$1`, [traId]);
       await client.query('COMMIT');
       return res.status(200).json({ sucesso: true, tra_id: traId, cancelada: true });
     }

@@ -78,7 +78,7 @@ export default async function handler(
         //   values(vcodusr,'CANCEL.TITULO','DBRECEB','COD:'||vCodFat,sysdate);
         // Estendido com o motivo no campo obs (o Delphi não guardava motivo).
         await client.query(
-          `INSERT INTO db_manaus.dbacao (codusr, acao, tabela, obs, data)
+          `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
            VALUES ($1, 'CANCEL.TITULO', 'DBRECEB', $2, now())`,
           [usuarioTxt.substring(0, 60), `COD:${codfat} | MOTIVO: ${motivoTxt}`.substring(0, 255)],
         );

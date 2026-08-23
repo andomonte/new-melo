@@ -55,8 +55,8 @@ export default async function handler(
         e.codent,
         COALESCE(rec.status, e.status) as status,
         COALESCE(e.est_alocado, 0) as est_alocado
-      FROM db_manaus.dbent e
-      LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+      FROM dbent e
+      LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
       WHERE e.codent = $1
     `, [id]);
 
@@ -77,8 +77,8 @@ export default async function handler(
         ie.quant AS quantidade_total,
         COALESCE(p.multiplo, 1) AS multiplo,
         ie.codreq AS req_id
-      FROM db_manaus.dbitent ie
-      LEFT JOIN db_manaus.dbprod p ON ie.codprod = p.codprod
+      FROM dbitent ie
+      LEFT JOIN dbprod p ON ie.codprod = p.codprod
       WHERE ie.codent = $1
       ORDER BY ie.codprod
     `, [id]);
@@ -90,8 +90,8 @@ export default async function handler(
         da.arm_id,
         ca.arm_descricao,
         da.qtd
-      FROM db_manaus.dbitent_armazem da
-      INNER JOIN db_manaus.cad_armazem ca ON da.arm_id = ca.arm_id
+      FROM dbitent_armazem da
+      INNER JOIN cad_armazem ca ON da.arm_id = ca.arm_id
       WHERE da.codent = $1
       ORDER BY da.codprod, da.arm_id
     `, [entrada.codent]);

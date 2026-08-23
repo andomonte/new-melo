@@ -32,8 +32,8 @@ interface ConferirItemResponse {
 // Verifica se o operador está ativo no recebimento desta entrada.
 const CHECK_OPERADOR_QUERY = `
   SELECT op.id as operacao_id
-  FROM db_manaus.entrada_itens_recebimento eir
-  INNER JOIN db_manaus.entrada_operacoes op ON op.id = eir.entrada_operacao_id
+  FROM entrada_itens_recebimento eir
+  INNER JOIN entrada_operacoes op ON op.id = eir.entrada_operacao_id
   WHERE eir.id = $1
     AND op.recebedor_matricula = $2
     AND op.status = 'EM_RECEBIMENTO'
@@ -41,7 +41,7 @@ const CHECK_OPERADOR_QUERY = `
 
 // Atualiza a conferência do item
 const UPSERT_ITEM_QUERY = `
-  UPDATE db_manaus.entrada_itens_recebimento
+  UPDATE entrada_itens_recebimento
      SET qtd_recebida = $2,
          status_item = $3,
          observacao = $4,

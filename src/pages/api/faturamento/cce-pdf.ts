@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Carta de correção (a mais recente do seq, ou a última do codfat).
     const cceQ = await client.query(
       `SELECT chave, nseqevento, xcorrecao, correcao_nova, protocolo, data
-         FROM db_manaus.fat_cce
+         FROM fat_cce
         WHERE codfat = $1 ${seq ? 'AND nseqevento = $2' : ''}
         ORDER BY nseqevento DESC, data DESC
         LIMIT 1`,
@@ -38,14 +38,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Nota (número + XML para extrair emitente/destinatário).
     const nfeQ = await client.query(
       `SELECT nrodoc_fiscal, xmlremessa
-         FROM db_manaus.dbfat_nfe
+         FROM dbfat_nfe
         WHERE codfat = $1 AND chave = $2
         ORDER BY dthrprotocolo DESC NULLS LAST LIMIT 1`,
       [codfat, cce.chave],
     );
     const nfe = nfeQ.rows[0] || {};
     const fatQ = await client.query(
-      `SELECT serie, codcli FROM db_manaus.dbfatura WHERE codfat = $1`,
+      `SELECT serie, codcli FROM dbfatura WHERE codfat = $1`,
       [codfat],
     );
     // Nome real do cliente (em homologação o XML traz o marcador "NF-E EMITIDA
@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let nomeClienteReal = '';
     try {
       const cliQ = await client.query(
-        `SELECT nome, nomefant FROM db_manaus.dbclien WHERE codcli = $1`,
+        `SELECT nome, nomefant FROM dbclien WHERE codcli = $1`,
         [fatQ.rows[0]?.codcli],
       );
       nomeClienteReal = cliQ.rows[0]?.nome || cliQ.rows[0]?.nomefant || '';

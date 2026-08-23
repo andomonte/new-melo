@@ -14,7 +14,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   const client = await getPgPool().connect();
   try {
     const r = await client.query(
-      `UPDATE db_manaus.dbref_fabrica SET referencia=$2, codmarca=$3, codcredor=$4 WHERE cod_id=$1
+      `UPDATE dbref_fabrica SET referencia=$2, codmarca=$3, codcredor=$4 WHERE cod_id=$1
        RETURNING cod_id, referencia, codmarca, codcredor`,
       [cod_id, referencia, codmarca, codcredor],
     );

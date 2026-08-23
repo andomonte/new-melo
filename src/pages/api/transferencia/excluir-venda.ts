@@ -16,15 +16,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     await client.query('BEGIN');
     const fat = await client.query(
-      `SELECT 1 FROM db_manaus.fatura_venda WHERE codvenda=$1 AND status='ativo' LIMIT 1`,
+      `SELECT 1 FROM fatura_venda WHERE codvenda=$1 AND status='ativo' LIMIT 1`,
       [codvenda],
     );
     if (fat.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(409).json({ erro: 'Venda tem fatura ativa — não pode ser excluída.' });
     }
-    await client.query(`DELETE FROM db_manaus.dbitvenda WHERE codvenda=$1`, [codvenda]);
-    const d = await client.query(`DELETE FROM db_manaus.dbvenda WHERE codvenda=$1`, [codvenda]);
+    await client.query(`DELETE FROM dbitvenda WHERE codvenda=$1`, [codvenda]);
+    const d = await client.query(`DELETE FROM dbvenda WHERE codvenda=$1`, [codvenda]);
     await client.query('COMMIT');
     return res.status(200).json({ sucesso: true, removida: (d.rowCount ?? 0) > 0 });
   } catch (error: any) {

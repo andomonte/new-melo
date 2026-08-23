@@ -43,7 +43,7 @@ export async function getActiveSmtpConfig(): Promise<SMTPConfig | null> {
   try {
     const result = await client.query(
       `SELECT host, port, secure, username, password, from_email, from_name
-       FROM db_manaus.smtp_config
+       FROM smtp_config
        WHERE ativo = true
        ORDER BY id DESC
        LIMIT 1`

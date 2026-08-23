@@ -55,9 +55,9 @@ export default async function handle(
         COALESCE(n.multiplocompra, n.multiplo, 1) AS multiplocompra,
         n.codgpp AS grupoproduto,
         n.unimed
-      FROM db_manaus.dbprod_substituir s
-      JOIN db_manaus.dbprod n ON n.codprod = s.codprod_subs
-      LEFT JOIN db_manaus.dbmarcas m ON n.codmarca = m.codmarca
+      FROM dbprod_substituir s
+      JOIN dbprod n ON n.codprod = s.codprod_subs
+      LEFT JOIN dbmarcas m ON n.codmarca = m.codmarca
       WHERE s.codprod_orig = $1
         AND UPPER(COALESCE(n.inf, '')) NOT IN ('D', 'S', 'N')
       LIMIT 1`;

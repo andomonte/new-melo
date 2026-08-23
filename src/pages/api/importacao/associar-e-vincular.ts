@@ -68,7 +68,7 @@ interface VinculacaoResult {
 
 const QUERY_RESOLVER_FORNECEDOR = `
   SELECT cod_credor, nome
-  FROM db_manaus.dbcredor
+  FROM dbcredor
   WHERE UPPER(TRIM(nome)) LIKE UPPER(TRIM($1)) || '%'
   ORDER BY cod_credor
   LIMIT 1
@@ -79,10 +79,10 @@ const QUERY_PEDIDOS_POR_PRODUTO = `
     orc.orc_id,
     itr.itr_codprod,
     (itr.itr_quantidade - COALESCE(itr.itr_quantidade_atendida, 0)) AS qtd_disponivel
-  FROM db_manaus.cmp_it_requisicao itr
-  JOIN db_manaus.cmp_requisicao req
+  FROM cmp_it_requisicao itr
+  JOIN cmp_requisicao req
     ON req.req_id = itr.itr_req_id AND req.req_versao = itr.itr_req_versao
-  JOIN db_manaus.cmp_ordem_compra orc
+  JOIN cmp_ordem_compra orc
     ON orc.orc_req_id = req.req_id AND orc.orc_req_versao = req.req_versao
   WHERE orc.orc_status = 'A'
     AND req.req_cod_credor = $1
@@ -93,7 +93,7 @@ const QUERY_PEDIDOS_POR_PRODUTO = `
 
 async function resolverCodmarca(client: PoolClient, nomeMarca: string): Promise<string | null> {
   const exato = await client.query(`
-    SELECT codmarca FROM db_manaus.dbmarcas
+    SELECT codmarca FROM dbmarcas
     WHERE UPPER(TRIM(descr)) = $1
     LIMIT 1
   `, [nomeMarca.toUpperCase().trim()]);
@@ -101,7 +101,7 @@ async function resolverCodmarca(client: PoolClient, nomeMarca: string): Promise<
   if (exato.rows.length > 0) return exato.rows[0].codmarca;
 
   const like = await client.query(`
-    SELECT codmarca FROM db_manaus.dbmarcas
+    SELECT codmarca FROM dbmarcas
     WHERE UPPER(TRIM(descr)) LIKE $1 || '%'
     LIMIT 1
   `, [nomeMarca.toUpperCase().trim()]);
@@ -195,7 +195,7 @@ export default async function handler(
           for (const ref of refs) {
             const result = await client!.query(`
               SELECT p.codprod, p.descr
-              FROM db_manaus.dbprod p
+              FROM dbprod p
               WHERE p.ref = $1
                 AND COALESCE(p.excluido, 0) != 1
                 ${filtroStrib}
@@ -231,9 +231,9 @@ export default async function handler(
           for (const ref of refs) {
             const result = await client!.query(`
               SELECT p.codprod, p.descr
-              FROM db_manaus.dbref_fabrica rf
-              INNER JOIN db_manaus.dbprod_ref_fabrica prf ON rf.cod_id = prf.cod_id
-              INNER JOIN db_manaus.dbprod p ON prf.codprod = p.codprod
+              FROM dbref_fabrica rf
+              INNER JOIN dbprod_ref_fabrica prf ON rf.cod_id = prf.cod_id
+              INNER JOIN dbprod p ON prf.codprod = p.codprod
               WHERE rf.referencia = $1
                 AND COALESCE(p.excluido, 0) != 1
                 ${filtroStrib}
@@ -284,7 +284,7 @@ export default async function handler(
 
           const result = await client!.query(`
             SELECT codprod, descr
-            FROM db_manaus.dbprod p
+            FROM dbprod p
             WHERE ${whereConditions}
               AND COALESCE(excluido, 0) != 1
               ${filtroStrib}

@@ -27,7 +27,7 @@ export default async function handler(
     client = await pool.connect();
 
     // Definir search_path
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     // Buscar dados da NFe
     const nfeQuery = `

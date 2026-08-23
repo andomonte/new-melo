@@ -41,14 +41,14 @@ export default async function handle(
 
     // Buscar as classes de fornecedor
     const classesFornecedorResult = await client.query(
-      `SELECT * FROM db_manaus.dbclassefornecedor ${whereClause} ORDER BY codcf ${limitOffset}`,
+      `SELECT * FROM dbclassefornecedor ${whereClause} ORDER BY codcf ${limitOffset}`,
       queryParams,
     );
 
     // Contar o total
     const countParams = search ? [`%${search}%`] : [];
     const countResult = await client.query(
-      `SELECT COUNT(*) as total FROM db_manaus.dbclassefornecedor ${whereClause}`,
+      `SELECT COUNT(*) as total FROM dbclassefornecedor ${whereClause}`,
       countParams,
     );
 

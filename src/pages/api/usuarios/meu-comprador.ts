@@ -25,7 +25,7 @@ export default async function handle(
     const { rows } = await client.query(
       `SELECT up.codcomprador, c.nome
          FROM tb_user_perfil up
-         LEFT JOIN db_manaus.dbcompradores c
+         LEFT JOIN dbcompradores c
            ON c.codcomprador = up.codcomprador
         WHERE up.user_login_id = $1
           AND up.codcomprador IS NOT NULL

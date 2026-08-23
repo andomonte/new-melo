@@ -59,7 +59,7 @@ export default async function handler(
       // Verificar se requisição existe e pegar status atual
       // Busca por req_id (formato completo ex: 12002010068) que é o que o frontend envia
       const checkResult = await client.query(
-        'SELECT req_id, req_status FROM db_manaus.cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
+        'SELECT req_id, req_status FROM cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
         [req.requisitionId.toString(), req.version]
       );
 
@@ -109,7 +109,7 @@ export default async function handler(
 
       // Atualizar status
       await client.query(
-        `UPDATE db_manaus.cmp_requisicao
+        `UPDATE cmp_requisicao
          SET req_status = $1
          WHERE req_id = $2 AND req_versao = $3`,
         [newStatus, req.requisitionId.toString(), req.version]
@@ -117,7 +117,7 @@ export default async function handler(
 
       // Registrar histórico
       await client.query(
-        `INSERT INTO db_manaus.cmp_requisicao_historico
+        `INSERT INTO cmp_requisicao_historico
          (req_id, req_versao, previous_status, new_status, user_id, user_name, reason, comments)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
@@ -139,7 +139,7 @@ export default async function handler(
         try {
           // Buscar dados da requisição
           const requisitionData = await client.query(
-            `SELECT r.* FROM db_manaus.cmp_requisicao r
+            `SELECT r.* FROM cmp_requisicao r
              WHERE r.req_id = $1 AND r.req_versao = $2`,
             [req.requisitionId.toString(), req.version]
           );
@@ -150,7 +150,7 @@ export default async function handler(
             // Calcular valor total
             const valorTotalResult = await client.query(
               `SELECT COALESCE(SUM(itr_quantidade * itr_pr_unitario), 0) as total_itens
-               FROM db_manaus.cmp_it_requisicao
+               FROM cmp_it_requisicao
                WHERE itr_req_id = $1 AND itr_req_versao = $2`,
               [reqId, req.version]
             );
@@ -162,7 +162,7 @@ export default async function handler(
 
             // Gerar ordem
             const ordemResult = await client.query(
-              `INSERT INTO db_manaus.cmp_ordem_compra (
+              `INSERT INTO cmp_ordem_compra (
                 orc_id, orc_req_id, orc_req_versao, orc_data, orc_status,
                 orc_valor_total, orc_previsao_chegada, orc_unm_id_entrega, orc_unm_id_destino, orc_observacao
               ) VALUES (

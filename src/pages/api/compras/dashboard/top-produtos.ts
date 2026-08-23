@@ -30,10 +30,10 @@ export default async function handler(
           p.descr AS "nomeProduto",
           SUM(i.itr_quantidade) AS "quantidadeComprada",
           SUM(i.itr_quantidade * i.itr_pr_unitario) AS "valorTotal"
-        FROM db_manaus.cmp_it_requisicao i
-        INNER JOIN db_manaus.cmp_requisicao r ON i.itr_req_id = r.req_id AND i.itr_req_versao = r.req_versao
-        INNER JOIN db_manaus.dbprod p ON i.itr_codprod = p.codprod
-        INNER JOIN db_manaus.cmp_ordem_compra o ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
+        FROM cmp_it_requisicao i
+        INNER JOIN cmp_requisicao r ON i.itr_req_id = r.req_id AND i.itr_req_versao = r.req_versao
+        INNER JOIN dbprod p ON i.itr_codprod = p.codprod
+        INNER JOIN cmp_ordem_compra o ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
         WHERE o.orc_status IN ('A', 'F')
           AND o.orc_data BETWEEN $1 AND $2
           AND o.orc_valor_total < 100000000

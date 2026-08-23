@@ -156,10 +156,10 @@ async function buscarTitulosParaRemessa(
       cb.n_agencia as agencia,
       ct.nro_conta as num_conta,
       ct.digito as digito_conta
-    FROM db_manaus.dbreceb r
-    LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-    LEFT JOIN db_manaus.dbconta ct ON ct.cod_conta = r.cod_conta
-    LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+    FROM dbreceb r
+    LEFT JOIN dbclien c ON c.codcli = r.codcli
+    LEFT JOIN dbconta ct ON ct.cod_conta = r.cod_conta
+    LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
     WHERE r.dt_venc BETWEEN $1 AND $2
       AND cb.cod_bc = $3
       AND COALESCE(r.bradesco, 'N') = 'N'
@@ -195,11 +195,11 @@ async function buscarTitulosParaRemessa(
       cb.n_agencia as agencia,
       ct.nro_conta as num_conta,
       ct.digito as digito_conta
-    FROM db_manaus.dbdocbodero_baixa_banco db
-    INNER JOIN db_manaus.dbreceb r ON r.cod_receb = db.cod_receb
-    LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-    LEFT JOIN db_manaus.dbconta ct ON ct.cod_conta = r.cod_conta
-    LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+    FROM dbdocbodero_baixa_banco db
+    INNER JOIN dbreceb r ON r.cod_receb = db.cod_receb
+    LEFT JOIN dbclien c ON c.codcli = r.codcli
+    LEFT JOIN dbconta ct ON ct.cod_conta = r.cod_conta
+    LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
     WHERE r.dt_venc BETWEEN $1 AND $2
       AND cb.cod_bc = $3
       AND COALESCE(db.export, 0) = 0
@@ -230,10 +230,10 @@ async function buscarTitulosParaRemessa(
       cb.n_agencia as agencia,
       ct.nro_conta as num_conta,
       ct.digito as digito_conta
-    FROM db_manaus.dbreceb r
-    LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-    LEFT JOIN db_manaus.dbconta ct ON ct.cod_conta = r.cod_conta
-    LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+    FROM dbreceb r
+    LEFT JOIN dbclien c ON c.codcli = r.codcli
+    LEFT JOIN dbconta ct ON ct.cod_conta = r.cod_conta
+    LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
     WHERE r.dt_venc BETWEEN $1 AND $2
       AND cb.cod_bc = $3
       AND r.venc_ant IS NOT NULL
@@ -261,7 +261,7 @@ async function gerarArquivoCNAB(banco: string, titulos: TituloRemessa[]) {
   // Buscar próximo sequencial usando codremessa
   const seqResult = await pool.query(`
     SELECT COALESCE(MAX(CAST(codremessa AS INTEGER)), 0) + 1 as proximo_seq
-    FROM db_manaus.dbremessa_arquivo
+    FROM dbremessa_arquivo
   `);
 
   const sequencial = seqResult.rows[0].proximo_seq;
@@ -417,13 +417,13 @@ async function registrarRemessa(
     // Gerar código do borderô
     const codBoderoResult = await pool.query(`
       SELECT COALESCE(MAX(CAST(codbodero AS INTEGER)), 0) + 1 as proximo
-      FROM db_manaus.dbremessa_arquivo
+      FROM dbremessa_arquivo
     `);
     const codbodero = String(codBoderoResult.rows[0].proximo).padStart(9, '0');
 
     // Inserir arquivo
     const arquivoResult = await pool.query(`
-      INSERT INTO db_manaus.dbremessa_arquivo
+      INSERT INTO dbremessa_arquivo
       (banco, data_gerado, nome_arquivo, usuario_importacao, codbodero)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING codremessa
@@ -435,7 +435,7 @@ async function registrarRemessa(
     for (let i = 0; i < titulos.length; i++) {
       const titulo = titulos[i];
       await pool.query(`
-        INSERT INTO db_manaus.dbremessa_detalhe
+        INSERT INTO dbremessa_detalhe
         ("CODREMESSA_DETALHE", "CODREMESSA", "CODCLI", "CODRECEB", "DOCUMENTO", "VALOR", "NROBANCO")
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
@@ -470,7 +470,7 @@ async function atualizarFlagsTitulos(titulos: TituloRemessa[]) {
     if (titulo.situacao === 'REMESSA' || titulo.situacao === 'PRORROGAR TITULO') {
       // Marcar como enviado
       await pool.query(`
-        UPDATE db_manaus.dbreceb
+        UPDATE dbreceb
         SET bradesco = 'S',
             venc_ant = dt_venc
         WHERE cod_receb = $1
@@ -479,7 +479,7 @@ async function atualizarFlagsTitulos(titulos: TituloRemessa[]) {
     } else if (titulo.situacao === 'BAIXAR TITULO') {
       // Marcar como exportado
       await pool.query(`
-        UPDATE db_manaus.dbdocbodero_baixa_banco
+        UPDATE dbdocbodero_baixa_banco
         SET export = 1
         WHERE cod_receb = $1
       `, [titulo.cod_receb]);

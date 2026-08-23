@@ -32,35 +32,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         -- Hoje
         COUNT(CASE WHEN a.data_gerado >= $1 THEN 1 END) as total_hoje,
         COALESCE(SUM(CASE WHEN a.data_gerado >= $1 THEN (
-          SELECT COALESCE(SUM(d."VALOR"), 0) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COALESCE(SUM(d."VALOR"), 0) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         ) ELSE 0 END), 0) as valor_hoje,
         COALESCE(SUM(CASE WHEN a.data_gerado >= $1 THEN (
-          SELECT COUNT(*) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COUNT(*) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         ) ELSE 0 END), 0) as titulos_hoje,
         
         -- Semana
         COUNT(CASE WHEN a.data_gerado >= $2 THEN 1 END) as total_semana,
         COALESCE(SUM(CASE WHEN a.data_gerado >= $2 THEN (
-          SELECT COALESCE(SUM(d."VALOR"), 0) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COALESCE(SUM(d."VALOR"), 0) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         ) ELSE 0 END), 0) as valor_semana,
         COALESCE(SUM(CASE WHEN a.data_gerado >= $2 THEN (
-          SELECT COUNT(*) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COUNT(*) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         ) ELSE 0 END), 0) as titulos_semana,
         
         -- Mês
         COUNT(CASE WHEN a.data_gerado >= $3 THEN 1 END) as total_mes,
         COALESCE(SUM(CASE WHEN a.data_gerado >= $3 THEN (
-          SELECT COALESCE(SUM(d."VALOR"), 0) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COALESCE(SUM(d."VALOR"), 0) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         ) ELSE 0 END), 0) as valor_mes,
         COALESCE(SUM(CASE WHEN a.data_gerado >= $3 THEN (
-          SELECT COUNT(*) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COUNT(*) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         ) ELSE 0 END), 0) as titulos_mes,
         
         -- Total geral
         COUNT(*) as total_geral,
-        COALESCE((SELECT SUM(d."VALOR") FROM db_manaus.dbremessa_detalhe d), 0) as valor_geral,
-        COALESCE((SELECT COUNT(*) FROM db_manaus.dbremessa_detalhe d), 0) as titulos_geral
-      FROM db_manaus.dbremessa_arquivo a
+        COALESCE((SELECT SUM(d."VALOR") FROM dbremessa_detalhe d), 0) as valor_geral,
+        COALESCE((SELECT COUNT(*) FROM dbremessa_detalhe d), 0) as titulos_geral
+      FROM dbremessa_arquivo a
     `;
 
     const result = await pool.query(query, [hoje, inicioSemana, inicioMes]);
@@ -77,12 +77,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         END as nome_banco,
         COUNT(*) as total_remessas,
         COALESCE(SUM((
-          SELECT COALESCE(SUM(d."VALOR"), 0) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COALESCE(SUM(d."VALOR"), 0) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         )), 0) as valor_total,
         COALESCE(SUM((
-          SELECT COUNT(*) FROM db_manaus.dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
+          SELECT COUNT(*) FROM dbremessa_detalhe d WHERE d."CODREMESSA" = a.codremessa
         )), 0) as total_titulos
-      FROM db_manaus.dbremessa_arquivo a
+      FROM dbremessa_arquivo a
       WHERE a.data_gerado >= $1
       GROUP BY a.banco
       ORDER BY total_remessas DESC
@@ -98,7 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         COUNT(CASE WHEN r.bradesco = 'N' THEN 1 END) as titulos_disponiveis,
         COALESCE(SUM(CASE WHEN r.bradesco = 'S' THEN r.valor_pgto ELSE 0 END), 0) as valor_pendente,
         COALESCE(SUM(CASE WHEN r.bradesco = 'B' THEN r.valor_pgto ELSE 0 END), 0) as valor_liquidado
-      FROM db_manaus.dbreceb r
+      FROM dbreceb r
       WHERE r.forma_fat = '2'
         AND r.cancel = 'N'
         AND r.rec = 'N'

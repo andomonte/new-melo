@@ -17,7 +17,7 @@ export default async function handle(
     // em vários schemas com senhas distintas; qualificar evita depender do
     // search_path e o 401/dado errado intermitente. Ver verUser.ts.
     const result = await pool.query(
-      'SELECT * FROM db_manaus.tb_login_user WHERE login_user_login = $1',
+      'SELECT * FROM tb_login_user WHERE login_user_login = $1',
       [dados.userLogin]
     );
 

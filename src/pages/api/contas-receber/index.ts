@@ -194,9 +194,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             THEN CURRENT_DATE - r.dt_venc
             ELSE 0
           END as dias_atraso
-        FROM db_manaus.dbreceb r
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-        LEFT JOIN db_manaus.cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
+        FROM dbreceb r
+        LEFT JOIN dbclien c ON c.codcli = r.codcli
+        LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
         WHERE 1=1 ${whereClause}
       )
       SELECT * FROM contas_com_status
@@ -237,9 +237,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             THEN CURRENT_DATE - r.dt_venc
             ELSE 0
           END as dias_atraso
-        FROM db_manaus.dbreceb r
-        LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-        LEFT JOIN db_manaus.cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
+        FROM dbreceb r
+        LEFT JOIN dbclien c ON c.codcli = r.codcli
+        LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
         WHERE 1=1 ${whereClause}
       )
       SELECT COUNT(*) as total
@@ -328,7 +328,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
             ELSE 'pendente'
           END as status
-        FROM db_manaus.dbreceb r
+        FROM dbreceb r
         WHERE r.cancel IS NULL OR r.cancel != 'S'
       ) as contas
     `;

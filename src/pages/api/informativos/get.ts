@@ -12,11 +12,11 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
       : '';
     const params: any[] = search ? [`%${search}%`] : [];
     const data = await client.query(
-      `SELECT simbolo, descr FROM db_manaus.dbinformativo ${where} ORDER BY simbolo LIMIT ${limit} OFFSET ${offset}`,
+      `SELECT simbolo, descr FROM dbinformativo ${where} ORDER BY simbolo LIMIT ${limit} OFFSET ${offset}`,
       params,
     );
     const count = await client.query(
-      `SELECT COUNT(*) AS total FROM db_manaus.dbinformativo ${where}`,
+      `SELECT COUNT(*) AS total FROM dbinformativo ${where}`,
       params,
     );
     const total = parseInt(count.rows[0].total, 10);

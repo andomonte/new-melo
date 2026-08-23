@@ -69,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let client;
   try {
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     // Cabeçalho da ordem + fornecedor
     const head = await client.query(
@@ -90,7 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // CNPJ da Melo (dadosempresa) — fallback para o padrão de Manaus
     let cnpjMelo = CNPJ_MELO_PADRAO;
     try {
-      const emp = await client.query(`SELECT * FROM db_manaus.dadosempresa LIMIT 1`);
+      const emp = await client.query(`SELECT * FROM dadosempresa LIMIT 1`);
       const row = emp.rows[0] || {};
       const c = soDigitos(row.cnpj || row.cpf_cgc || row.cgc || row.cpfcgc);
       if (c.length === 14) cnpjMelo = c;
@@ -106,15 +106,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          itr.itr_quantidade AS quant,
          COALESCE(
            (SELECT rf.referencia
-              FROM db_manaus.dbprod_ref_fabrica prf
-              JOIN db_manaus.dbref_fabrica rf ON rf.cod_id = prf.cod_id
+              FROM dbprod_ref_fabrica prf
+              JOIN dbref_fabrica rf ON rf.cod_id = prf.cod_id
              WHERE prf.codprod = p.codprod
                AND lpad(trim(rf.codcredor), 5, '0') = lpad(trim($3), 5, '0')
              ORDER BY rf.cod_id LIMIT 1),
            p.ref
          ) AS ref_export
        FROM cmp_it_requisicao itr
-       JOIN db_manaus.dbprod p ON itr.itr_codprod = p.codprod
+       JOIN dbprod p ON itr.itr_codprod = p.codprod
       WHERE itr.itr_req_id = $1 AND itr.itr_req_versao = $2
         AND COALESCE(itr.itr_quantidade, 0) > 0
       ORDER BY p.codprod`,

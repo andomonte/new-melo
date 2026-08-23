@@ -33,8 +33,8 @@ export default async function handler(
         c.digito,
         b.nome as banco_nome,
         b.cod_bc as banco_codigo
-      FROM db_manaus.dbconta c
-      LEFT JOIN db_manaus.dbbanco b ON b.cod_banco = c.cod_banco
+      FROM dbconta c
+      LEFT JOIN dbbanco b ON b.cod_banco = c.cod_banco
       ORDER BY c.cod_conta
     `;
 

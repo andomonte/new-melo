@@ -92,7 +92,7 @@ export async function obterCRTEmpresa(cnpj: string, ie?: string): Promise<string
     const params: any[] = [cnpj];
     let query = `
       SELECT crt, nomecontribuinte 
-      FROM db_manaus.dadosempresa 
+      FROM dadosempresa 
       WHERE cgc = $1
     `;
     
@@ -129,7 +129,7 @@ export async function obterCRTEmpresa(cnpj: string, ie?: string): Promise<string
     // 4. Atualizar no banco
     const updateParams: any[] = [crtNovo, cnpj];
     let updateQuery = `
-      UPDATE db_manaus.dadosempresa 
+      UPDATE dadosempresa 
       SET crt = $1 
       WHERE cgc = $2
     `;

@@ -38,11 +38,11 @@ export default async function handler(
         o.orc_pagamento_configurado,
         o.orc_valor_entrada,
         COALESCE(f.nome_fant, f.nome) as fornecedor_nome
-      FROM db_manaus.cmp_ordem_compra o
-      LEFT JOIN db_manaus.cmp_requisicao r
+      FROM cmp_ordem_compra o
+      LEFT JOIN cmp_requisicao r
         ON o.orc_req_id = r.req_id
         AND o.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor f
+      LEFT JOIN dbcredor f
         ON r.req_cod_credor = f.cod_credor
       WHERE o.orc_id = ANY($1)
     `;
@@ -57,7 +57,7 @@ export default async function handler(
         if (ordem.orc_pagamento_configurado) {
           const parcelasResult = await client.query(
             `SELECT COUNT(*) as total
-             FROM db_manaus.ordem_pagamento_parcelas
+             FROM ordem_pagamento_parcelas
              WHERE orc_id = $1`,
             [ordem.orc_id]
           );

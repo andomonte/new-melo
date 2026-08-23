@@ -53,9 +53,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           THEN CURRENT_DATE - r.dt_venc
           ELSE 0
         END as dias_atraso
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-      LEFT JOIN db_manaus.dbconta co ON co.cod_conta = r.cod_conta
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      LEFT JOIN dbconta co ON co.cod_conta = r.cod_conta
       WHERE r.cod_receb = $1
     `;
 

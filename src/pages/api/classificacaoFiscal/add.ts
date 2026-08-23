@@ -13,10 +13,10 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   const client = await getPgPool().connect();
   try {
     await client.query('BEGIN');
-    const maxRes = await client.query('SELECT COALESCE(MAX(id),0)+1 AS next_id FROM db_manaus.dbclassificacao_fiscal');
+    const maxRes = await client.query('SELECT COALESCE(MAX(id),0)+1 AS next_id FROM dbclassificacao_fiscal');
     const id = maxRes.rows[0].next_id;
     const r = await client.query(
-      `INSERT INTO db_manaus.dbclassificacao_fiscal (id, ncm, ipi, pis, cofins, agregado, descricao)
+      `INSERT INTO dbclassificacao_fiscal (id, ncm, ipi, pis, cofins, agregado, descricao)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING id, ncm, ipi, pis, cofins, agregado, descricao`,
       [id, ncm, num(req.body?.ipi), num(req.body?.pis), num(req.body?.cofins), num(req.body?.agregado), String(req.body?.descricao ?? '').trim().toUpperCase() || null],

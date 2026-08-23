@@ -64,11 +64,11 @@ export default async function handler(
         COALESCE(c.nome, c.nome_fant, 'FORNECEDOR NÃO INFORMADO') as fornecedor,
         o.orc_status as status,
         COALESCE(o.orc_valor_total, 0) as valor_total
-      FROM db_manaus.cmp_ordem_compra o
-      LEFT JOIN db_manaus.cmp_requisicao r
+      FROM cmp_ordem_compra o
+      LEFT JOIN cmp_requisicao r
         ON o.orc_req_id = r.req_id
         AND o.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor c
+      LEFT JOIN dbcredor c
         ON r.req_cod_credor = c.cod_credor
       WHERE o.orc_id = $1
     `;

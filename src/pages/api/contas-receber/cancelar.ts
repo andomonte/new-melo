@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cancel,
         rec,
         bradesco
-      FROM db_manaus.dbreceb
+      FROM dbreceb
       WHERE cod_receb = $1
     `;
     
@@ -68,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Cancelar título
     const updateQuery = `
-      UPDATE db_manaus.dbreceb
+      UPDATE dbreceb
       SET 
         cancel = 'S'
       WHERE cod_receb = $1
@@ -79,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Registrar no histórico
     const historicoQuery = `
-      INSERT INTO db_manaus.dbfreceb (
+      INSERT INTO dbfreceb (
         cod_freceb,
         cod_receb,
         valor,
@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sf,
         nome
       ) VALUES (
-        (SELECT COALESCE(MAX(CAST(cod_freceb AS INTEGER)), 0) + 1 FROM db_manaus.dbfreceb WHERE cod_receb = $1),
+        (SELECT COALESCE(MAX(CAST(cod_freceb AS INTEGER)), 0) + 1 FROM dbfreceb WHERE cod_receb = $1),
         $1,
         0,
         CURRENT_DATE,
@@ -109,7 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // (Insert Into DbAcao(codusr,acao,tabela,obs,data)). Registra QUEM cancelou,
     // QUANDO e o MOTIVO (obs). Mesmo padrão do cancelar cobrança.
     await client.query(
-      `INSERT INTO db_manaus.dbacao (codusr, acao, tabela, obs, data)
+      `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
        VALUES ($1, 'CANCEL.TITULO', 'DBRECEB', $2, now())`,
       [
         usuarioTxt.substring(0, 60),

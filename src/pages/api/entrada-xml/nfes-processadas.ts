@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     const {
       page = '1',
@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         COALESCE(COUNT(nia.id), 0) as itens_associados,
         CASE WHEN COUNT(nia.id) > 0 THEN true ELSE false END as pode_gerar_entrada,
         -- Já existe entrada (dbent) gerada para esta chave? (exec='S' sem entrada = órfã, pode regerar)
-        EXISTS (SELECT 1 FROM db_manaus.dbent d WHERE d.chave = n.chave) as tem_entrada
+        EXISTS (SELECT 1 FROM dbent d WHERE d.chave = n.chave) as tem_entrada
       FROM dbnfe_ent n
       LEFT JOIN dbnfe_ent_emit e ON n.codnfe_ent = e.codnfe_ent
       LEFT JOIN nfe_item_associacao nia ON n.codnfe_ent = nia.nfe_id

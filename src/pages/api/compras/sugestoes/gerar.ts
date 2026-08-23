@@ -161,11 +161,11 @@ async function calcularDemanda(
         ELSE 0
       END), 0) as demanda_periodo
 
-    FROM db_manaus.dbprod p
-    LEFT JOIN db_manaus.dbmarcas m ON m.codmarca = p.codmarca
-    LEFT JOIN db_manaus.dbgpprod g ON g.codgpp = p.codgpp
-    LEFT JOIN db_manaus.dbitvenda iv ON iv.codprod = p.codprod
-    LEFT JOIN db_manaus.dbvenda v ON v.codvenda = iv.codvenda ${condicaoFilial}
+    FROM dbprod p
+    LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
+    LEFT JOIN dbgpprod g ON g.codgpp = p.codgpp
+    LEFT JOIN dbitvenda iv ON iv.codprod = p.codprod
+    LEFT JOIN dbvenda v ON v.codvenda = iv.codvenda ${condicaoFilial}
 
     WHERE ${condicaoFiltro}
       AND p.excluido = 0
@@ -206,8 +206,8 @@ async function consultarEstoqueDisponivel(
       -- Trânsito (requisições/ordens abertas)
       COALESCE((
         SELECT SUM(ir.itr_quantidade - ir.itr_quantidade_atendida)
-        FROM db_manaus.cmp_it_requisicao ir
-        JOIN db_manaus.cmp_requisicao r ON r.req_id = ir.itr_req_id AND r.req_versao = ir.itr_req_versao
+        FROM cmp_it_requisicao ir
+        JOIN cmp_requisicao r ON r.req_id = ir.itr_req_id AND r.req_versao = ir.itr_req_versao
         WHERE ir.itr_codprod = e.codprod
           AND r.req_status IN ('S', 'A') -- Submetida ou Aprovada
           AND ir.itr_quantidade > ir.itr_quantidade_atendida
@@ -216,15 +216,15 @@ async function consultarEstoqueDisponivel(
       -- Pendências (itens finalizados mas não entregues)
       COALESCE((
         SELECT SUM(ir.itr_quantidade_atendida - COALESCE(ir.itr_quantidade_fechada, 0))
-        FROM db_manaus.cmp_it_requisicao ir
-        JOIN db_manaus.cmp_requisicao r ON r.req_id = ir.itr_req_id AND r.req_versao = ir.itr_req_versao
+        FROM cmp_it_requisicao ir
+        JOIN cmp_requisicao r ON r.req_id = ir.itr_req_id AND r.req_versao = ir.itr_req_versao
         WHERE ir.itr_codprod = e.codprod
           AND r.req_status = 'A'
           AND ir.itr_status = 'F'
           AND ir.itr_quantidade_atendida > COALESCE(ir.itr_quantidade_fechada, 0)
       ), 0) as pendencia
 
-    FROM db_manaus.dbestoque e
+    FROM dbestoque e
     WHERE e.codprod = ANY($1::VARCHAR[])
     GROUP BY e.codprod
   `;

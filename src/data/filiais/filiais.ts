@@ -5,6 +5,9 @@ import { GetParams } from '../common/getParams';
 export interface Filial {
   codigo_filial: number;
   nome_filial: string;
+  timezone?: string;
+  /** Código de acesso da filial (segredo do setor) p/ as telas soltas. */
+  codigo_acesso?: string | null;
 }
 
 export interface Filiais {

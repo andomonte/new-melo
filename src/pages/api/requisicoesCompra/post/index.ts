@@ -73,7 +73,7 @@ export default async function handler(
 
     // Validar se o fornecedor existe (BUG-005 fix)
     const fornecedorCheck = await client.query(
-      'SELECT cod_credor FROM db_manaus.dbcredor WHERE cod_credor = $1',
+      'SELECT cod_credor FROM dbcredor WHERE cod_credor = $1',
       [fornecedorCodigo]
     );
     if (fornecedorCheck.rows.length === 0) {
@@ -86,7 +86,7 @@ export default async function handler(
 
     // Validar se o comprador existe (BUG-005 fix)
     const compradorCheck = await client.query(
-      'SELECT codcomprador FROM db_manaus.dbcompradores WHERE codcomprador = $1',
+      'SELECT codcomprador FROM dbcompradores WHERE codcomprador = $1',
       [compradorCodigo]
     );
     if (compradorCheck.rows.length === 0) {

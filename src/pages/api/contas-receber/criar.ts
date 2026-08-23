@@ -55,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Buscar o maior cod_receb atual para gerar os próximos
     const maxCodResult = await client.query(`
       SELECT COALESCE(MAX(CAST(cod_receb AS INTEGER)), 0) as max_cod
-      FROM db_manaus.dbreceb
+      FROM dbreceb
       WHERE cod_receb ~ '^[0-9]+$'
     `);
     let proximoCod = parseInt(maxCodResult.rows[0]?.max_cod || '0') + 1;
@@ -82,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const codReceb = String(proximoCod + i);
 
       const insertQuery = `
-        INSERT INTO db_manaus.dbreceb (
+        INSERT INTO dbreceb (
           cod_receb, codcli, rec_cof_id, dt_venc, dt_emissao, valor_pgto, nro_doc, tipo, forma_fat, banco, rec, cancel, valor_rec, bradesco
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'N', 'N', 0, 'N'

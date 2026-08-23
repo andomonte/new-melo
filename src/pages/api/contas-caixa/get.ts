@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Sem busca → traz TODAS as contas (dbconta é pequena, ~133) para que uma conta já
     // salva no usuário sempre apareça no select ao editar (senão o valor não é exibido).
     const r = await client.query(
-      `SELECT cod_conta, nro_conta FROM db_manaus.dbconta ${where} ORDER BY cod_conta LIMIT 500`,
+      `SELECT cod_conta, nro_conta FROM dbconta ${where} ORDER BY cod_conta LIMIT 500`,
       params,
     );
     return res.status(200).json({ data: r.rows });

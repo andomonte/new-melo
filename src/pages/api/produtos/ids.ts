@@ -34,13 +34,13 @@ export default async function handle(
 
     // total (para avisar quando exceder o teto)
     const countRes = await client.query(
-      `SELECT COUNT(*) AS total FROM db_manaus.dbprod ${where}`,
+      `SELECT COUNT(*) AS total FROM dbprod ${where}`,
       params,
     );
     const total = parseInt(countRes.rows[0].total, 10);
 
     const idsRes = await client.query(
-      `SELECT codprod FROM db_manaus.dbprod ${where} ORDER BY descr LIMIT ${LIMITE}`,
+      `SELECT codprod FROM dbprod ${where} ORDER BY descr LIMIT ${LIMITE}`,
       params,
     );
 

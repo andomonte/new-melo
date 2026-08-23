@@ -58,7 +58,7 @@ export default async function handler(
       ),
       marcas AS (
         SELECT DISTINCT trim(rf.codmarca) AS codmarca
-        FROM db_manaus.dbref_fabrica rf, cred
+        FROM dbref_fabrica rf, cred
         WHERE cred.c IS NOT NULL
           AND lpad(trim(rf.codcredor), 5, '0') = cred.c
           AND rf.codmarca IS NOT NULL AND trim(rf.codmarca) <> ''
@@ -66,15 +66,15 @@ export default async function handler(
       matches AS (
         -- 1) referência de fábrica do fornecedor
         SELECT lower(trim(rf.referencia)) AS ref_busca, prf.codprod, 1 AS prioridade
-        FROM db_manaus.dbref_fabrica rf
-        JOIN db_manaus.dbprod_ref_fabrica prf ON prf.cod_id = rf.cod_id, cred
+        FROM dbref_fabrica rf
+        JOIN dbprod_ref_fabrica prf ON prf.cod_id = rf.cod_id, cred
         WHERE cred.c IS NOT NULL
           AND lpad(trim(rf.codcredor), 5, '0') = cred.c
           AND lower(trim(rf.referencia)) = ANY($1::text[])
         UNION ALL
         -- 2) referência do próprio produto (dbprod.ref), filtrada pela marca do fornecedor
         SELECT lower(trim(p.ref)) AS ref_busca, p.codprod, 2 AS prioridade
-        FROM db_manaus.dbprod p
+        FROM dbprod p
         WHERE lower(trim(p.ref)) = ANY($1::text[])
           AND ( NOT EXISTS (SELECT 1 FROM marcas)
                 OR trim(p.codmarca) = ANY (SELECT codmarca FROM marcas) )
@@ -98,8 +98,8 @@ export default async function handler(
         p.codgpp AS grupoproduto,
         p.unimed
       FROM matches mt
-      JOIN db_manaus.dbprod p ON p.codprod = mt.codprod
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      JOIN dbprod p ON p.codprod = mt.codprod
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       WHERE LENGTH(p.codprod) = 6
       ORDER BY mt.ref_busca, mt.prioridade, CASE WHEN p.inf = 'D' THEN 1 ELSE 0 END, p.codprod
       `,

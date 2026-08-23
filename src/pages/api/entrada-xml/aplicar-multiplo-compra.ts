@@ -60,7 +60,7 @@ export default async function handler(
     // Validar senha do gerente (implementar validação real aqui)
     const senhaValidaResult = await client.query(`
       SELECT u.login_user_login, u.login_user_name, u.login_perfil_name
-      FROM db_manaus.tb_login_user u
+      FROM tb_login_user u
       WHERE u.login_user_login = $1 
         AND u.login_user_password = $2 
         AND u.login_perfil_name IN ('GERENTE', 'DIRETOR', 'ADMIN')
@@ -77,8 +77,8 @@ export default async function handler(
     // Verificar se o pedido existe e buscar dados atuais
     const pedidoResult = await client.query(`
       SELECT r.*, ri.itr_quantidade as quantidade_atual
-      FROM db_manaus.cmp_requisicao r
-      JOIN db_manaus.cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
+      FROM cmp_requisicao r
+      JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
       WHERE r.req_id = $1 AND ri.itr_codprod = $2
     `, [pedidoId, produtoId]);
 
@@ -94,7 +94,7 @@ export default async function handler(
 
     // Atualizar quantidade do item no pedido
     const updateResult = await client.query(`
-      UPDATE db_manaus.cmp_it_requisicao
+      UPDATE cmp_it_requisicao
       SET
         itr_quantidade = $1,
         itr_quantidade_atendida = CASE
@@ -111,7 +111,7 @@ export default async function handler(
 
     // Registrar log da operação de múltiplo de compra
     await client.query(`
-      INSERT INTO db_manaus.log_multiplo_compra (
+      INSERT INTO log_multiplo_compra (
         req_id,
         codprod,
         quantidade_anterior,
@@ -133,7 +133,7 @@ export default async function handler(
 
     // Log geral da requisição
     await client.query(`
-      INSERT INTO db_manaus.dbrequisicao_log (
+      INSERT INTO dbrequisicao_log (
         req_id,
         req_versao,
         acao,

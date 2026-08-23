@@ -42,8 +42,8 @@ export default async function handler(
       const resultFatura = await client.query(
         `SELECT f.*, c.nome, c.cpfcgc, c.email, c.telefone, c.celular, 
                 c.endereco, c.numero, c.complemento, c.bairro, c.cep
-         FROM db_manaus.dbfatura f
-         INNER JOIN db_manaus.dbclien c ON c.codcli = f.codcli
+         FROM dbfatura f
+         INNER JOIN dbclien c ON c.codcli = f.codcli
          WHERE f.codfat = $1`,
         [codfat],
       );
@@ -98,7 +98,7 @@ export default async function handler(
     const clientUpdate = await pool!.connect();
     try {
       await clientUpdate.query(
-        `UPDATE db_manaus.dbfatura 
+        `UPDATE dbfatura 
          SET asaas_cobranca_id = $1,
              asaas_cliente_id = $2,
              linha_digitavel = $3,

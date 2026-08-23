@@ -26,7 +26,7 @@ type FlagsFat = {
 
 /**
  * Grava os itens da fatura RECALCULANDO o imposto por item via
- * db_manaus.calcular_imposto_item (motor PG = tradução fiel do Oracle CALCULO_IMPOSTO),
+ * calcular_imposto_item (motor PG = tradução fiel do Oracle CALCULO_IMPOSTO),
  * aplicando os flags de ajuste do faturamento. Substitui o snapshot cego de dbitvenda.
  */
 async function gravarItensFatRecalculado(
@@ -53,7 +53,7 @@ async function gravarItensFatRecalculado(
   let n = 0;
   for (const it of itens) {
     const { rows } = await client.query(
-      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
         String(it.codprod).trim().padStart(6, '0'),
         String(codcli).trim(),
@@ -530,7 +530,7 @@ export default async function handler(
 
       // ===== ITENS DA FATURA (DBPRODFAT) =====
       // FASE 4 (A): quando a operação é VENDA (portada), RECALCULA o imposto por item
-      // via db_manaus.calcular_imposto_item aplicando os flags de ajuste do faturamento
+      // via calcular_imposto_item aplicando os flags de ajuste do faturamento
       // (zerar IPI/ICMS/subst, desconto Suframa, MVA antecipado, Insc 04/07).
       // Para VENDA sem flags, o resultado é idêntico ao snapshot (idempotente) e ainda
       // preenche IBS/CBS. Operações não portadas (P2) mantêm o snapshot de dbitvenda.

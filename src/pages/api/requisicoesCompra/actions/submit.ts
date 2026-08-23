@@ -46,7 +46,7 @@ export default async function handler(
     // Verificar se a requisição existe e está em status que permite submissão
     // Busca por req_id (formato completo ex: 12002010068) que é o que o frontend envia
     const checkResult = await client.query(
-      'SELECT req_id, req_status FROM db_manaus.cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
+      'SELECT req_id, req_status FROM cmp_requisicao WHERE req_id = $1 AND req_versao = $2',
       [requisitionId.toString(), version]
     );
     
@@ -74,7 +74,7 @@ export default async function handler(
 
     // Atualizar status para Submetida (S)
     const updateResult = await client.query(
-      `UPDATE db_manaus.cmp_requisicao
+      `UPDATE cmp_requisicao
        SET req_status = 'S'
        WHERE req_id = $1 AND req_versao = $2
        RETURNING req_id, req_versao, req_status`,
@@ -84,7 +84,7 @@ export default async function handler(
     // Registrar histórico da mudança
     try {
       await client.query(
-        `INSERT INTO db_manaus.cmp_requisicao_historico 
+        `INSERT INTO cmp_requisicao_historico 
          (req_id, req_versao, previous_status, new_status, user_id, user_name, reason, comments)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [

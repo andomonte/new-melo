@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         co.nro_conta as descricao_conta,
         COALESCE(
           (SELECT SUM(f.valor_pgto) 
-           FROM db_manaus.dbfpgto f 
+           FROM dbfpgto f 
            WHERE f.cod_pgto = p.cod_pgto 
              AND (f.cancel IS NULL OR f.cancel != 'S')
           ), 0
@@ -53,24 +53,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           WHEN p.cancel = 'S' THEN 'cancelado'
           WHEN COALESCE(
             (SELECT SUM(f.valor_pgto) 
-             FROM db_manaus.dbfpgto f 
+             FROM dbfpgto f 
              WHERE f.cod_pgto = p.cod_pgto 
                AND (f.cancel IS NULL OR f.cancel != 'S')
             ), 0
           ) >= p.valor_pgto THEN 'pago'
           WHEN COALESCE(
             (SELECT SUM(f.valor_pgto) 
-             FROM db_manaus.dbfpgto f 
+             FROM dbfpgto f 
              WHERE f.cod_pgto = p.cod_pgto 
                AND (f.cancel IS NULL OR f.cancel != 'S')
             ), 0
           ) > 0 THEN 'pago_parcial'
           ELSE 'pendente'
         END as status
-      FROM db_manaus.dbpgto p
-      LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
-      LEFT JOIN db_manaus.dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
-      LEFT JOIN db_manaus.dbconta co ON co.cod_conta = p.cod_conta
+      FROM dbpgto p
+      LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+      LEFT JOIN dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
+      LEFT JOIN dbconta co ON co.cod_conta = p.cod_conta
       WHERE p.cod_pgto = $1
     `;
 

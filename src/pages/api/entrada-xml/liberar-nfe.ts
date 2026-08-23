@@ -23,7 +23,7 @@ export default async function handler(
 
   try {
     client = await pool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     // Verificar o estado atual da NFe
     const nfeResult = await client.query(

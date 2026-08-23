@@ -14,7 +14,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   const client = await getPgPool().connect();
   try {
     const r = await client.query(
-      `UPDATE db_manaus.dbclassificacao_fiscal
+      `UPDATE dbclassificacao_fiscal
           SET ncm=$2, ipi=$3, pis=$4, cofins=$5, agregado=$6, descricao=$7
         WHERE id=$1
         RETURNING id, ncm, ipi, pis, cofins, agregado, descricao`,

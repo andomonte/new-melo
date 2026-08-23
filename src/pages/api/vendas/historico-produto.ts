@@ -23,9 +23,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         i.qtd,
         i.prunit,
         (i.qtd * i.prunit) as total
-      FROM db_manaus.dbitvenda i
-      JOIN db_manaus.dbvenda v ON i.codvenda = v.codvenda
-      LEFT JOIN db_manaus.dbclien c ON v.codcli = c.codcli
+      FROM dbitvenda i
+      JOIN dbvenda v ON i.codvenda = v.codvenda
+      LEFT JOIN dbclien c ON v.codcli = c.codcli
       WHERE i.codprod = $1
         AND v.data >= NOW() - INTERVAL '12 months'
         AND COALESCE(v.cancel, 'N') <> 'S'
@@ -38,8 +38,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       SELECT
         COALESCE(SUM(i.qtd), 0) as total_vendido,
         COUNT(DISTINCT v.codvenda) as qtd_vendas
-      FROM db_manaus.dbitvenda i
-      JOIN db_manaus.dbvenda v ON i.codvenda = v.codvenda
+      FROM dbitvenda i
+      JOIN dbvenda v ON i.codvenda = v.codvenda
       WHERE i.codprod = $1
         AND v.data >= NOW() - INTERVAL '12 months'
         AND COALESCE(v.cancel, 'N') <> 'S'

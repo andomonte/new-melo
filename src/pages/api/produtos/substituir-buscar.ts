@@ -24,9 +24,9 @@ export default async function handle(
     const r = await client.query(
       `SELECT p.codprod, p.ref, p.descr, p.aplic_extendida, p.codmarca, p.qtest,
               p.local,
-              COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m
+              COALESCE((SELECT m.descr FROM dbmarcas m
                          WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
-         FROM db_manaus.dbprod p
+         FROM dbprod p
         WHERE p.excluido = 0
           AND (p.ref ILIKE $1 OR p.descr ILIKE $1 OR p.codprod ILIKE $1)
         ORDER BY p.ref

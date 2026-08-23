@@ -32,11 +32,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.nro_doc,
         COALESCE(
           (SELECT SUM(f.valor) 
-           FROM db_manaus.dbfreceb f 
+           FROM dbfreceb f 
            WHERE f.cod_receb = r.cod_receb
           ), 0
         ) as total_recebido
-      FROM db_manaus.dbreceb r
+      FROM dbreceb r
       WHERE r.cod_receb = $1
     `;
     const checkResult = await pool.query(checkQuery, [cod_receb]);
@@ -105,7 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const updateQuery = `
-      UPDATE db_manaus.dbreceb
+      UPDATE dbreceb
       SET ${updates.join(', ')}
       WHERE cod_receb = $1
       RETURNING *
@@ -115,7 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 📝 Auditoria (seguindo padrão do contas a pagar)
     const auditoriaQuery = `
-      INSERT INTO db_manaus.dbusuario_acoes (codusr, acao, tabela, detalhes, dt_acao)
+      INSERT INTO dbusuario_acoes (codusr, acao, tabela, detalhes, dt_acao)
       VALUES (
         'SYSTEM',
         'UPDATE',

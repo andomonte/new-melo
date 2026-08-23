@@ -61,8 +61,8 @@ export default async function handler(
     // 1. Buscar dados da entrada (dbent + workflow)
     const entradaResult = await client.query(`
       SELECT e.codent, COALESCE(rec.status, e.status) as status
-      FROM db_manaus.dbent e
-      LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+      FROM dbent e
+      LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
       WHERE e.codent = $1
     `, [id]);
 
@@ -88,7 +88,7 @@ export default async function handler(
     // 3. Verificar se já tem romaneio (não pode editar depois de salvo!)
     const romaneioExistente = await client.query(`
       SELECT COUNT(*) as total
-      FROM db_manaus.dbitent_armazem
+      FROM dbitent_armazem
       WHERE codent = $1
     `, [entrada.codent]);
 
@@ -104,7 +104,7 @@ export default async function handler(
 
     if (armIds.length > 0) {
       const armazensResult = await client.query(`
-        SELECT arm_id FROM db_manaus.cad_armazem
+        SELECT arm_id FROM cad_armazem
         WHERE arm_id = ANY($1) AND arm_status = 'A'
       `, [armIds]);
 
@@ -147,7 +147,7 @@ export default async function handler(
     for (const item of itens) {
       // Buscar codreq do item (dbitent)
       const reqResult = await client.query(`
-        SELECT codreq FROM db_manaus.dbitent
+        SELECT codreq FROM dbitent
         WHERE codent = $1 AND codprod = $2
         LIMIT 1
       `, [entrada.codent, item.produto_cod]);
@@ -157,7 +157,7 @@ export default async function handler(
       // Se não tiver separação, usar armazém padrão (1003) para todo o produto
       if (item.romaneio.length === 0) {
         await client.query(`
-          INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
+          INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
           VALUES ($1, $2, $3, $4, $5)
         `, [
           entrada.codent,
@@ -172,7 +172,7 @@ export default async function handler(
         for (const rom of item.romaneio) {
           if (rom.qtd > 0) {
             await client.query(`
-              INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
+              INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
               VALUES ($1, $2, $3, $4, $5)
             `, [
               entrada.codent,
@@ -189,7 +189,7 @@ export default async function handler(
 
     // 7. Marcar entrada como tendo romaneio realizado (est_alocado=1)
     await client.query(`
-      UPDATE db_manaus.dbent
+      UPDATE dbent
       SET est_alocado = 1
       WHERE codent = $1
     `, [entrada.codent]);

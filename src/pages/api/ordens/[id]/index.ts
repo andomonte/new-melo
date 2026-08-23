@@ -36,11 +36,11 @@ export default async function handler(
         o.orc_req_versao,
         r.req_cod_credor,
         COALESCE(f.nome_fant, f.nome) as fornecedor_nome
-      FROM db_manaus.cmp_ordem_compra o
-      LEFT JOIN db_manaus.cmp_requisicao r
+      FROM cmp_ordem_compra o
+      LEFT JOIN cmp_requisicao r
         ON o.orc_req_id = r.req_id
         AND o.orc_req_versao = r.req_versao
-      LEFT JOIN db_manaus.dbcredor f
+      LEFT JOIN dbcredor f
         ON r.req_cod_credor = f.cod_credor
       WHERE o.orc_id = $1
     `;
@@ -64,7 +64,7 @@ export default async function handler(
           data_vencimento,
           tipo_documento,
           status
-         FROM db_manaus.ordem_pagamento_parcelas
+         FROM ordem_pagamento_parcelas
          WHERE orc_id = $1
          ORDER BY numero_parcela`,
         [ordemId]

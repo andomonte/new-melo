@@ -42,10 +42,10 @@ export default async function handle(
           cr.uf as fornecedor_uf,
           cr.cep as fornecedor_cep,
           cr.contatos as fornecedor_telefone
-        FROM db_manaus.cmp_ordem_compra o
-        JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+        FROM cmp_ordem_compra o
+        JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
         LEFT JOIN dbcompradores c ON r.req_codcomprador = c.codcomprador
-        LEFT JOIN db_manaus.dbcredor cr ON r.req_cod_credor = cr.cod_credor
+        LEFT JOIN dbcredor cr ON r.req_cod_credor = cr.cod_credor
         WHERE o.orc_id = $1
       `, [Number(id)]);
 
@@ -60,9 +60,9 @@ export default async function handle(
           p.descricao as produto_descricao,
           p.ref as produto_referencia,
           p.marca as produto_marca
-        FROM db_manaus.cmp_ordem_compra o
-        JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-        JOIN db_manaus.cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
+        FROM cmp_ordem_compra o
+        JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+        JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
         LEFT JOIN dbprod p ON ri.itr_codprod = p.codprod
         WHERE o.orc_id = $1
         ORDER BY ri.itr_codprod
@@ -138,7 +138,7 @@ export default async function handle(
 
       // Atualizar status da ordem de compra
       await client.query(`
-        UPDATE db_manaus.cmp_ordem_compra
+        UPDATE cmp_ordem_compra
         SET orc_status = $1
         WHERE orc_id = $2
       `, [status, Number(id)]);
@@ -146,10 +146,10 @@ export default async function handle(
       if (observacao) {
         // Atualizar observação na requisição
         await client.query(`
-          UPDATE db_manaus.cmp_requisicao
+          UPDATE cmp_requisicao
           SET req_observacao = $1
           WHERE req_id = (
-            SELECT orc_req_id FROM db_manaus.cmp_ordem_compra WHERE orc_id = $2
+            SELECT orc_req_id FROM cmp_ordem_compra WHERE orc_id = $2
           )
         `, [observacao, Number(id)]);
       }

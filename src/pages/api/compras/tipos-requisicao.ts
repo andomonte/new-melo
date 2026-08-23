@@ -22,7 +22,7 @@ export default async function handler(
     // Buscar tipos de requisição diretamente do banco
     const result = await client.query(`
       SELECT DISTINCT ret_id as id, ret_descricao as nome
-      FROM db_manaus.cmp_requisicao_tipo
+      FROM cmp_requisicao_tipo
       ORDER BY ret_descricao
     `);
 

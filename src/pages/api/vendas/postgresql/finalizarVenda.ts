@@ -439,7 +439,7 @@ async function insertPgVenda(
 }
 
 /**
- * Vocabulário de tipo de operação da procedure fiscal (CALCULO_IMPOSTO / db_manaus.calcular_imposto_item).
+ * Vocabulário de tipo de operação da procedure fiscal (CALCULO_IMPOSTO / calcular_imposto_item).
  * Mantém o MESMO mapeamento do endpoint /api/impostos para que display (venda) = persistência (finalizar).
  */
 function mapTipoOperacaoPG(tipo: string): string {
@@ -452,7 +452,7 @@ function mapTipoOperacaoPG(tipo: string): string {
 }
 
 /* ------------------------------------------------
- * Calcula impostos por item via função PostgreSQL db_manaus.calcular_imposto_item
+ * Calcula impostos por item via função PostgreSQL calcular_imposto_item
  * (tradução fiel da procedure Oracle CALCULO_IMPOSTO). O SERVIDOR é a fonte única:
  * ignora valores fiscais vindos do front e recalcula no banco, com os MESMOS parâmetros
  * do endpoint /api/impostos → o que a tela mostra é o que é persistido. Sem aritmética em JS.
@@ -475,7 +475,7 @@ async function calcularImpostosItens(
     const item = itens[i];
 
     const { rows } = await client.query(
-      `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
         String(item.codprod).trim().padStart(6, '0'),
         String(codcli).trim(),
@@ -877,7 +877,7 @@ export default async function handler(
 
     // Buscar timezone da filial
     const filialTzResult = await pgClient.query(
-      `SELECT timezone FROM db_manaus.tb_filial WHERE nome_filial = $1 LIMIT 1`,
+      `SELECT timezone FROM tb_filial WHERE nome_filial = $1 LIMIT 1`,
       [filial],
     );
     const filialTz = filialTzResult.rows[0]?.timezone || 'America/Manaus';

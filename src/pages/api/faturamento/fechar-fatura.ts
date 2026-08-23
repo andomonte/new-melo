@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Fatura existe e não está cancelada?
     const fat = await client.query(
-      `SELECT cancel FROM db_manaus.dbfatura WHERE codfat = $1`,
+      `SELECT cancel FROM dbfatura WHERE codfat = $1`,
       [String(codfat)],
     );
     if (fat.rows.length === 0) {
@@ -37,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Venda(s) ligada(s) à fatura (dbprodfat.codvenda).
     const vendas = await client.query(
-      `SELECT DISTINCT codvenda FROM db_manaus.dbprodfat
+      `SELECT DISTINCT codvenda FROM dbprodfat
         WHERE codfat = $1 AND codvenda IS NOT NULL`,
       [String(codfat)],
     );
@@ -52,14 +52,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Espelha Fechar_Venda: status da venda vai para 'F' (faturada/fechada).
       const upd = await client.query(
-        `UPDATE db_manaus.dbvenda SET status = 'F' WHERE codvenda = ANY($1)`,
+        `UPDATE dbvenda SET status = 'F' WHERE codvenda = ANY($1)`,
         [codVendas],
       );
 
       // Histórico — espelha USUARIO.Inc_Acao_Usr do Delphi
       // (o Fechar_Venda loga 'ant.FECHAR VENDA' em DBFECHARVENDAS).
       await client.query(
-        `INSERT INTO db_manaus.dbacao (codusr, acao, tabela, obs, data)
+        `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
          VALUES ($1, 'FECHAR.FATURA', 'DBFATURA', $2, now())`,
         [
           usuarioTxt.substring(0, 60),

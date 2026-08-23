@@ -28,9 +28,9 @@ function lerUsuario(req: NextApiRequest): { codusr: string; nomeusr: string } {
 
 const SEL_PROD = `
   SELECT p.codprod, p.ref, p.codmarca, p.qtest, p.inf,
-         COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m
+         COALESCE((SELECT m.descr FROM dbmarcas m
                     WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
-    FROM db_manaus.dbprod p WHERE p.codprod = $1`;
+    FROM dbprod p WHERE p.codprod = $1`;
 
 async function auditar(
   client: PoolClient,
@@ -40,12 +40,12 @@ async function auditar(
 ) {
   try {
     await client.query(
-      `INSERT INTO db_manaus.xaud_produto_substituir
+      `INSERT INTO xaud_produto_substituir
          (id, codusr, nomeusr, data,
           orig_codprod, orig_ref, orig_marca, orig_qtest, orig_inf,
           subs_codprod, subs_ref, subs_marca, subs_qtest, subs_inf, operacao)
        VALUES (
-          COALESCE((SELECT MAX(id) FROM db_manaus.xaud_produto_substituir), 0) + 1,
+          COALESCE((SELECT MAX(id) FROM xaud_produto_substituir), 0) + 1,
           $1, $2, NOW(),
           $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 2)`,
       [
@@ -92,7 +92,7 @@ export default async function handle(
 
     await client.query('BEGIN');
     const del = await client.query(
-      `DELETE FROM db_manaus.dbprod_substituir
+      `DELETE FROM dbprod_substituir
         WHERE codprod_orig = $1 AND codprod_subs = $2`,
       [original, substituto],
     );
@@ -104,7 +104,7 @@ export default async function handle(
     // mesma convenção do Ativar. Só mexe se estiver em 'S' (marca da
     // substituição), para não clobber um inf mudado por outro motivo.
     await client.query(
-      `UPDATE db_manaus.dbprod SET inf = '-' WHERE codprod = $1 AND inf = 'S'`,
+      `UPDATE dbprod SET inf = '-' WHERE codprod = $1 AND inf = 'S'`,
       [original],
     );
     await client.query('COMMIT');

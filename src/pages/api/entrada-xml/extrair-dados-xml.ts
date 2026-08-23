@@ -95,7 +95,7 @@ export default async function handler(
 
     const pgPool = getPgPool('manaus');
     client = await pgPool.connect();
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     // OTIMIZADO: Buscar NFe header e itens em PARALELO
     const [nfeResult, itensResult] = await Promise.all([

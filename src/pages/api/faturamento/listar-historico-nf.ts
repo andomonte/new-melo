@@ -58,9 +58,9 @@ export default async function handler(
     // Contar total
     const countQuery = `
       SELECT COUNT(*) 
-      FROM db_manaus.dbfat_nfe n
-      LEFT JOIN db_manaus.dbfatura f ON n.codfat = f.codfat
-      LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
+      FROM dbfat_nfe n
+      LEFT JOIN dbfatura f ON n.codfat = f.codfat
+      LEFT JOIN dbclien c ON f.codcli = c.codcli
       ${whereClause}
     `;
     const countResult = await client.query(countQuery, values);
@@ -92,9 +92,9 @@ export default async function handler(
           WHEN n.modelo = '55' THEN 'NF-e'
           ELSE 'Outros'
         END AS tipo_documento
-      FROM db_manaus.dbfat_nfe n
-      LEFT JOIN db_manaus.dbfatura f ON n.codfat = f.codfat
-      LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
+      FROM dbfat_nfe n
+      LEFT JOIN dbfatura f ON n.codfat = f.codfat
+      LEFT JOIN dbclien c ON f.codcli = c.codcli
       ${whereClause}
       ORDER BY n.data DESC NULLS LAST
       LIMIT $${values.length + 1}

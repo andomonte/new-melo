@@ -62,7 +62,7 @@ export default async function handle(
             status: 'COALESCE(rec.status, e.status)',
             temRomaneio: 'temRomaneio', // tratamento especial abaixo
             precoConfirmado: 'precoConfirmado', // tratamento especial abaixo
-            valorProdutos: '(SELECT COALESCE(SUM(quant*prunit), 0) FROM db_manaus.dbitent WHERE codent = e.codent)',
+            valorProdutos: '(SELECT COALESCE(SUM(quant*prunit), 0) FROM dbitent WHERE codent = e.codent)',
             valorTotal: 'e.totalnf',
             fornecedorNome: 'emit.xnome',
             dataEmissao: 'nfe.demi',
@@ -70,7 +70,7 @@ export default async function handle(
             serie: 'nfe.serie',
             tipoEntrada: 'e.operacao',
             observacoes: 'e.obs',
-            totalItens: '(SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent)',
+            totalItens: '(SELECT COUNT(*) FROM dbitent WHERE codent = e.codent)',
           };
 
           const camposBooleanos = ['temRomaneio', 'precoConfirmado'];
@@ -98,7 +98,7 @@ export default async function handle(
                     ? `((rec.status IS NOT NULL AND rec.data_confirmacao_preco IS NOT NULL) OR (rec.status IS NULL AND e.status = 'F'))`
                     : `((rec.status IS NOT NULL AND rec.data_confirmacao_preco IS NULL) OR (rec.status IS NULL AND e.status <> 'F'))`);
                 } else if (filtro.campo === 'temRomaneio') {
-                  const cond = `(COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.codent) > 0)`;
+                  const cond = `(COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM dbitent_armazem WHERE codent = e.codent) > 0)`;
                   whereConditions.push(valorBool ? cond : `NOT ${cond}`);
                 }
               }
@@ -159,10 +159,10 @@ export default async function handle(
       const whereSQL = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       const fromJoin = `
-        FROM db_manaus.dbent e
-        LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
-        LEFT JOIN db_manaus.dbnfe_ent nfe ON nfe.chave = e.chave
-        LEFT JOIN db_manaus.dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
+        FROM dbent e
+        LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
+        LEFT JOIN dbnfe_ent nfe ON nfe.chave = e.chave
+        LEFT JOIN dbnfe_ent_emit emit ON emit.codnfe_ent = nfe.codnfe_ent
       `;
 
       const entradasQuery = `
@@ -183,9 +183,9 @@ export default async function handle(
           nfe.demi as nfe_emissao,
           emit.cpf_cnpj as fornecedor_cnpj,
           emit.xnome as fornecedor_nome,
-          (SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent) as total_itens,
-          (SELECT COALESCE(SUM(quant*prunit), 0) FROM db_manaus.dbitent WHERE codent = e.codent) as valor_produtos,
-          (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM db_manaus.dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
+          (SELECT COUNT(*) FROM dbitent WHERE codent = e.codent) as total_itens,
+          (SELECT COALESCE(SUM(quant*prunit), 0) FROM dbitent WHERE codent = e.codent) as valor_produtos,
+          (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
         ${fromJoin}
         ${whereSQL}
         ORDER BY e.dtent DESC, e.codent DESC

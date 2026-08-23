@@ -21,7 +21,7 @@ export async function getLogoFornecedorBase64(
   try {
     const r = await client.query(
       `SELECT imagem, mime, largura, altura
-         FROM db_manaus.cad_credor_logo
+         FROM cad_credor_logo
         WHERE cod_credor = $1`,
       [String(codCredor).trim()],
     );

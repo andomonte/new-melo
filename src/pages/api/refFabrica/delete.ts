@@ -10,8 +10,8 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   try {
     await client.query('BEGIN');
     // remove vínculos com produtos e a referência
-    await client.query('DELETE FROM db_manaus.dbprod_ref_fabrica WHERE cod_id = $1', [cod_id]);
-    const r = await client.query('DELETE FROM db_manaus.dbref_fabrica WHERE cod_id = $1', [cod_id]);
+    await client.query('DELETE FROM dbprod_ref_fabrica WHERE cod_id = $1', [cod_id]);
+    const r = await client.query('DELETE FROM dbref_fabrica WHERE cod_id = $1', [cod_id]);
     await client.query('COMMIT');
     if (!r.rowCount) return res.status(404).json({ error: 'Referência não encontrada.' });
     res.status(200).json({ ok: true });

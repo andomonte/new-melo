@@ -37,7 +37,7 @@ export default async function handler(
     // 1. Validar DI status='N'
     const cabResult = await client.query(`
       SELECT id, nro_di, status
-      FROM db_manaus.dbent_importacao
+      FROM dbent_importacao
       WHERE id = $1
       FOR UPDATE
     `, [id]);
@@ -57,14 +57,14 @@ export default async function handler(
     // 2. Buscar próximo codnfe_ent
     const maxResult = await client.query(`
       SELECT COALESCE(MAX(codnfe_ent::int), 0) + 1 as next_id
-      FROM db_manaus.dbnfe_ent
+      FROM dbnfe_ent
     `);
     let nextCodNfe = parseInt(maxResult.rows[0].next_id);
 
     // 3. Buscar faturas
     const faturasResult = await client.query(`
       SELECT id, cod_credor, fornecedor_nome, codent
-      FROM db_manaus.dbent_importacao_entrada
+      FROM dbent_importacao_entrada
       WHERE id_importacao = $1
       ORDER BY id
     `, [id]);
@@ -86,7 +86,7 @@ export default async function handler(
       const itensResult = await client.query(`
         SELECT id, codprod, descricao, qtd, custo_unit_dolar, custo_unit_real,
                custo_total_real, id_orc, invoice_total
-        FROM db_manaus.dbent_importacao_it_ent
+        FROM dbent_importacao_it_ent
         WHERE id_importacao = $1 AND id_fatura = $2 AND codprod IS NOT NULL
         ORDER BY id
       `, [id, fatura.id]);
@@ -117,7 +117,7 @@ export default async function handler(
 
       // 5. INSERT em dbnfe_ent
       await client.query(`
-        INSERT INTO db_manaus.dbnfe_ent (
+        INSERT INTO dbnfe_ent (
           codnfe_ent, chave, nnf, serie, demi, dtimport, vnf, vprod,
           exec, natop, infcpl, xnemp
         ) VALUES ($1, $2, $3, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4, $4,
@@ -133,7 +133,7 @@ export default async function handler(
 
       // 6. INSERT em dbnfe_ent_emit (emitente = fornecedor)
       await client.query(`
-        INSERT INTO db_manaus.dbnfe_ent_emit (
+        INSERT INTO dbnfe_ent_emit (
           codnfe_ent, cpf_cnpj, xnome
         ) VALUES ($1, $2, $3)
       `, [
@@ -151,7 +151,7 @@ export default async function handler(
 
         // dbnfe_ent_det (vuncom e vprod são integer - guardar em centavos como o sistema faz)
         await client.query(`
-          INSERT INTO db_manaus.dbnfe_ent_det (
+          INSERT INTO dbnfe_ent_det (
             codnfe_ent, nitem, cprod, xprod, qcom, vuncom, vprod
           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [
@@ -166,7 +166,7 @@ export default async function handler(
 
         // nfe_item_associacao (pré-preenchida com codprod da DI)
         const assocResult = await client.query(`
-          INSERT INTO db_manaus.nfe_item_associacao (
+          INSERT INTO nfe_item_associacao (
             nfe_id, nfe_item_id, produto_cod, quantidade_associada,
             valor_unitario, preco_real, status, created_at, quantidade_nf, preco_unitario_nf
           ) VALUES ($1, $2, $3, $4, $5, $5, 'ASSOCIADO', NOW(), $4, $5)
@@ -184,7 +184,7 @@ export default async function handler(
         // nfe_item_pedido_associacao (vincular ao pedido se tiver id_orc)
         if (item.id_orc) {
           await client.query(`
-            INSERT INTO db_manaus.nfe_item_pedido_associacao (
+            INSERT INTO nfe_item_pedido_associacao (
               nfe_associacao_id, nfe_id, req_id, quantidade, valor_unitario, created_at
             ) VALUES ($1, $2, $3, $4, $5, NOW())
           `, [
@@ -201,7 +201,7 @@ export default async function handler(
 
       // 8. UPDATE codent na fatura da DI (guarda o codnfe_ent)
       await client.query(`
-        UPDATE db_manaus.dbent_importacao_entrada SET codent = $1 WHERE id = $2
+        UPDATE dbent_importacao_entrada SET codent = $1 WHERE id = $2
       `, [codnfe, fatura.id]);
 
       nfesCriadas.push({ faturaId: fatura.id, codnfe_ent: codnfe, itensProcessados: itensResult.rows.length });
@@ -222,7 +222,7 @@ export default async function handler(
 
       const itensResult = await client.query(`
         SELECT codprod, qtd, id_orc
-        FROM db_manaus.dbent_importacao_it_ent
+        FROM dbent_importacao_it_ent
         WHERE id_importacao = $1 AND id_fatura = $2 AND codprod IS NOT NULL AND id_orc IS NOT NULL
         ORDER BY id
       `, [id, fatura.id]);
@@ -239,9 +239,9 @@ export default async function handler(
       for (const [key, quantidade] of pedidosAssociados) {
         const [pedidoId, produtoCod] = key.split('|');
         await client.query(`
-          UPDATE db_manaus.cmp_it_requisicao ri
+          UPDATE cmp_it_requisicao ri
           SET itr_quantidade_atendida = COALESCE(itr_quantidade_atendida, 0) + $1
-          FROM db_manaus.cmp_ordem_compra o
+          FROM cmp_ordem_compra o
           WHERE o.orc_id = $2
             AND ri.itr_req_id = o.orc_req_id
             AND ri.itr_req_versao = o.orc_req_versao
@@ -258,14 +258,14 @@ export default async function handler(
       for (const pedidoId of pedidosDistintos) {
         const ordemResult = await client.query(
           `SELECT orc_id, orc_req_id, orc_req_versao, orc_status
-           FROM db_manaus.cmp_ordem_compra WHERE orc_id = $1`,
+           FROM cmp_ordem_compra WHERE orc_id = $1`,
           [pedidoId]
         );
         if (ordemResult.rows.length === 0 || ordemResult.rows[0].orc_status !== 'A') continue;
 
         const ordem = ordemResult.rows[0];
         const pendentesResult = await client.query(
-          `SELECT COUNT(*) as count FROM db_manaus.cmp_it_requisicao
+          `SELECT COUNT(*) as count FROM cmp_it_requisicao
            WHERE itr_req_id = $1 AND itr_req_versao = $2
              AND (itr_quantidade - COALESCE(itr_quantidade_atendida, 0) - COALESCE(itr_quantidade_fechada, 0)) > 0`,
           [ordem.orc_req_id, ordem.orc_req_versao]
@@ -273,7 +273,7 @@ export default async function handler(
 
         if (Number(pendentesResult.rows[0].count) === 0) {
           await client.query(
-            `UPDATE db_manaus.cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`,
+            `UPDATE cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`,
             [pedidoId]
           );
           await registrarHistoricoOrdem(client, {
@@ -298,7 +298,7 @@ export default async function handler(
 
     // 10. UPDATE status da DI para 'E' (Entrada Gerada)
     await client.query(`
-      UPDATE db_manaus.dbent_importacao SET status = 'E', updated_at = NOW() WHERE id = $1
+      UPDATE dbent_importacao SET status = 'E', updated_at = NOW() WHERE id = $1
     `, [id]);
 
     await client.query('COMMIT');

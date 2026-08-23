@@ -43,7 +43,7 @@ export default async function handler(
         cod_freceb,
         observacao,
         dt_importacao
-      FROM db_manaus.fin_cartao_receb_import
+      FROM fin_cartao_receb_import
       WHERE 1=1
     `;
 
@@ -86,7 +86,7 @@ export default async function handler(
         COUNT(*) as quantidade,
         SUM(valor_bruto) as valor_bruto_total,
         SUM(valor_liquido) as valor_liquido_total
-      FROM db_manaus.fin_cartao_receb_import
+      FROM fin_cartao_receb_import
       WHERE 1=1
         ${dataInicio ? `AND dt_transacao >= $1` : ''}
         ${dataFim ? `AND dt_transacao <= $${dataInicio ? 2 : 1}` : ''}

@@ -120,10 +120,10 @@ export default async function handler(
         c.codpgto as cod_pgto,
         p.dt_pgto,
         COALESCE(p.valor_pgto, 0) as valor_pago
-      FROM db_manaus.dbconhecimentoent ce
-      LEFT JOIN db_manaus.dbtransp t ON t.codtransp = ce.codtransp
-      LEFT JOIN db_manaus.dbconhecimento c ON c.nrocon = ce.nrocon AND c.codtransp = ce.codtransp
-      LEFT JOIN db_manaus.dbpgto p ON p.cod_pgto = c.codpgto
+      FROM dbconhecimentoent ce
+      LEFT JOIN dbtransp t ON t.codtransp = ce.codtransp
+      LEFT JOIN dbconhecimento c ON c.nrocon = ce.nrocon AND c.codtransp = ce.codtransp
+      LEFT JOIN dbpgto p ON p.cod_pgto = c.codpgto
       WHERE 1=1 ${whereClause}
       ORDER BY ce.codtransp, ce.nrocon, ce.serie, p.dt_pgto DESC NULLS LAST, ce.dtcon DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -136,10 +136,10 @@ export default async function handler(
     // Query de contagem total (DISTINCT para evitar contar duplicatas)
     const countQuery = `
       SELECT COUNT(DISTINCT (ce.codtransp, ce.nrocon, ce.serie)) as total
-      FROM db_manaus.dbconhecimentoent ce
-      LEFT JOIN db_manaus.dbtransp t ON t.codtransp = ce.codtransp
-      LEFT JOIN db_manaus.dbconhecimento c ON c.nrocon = ce.nrocon AND c.codtransp = ce.codtransp
-      LEFT JOIN db_manaus.dbpgto p ON p.cod_pgto = c.codpgto
+      FROM dbconhecimentoent ce
+      LEFT JOIN dbtransp t ON t.codtransp = ce.codtransp
+      LEFT JOIN dbconhecimento c ON c.nrocon = ce.nrocon AND c.codtransp = ce.codtransp
+      LEFT JOIN dbpgto p ON p.cod_pgto = c.codpgto
       WHERE 1=1 ${whereClause}
     `;
 

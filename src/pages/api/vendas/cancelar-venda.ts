@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 6. Registrar auditoria
     await client.query(
-      `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
+      `INSERT INTO dbanalise_liberacao (codvenda, resultado, usuario, dt_conclusao)
        VALUES ($1, 'CANCELADA', $2, NOW())`,
       [codvenda, user],
     );

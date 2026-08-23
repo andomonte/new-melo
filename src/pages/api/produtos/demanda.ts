@@ -61,7 +61,7 @@ export default async function handle(
           0 as rec_transf,
           0 as fl2_transf,
           0 as dp5_transf
-        FROM db_manaus.dbvendaitens
+        FROM dbvendaitens
         WHERE codprod = $1
           AND EXTRACT(YEAR FROM data) = $2
           AND EXTRACT(MONTH FROM data) = $3

@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Se veio codfat, descobre a GP dele.
     if (!codgp && codfat) {
       const r = await client.query(
-        `SELECT codgp FROM db_manaus.dbfatura WHERE codfat = $1`,
+        `SELECT codgp FROM dbfatura WHERE codfat = $1`,
         [String(codfat)],
       );
       codgp = r.rows[0]?.codgp;
@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Faturas do grupo (membros reais, exclui a fatura-GP sintética 'GP...').
     const membros = await client.query(
-      `SELECT codfat FROM db_manaus.dbfatura
+      `SELECT codfat FROM dbfatura
         WHERE codgp = $1 AND codfat NOT LIKE 'GP%'`,
       [codgp],
     );
@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Trava: cobrança agrupada já paga?
     const paga = await client.query(
-      `SELECT 1 FROM db_manaus.dbreceb
+      `SELECT 1 FROM dbreceb
         WHERE codgp = $1 AND cancel = 'N' AND dt_pgto IS NOT NULL LIMIT 1`,
       [codgp],
     );
@@ -56,19 +56,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 1. Cancela a cobrança agrupada (dbreceb da GP).
     const recCancel = await client.query(
-      `UPDATE db_manaus.dbreceb SET cancel = 'S' WHERE codgp = $1 AND cancel = 'N'`,
+      `UPDATE dbreceb SET cancel = 'S' WHERE codgp = $1 AND cancel = 'N'`,
       [codgp],
     );
 
     // 2. Remove a fatura-GP sintética criada no agrupamento (codfat 'GP...').
     await client.query(
-      `DELETE FROM db_manaus.dbfatura WHERE codgp = $1 AND codfat LIKE 'GP%'`,
+      `DELETE FROM dbfatura WHERE codgp = $1 AND codfat LIKE 'GP%'`,
       [codgp],
     );
 
     // 3. Desassocia as faturas membros (codgp = NULL, agp = 'N').
     const upd = await client.query(
-      `UPDATE db_manaus.dbfatura SET codgp = NULL, agp = 'N'
+      `UPDATE dbfatura SET codgp = NULL, agp = 'N'
         WHERE codgp = $1 AND codfat NOT LIKE 'GP%'`,
       [codgp],
     );
@@ -76,15 +76,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 4. Desativa os registros de grupo_pagamento (se as tabelas existirem).
     await client
       .query(
-        `UPDATE db_manaus.grupo_pagamento SET status = 'DESAGRUPADO' WHERE codigo_gp = $1`,
+        `UPDATE grupo_pagamento SET status = 'DESAGRUPADO' WHERE codigo_gp = $1`,
         [codgp],
       )
       .catch(() => {});
     await client
       .query(
-        `DELETE FROM db_manaus.grupo_pagamento_fatura
+        `DELETE FROM grupo_pagamento_fatura
           WHERE grupo_pagamento_id IN (
-            SELECT id FROM db_manaus.grupo_pagamento WHERE codigo_gp = $1
+            SELECT id FROM grupo_pagamento WHERE codigo_gp = $1
           )`,
         [codgp],
       )

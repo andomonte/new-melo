@@ -46,7 +46,7 @@ export default async function handler(
         txopera,
         pzopera,
         codcli
-      FROM db_manaus.dbopera
+      FROM dbopera
       WHERE codopera = $1
         AND COALESCE(desativado, 0) = 0
     `;
@@ -93,7 +93,7 @@ export default async function handler(
     // 4. Buscar próximo código de freceb disponível
     const gerarCodFRecebQuery = `
       SELECT COALESCE(MAX(CAST(cod_freceb AS INTEGER)), 0) as max_cod
-      FROM db_manaus.dbfreceb
+      FROM dbfreceb
       WHERE cod_receb = $1
     `;
     const seqRes = await client.query(gerarCodFRecebQuery, [cod_receb]);
@@ -104,7 +104,7 @@ export default async function handler(
     
     for (const parcela of parcelas) {
       await client.query(`
-        INSERT INTO db_manaus.dbfreceb (
+        INSERT INTO dbfreceb (
           cod_freceb,
           cod_receb,
           codopera,
@@ -142,7 +142,7 @@ export default async function handler(
     const somaValores = parcelas.reduce((acc, p) => acc + p.valor, 0);
     
     await client.query(`
-      UPDATE db_manaus.dbreceb
+      UPDATE dbreceb
       SET 
         valor_rec = COALESCE(valor_rec, 0) + $1,
         rec = CASE 
@@ -157,7 +157,7 @@ export default async function handler(
     // 7. Auditoria
     if (username) {
       try {
-        const userQuery = `SELECT codusr FROM db_manaus.dbusuario WHERE nomeusr = $1 LIMIT 1`;
+        const userQuery = `SELECT codusr FROM dbusuario WHERE nomeusr = $1 LIMIT 1`;
         const userRes = await client.query(userQuery, [username]);
         
         if (userRes.rows && userRes.rows.length > 0) {
@@ -166,7 +166,7 @@ export default async function handler(
           
           const tblAuditoriaRes = await client.query(
             `SELECT table_name FROM information_schema.tables 
-             WHERE table_schema='db_manaus' 
+             WHERE table_schema = current_schema() 
              AND table_name IN ('dbusuario_acoes', 'dblog_acoes', 'dbauditoria')`
           );
           
@@ -174,7 +174,7 @@ export default async function handler(
             const tblNome = tblAuditoriaRes.rows[0].table_name;
             
             await client.query(
-              `INSERT INTO db_manaus.${tblNome} (codusr, acao, tabela, detalhes, dt_acao) 
+              `INSERT INTO ${tblNome} (codusr, acao, tabela, detalhes, dt_acao) 
                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
               [codusr, 'GERAR_PARCELAS_CARTAO', 'DBFRECEB', detalhes]
             );

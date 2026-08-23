@@ -65,7 +65,7 @@ export default async function handler(
     client = await pool.connect();
 
     // Configurar schema
-    await client.query('SET search_path TO db_manaus');
+    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     console.log('🔍 EXPORT REQUISICOES - Filtros recebidos:', filtros);
     console.log('🔍 EXPORT REQUISICOES - Where clauses:', whereClauses);

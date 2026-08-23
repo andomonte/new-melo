@@ -17,7 +17,7 @@ import { getPgPool } from '@/lib/pgClient';
 import type { PoolClient } from 'pg';
 
 const INSERT_IMPORTACAO = `
-  INSERT INTO db_manaus.dbent_importacao (
+  INSERT INTO dbent_importacao (
     nro_di, data_di, status, tipo_die, taxa_dolar,
     total_mercadoria, frete, seguro, thc, total_cif,
     pis_cofins, ii, ipi, siscomex,
@@ -39,20 +39,20 @@ const INSERT_IMPORTACAO = `
 `;
 
 const INSERT_CONTRATO = `
-  INSERT INTO db_manaus.dbent_importacao_contratos (
+  INSERT INTO dbent_importacao_contratos (
     id_importacao, contrato, vl_merc_dolar, moeda, taxa_dolar, vl_reais, data
   ) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `;
 
 const INSERT_ENTRADA = `
-  INSERT INTO db_manaus.dbent_importacao_entrada (
+  INSERT INTO dbent_importacao_entrada (
     id_importacao, fornecedor_nome
   ) VALUES ($1, $2)
   RETURNING id
 `;
 
 const INSERT_ITEM = `
-  INSERT INTO db_manaus.dbent_importacao_it_ent (
+  INSERT INTO dbent_importacao_it_ent (
     id_importacao, id_fatura, descricao, qtd,
     proforma_unit, proforma_total, invoice_unit, invoice_total,
     ncm, unidade, numero_adicao
@@ -95,7 +95,7 @@ export default async function handler(
 
     // Verificar se já existe DI com esse número
     const existente = await client.query(
-      'SELECT id FROM db_manaus.dbent_importacao WHERE nro_di = $1',
+      'SELECT id FROM dbent_importacao WHERE nro_di = $1',
       [body.nro_di],
     );
 

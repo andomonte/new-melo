@@ -39,7 +39,7 @@ export default async function handler(
         descr,
         txopera,
         pzopera
-      FROM db_manaus.dbopera
+      FROM dbopera
       WHERE codopera = $1
         AND COALESCE(desativado, 0) = 0
     `;

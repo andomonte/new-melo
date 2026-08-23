@@ -24,7 +24,7 @@ export default async function handler(
     // Atualizar status da NFe
     // status: 'PENDENTE', 'ASSOCIACAO_CONCLUIDA', 'PROCESSADA', etc
     await client.query(`
-      UPDATE db_manaus.nfe_entrada
+      UPDATE nfe_entrada
       SET status = $1,
           updated_at = NOW()
       WHERE numero_nf = $2

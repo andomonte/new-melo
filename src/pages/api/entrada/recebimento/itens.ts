@@ -45,11 +45,11 @@ const ITENS_QUERY = `
     COALESCE(eir.status_item, 'PENDENTE') as status_item,
     eir.observacao,
     COALESCE(p.unimed, 'UN') as unidade
-  FROM db_manaus.dbitent ie
-  LEFT JOIN db_manaus.entrada_itens_recebimento eir
+  FROM dbitent ie
+  LEFT JOIN entrada_itens_recebimento eir
     ON eir.codent = ie.codent AND eir.produto_cod = ie.codprod
    AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
-  LEFT JOIN db_manaus.dbprod p ON p.codprod = ie.codprod
+  LEFT JOIN dbprod p ON p.codprod = ie.codprod
   WHERE ie.codent = $1
   ORDER BY ie.codprod
 `;

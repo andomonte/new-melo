@@ -34,7 +34,7 @@ export default async function handle(
 
     // 1. Verificar se produto existe
     const produtoResult = await client.query(
-      `SELECT codprod, descr, excluido FROM db_manaus.dbprod WHERE codprod = $1`,
+      `SELECT codprod, descr, excluido FROM dbprod WHERE codprod = $1`,
       [codprod],
     );
 
@@ -59,7 +59,7 @@ export default async function handle(
     const vendasResult = await client.query(
       `
       SELECT COUNT(*) as count
-      FROM db_manaus.dbvendaitens
+      FROM dbvendaitens
       WHERE codprod = $1
     `,
       [codprod],
@@ -81,7 +81,7 @@ export default async function handle(
     /*
     const comprasResult = await client.query(`
       SELECT COUNT(*) as count
-      FROM db_manaus.dbcompraitens
+      FROM dbcompraitens
       WHERE codprod = $1
     `, [codprod]);
 
@@ -100,7 +100,7 @@ export default async function handle(
     // 4. Fazer SOFT DELETE
     await client.query(
       `
-      UPDATE db_manaus.dbprod
+      UPDATE dbprod
       SET
         excluido = 1,
         data_exclusao = NOW()

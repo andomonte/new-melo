@@ -128,7 +128,7 @@ export default async function handle(
       const values = Object.values(dadosFornecedor);
 
       const updateQuery = `
-        UPDATE db_manaus.dbcredor 
+        UPDATE dbcredor 
         SET ${setClause}
         WHERE cod_credor = $${Object.keys(dadosFornecedor).length + 1}
       `;
@@ -157,7 +157,7 @@ export default async function handle(
       .join(', ');
 
     const upsertQuery = `
-      INSERT INTO db_manaus.cad_credor_regra_faturamento (${columns})
+      INSERT INTO cad_credor_regra_faturamento (${columns})
       VALUES (${placeholders})
       ON CONFLICT (crf_id) 
       DO UPDATE SET ${updateSet};

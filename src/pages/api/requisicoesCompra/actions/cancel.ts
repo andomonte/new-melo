@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Busca por req_id (formato completo ex: 12002010068) que é o que o frontend envia
     const checkQuery = `
       SELECT req_id, req_status, req_versao
-      FROM db_manaus.cmp_requisicao
+      FROM cmp_requisicao
       WHERE req_id = $1 AND req_versao = $2
     `;
 
@@ -75,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Update requisition status to cancelled
     const updateQuery = `
-      UPDATE db_manaus.cmp_requisicao
+      UPDATE cmp_requisicao
       SET req_status = 'C'
       WHERE req_id = $1 AND req_versao = $2
       RETURNING req_id, req_versao, req_status
@@ -87,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const cancelComment = comments || 'Cancelamento via interface';
       await client.query(
-        `INSERT INTO db_manaus.cmp_requisicao_historico
+        `INSERT INTO cmp_requisicao_historico
          (req_id, req_versao, previous_status, new_status, user_id, user_name, reason, comments)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [

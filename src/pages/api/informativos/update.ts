@@ -9,7 +9,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
   const client = await getPgPool().connect();
   try {
-    const r = await client.query('UPDATE db_manaus.dbinformativo SET descr = $2 WHERE simbolo = $1', [simbolo, descr]);
+    const r = await client.query('UPDATE dbinformativo SET descr = $2 WHERE simbolo = $1', [simbolo, descr]);
     if (!r.rowCount) return res.status(404).json({ error: 'Informativo não encontrado.' });
     res.status(200).json({ data: { simbolo, descr } });
   } catch (e: any) {

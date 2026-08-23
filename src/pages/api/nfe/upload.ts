@@ -122,7 +122,7 @@ export default async function handle(
   const pgClient = await pgPool.connect();
 
   try {
-    await pgClient.query('SET search_path TO db_manaus');
+    await pgClient.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     const form = formidable({
       multiples: true,

@@ -16,9 +16,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { rows } = await getPgPool().query(
       `SELECT p.ref AS referencia, m.descr AS marca, iv.qtd AS qtde, iv.prunit
-         FROM db_manaus.dbitvenda iv
-         LEFT JOIN db_manaus.dbprod p ON p.codprod = iv.codprod
-         LEFT JOIN db_manaus.dbmarcas m ON m.codmarca = p.codmarca
+         FROM dbitvenda iv
+         LEFT JOIN dbprod p ON p.codprod = iv.codprod
+         LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
         WHERE iv.codvenda = $1
         ORDER BY p.ref`,
       [codvenda],

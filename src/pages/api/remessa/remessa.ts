@@ -94,7 +94,7 @@ async function determinarBancoRemessa(detalhes: any[]): Promise<string> {
     const codBanco = bancosDistintos[0];
     try {
       const bancoResult = await pool.query(`
-        SELECT nome FROM db_manaus.dbbanco
+        SELECT nome FROM dbbanco
         WHERE cod_banco = $1
         LIMIT 1
       `, [codBanco]);
@@ -125,7 +125,7 @@ async function salvarRemessaAutomaticamente(
     // 1. Obter próximo código de remessa
     const proximoCodQuery = `
       SELECT COALESCE(MAX(codremessa), 0) + 1 as proximo_cod
-      FROM db_manaus.dbremessa_arquivo
+      FROM dbremessa_arquivo
     `;
     const proximoCodResult = await pool.query(proximoCodQuery);
     const codremessa = proximoCodResult.rows[0].proximo_cod;
@@ -133,14 +133,14 @@ async function salvarRemessaAutomaticamente(
     // 2. Obter próximo codbodero
     const proximoBodeQuery = `
       SELECT COALESCE(MAX(CAST(codbodero AS INTEGER)), 0) + 1 as proximo_bode
-      FROM db_manaus.dbremessa_arquivo
+      FROM dbremessa_arquivo
     `;
     const proximoBodeResult = await pool.query(proximoBodeQuery);
     const codbodero = String(proximoBodeResult.rows[0].proximo_bode).padStart(9, '0');
 
     // 3. Inserir na tabela dbremessa_arquivo
     const arquivoQuery = `
-      INSERT INTO db_manaus.dbremessa_arquivo
+      INSERT INTO dbremessa_arquivo
       (codremessa, banco, data_gerado, nome_arquivo, usuario_importacao, codbodero)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING codremessa
@@ -163,7 +163,7 @@ async function salvarRemessaAutomaticamente(
         const detalhe = detalhes[i];
 
         const detalheQuery = `
-          INSERT INTO db_manaus.dbremessa_detalhe
+          INSERT INTO dbremessa_detalhe
           ("CODREMESSA_DETALHE", "CODREMESSA", "CODCLI", "DOCUMENTO", "VALOR", "NROBANCO")
           VALUES ($1, $2, $3, $4, $5, $6)
         `;
@@ -261,8 +261,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.codcli as codcli,
         r.banco as banco,
         r.nro_banco as nro_banco
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
       WHERE r.dt_pgto BETWEEN $1 AND $2
         AND r.cancel = 'N'
         AND r.rec = 'S'

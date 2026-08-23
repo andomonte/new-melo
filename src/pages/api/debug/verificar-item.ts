@@ -19,8 +19,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         itr_quantidade as quantidade,
         itr_pr_unitario as preco_unitario,
         p.descr as produto_descr
-      FROM db_manaus.cmp_it_requisicao ri
-      LEFT JOIN db_manaus.dbprod p ON p.codprod = ri.itr_codprod
+      FROM cmp_it_requisicao ri
+      LEFT JOIN dbprod p ON p.codprod = ri.itr_codprod
       WHERE ri.itr_req_id = $1 AND ri.itr_req_versao = $2
       ORDER BY ri.itr_codprod
     `;

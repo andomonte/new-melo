@@ -80,12 +80,12 @@ async function buscarDadosOrdem(orcId: string): Promise<OrdemCompraPDFData | nul
         -- Dados da Filial (Centro de Custo)
         COALESCE(u.unm_nome, 'MANAUS') as centro_custo
 
-      FROM db_manaus.cmp_ordem_compra o
-      JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id
+      FROM cmp_ordem_compra o
+      JOIN cmp_requisicao r ON o.orc_req_id = r.req_id
         AND o.orc_req_versao = r.req_versao
-      JOIN db_manaus.dbcompradores c ON r.req_codcomprador = c.codcomprador
-      LEFT JOIN db_manaus.dbcredor f ON r.req_cod_credor = f.cod_credor
-      LEFT JOIN db_manaus.cad_unidade_melo u ON r.req_unm_id_destino = u.unm_id
+      JOIN dbcompradores c ON r.req_codcomprador = c.codcomprador
+      LEFT JOIN dbcredor f ON r.req_cod_credor = f.cod_credor
+      LEFT JOIN cad_unidade_melo u ON r.req_unm_id_destino = u.unm_id
 
       WHERE o.orc_id = $1
     `;
@@ -108,14 +108,14 @@ async function buscarDadosOrdem(orcId: string): Promise<OrdemCompraPDFData | nul
         COALESCE(m.descr, '') as marca,
         COALESCE(ri.itr_pr_unitario::float, 0) as preco_unitario,
         COALESCE((ri.itr_quantidade * ri.itr_pr_unitario)::float, 0) as preco_total
-      FROM db_manaus.cmp_it_requisicao ri
-      JOIN db_manaus.dbprod p ON ri.itr_codprod = p.codprod
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
+      FROM cmp_it_requisicao ri
+      JOIN dbprod p ON ri.itr_codprod = p.codprod
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
       WHERE ri.itr_req_id = (
-        SELECT orc_req_id FROM db_manaus.cmp_ordem_compra WHERE orc_id = $1
+        SELECT orc_req_id FROM cmp_ordem_compra WHERE orc_id = $1
       )
       AND ri.itr_req_versao = (
-        SELECT orc_req_versao FROM db_manaus.cmp_ordem_compra WHERE orc_id = $1
+        SELECT orc_req_versao FROM cmp_ordem_compra WHERE orc_id = $1
       )
     `;
 

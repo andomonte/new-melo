@@ -103,10 +103,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.bradesco as flag_enviado,
         -- Vencimento anterior (NULL para remessa nova)
         r.venc_ant
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-      LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
-      LEFT JOIN db_manaus.dbconta ct ON ct.cod_conta = r.cod_conta
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+      LEFT JOIN dbconta ct ON ct.cod_conta = r.cod_conta
       WHERE r.dt_venc BETWEEN $1 AND $2
         ${mostrarEnviados ? '' : "AND COALESCE(r.bradesco, 'N') = 'N'"}
         AND COALESCE(r.cancel, 'N') = 'N'
@@ -158,11 +158,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.bradesco as flag_enviado,
         -- Vencimento anterior (pode ser NULL)
         r.venc_ant
-      FROM db_manaus.dbdocbodero_baixa_banco db
-      INNER JOIN db_manaus.dbreceb r ON r.cod_receb = db.cod_receb
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-      LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
-      LEFT JOIN db_manaus.dbconta ct ON ct.cod_conta = r.cod_conta
+      FROM dbdocbodero_baixa_banco db
+      INNER JOIN dbreceb r ON r.cod_receb = db.cod_receb
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+      LEFT JOIN dbconta ct ON ct.cod_conta = r.cod_conta
       WHERE r.dt_venc BETWEEN $1 AND $2
         AND COALESCE(db.export, 0) = 0
         AND COALESCE(r.forma_fat, '') = '2'
@@ -209,10 +209,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.bradesco as flag_enviado,
         -- Vencimento anterior para referência
         r.venc_ant
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-      LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
-      LEFT JOIN db_manaus.dbconta ct ON ct.cod_conta = r.cod_conta
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+      LEFT JOIN dbconta ct ON ct.cod_conta = r.cod_conta
       WHERE r.dt_venc BETWEEN $1 AND $2
         AND r.venc_ant IS NOT NULL
         AND r.dt_venc <> r.venc_ant

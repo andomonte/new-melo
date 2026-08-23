@@ -26,8 +26,8 @@ export default async function handler(
         COUNT(*) as qtd_uso,
         co.nro_conta,
         co.cod_banco
-      FROM db_manaus.dbpgto p
-      LEFT JOIN db_manaus.dbconta co ON co.cod_conta = p.cod_conta
+      FROM dbpgto p
+      LEFT JOIN dbconta co ON co.cod_conta = p.cod_conta
       WHERE p.cod_ccusto = $1
         AND p.cod_conta IS NOT NULL
       GROUP BY p.cod_conta, co.nro_conta, co.cod_banco

@@ -10,7 +10,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   }
   try {
     const result = await queryWithRelease(
-      `SELECT codigo, descricao FROM db_manaus."cad_tipo_movimentacao" WHERE ativo = true ORDER BY ordem ASC`,
+      `SELECT codigo, descricao FROM "cad_tipo_movimentacao" WHERE ativo = true ORDER BY ordem ASC`,
     );
     res.status(200).json(result.rows);
   } catch (error: any) {

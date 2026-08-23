@@ -54,7 +54,7 @@ export default async function handle(
     // Contar o total de registros
     const countQuery = `
       SELECT COUNT(*) as total 
-      FROM db_manaus.dbprod p 
+      FROM dbprod p 
       ${whereClause}
     `;
     const countResult = await client.query(countQuery, queryParams);
@@ -63,7 +63,7 @@ export default async function handle(
     // Buscar os produtos
     const dataQuery = `
       SELECT p.codprod, p.descr, p.ref, p.ativo
-      FROM db_manaus.dbprod p 
+      FROM dbprod p 
       ${whereClause}
       ORDER BY 
         CASE 

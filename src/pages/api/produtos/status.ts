@@ -44,7 +44,7 @@ export default async function handle(
   try {
     await client.query('BEGIN');
     const r = await client.query(
-      `UPDATE db_manaus.dbprod
+      `UPDATE dbprod
           SET inf = $1
         WHERE codprod = ANY($2::text[])`,
       [novoInf, lista],

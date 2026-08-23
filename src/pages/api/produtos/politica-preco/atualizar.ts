@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const pool = getPgPool(filial);
     client = await pool.connect();
     await client.query('BEGIN');
-    await client.query('SET LOCAL search_path TO db_manaus, public');
+    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     // Atributos fiscais do produto (custo base + divisor "fora do estado")
     const pRes = await client.query(

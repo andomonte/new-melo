@@ -66,12 +66,12 @@ export default async function handler(
         CURRENT_DATE + INTERVAL '30 days' as data_previsao,
         1 as multiplo,
         5.50 as dolar_atual
-      FROM db_manaus.cmp_ordem_compra o
-      INNER JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-      INNER JOIN db_manaus.cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
-      INNER JOIN db_manaus.dbprod p ON ri.itr_codprod = p.codprod
-      LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
-      LEFT JOIN db_manaus.dbcredor c ON r.req_cod_credor = c.cod_credor
+      FROM cmp_ordem_compra o
+      INNER JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+      INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
+      INNER JOIN dbprod p ON ri.itr_codprod = p.codprod
+      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
+      LEFT JOIN dbcredor c ON r.req_cod_credor = c.cod_credor
       WHERE ri.itr_codprod = $1
         AND o.orc_status = 'A'
         AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
@@ -123,12 +123,12 @@ export default async function handler(
           CURRENT_DATE + INTERVAL '30 days' as data_previsao,
           1 as multiplo,
           5.50 as dolar_atual
-        FROM db_manaus.cmp_ordem_compra o
-        INNER JOIN db_manaus.cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-        INNER JOIN db_manaus.cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
-        INNER JOIN db_manaus.dbprod p ON ri.itr_codprod = p.codprod
-        LEFT JOIN db_manaus.dbmarcas m ON p.codmarca = m.codmarca
-        LEFT JOIN db_manaus.dbcredor c ON r.req_cod_credor = c.cod_credor
+        FROM cmp_ordem_compra o
+        INNER JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+        INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
+        INNER JOIN dbprod p ON ri.itr_codprod = p.codprod
+        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
+        LEFT JOIN dbcredor c ON r.req_cod_credor = c.cod_credor
         WHERE o.orc_status = 'A'
           AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
           AND upper(REPLACE(REPLACE(REPLACE(c.cpf_cgc, '.', ''), '-', ''), '/', '')) = $1

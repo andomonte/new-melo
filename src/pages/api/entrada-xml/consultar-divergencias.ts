@@ -56,8 +56,8 @@ export default async function handler(
         d.diferenca_pct,
         d.alerta,
         d.data_ocorrencia
-      FROM db_manaus.consultar_divergencias_preco($1, $2) d
-      LEFT JOIN db_manaus.dbprod p ON d.produto = p.codprod
+      FROM consultar_divergencias_preco($1, $2) d
+      LEFT JOIN dbprod p ON d.produto = p.codprod
       ORDER BY d.diferenca_pct DESC, d.data_ocorrencia DESC
     `, [reqId || null, status]);
 
@@ -117,8 +117,8 @@ export default async function handler(
           dp.data_registro as data_ocorrencia,
           dp.status,
           dp.justificativa
-        FROM db_manaus.divergencias_preco dp
-        LEFT JOIN db_manaus.dbprod p ON dp.produto_cod = p.codprod
+        FROM divergencias_preco dp
+        LEFT JOIN dbprod p ON dp.produto_cod = p.codprod
         WHERE dp.data_registro > CURRENT_DATE - INTERVAL '30 days'
         ORDER BY dp.data_registro DESC
         LIMIT 10

@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 
 // PREVIEW do recálculo de imposto do faturamento — NÃO salva nada.
-// Usa a MESMA função PG db_manaus.calcular_imposto_item que o salvar.ts usa em
+// Usa a MESMA função PG calcular_imposto_item que o salvar.ts usa em
 // gravarItensFatRecalculado, mas RETORNA os itens em vez de inserir no dbprodfat.
 //
 // PORTÃO REMOVIDO (homolog): recalcula QUALQUER operação (passa tipo_movimentacao/
@@ -64,7 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const it of itens) {
         try {
           const { rows } = await client.query(
-            `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
             [
               String(it.codprod).trim().padStart(6, '0'),
               String(codcli).trim(),

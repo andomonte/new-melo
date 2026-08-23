@@ -84,10 +84,10 @@ export default async function handler(
           -- Dados do banco de cobrança
           bc.nome as nome_banco
           
-         FROM db_manaus.dbfatura f
-         INNER JOIN db_manaus.dbclien c ON c.codcli = f.codcli
-         LEFT JOIN db_manaus.dbdados_banco db ON db.banco IN ('001', '0001', '0005', COALESCE($2, c.banco, '0'))
-         LEFT JOIN db_manaus.dbbanco_cobranca bc ON bc.banco = db.banco
+         FROM dbfatura f
+         INNER JOIN dbclien c ON c.codcli = f.codcli
+         LEFT JOIN dbdados_banco db ON db.banco IN ('001', '0001', '0005', COALESCE($2, c.banco, '0'))
+         LEFT JOIN dbbanco_cobranca bc ON bc.banco = db.banco
          WHERE f.codfat = $1
          LIMIT 1`,
         [codfat, banco || null]
@@ -116,7 +116,7 @@ export default async function handler(
       
       // Verificar se já existe um COD_RECEB para esta fatura
       const consultaReceb = await client.query(
-        `SELECT cod_receb FROM db_manaus.dbreceb 
+        `SELECT cod_receb FROM dbreceb 
          WHERE cod_fat = $1 AND cancel != 'S' 
          ORDER BY cod_receb DESC LIMIT 1`,
         [codfat]
@@ -248,7 +248,7 @@ export default async function handler(
       // 7. Gerar nro_docbanco sequencial (limitado a 5 dígitos)
       const nroDocBancoResult = await client.query(
         `SELECT COALESCE(MAX(CAST(nro_docbanco AS INTEGER)), 0) + 1 as next_nro 
-         FROM db_manaus.dbreceb 
+         FROM dbreceb 
          WHERE nro_docbanco ~ '^[0-9]+$'`
       );
       let nroDocBancoNum = nroDocBancoResult.rows[0].next_nro;
@@ -268,7 +268,7 @@ export default async function handler(
       if (existeReceb) {
         // Atualizar registro existente
         await client.query(
-          `UPDATE db_manaus.dbreceb 
+          `UPDATE dbreceb 
            SET 
              nro_docbanco = $2,
              nro_banco = $3,
@@ -290,7 +290,7 @@ export default async function handler(
       } else {
         // Inserir novo registro
         await client.query(
-          `INSERT INTO db_manaus.dbreceb (
+          `INSERT INTO dbreceb (
              cod_receb, codcli, cod_fat, dt_venc, valor_pgto,
              nro_doc, nro_docbanco, nro_banco, forma_fat, banco,
              rec, cancel

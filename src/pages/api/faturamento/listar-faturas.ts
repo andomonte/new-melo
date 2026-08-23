@@ -202,7 +202,7 @@ export default async function listarFaturas(
       const columnCheckQuery = `
         SELECT EXISTS (
           SELECT FROM information_schema.columns 
-          WHERE table_schema = 'db_manaus' 
+          WHERE table_schema = current_schema() 
           AND table_name = 'dbfatura'
           AND column_name = 'codgp'
         );
@@ -212,7 +212,7 @@ export default async function listarFaturas(
 
       if (!hasCodgpColumn) {
         console.warn(
-          '⚠️ IMPORTANTE: Coluna codgp não encontrada na tabela db_manaus.dbfatura. Execute o script: scripts/verificar_criar_colunas_agrupamento.sql',
+          '⚠️ IMPORTANTE: Coluna codgp não encontrada na tabela dbfatura. Execute o script: scripts/verificar_criar_colunas_agrupamento.sql',
         );
       }
     } catch (e) {
@@ -303,13 +303,13 @@ export default async function listarFaturas(
   
 
     const totalQuery = `
-      SELECT COUNT(*) FROM db_manaus.dbfatura f
-      LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
-      LEFT JOIN db_manaus.dbvend v ON f.codvend = v.codvend
-      LEFT JOIN db_manaus.dbtransp t ON f.codtransp = t.codtransp
+      SELECT COUNT(*) FROM dbfatura f
+      LEFT JOIN dbclien c ON f.codcli = c.codcli
+      LEFT JOIN dbvend v ON f.codvend = v.codvend
+      LEFT JOIN dbtransp t ON f.codtransp = t.codtransp
       LEFT JOIN LATERAL (
         SELECT *
-        FROM db_manaus.dbfat_nfe n
+        FROM dbfat_nfe n
         WHERE n.codfat = f.codfat
         ORDER BY (n.status = '100') DESC, n.dthrprotocolo DESC NULLS LAST, n.chave DESC NULLS LAST
         LIMIT 1
@@ -324,7 +324,7 @@ export default async function listarFaturas(
         f.*,
         COALESCE(f.totalnf, f.totalfat, f.totalprod, 0) AS totalnf,
         EXISTS (
-          SELECT 1 FROM db_manaus.dbreceb r
+          SELECT 1 FROM dbreceb r
           WHERE r.cod_fat = f.codfat
             AND (r.cancel IS NULL OR r.cancel <> 'S')
             -- Pago de verdade = rec='S' OU dt_pgto preenchido.
@@ -364,13 +364,13 @@ export default async function listarFaturas(
         `
             : ', NULL AS grupo_pagamento, NULL AS total_faturas_grupo, NULL AS data_criacao_grupo'
         }
-      FROM db_manaus.dbfatura f
-      LEFT JOIN db_manaus.dbclien c ON f.codcli = c.codcli
-      LEFT JOIN db_manaus.dbvend v ON f.codvend = v.codvend
-      LEFT JOIN db_manaus.dbtransp t ON f.codtransp = t.codtransp
+      FROM dbfatura f
+      LEFT JOIN dbclien c ON f.codcli = c.codcli
+      LEFT JOIN dbvend v ON f.codvend = v.codvend
+      LEFT JOIN dbtransp t ON f.codtransp = t.codtransp
       LEFT JOIN LATERAL (
         SELECT *
-        FROM db_manaus.dbfat_nfe n
+        FROM dbfat_nfe n
         WHERE n.codfat = f.codfat
         ORDER BY (n.status = '100') DESC, n.dthrprotocolo DESC NULLS LAST, n.chave DESC NULLS LAST
         LIMIT 1

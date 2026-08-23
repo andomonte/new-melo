@@ -22,7 +22,7 @@ export interface FiscalArmazem {
 export async function resolverFiscalArmazem(
   client: { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> },
   armId: number | string,
-  schema = 'db_manaus',
+  schema = process.env.DB_SCHEMA || 'db_manaus',
 ): Promise<FiscalArmazem | null> {
   const r = await client.query(
     `SELECT a.arm_id, ie.inscricaoestadual AS ie, ie.cgc, ie.tipo,
@@ -68,7 +68,7 @@ export async function ieEmitentePorSerie(
   client: { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> },
   cgc: string,
   serie: string | number,
-  schema = 'db_manaus',
+  schema = process.env.DB_SCHEMA || 'db_manaus',
 ): Promise<string | null> {
   const tipo = String(serie) === '2' ? '07' : '04';
   const cnpj = String(cgc || '').replace(/\D/g, '');

@@ -37,9 +37,9 @@ export default async function handler(
         c.cep,
         b.nome as banco_nome,
         b.banco as cod_banco
-      FROM db_manaus.dbfatura f
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = f.codcli
-      LEFT JOIN db_manaus.dbbancos b ON b.banco = f.cod_banco
+      FROM dbfatura f
+      LEFT JOIN dbclien c ON c.codcli = f.codcli
+      LEFT JOIN dbbancos b ON b.banco = f.cod_banco
       WHERE f.codfat = $1
     `;
 
@@ -60,7 +60,7 @@ export default async function handler(
         valor_pgto,
         nro_doc,
         forma_fat
-      FROM db_manaus.dbreceb
+      FROM dbreceb
       WHERE cod_fat = $1
       ORDER BY dt_venc
     `;

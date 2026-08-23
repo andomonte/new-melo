@@ -33,7 +33,7 @@ export default async function handler(
         modelo,
         status,
         motivo
-       FROM db_manaus.dbfat_nfe 
+       FROM dbfat_nfe 
        WHERE codfat = $1 
        AND status = '100'
        ORDER BY data DESC 

@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Buscar o budget atual para vincular
     const budgetAtualQuery = `
       SELECT buc_id 
-      FROM db_manaus.fin_budget_compra 
+      FROM fin_budget_compra 
       ORDER BY buc_data DESC 
       LIMIT 1
     `;
@@ -60,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Gerar novo ID para a solicitação
     const novoIdQuery = `
       SELECT COALESCE(MAX(bua_id), 0) + 1 as novo_id 
-      FROM db_manaus.fin_budget_adicional
+      FROM fin_budget_adicional
     `;
     
     const novoIdResult = await client.query(novoIdQuery);
@@ -68,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Inserir nova solicitação
     const insertQuery = `
-      INSERT INTO db_manaus.fin_budget_adicional (
+      INSERT INTO fin_budget_adicional (
         bua_id,
         bua_valor,
         bua_motivo,

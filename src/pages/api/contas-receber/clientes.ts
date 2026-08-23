@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         codcli as value,
         CONCAT(codcli, ' - ', nome) as label,
         nome
-      FROM db_manaus.dbclien
+      FROM dbclien
       WHERE (
           CAST(codcli AS TEXT) LIKE $1
           OR UPPER(nome) LIKE UPPER($2)

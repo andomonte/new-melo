@@ -59,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Verificar se já está totalmente paga pelo histórico
     const historicoQuery = `
       SELECT COALESCE(SUM(valor_pgto), 0) as total_pago
-      FROM db_manaus.dbfpgto
+      FROM dbfpgto
       WHERE cod_pgto = $1
         AND (cancel IS NULL OR cancel != 'S')
     `;
@@ -180,12 +180,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Gerar próximo FPG_COF_ID (ID único da forma de pagamento)
       const maxFpgCofResult = await pool.query(
-        'SELECT COALESCE(MAX(fpg_cof_id), 0) + 1 as next_fpg_cof_id FROM db_manaus.dbfpgto'
+        'SELECT COALESCE(MAX(fpg_cof_id), 0) + 1 as next_fpg_cof_id FROM dbfpgto'
       );
       const nextFpgCofId = maxFpgCofResult.rows[0].next_fpg_cof_id;
 
       const insertFpgtoQuery = `
-        INSERT INTO db_manaus.dbfpgto (
+        INSERT INTO dbfpgto (
           cod_pgto,
           cod_fpgto,
           fpg_cof_id,

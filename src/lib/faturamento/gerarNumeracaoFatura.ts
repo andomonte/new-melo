@@ -44,7 +44,7 @@ export async function proximoNroForm(
   client: { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> },
   opts: { serie: string; insc07?: string | null; cgc?: string | null; schema?: string },
 ): Promise<string> {
-  const schema = opts.schema ?? 'db_manaus';
+  const schema = opts.schema ?? (process.env.DB_SCHEMA || 'db_manaus');
   const insc07 = String(opts.insc07 ?? 'N').toUpperCase();
   const serieChave = String(opts.serie).replace(/\D/g, '').padStart(3, '0'); // série na chave = 3 díg
   const cgc = opts.cgc ? String(opts.cgc).replace(/\D/g, '') : null;

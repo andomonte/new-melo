@@ -46,7 +46,7 @@ export default async function handler(
     // 1. Buscar dados da ordem
     const ordemResult = await client.query(
       `SELECT orc_id, orc_req_id, orc_req_versao, orc_status
-       FROM db_manaus.cmp_ordem_compra
+       FROM cmp_ordem_compra
        WHERE orc_id = $1`,
       [id]
     );
@@ -80,7 +80,7 @@ export default async function handler(
          itr_quantidade_atendida,
          COALESCE(itr_quantidade_fechada, 0) as itr_quantidade_fechada,
          itr_pr_unitario
-       FROM db_manaus.cmp_it_requisicao
+       FROM cmp_it_requisicao
        WHERE itr_req_id = $1
          AND itr_req_versao = $2
          AND itr_codprod = $3`,
@@ -114,7 +114,7 @@ export default async function handler(
 
     // 5. Buscar referência do produto para o log
     const prodResult = await client.query(
-      `SELECT ref, descr FROM db_manaus.dbprod WHERE codprod = $1`,
+      `SELECT ref, descr FROM dbprod WHERE codprod = $1`,
       [codprod]
     );
     const prodRef = prodResult.rows[0]?.ref || codprod;
@@ -124,7 +124,7 @@ export default async function handler(
     // quantidade_fechada += (quantidade - quantidade_atendida)
     // quantidade = quantidade_atendida
     await client.query(
-      `UPDATE db_manaus.cmp_it_requisicao SET
+      `UPDATE cmp_it_requisicao SET
          itr_quantidade_fechada = COALESCE(itr_quantidade_fechada, 0) + (itr_quantidade - COALESCE(itr_quantidade_atendida, 0)),
          itr_quantidade = COALESCE(itr_quantidade_atendida, 0)
        WHERE itr_req_id = $1
@@ -136,7 +136,7 @@ export default async function handler(
     // 7. Verificar se todos os itens da ordem estão fechados
     const pendentesResult = await client.query(
       `SELECT COUNT(*) as count
-       FROM db_manaus.cmp_it_requisicao
+       FROM cmp_it_requisicao
        WHERE itr_req_id = $1
          AND itr_req_versao = $2
          AND itr_quantidade > COALESCE(itr_quantidade_atendida, 0)`,
@@ -148,7 +148,7 @@ export default async function handler(
     // 8. Se não há mais itens pendentes, fechar a ordem
     if (itensPendentes === 0) {
       await client.query(
-        `UPDATE db_manaus.cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`,
+        `UPDATE cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`,
         [id]
       );
     }

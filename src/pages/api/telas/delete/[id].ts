@@ -32,13 +32,13 @@ export default async function handler(
 
     // 1. Delete associated permissions in tb_grupo_Permissao
     await client.query(
-      `DELETE FROM db_manaus."tb_grupo_Permissao" WHERE tela = $1`,
+      `DELETE FROM "tb_grupo_Permissao" WHERE tela = $1`,
       [telaId],
     );
 
     // 2. Delete the tela from tb_telas
     const deleteResult = await client.query(
-      `DELETE FROM db_manaus.tb_telas WHERE "CODIGO_TELA" = $1 RETURNING *`,
+      `DELETE FROM tb_telas WHERE "CODIGO_TELA" = $1 RETURNING *`,
       [telaId],
     );
 

@@ -44,7 +44,7 @@ interface Resultado {
 async function resolverCodmarca(client: PoolClient, nomeMarca: string): Promise<string | null> {
   // Tenta match exato
   const exato = await client.query(`
-    SELECT codmarca FROM db_manaus.dbmarcas
+    SELECT codmarca FROM dbmarcas
     WHERE UPPER(TRIM(descr)) = $1
     LIMIT 1
   `, [nomeMarca.toUpperCase().trim()]);
@@ -53,7 +53,7 @@ async function resolverCodmarca(client: PoolClient, nomeMarca: string): Promise<
 
   // Tenta LIKE (ex: "MBC" matchando "MBC PARTS")
   const like = await client.query(`
-    SELECT codmarca FROM db_manaus.dbmarcas
+    SELECT codmarca FROM dbmarcas
     WHERE UPPER(TRIM(descr)) LIKE $1 || '%'
     LIMIT 1
   `, [nomeMarca.toUpperCase().trim()]);
@@ -129,8 +129,8 @@ export default async function handler(
         for (const ref of refs) {
           const result = await client!.query(`
             SELECT p.codprod, p.descr, p.ref, m.descr as marca_nome
-            FROM db_manaus.dbprod p
-            LEFT JOIN db_manaus.dbmarcas m ON m.codmarca = p.codmarca
+            FROM dbprod p
+            LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
             WHERE p.ref = $1
               AND COALESCE(p.excluido, 0) != 1
               ${filtroStrib}
@@ -173,9 +173,9 @@ export default async function handler(
             SELECT
               p.codprod,
               p.descr
-            FROM db_manaus.dbref_fabrica rf
-            INNER JOIN db_manaus.dbprod_ref_fabrica prf ON rf.cod_id = prf.cod_id
-            INNER JOIN db_manaus.dbprod p ON prf.codprod = p.codprod
+            FROM dbref_fabrica rf
+            INNER JOIN dbprod_ref_fabrica prf ON rf.cod_id = prf.cod_id
+            INNER JOIN dbprod p ON prf.codprod = p.codprod
             WHERE rf.referencia = $1
               AND COALESCE(p.excluido, 0) != 1
               ${filtroStrib}
@@ -231,7 +231,7 @@ export default async function handler(
 
         const result = await client!.query(`
           SELECT codprod, descr
-          FROM db_manaus.dbprod p
+          FROM dbprod p
           WHERE ${whereConditions}
             AND COALESCE(excluido, 0) != 1
             ${filtroStrib}

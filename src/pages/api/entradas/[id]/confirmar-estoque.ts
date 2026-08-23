@@ -51,8 +51,8 @@ export default async function handler(
 
     const entResult = await client.query(
       `SELECT e.codent, rec.status AS rec_status
-         FROM db_manaus.dbent e
-         LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+         FROM dbent e
+         LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
         WHERE e.codent = $1`,
       [id]
     );
@@ -66,19 +66,19 @@ export default async function handler(
 
     // Romaneio: se não houver, cria automático com armazém padrão a partir de dbitent
     const romaneioResult = await client.query(
-      `SELECT COUNT(*) AS total FROM db_manaus.dbitent_armazem WHERE codent = $1`,
+      `SELECT COUNT(*) AS total FROM dbitent_armazem WHERE codent = $1`,
       [id]
     );
     const temRomaneio = parseInt(romaneioResult.rows[0].total, 10) > 0;
 
     if (!temRomaneio) {
       const itensResult = await client.query(
-        `SELECT codprod, codreq, quant FROM db_manaus.dbitent WHERE codent = $1`,
+        `SELECT codprod, codreq, quant FROM dbitent WHERE codent = $1`,
         [id]
       );
       for (const item of itensResult.rows) {
         await client.query(
-          `INSERT INTO db_manaus.dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
+          `INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT DO NOTHING`,
           [id, item.codprod, item.codreq, ARMAZEM_PADRAO, parseFloat(item.quant)]
@@ -89,7 +89,7 @@ export default async function handler(
 
     // Avança o workflow físico
     await client.query(
-      `UPDATE db_manaus.dbent_recebimento
+      `UPDATE dbent_recebimento
           SET status = 'AGUARDANDO_RECEBIMENTO',
               data_confirmacao_estoque = now(),
               observacao_estoque = $2,

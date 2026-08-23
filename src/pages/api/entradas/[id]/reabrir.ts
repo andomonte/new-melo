@@ -29,13 +29,13 @@ export default async function handler(
     client = await pool.connect();
 
     await client.query('BEGIN');
-    await client.query('SET LOCAL search_path TO db_manaus, public');
+    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     const checkResult = await client.query(
       `SELECT e.codent, e.chave, rec.status AS rec_status,
-              (SELECT codnfe_ent FROM db_manaus.dbnfe_ent WHERE chave = e.chave LIMIT 1) AS nfe_id
-         FROM db_manaus.dbent e
-         LEFT JOIN db_manaus.dbent_recebimento rec ON rec.codent = e.codent
+              (SELECT codnfe_ent FROM dbnfe_ent WHERE chave = e.chave LIMIT 1) AS nfe_id
+         FROM dbent e
+         LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
         WHERE e.codent = $1`,
       [id]
     );
@@ -56,14 +56,14 @@ export default async function handler(
     // Se estava disponível para venda, reverter romaneio/estoque por armazém
     if (statusAtual === 'DISPONIVEL_VENDA') {
       const romaneioResult = await client.query(
-        `SELECT codprod, arm_id, qtd FROM db_manaus.dbitent_armazem WHERE codent = $1`,
+        `SELECT codprod, arm_id, qtd FROM dbitent_armazem WHERE codent = $1`,
         [id]
       );
 
       const produtosInsuficientes: string[] = [];
       for (const rom of romaneioResult.rows) {
         const est = await client.query(
-          `SELECT arp_qtest FROM db_manaus.cad_armazem_produto WHERE arp_arm_id = $1 AND arp_codprod = $2`,
+          `SELECT arp_qtest FROM cad_armazem_produto WHERE arp_arm_id = $1 AND arp_codprod = $2`,
           [rom.arm_id, rom.codprod]
         );
         if (est.rows.length > 0) {
@@ -87,30 +87,30 @@ export default async function handler(
       for (const rom of romaneioResult.rows) {
         const qtd = parseFloat(rom.qtd);
         await client.query(
-          `UPDATE db_manaus.dbprod SET qtdreservada = COALESCE(qtdreservada, 0) + $2 WHERE codprod = $1`,
+          `UPDATE dbprod SET qtdreservada = COALESCE(qtdreservada, 0) + $2 WHERE codprod = $1`,
           [rom.codprod, qtd]
         );
         await client.query(
-          `UPDATE db_manaus.cad_armazem_produto SET arp_qtest = GREATEST(COALESCE(arp_qtest, 0) - $3, 0)
+          `UPDATE cad_armazem_produto SET arp_qtest = GREATEST(COALESCE(arp_qtest, 0) - $3, 0)
              WHERE arp_arm_id = $1 AND arp_codprod = $2`,
           [rom.arm_id, rom.codprod, qtd]
         );
       }
 
-      await client.query(`DELETE FROM db_manaus.dbitent_armazem WHERE codent = $1`, [id]);
-      await client.query(`UPDATE db_manaus.dbent SET est_alocado = 0 WHERE codent = $1`, [id]);
+      await client.query(`DELETE FROM dbitent_armazem WHERE codent = $1`, [id]);
+      await client.query(`UPDATE dbent SET est_alocado = 0 WHERE codent = $1`, [id]);
     }
 
     // Reabre o dbent e volta o workflow para PENDENTE, limpando as confirmações
-    await client.query(`UPDATE db_manaus.dbent SET status = 'A' WHERE codent = $1`, [id]);
+    await client.query(`UPDATE dbent SET status = 'A' WHERE codent = $1`, [id]);
     await client.query(
-      `INSERT INTO db_manaus.dbent_recebimento
+      `INSERT INTO dbent_recebimento
          (codent, status, observacoes, data_confirmacao_preco, observacao_preco,
           data_confirmacao_estoque, observacao_estoque, updated_at)
        VALUES ($1, 'PENDENTE', $2, NULL, NULL, NULL, NULL, now())
        ON CONFLICT (codent) DO UPDATE SET
          status = 'PENDENTE',
-         observacoes = COALESCE(db_manaus.dbent_recebimento.observacoes, '') || E'\n[REABERTA] ' || COALESCE(EXCLUDED.observacoes, ''),
+         observacoes = COALESCE(dbent_recebimento.observacoes, '') || E'\n[REABERTA] ' || COALESCE(EXCLUDED.observacoes, ''),
          data_confirmacao_preco = NULL, observacao_preco = NULL,
          data_confirmacao_estoque = NULL, observacao_estoque = NULL,
          updated_at = now()`,
@@ -119,7 +119,7 @@ export default async function handler(
 
     // Reverter a NFe para não processada
     if (entrada.nfe_id) {
-      await client.query(`UPDATE db_manaus.dbnfe_ent SET exec = 'N' WHERE codnfe_ent = $1`, [entrada.nfe_id]);
+      await client.query(`UPDATE dbnfe_ent SET exec = 'N' WHERE codnfe_ent = $1`, [entrada.nfe_id]);
     }
 
     await client.query('COMMIT');

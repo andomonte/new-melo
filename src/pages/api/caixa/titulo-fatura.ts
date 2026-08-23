@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const r = await client.query(
       `SELECT cod_receb, codcli, valor_pgto, valor_rec, forma_fat, dt_venc, rec
-         FROM db_manaus.dbreceb
+         FROM dbreceb
         WHERE cod_fat = $1 AND COALESCE(rec,'N') = 'N' AND COALESCE(cancel,'N') = 'N'
         ORDER BY cod_receb
         LIMIT 1`,

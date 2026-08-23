@@ -107,7 +107,7 @@ function buildQuery(
         CASE
           WHEN p.nro_dup LIKE '%/%' AND split_part(p.nro_dup, '/', 2) ~ '^[0-9]+$' THEN
             (split_part(p.nro_dup, '/', 2)::int)::text || ' de ' ||
-            (SELECT COUNT(*) FROM db_manaus.dbpgto pp WHERE pp.nro_dup LIKE split_part(p.nro_dup, '/', 1) || '/%')::text
+            (SELECT COUNT(*) FROM dbpgto pp WHERE pp.nro_dup LIKE split_part(p.nro_dup, '/', 1) || '/%')::text
           ELSE ''
         END AS parcela,
         CASE
@@ -117,7 +117,7 @@ function buildQuery(
         p.valor_pgto,
         COALESCE(
           (SELECT SUM(f.valor_pgto)
-           FROM db_manaus.dbfpgto f
+           FROM dbfpgto f
            WHERE f.cod_pgto = p.cod_pgto
              AND (f.cancel IS NULL OR f.cancel != 'S')
           ), 0
@@ -134,24 +134,24 @@ function buildQuery(
           WHEN p.cancel = 'S' THEN 'cancelado'
           WHEN COALESCE(
             (SELECT SUM(f.valor_pgto)
-             FROM db_manaus.dbfpgto f
+             FROM dbfpgto f
              WHERE f.cod_pgto = p.cod_pgto
                AND (f.cancel IS NULL OR f.cancel != 'S')
             ), 0
           ) >= p.valor_pgto THEN 'pago'
           WHEN COALESCE(
             (SELECT SUM(f.valor_pgto)
-             FROM db_manaus.dbfpgto f
+             FROM dbfpgto f
              WHERE f.cod_pgto = p.cod_pgto
                AND (f.cancel IS NULL OR f.cancel != 'S')
             ), 0
           ) > 0 THEN 'pago_parcial'
           ELSE 'pendente'
         END AS calc_status
-      FROM db_manaus.dbpgto p
-      LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
-      LEFT JOIN db_manaus.dbtransp t ON t.codtransp = p.cod_transp
-      LEFT JOIN db_manaus.cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
+      FROM dbpgto p
+      LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+      LEFT JOIN dbtransp t ON t.codtransp = p.cod_transp
+      LEFT JOIN cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
       WHERE 1=1 ${whereClause}
     )
     SELECT * FROM base
@@ -162,9 +162,9 @@ function buildQuery(
   // Contagem leve (sem os subselects de status) para a trava de segurança
   const countSql = `
     SELECT COUNT(*) AS total
-    FROM db_manaus.dbpgto p
-    LEFT JOIN db_manaus.dbcredor c ON c.cod_credor = p.cod_credor
-    LEFT JOIN db_manaus.dbtransp t ON t.codtransp = p.cod_transp
+    FROM dbpgto p
+    LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+    LEFT JOIN dbtransp t ON t.codtransp = p.cod_transp
     WHERE 1=1 ${whereClause}
   `;
 

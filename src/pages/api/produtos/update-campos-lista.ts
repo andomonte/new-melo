@@ -73,7 +73,7 @@ export default async function handle(
       for (const row of rows) {
         if (!row?.codprod) continue;
         const r = await client.query(
-          `UPDATE db_manaus.dbprod
+          `UPDATE dbprod
               SET clasfiscal = $1, pis = $2, cofins = $3, percsubst = $4, cest = $5
             WHERE codprod = $6`,
           [
@@ -94,11 +94,11 @@ export default async function handle(
         const temRef = row.ref !== undefined && row.ref !== null;
         const r = temRef
           ? await client.query(
-              `UPDATE db_manaus.dbprod SET descr = $1, ref = $2 WHERE codprod = $3`,
+              `UPDATE dbprod SET descr = $1, ref = $2 WHERE codprod = $3`,
               [String(row.valor ?? ''), String(row.ref ?? ''), String(row.codprod)],
             )
           : await client.query(
-              `UPDATE db_manaus.dbprod SET descr = $1 WHERE codprod = $2`,
+              `UPDATE dbprod SET descr = $1 WHERE codprod = $2`,
               [String(row.valor ?? ''), String(row.codprod)],
             );
         alterados += r.rowCount || 0;
@@ -108,7 +108,7 @@ export default async function handle(
       for (const row of rows) {
         if (!row?.codprod) continue;
         const r = await client.query(
-          `UPDATE db_manaus.dbprod SET ${campo} = $1 WHERE codprod = $2`,
+          `UPDATE dbprod SET ${campo} = $1 WHERE codprod = $2`,
           [converte(tipo, row.valor), String(row.codprod)],
         );
         alterados += r.rowCount || 0;

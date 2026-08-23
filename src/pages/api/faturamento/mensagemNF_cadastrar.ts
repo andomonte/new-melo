@@ -24,7 +24,7 @@ export default async function handler(
     // Para garantir, mesmo que a coluna seja numérica, o CAST não causa problemas.
     // Se a coluna for texto, o CAST é essencial.
     const maxCodResult = await client.query(
-      'SELECT MAX(CAST(codigo AS INTEGER)) as ultimo_codigo FROM db_manaus.dbmensagens',
+      'SELECT MAX(CAST(codigo AS INTEGER)) as ultimo_codigo FROM dbmensagens',
     );
 
     const ultimoCodigo = maxCodResult.rows[0].ultimo_codigo || 0;
@@ -38,7 +38,7 @@ export default async function handler(
     const codigoFormatado = String(novoCodigo).padStart(3, '0');
 
     const insertQuery = `
-      INSERT INTO db_manaus.dbmensagens (codigo, mensagem) 
+      INSERT INTO dbmensagens (codigo, mensagem) 
       VALUES ($1, $2) 
       ON CONFLICT (codigo) DO UPDATE SET mensagem = EXCLUDED.mensagem
       RETURNING *

@@ -44,7 +44,11 @@ let modulePool: Pool | null = null;
 // central deve nascer com este search_path.
 // OBS: sem espaço entre os schemas — no parâmetro "options" do libpq o espaço
 // separa argumentos e quebra o valor (ex.: "db_manaus," inválido).
-const SEARCH_PATH_CENTRAL = 'db_manaus,public';
+// Schema ativo — configurável por ambiente. Produção/homolog: db_manaus (default).
+// Localhost de teste: DB_SCHEMA=db_rondonia (filial de testes, descartável).
+// Como as queries passam a ser SEM prefixo de schema, o search_path resolve tudo.
+export const DB_SCHEMA = process.env.DB_SCHEMA || 'db_manaus';
+const SEARCH_PATH_CENTRAL = `${DB_SCHEMA},public`;
 
 function createPool(): Pool {
   const pool = new Pool({

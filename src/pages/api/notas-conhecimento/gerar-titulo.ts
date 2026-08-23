@@ -70,8 +70,8 @@ export default async function handler(
           nc.codtransp,
           t.nome as nome_transp,
           nc.pago
-        FROM db_manaus.dbconhecimentoent nc
-        LEFT JOIN db_manaus.dbtransp t ON t.codtransp = nc.codtransp
+        FROM dbconhecimentoent nc
+        LEFT JOIN dbtransp t ON t.codtransp = nc.codtransp
         WHERE (nc.codtransp, nc.nrocon) IN (${placeholders})
       `;
 
@@ -113,13 +113,13 @@ export default async function handler(
 
       // Gerar código do pagamento
       const maxCodResult = await client.query(
-        'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM db_manaus.dbpgto'
+        'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM dbpgto'
       );
       const nextCodPgto = maxCodResult.rows[0].next_cod.toString().padStart(9, '0');
 
       // Gerar pag_cof_id
       const maxPagCofResult = await client.query(
-        'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM db_manaus.dbpgto'
+        'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM dbpgto'
       );
       const nextPagCofId = maxPagCofResult.rows[0].next_pag_cof_id;
 
@@ -127,7 +127,7 @@ export default async function handler(
       const tituloObservacao = obs || `Pagamento de ${notas.length} CT-e(s): ${cteResult.rows.map(n => n.nrocon).join(', ')}`;
 
       await client.query(
-        `INSERT INTO db_manaus.dbpgto (
+        `INSERT INTO dbpgto (
           cod_pgto,
           pag_cof_id,
           tipo,
@@ -164,7 +164,7 @@ export default async function handler(
       // 4. Criar relacionamentos em dbconhecimento para cada CT-e
       for (const cte of cteResult.rows) {
         await client.query(
-          `INSERT INTO db_manaus.dbconhecimento (codpgto, codtransp, nrocon)
+          `INSERT INTO dbconhecimento (codpgto, codtransp, nrocon)
            VALUES ($1, $2, $3)
            ON CONFLICT (codpgto, codtransp, nrocon) DO NOTHING`,
           [nextCodPgto, cte.codtransp, cte.nrocon]

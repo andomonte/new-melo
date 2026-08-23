@@ -29,7 +29,7 @@ export default async function handler(
     // fatura agrupada (membro de GP) — como o spVerifica_Gp do Delphi.
     if (alterar) {
       const pagas = await client.query(
-        `SELECT COUNT(*)::int AS n FROM db_manaus.dbreceb
+        `SELECT COUNT(*)::int AS n FROM dbreceb
           WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
             AND (nro_doc IS NULL OR substr(nro_doc, 1, 2) <> 'GP')
             AND (rec = 'S' OR dt_pgto IS NOT NULL)`,
@@ -41,7 +41,7 @@ export default async function handler(
         });
       }
       const gp = await client.query(
-        `SELECT codgp, agp FROM db_manaus.dbfatura WHERE codfat = $1`,
+        `SELECT codgp, agp FROM dbfatura WHERE codfat = $1`,
         [codfat],
       );
       if (gp.rows[0]?.codgp || gp.rows[0]?.agp === 'S') {
@@ -57,7 +57,7 @@ export default async function handler(
     // Ao ALTERAR, cancela os títulos atuais (não pagos, exceto GP) antes de gerar.
     if (alterar) {
       await client.query(
-        `UPDATE db_manaus.dbreceb SET cancel = 'S'
+        `UPDATE dbreceb SET cancel = 'S'
           WHERE cod_fat = $1 AND (nro_doc IS NULL OR substr(nro_doc, 1, 2) <> 'GP')`,
         [codfat],
       );

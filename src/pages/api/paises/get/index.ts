@@ -34,14 +34,14 @@ export default async function handle(
 
     // Buscar os países
     const paisesResult = await client.query(
-      `SELECT * FROM db_manaus.dbpais ${whereClause} ORDER BY descricao ${limitOffset}`,
+      `SELECT * FROM dbpais ${whereClause} ORDER BY descricao ${limitOffset}`,
       queryParams,
     );
 
     // Contar o total
     const countParams = search ? [`%${search}%`] : [];
     const countResult = await client.query(
-      `SELECT COUNT(*) as total FROM db_manaus.dbpais ${whereClause}`,
+      `SELECT COUNT(*) as total FROM dbpais ${whereClause}`,
       countParams,
     );
 

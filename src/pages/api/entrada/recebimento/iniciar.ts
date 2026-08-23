@@ -28,7 +28,7 @@ interface IniciarResponse {
 // Verificar se operador ja tem recebimento ativo
 const CHECK_ATIVO_QUERY = `
   SELECT id, codent
-  FROM db_manaus.entrada_operacoes
+  FROM entrada_operacoes
   WHERE recebedor_matricula = $1 AND status = 'EM_RECEBIMENTO'
   LIMIT 1
 `;
@@ -36,14 +36,14 @@ const CHECK_ATIVO_QUERY = `
 // Verificar se entrada ja esta em recebimento
 const CHECK_ENTRADA_QUERY = `
   SELECT id, recebedor_nome
-  FROM db_manaus.entrada_operacoes
+  FROM entrada_operacoes
   WHERE codent = $1 AND status = 'EM_RECEBIMENTO'
   LIMIT 1
 `;
 
 // Buscar ou criar registro de operacao (por codent)
 const UPSERT_OPERACAO_QUERY = `
-  INSERT INTO db_manaus.entrada_operacoes (
+  INSERT INTO entrada_operacoes (
     codent, status, recebedor_matricula, recebedor_nome, inicio_recebimento, created_at, updated_at
   )
   VALUES ($1, 'EM_RECEBIMENTO', $2, $3, NOW(), NOW(), NOW())
@@ -57,14 +57,14 @@ const UPSERT_OPERACAO_QUERY = `
 
 // Criar registros de itens para conferencia (a partir de dbitent)
 const CREATE_ITENS_RECEBIMENTO_QUERY = `
-  INSERT INTO db_manaus.entrada_itens_recebimento (
+  INSERT INTO entrada_itens_recebimento (
     entrada_operacao_id, codent, codreq, produto_cod, qtd_esperada, status_item, created_at, updated_at
   )
   SELECT $1, ie.codent, ie.codreq, ie.codprod, ie.quant, 'PENDENTE', NOW(), NOW()
-    FROM db_manaus.dbitent ie
+    FROM dbitent ie
    WHERE ie.codent = $2
      AND NOT EXISTS (
-       SELECT 1 FROM db_manaus.entrada_itens_recebimento r
+       SELECT 1 FROM entrada_itens_recebimento r
         WHERE r.entrada_operacao_id = $1 AND r.produto_cod = ie.codprod
           AND COALESCE(r.codreq,'') = COALESCE(ie.codreq,''))
 `;
@@ -136,7 +136,7 @@ export default async function handler(
 
     // Avança o workflow físico
     await client.query(
-      `UPDATE db_manaus.dbent_recebimento SET status = 'EM_RECEBIMENTO', updated_at = now() WHERE codent = $1`,
+      `UPDATE dbent_recebimento SET status = 'EM_RECEBIMENTO', updated_at = now() WHERE codent = $1`,
       [entradaId]);
 
     await client.query('COMMIT');

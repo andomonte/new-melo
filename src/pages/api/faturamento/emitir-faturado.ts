@@ -56,7 +56,7 @@ export default async function handler(
       // Busca fatura
       console.log('📋 Buscando dados da fatura...');
       const fatRes = await client.query(
-        'SELECT * FROM db_manaus.dbfatura WHERE codfat = $1',
+        'SELECT * FROM dbfatura WHERE codfat = $1',
         [codfat],
       );
       dbfatura = fatRes.rows[0];
@@ -65,7 +65,7 @@ export default async function handler(
       // Buscar codvenda via tabela fatura_venda (relacionamento correto)
       console.log('📋 Buscando codvenda via fatura_venda...');
       const faturaVendaRes = await client.query(
-        'SELECT codvenda FROM db_manaus.fatura_venda WHERE codfat = $1',
+        'SELECT codvenda FROM fatura_venda WHERE codfat = $1',
         [codfat],
       );
       
@@ -75,7 +75,7 @@ export default async function handler(
       if (!codvendaParaBusca && dbfatura.nrovenda) {
         console.log('📋 Buscando codvenda via nrovenda...');
         const vendaPorNroRes = await client.query(
-          'SELECT codvenda FROM db_manaus.dbvenda WHERE nrovenda = $1 OR codvenda = $1',
+          'SELECT codvenda FROM dbvenda WHERE nrovenda = $1 OR codvenda = $1',
           [dbfatura.nrovenda],
         );
         codvendaParaBusca = vendaPorNroRes.rows[0]?.codvenda;
@@ -90,7 +90,7 @@ export default async function handler(
       // Busca venda vinculada
       console.log('📋 Buscando dados da venda...');
       const vendaRes = await client.query(
-        'SELECT * FROM db_manaus.dbvenda WHERE codvenda = $1',
+        'SELECT * FROM dbvenda WHERE codvenda = $1',
         [codvendaParaBusca],
       );
       dbvenda = vendaRes.rows[0];
@@ -99,7 +99,7 @@ export default async function handler(
       console.log('📋 Buscando dados do cliente...');
       const codcliParaBusca = dbvenda?.codcli || dbfatura.codcli;
       const clienteRes = await client.query(
-        'SELECT * FROM db_manaus.dbclien WHERE codcli = $1',
+        'SELECT * FROM dbclien WHERE codcli = $1',
         [codcliParaBusca],
       );
       dbclien = clienteRes.rows[0];
@@ -108,8 +108,8 @@ export default async function handler(
       console.log('📋 Buscando produtos da venda...');
       const produtosRes = await client.query(
         `SELECT iv.*, p.descr as descr_produto, p.clasfiscal, p.unimed
-         FROM db_manaus.dbitvenda iv
-         LEFT JOIN db_manaus.dbprod p ON iv.codprod = p.codprod
+         FROM dbitvenda iv
+         LEFT JOIN dbprod p ON iv.codprod = p.codprod
          WHERE iv.codvenda = $1`,
         [codvendaParaBusca],
       );
@@ -142,7 +142,7 @@ export default async function handler(
     console.log('🔐 Buscando dados da empresa e certificados...');
     
     const empresaQuery = await getPgPool().query(`
-      SELECT * FROM db_manaus.dadosempresa
+      SELECT * FROM dadosempresa
       WHERE "certificadoKey" IS NOT NULL
         AND "certificadoCrt" IS NOT NULL
       LIMIT 1
@@ -530,7 +530,7 @@ export default async function handler(
         const updateClient = await getPgPool().connect();
         try {
           await updateClient.query(
-            `UPDATE db_manaus.dbfatura SET denegada = NULL WHERE codfat = $1`,
+            `UPDATE dbfatura SET denegada = NULL WHERE codfat = $1`,
             [codfat],
           );
           console.log(`✅ Campo 'denegada' limpo na fatura ${codfat}`);
@@ -552,11 +552,11 @@ export default async function handler(
       let dupTextoFatura = '';
       try {
         const parcRes = await getPgPool().query(
-          `SELECT dt_venc FROM db_manaus.dbreceb
+          `SELECT dt_venc FROM dbreceb
             WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
               AND (nro_doc IS NULL OR substr(nro_doc, 1, 2) <> 'GP')
               AND dt_emissao = (
-                SELECT MAX(dt_emissao) FROM db_manaus.dbreceb
+                SELECT MAX(dt_emissao) FROM dbreceb
                  WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
               )
             ORDER BY dt_venc`,
@@ -632,7 +632,7 @@ export default async function handler(
           const codnumerico = Math.floor(Math.random() * 1e9).toString().padStart(9, '0');
           
           await saveClient.query(
-            `INSERT INTO db_manaus.dbfat_nfe (
+            `INSERT INTO dbfat_nfe (
               codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, xmlremessa, xmlretorno, 
               status, numprotocolo, dthrprotocolo, motivo, tipo_emissao, modelo, tpemissao, imagem, emailenviado
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
@@ -661,7 +661,7 @@ export default async function handler(
           // Limpar status de denegação na fatura (se existir a coluna)
           try {
             await saveClient.query(
-              `UPDATE db_manaus.dbfatura 
+              `UPDATE dbfatura 
                SET denegada = NULL
                WHERE codfat = $1`,
               [codfat]
@@ -695,7 +695,7 @@ export default async function handler(
         const updateClient = await getPgPool().connect();
         try {
           await updateClient.query(
-            `UPDATE db_manaus.dbfatura SET denegada = 'S' WHERE codfat = $1`,
+            `UPDATE dbfatura SET denegada = 'S' WHERE codfat = $1`,
             [codfat],
           );
           console.log(`✅ Campo 'denegada' atualizado para 'S'`);
@@ -714,7 +714,7 @@ export default async function handler(
       try {
         const codnumerico = Math.floor(Math.random() * 1e9).toString().padStart(9, '0');
         await rejClient.query(
-          `INSERT INTO db_manaus.dbfat_nfe (
+          `INSERT INTO dbfat_nfe (
             codfat, nrodoc_fiscal, codnumerico, "data", chave, versao, xmlremessa, xmlretorno,
             status, numprotocolo, dthrprotocolo, motivo, tipo_emissao, modelo, tpemissao, emailenviado
           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,

@@ -39,7 +39,7 @@ async function carregarColunasValidas(
   const r = await client.query(
     `SELECT column_name, data_type
        FROM information_schema.columns
-      WHERE table_schema = 'db_manaus' AND table_name = 'dbprod'`,
+      WHERE table_schema = current_schema() AND table_name = 'dbprod'`,
   );
   colunasValidas = new Map(
     r.rows.map((x: any) => [
@@ -280,7 +280,7 @@ export default async function handle(
           FROM cad_armazem_produto cap
           WHERE cap.arp_codprod = p.codprod AND COALESCE(cap.arp_qtest, 0) > 0
         ), 0) as qtd_armazens
-      FROM db_manaus.dbprod p
+      FROM dbprod p
       ${whereClause}
       ORDER BY p.descr
       OFFSET $${paramIndex} LIMIT $${paramIndex + 1}
@@ -294,7 +294,7 @@ export default async function handle(
     // correlacionadas (marca/grupo) quebram sem o alias: "m.codmarca = codmarca"
     // resolveria o lado direito para a própria tabela interna.
     const countQuery = `
-      SELECT COUNT(*) as total FROM db_manaus.dbprod p
+      SELECT COUNT(*) as total FROM dbprod p
       ${whereClause}
     `;
 

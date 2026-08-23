@@ -31,7 +31,7 @@ export default async function handle(
 
     // Próximo codgpf: MAX numérico + 1, com zero-padding de 5 dígitos
     const maxRes = await client.query(
-      `SELECT codgpf FROM db_manaus.dbgpfunc
+      `SELECT codgpf FROM dbgpfunc
         WHERE codgpf ~ '^[0-9]+$'
         ORDER BY CAST(codgpf AS INTEGER) DESC LIMIT 1`,
     );
@@ -42,12 +42,12 @@ export default async function handle(
 
     // Próximo gpf_id
     const idRes = await client.query(
-      'SELECT COALESCE(MAX(gpf_id), 0) + 1 AS next_id FROM db_manaus.dbgpfunc',
+      'SELECT COALESCE(MAX(gpf_id), 0) + 1 AS next_id FROM dbgpfunc',
     );
     const gpfId = idRes.rows[0].next_id;
 
     const result = await client.query(
-      `INSERT INTO db_manaus.dbgpfunc (codgpf, descr, agregado_substituicao, gpf_id, "AGREGADO_SUBSTUICAO")
+      `INSERT INTO dbgpfunc (codgpf, descr, agregado_substituicao, gpf_id, "AGREGADO_SUBSTUICAO")
        VALUES ($1, $2, 0, $3, 0)
        RETURNING codgpf, descr`,
       [codgpf, descr, gpfId],

@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         rec,
         cancel,
         bradesco
-      FROM db_manaus.dbreceb
+      FROM dbreceb
       WHERE cod_receb = $1
       FOR UPDATE
     `;
@@ -106,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Atualizar título com novo valor recebido (não marcar como pago até atingir o total)
     const updateQuery = `
-      UPDATE db_manaus.dbreceb
+      UPDATE dbreceb
       SET
         valor_rec = $2,
         rec = $3,
@@ -135,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Registrar no histórico (dbfreceb) - valor principal e juros
     const gerarCodFRecebQuery = `
       SELECT COALESCE(MAX(CAST(cod_freceb AS INTEGER)), 0) + 1 as novo
-      FROM db_manaus.dbfreceb
+      FROM dbfreceb
       WHERE cod_receb = $1
     `;
     const seqRes = await client.query(gerarCodFRecebQuery, [cod_receb]);
@@ -143,7 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Detectar colunas existentes em dbfreceb para montar insert dinâmico
     const colsRes = await client.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'db_manaus' AND table_name = 'dbfreceb'`
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'dbfreceb'`
     );
     const existingCols = new Set(colsRes.rows.map((r: any) => String(r.column_name).toLowerCase()));
 
@@ -163,7 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (cols.length === 0) {
         throw new Error('Nenhuma coluna válida encontrada para inserir em dbfreceb');
       }
-      const sql = `INSERT INTO db_manaus.dbfreceb (${cols.join(',')}) VALUES (${placeholders.join(',')})`;
+      const sql = `INSERT INTO dbfreceb (${cols.join(',')}) VALUES (${placeholders.join(',')})`;
       return { sql, vals };
     };
 
@@ -211,7 +211,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Tentar mapear username -> codusr
     if (username && existingCols.has('codusr')) {
       try {
-        const userQuery = `SELECT codusr FROM db_manaus.dbusuario WHERE nomeusr = $1 LIMIT 1`;
+        const userQuery = `SELECT codusr FROM dbusuario WHERE nomeusr = $1 LIMIT 1`;
         const userRes = await client.query(userQuery, [username]);
         if (userRes.rows && userRes.rows.length > 0) {
           valuesPrincipal.codusr = userRes.rows[0].codusr;
@@ -243,18 +243,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 1. INSERIR em DBFPRERECEB (histórico de movimentos de pré-recebimento) - Paridade Oracle
     const fpreRecebColsRes = await client.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema='db_manaus' AND table_name = 'dbfprereceb'`
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'dbfprereceb'`
     );
     if (fpreRecebColsRes.rows.length > 0) {
       // cod_fprereceb é NOT NULL sem default (varchar) — gerar o próximo código
       // a partir do MAX global, senão o INSERT viola a restrição de não-nulo (23502).
       const seqFpre = await client.query(
         `SELECT COALESCE(MAX(CAST(cod_fprereceb AS INTEGER)), 0) + 1 AS novo
-           FROM db_manaus.dbfprereceb`
+           FROM dbfprereceb`
       );
       const novoCodFpre = String(seqFpre.rows[0]?.novo ?? 1);
       await client.query(
-        `INSERT INTO db_manaus.dbfprereceb (cod_fprereceb, cod_receb, dt_pgto, valor) VALUES ($1, $2, $3, $4)`,
+        `INSERT INTO dbfprereceb (cod_fprereceb, cod_receb, dt_pgto, valor) VALUES ($1, $2, $3, $4)`,
         [novoCodFpre, cod_receb, baseDtPgto, valorReceberNum]
       );
     }
@@ -266,7 +266,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (tipoFinal === 'D' && sfFinal === 'S') {
       // Buscar codcli do título
       const clienteRes = await client.query(
-        'SELECT codcli FROM db_manaus.dbreceb WHERE cod_receb = $1',
+        'SELECT codcli FROM dbreceb WHERE cod_receb = $1',
         [cod_receb]
       );
       
@@ -276,13 +276,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         
         // Verificar se tabela dbclien existe
         const tblClienteRes = await client.query(
-          `SELECT table_name FROM information_schema.tables WHERE table_schema='db_manaus' AND table_name = 'dbclien'`
+          `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'dbclien'`
         );
         
         if (tblClienteRes.rows.length > 0) {
           // Reduzir débito do cliente (Red_Debcli)
           await client.query(
-            `UPDATE db_manaus.dbclien 
+            `UPDATE dbclien 
              SET debito = COALESCE(debito, 0) - $1 
              WHERE codcli = $2`,
             [valorTotalBaixa, codcli]
@@ -293,23 +293,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Pre-recebimento / dbPreReceb (inserir ou atualizar similar a ContasR_Baixa)
     const preRecebColsRes = await client.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema='db_manaus' AND table_name = 'dbprereceb'`
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'dbprereceb'`
     );
     if (preRecebColsRes.rows.length > 0) {
-      const countPre = await client.query(`SELECT count(*) as c from db_manaus.dbprereceb where cod_receb = $1`, [cod_receb]);
+      const countPre = await client.query(`SELECT count(*) as c from dbprereceb where cod_receb = $1`, [cod_receb]);
       const cnt = parseInt(countPre.rows[0].c, 10);
       const vRec = novoValorRec >= valorTotal ? 'S' : 'N';
       if (cnt === 0) {
-        await client.query(`INSERT INTO db_manaus.dbprereceb (cod_receb, dt_pgto, valor_rec, cod_conta, rec) VALUES ($1,$2,$3,$4,$5)`, [cod_receb, baseDtPgto, valorReceberNum + jurosNum, cod_conta || null, vRec]);
+        await client.query(`INSERT INTO dbprereceb (cod_receb, dt_pgto, valor_rec, cod_conta, rec) VALUES ($1,$2,$3,$4,$5)`, [cod_receb, baseDtPgto, valorReceberNum + jurosNum, cod_conta || null, vRec]);
       } else {
-        await client.query(`UPDATE db_manaus.dbprereceb SET valor_rec = $1, cod_conta = $2, dt_pgto = $3, rec = $4 WHERE cod_receb = $5`, [novoValorRec, cod_conta || null, baseDtPgto, vRec, cod_receb]);
+        await client.query(`UPDATE dbprereceb SET valor_rec = $1, cod_conta = $2, dt_pgto = $3, rec = $4 WHERE cod_receb = $5`, [novoValorRec, cod_conta || null, baseDtPgto, vRec, cod_receb]);
       }
     }
 
     // 3. AUDITORIA FORMAL (inc_acao_usr) - Paridade Oracle
     if (username) {
       try {
-        const userQuery = `SELECT codusr FROM db_manaus.dbusuario WHERE nomeusr = $1 LIMIT 1`;
+        const userQuery = `SELECT codusr FROM dbusuario WHERE nomeusr = $1 LIMIT 1`;
         const userRes = await client.query(userQuery, [username]);
         if (userRes.rows && userRes.rows.length > 0) {
           const codusr = userRes.rows[0].codusr;
@@ -318,7 +318,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // Verificar se tabela de auditoria existe
           const tblAuditoriaRes = await client.query(
             `SELECT table_name FROM information_schema.tables 
-             WHERE table_schema='db_manaus' 
+             WHERE table_schema = current_schema() 
              AND table_name IN ('dbusuario_acoes', 'dblog_acoes', 'dbauditoria')`
           );
           
@@ -328,7 +328,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             
             // Registrar ação em tabela de auditoria
             await client.query(
-              `INSERT INTO db_manaus.${tblNome} (codusr, acao, tabela, detalhes, dt_acao) 
+              `INSERT INTO ${tblNome} (codusr, acao, tabela, detalhes, dt_acao) 
                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
               [codusr, 'DAR_BAIXA', 'DBRECEB', detalhes]
             );

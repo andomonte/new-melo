@@ -24,8 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         COALESCE(c.limite, 0) as cliente_limite,
         COALESCE(c.debito, 0) as cliente_debito,
         COALESCE(c.claspgto, '') as cliente_claspgto
-      FROM db_manaus.dbvenda v
-      LEFT JOIN db_manaus.dbclien c ON v.codcli = c.codcli
+      FROM dbvenda v
+      LEFT JOIN dbclien c ON v.codcli = c.codcli
       WHERE v.codvenda = $1`,
       [codvenda]
     );
@@ -39,26 +39,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Vendedor e operador
     const vvendResult = await client.query(
       `SELECT vv.*, u.nomeusr as nome
-       FROM db_manaus.dbvvend vv
-       LEFT JOIN db_manaus.dbusuario u ON vv.codvend = u.codusr
+       FROM dbvvend vv
+       LEFT JOIN dbusuario u ON vv.codvend = u.codusr
        WHERE vv.codvenda = $1`,
       [codvenda]
     );
 
     // Prazos
     const prazosResult = await client.query(
-      `SELECT * FROM db_manaus.dbprazo_pagamento WHERE codvenda = $1 ORDER BY dia`,
+      `SELECT * FROM dbprazo_pagamento WHERE codvenda = $1 ORDER BY dia`,
       [codvenda]
     );
 
     // Transportadoras disponíveis
     const transpResult = await client.query(
-      `SELECT codtptransp, descr FROM db_manaus.dbtptransp ORDER BY descr`
+      `SELECT codtptransp, descr FROM dbtptransp ORDER BY descr`
     );
 
     // Formas de pagamento
     const fpResult = await client.query(
-      `SELECT id, descricao FROM db_manaus.dbtipo_documento WHERE descricao IS NOT NULL AND descricao <> '' ORDER BY descricao`
+      `SELECT id, descricao FROM dbtipo_documento WHERE descricao IS NOT NULL AND descricao <> '' ORDER BY descricao`
     );
 
     return res.status(200).json({

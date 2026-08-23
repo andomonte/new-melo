@@ -53,7 +53,7 @@ const ENTRADAS_QUERY = `
     COALESCE(n.serie::text, '') as nfe_serie,
     COALESCE(emit.xnome, 'Fornecedor nao identificado') as fornecedor,
     COALESCE(e.totalnf, 0) as valor_total,
-    COALESCE((SELECT COUNT(*) FROM db_manaus.dbitent WHERE codent = e.codent), 0) as qtd_itens,
+    COALESCE((SELECT COUNT(*) FROM dbitent WHERE codent = e.codent), 0) as qtd_itens,
     COALESCE(op.fim_recebimento, e.dtent) as data_recebimento,
     COALESCE(op.status, 'RECEBIDO') as status,
     CASE COALESCE(op.status, 'RECEBIDO')
@@ -65,10 +65,10 @@ const ENTRADAS_QUERY = `
     op.alocador_nome,
     op.inicio_alocacao,
     COALESCE(op.tem_divergencia, false) as tem_divergencia
-  FROM db_manaus.dbent e
-  INNER JOIN db_manaus.entrada_operacoes op ON op.codent = e.codent
-  LEFT JOIN db_manaus.dbnfe_ent n ON n.chave = e.chave
-  LEFT JOIN db_manaus.dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
+  FROM dbent e
+  INNER JOIN entrada_operacoes op ON op.codent = e.codent
+  LEFT JOIN dbnfe_ent n ON n.chave = e.chave
+  LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
   WHERE
     (
       op.status = 'RECEBIDO'
@@ -87,8 +87,8 @@ const ROMANEIO_QUERY = `
     da.arm_id,
     ca.arm_descricao,
     SUM(da.qtd) as qtd_total
-  FROM db_manaus.dbitent_armazem da
-  INNER JOIN db_manaus.cad_armazem ca ON ca.arm_id = da.arm_id
+  FROM dbitent_armazem da
+  INNER JOIN cad_armazem ca ON ca.arm_id = da.arm_id
   WHERE da.codent = ANY($1)
   GROUP BY da.codent, da.arm_id, ca.arm_descricao
   ORDER BY da.codent, da.arm_id

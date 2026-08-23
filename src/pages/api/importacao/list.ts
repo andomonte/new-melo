@@ -53,7 +53,7 @@ export default async function handler(
 
     // Count total
     const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM db_manaus.dbent_importacao ${where}`,
+      `SELECT COUNT(*) as total FROM dbent_importacao ${where}`,
       params,
     );
     const total = parseInt(countResult.rows[0].total, 10);
@@ -66,7 +66,7 @@ export default async function handler(
         pis_cofins, ii, ipi, siscomex, anuencia,
         peso_liquido, qtd_adicoes, navio,
         data_entrada_brasil, codusr, data_cad
-      FROM db_manaus.dbent_importacao
+      FROM dbent_importacao
       ${where}
       ORDER BY data_cad DESC
       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,

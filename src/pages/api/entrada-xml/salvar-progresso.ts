@@ -50,8 +50,8 @@ export default async function handler(
     // Buscar dados da NFe (fornecedor) para aprendizado
     const nfeDataResult = await client.query(`
       SELECT emit.cpf_cnpj as cod_credor_cnpj
-      FROM db_manaus.dbnfe_ent nfe
-      INNER JOIN db_manaus.dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
+      FROM dbnfe_ent nfe
+      INNER JOIN dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
       WHERE nfe.codnfe_ent = $1
     `, [nfeId]);
 
@@ -60,7 +60,7 @@ export default async function handler(
       const cnpj = nfeDataResult.rows[0].cod_credor_cnpj;
       // Buscar código do credor pelo CNPJ
       const credorResult = await client.query(
-        'SELECT cod_credor FROM db_manaus.dbcredor WHERE cpf_cgc = $1',
+        'SELECT cod_credor FROM dbcredor WHERE cpf_cgc = $1',
         [cnpj]
       );
       if (credorResult.rows.length > 0) {
@@ -70,12 +70,12 @@ export default async function handler(
 
     // Limpar associações antigas para esta NFe
     await client.query(
-      `DELETE FROM db_manaus.nfe_item_associacao WHERE nfe_id = $1`,
+      `DELETE FROM nfe_item_associacao WHERE nfe_id = $1`,
       [nfeId]
     );
 
     await client.query(
-      `DELETE FROM db_manaus.nfe_item_pedido_associacao WHERE nfe_id = $1`,
+      `DELETE FROM nfe_item_pedido_associacao WHERE nfe_id = $1`,
       [nfeId]
     );
 
@@ -87,7 +87,7 @@ export default async function handler(
 
         // Salvar associação principal
         const assocResult = await client.query(`
-          INSERT INTO db_manaus.nfe_item_associacao (
+          INSERT INTO nfe_item_associacao (
             nfe_id,
             nfe_item_id,
             produto_cod,
@@ -121,7 +121,7 @@ export default async function handler(
         // Salvar cada associação com pedido/ordem
         for (const assoc of item.associacoes) {
           await client.query(`
-            INSERT INTO db_manaus.nfe_item_pedido_associacao (
+            INSERT INTO nfe_item_pedido_associacao (
               nfe_associacao_id,
               nfe_id,
               req_id,
@@ -156,7 +156,7 @@ export default async function handler(
             let marcaProduto = item.codMarca;
             if (!marcaProduto) {
               const prodResult = await client.query(
-                'SELECT codmarca FROM db_manaus.dbprod WHERE codprod = $1',
+                'SELECT codmarca FROM dbprod WHERE codprod = $1',
                 [item.produtoId]
               );
               if (prodResult.rows.length > 0) {
@@ -169,7 +169,7 @@ export default async function handler(
             // Verificar se a marca existe na tabela dbmarcas (FK constraint)
             if (marcaTruncada) {
               const marcaExists = await client.query(
-                'SELECT 1 FROM db_manaus.dbmarcas WHERE codmarca = $1',
+                'SELECT 1 FROM dbmarcas WHERE codmarca = $1',
                 [marcaTruncada]
               );
               if (marcaExists.rows.length === 0) {
@@ -184,7 +184,7 @@ export default async function handler(
             let codId: number;
             const checkRef = await client.query(`
               SELECT cod_id
-              FROM db_manaus.dbref_fabrica
+              FROM dbref_fabrica
               WHERE referencia = $1
                 AND codcredor = $2
                 AND codmarca = $3
@@ -195,12 +195,12 @@ export default async function handler(
             } else {
               // Criar nova referência
               const maxIdResult = await client.query(
-                'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM db_manaus.dbref_fabrica'
+                'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica'
               );
               codId = maxIdResult.rows[0].next_id;
 
               await client.query(`
-                INSERT INTO db_manaus.dbref_fabrica (cod_id, codmarca, referencia, codcredor)
+                INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor)
                 VALUES ($1, $2, $3, $4)
               `, [codId, marcaTruncada, referenciaTruncada, codCredorTruncado]);
 
@@ -210,13 +210,13 @@ export default async function handler(
             // Verificar se já existe o relacionamento
             const checkProdRef = await client.query(`
               SELECT 1
-              FROM db_manaus.dbprod_ref_fabrica
+              FROM dbprod_ref_fabrica
               WHERE codprod = $1 AND cod_id = $2
             `, [item.produtoId, codId]);
 
             if (checkProdRef.rows.length === 0) {
               await client.query(`
-                INSERT INTO db_manaus.dbprod_ref_fabrica (codprod, cod_id)
+                INSERT INTO dbprod_ref_fabrica (codprod, cod_id)
                 VALUES ($1, $2)
               `, [item.produtoId, codId]);
 
@@ -237,7 +237,7 @@ export default async function handler(
     // ✅ Marcar NFe como 'A' (em Andamento/progresso salvo)
     // exec: 'N' = Recebida, 'A' = Em Andamento (progresso salvo), 'C' = Associada, 'S' = Entrada Gerada
     await client.query(`
-      UPDATE db_manaus.dbnfe_ent
+      UPDATE dbnfe_ent
       SET exec = 'A'
       WHERE codnfe_ent = $1
     `, [nfeId]);
@@ -247,7 +247,7 @@ export default async function handler(
     // Registrar histórico de associação
     const itensAssociados = items.filter(i => i.status === 'associated' || i.status === 'partial').length;
     if (userId && userName && itensAssociados > 0) {
-      await client.query('SET search_path TO db_manaus');
+      await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
       await registrarHistoricoNfe(client, {
         codNfeEnt: parseInt(nfeId),
         tipoAcao: 'ASSOCIACAO_ITEM',
@@ -272,7 +272,7 @@ export default async function handler(
         COUNT(*) as total,
         SUM(CASE WHEN status = 'ASSOCIADO' THEN 1 ELSE 0 END) as associados,
         SUM(CASE WHEN status = 'PARCIAL' THEN 1 ELSE 0 END) as parciais
-      FROM db_manaus.nfe_item_associacao
+      FROM nfe_item_associacao
       WHERE nfe_id = $1
     `, [nfeId]);
 

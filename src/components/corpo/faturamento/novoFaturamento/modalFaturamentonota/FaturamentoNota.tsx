@@ -101,6 +101,9 @@ export default function FaturamentoNota({
 
   // Estados necessários para ambos os fluxos
   const [modalidadeTransporte, setModalidadeTransporte] = useState('');
+  // Em homologação o e-mail ao cliente é pulado (evita spammar cliente real nos
+  // testes). Marcar força o envio para conferir como o e-mail chega.
+  const [forcarEmailTeste, setForcarEmailTeste] = useState(false);
   // Wizard: 1 = Faturamento & Cobrança · 2 = Dados Básicos · 3 = Valores/Frete/Comissão.
   const [etapa, setEtapa] = useState(1);
 
@@ -145,8 +148,19 @@ export default function FaturamentoNota({
       totalSteps > 0 ? Math.min(100, Math.round((currentStep / totalSteps) * 100)) : 0;
     const fecharEmissao = () => {
       setEmissaoProgresso((p) => ({ ...p, aberto: false }));
-      if (status === 'success')
-        window.location.href = '/faturamento/consultaFatura';
+      // A fatura é salva mesmo quando a NF-e é REJEITADA (fica na Consulta como
+      // pendente/rejeitada). Se o passo "Salvando dados da fatura" concluiu, ao
+      // fechar volta pra Consulta ATUALIZADA (fecha todas as telas via reload) —
+      // tanto no sucesso quanto no erro de emissão. Só NÃO redireciona se o erro
+      // foi ANTES de salvar a fatura (aí mantém a tela pra corrigir e reemitir).
+      const faturaSalva =
+        status === 'success' ||
+        (passos?.some(
+          (p) =>
+            /salvando dados da fatura/i.test(p.nome) && p.status === 'done',
+        ) ??
+          false);
+      if (faturaSalva) window.location.href = '/faturamento/consultaFatura';
     };
     return (
       <div className="fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4">
@@ -2008,6 +2022,8 @@ export default function FaturamentoNota({
         codfat: novoCodfat,
         isAgrupamento: agrupandoFaturas,
         observacoes: observacoesValida,
+        // Em homologação o e-mail ao cliente é pulado; marque para testar o envio.
+        forcarEmail: forcarEmailTeste,
       };
 
       console.log('🚀 Payload de emissão:', {
@@ -4372,6 +4388,26 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
                       Venda; demais operações mantêm o cálculo feito na venda. A Inscrição
                       vem pré-selecionada pela IE da empresa e pode ser trocada.
                     </p>
+                  </div>
+                  {/* GRUPO: Notificação (e-mail ao cliente) */}
+                  <div>
+                    <div className="fat-sec-header"><span>Notificação</span></div>
+                    <div className="fat-gp">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={forcarEmailTeste}
+                          onChange={(e) => setForcarEmailTeste(e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                        Enviar e-mail ao cliente (teste)
+                      </label>
+                      <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                        Em homologação o e-mail ao cliente <b>não é enviado</b> (evita
+                        avisar cliente real nos testes). Marque para <b>forçar o envio</b>{' '}
+                        e conferir como o e-mail chega. Em produção o envio é automático.
+                      </p>
+                    </div>
                   </div>
                   {/* GRUPO: Transporte & Identificação */}
                   <div>

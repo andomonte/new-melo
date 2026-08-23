@@ -30,9 +30,9 @@ export default async function handler(
           c.nome AS "nomeFornecedor",
           COALESCE(SUM(o.orc_valor_total), 0) AS "totalCompras",
           COUNT(o.orc_id) AS "totalOrdens"
-        FROM db_manaus.dbcredor c
-        INNER JOIN db_manaus.cmp_requisicao r ON c.cod_credor = r.req_cod_credor
-        INNER JOIN db_manaus.cmp_ordem_compra o ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
+        FROM dbcredor c
+        INNER JOIN cmp_requisicao r ON c.cod_credor = r.req_cod_credor
+        INNER JOIN cmp_ordem_compra o ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
         WHERE o.orc_status IN ('A', 'F')
           AND o.orc_data BETWEEN $1 AND $2
           AND o.orc_valor_total < 100000000

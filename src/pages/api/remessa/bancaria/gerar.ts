@@ -522,10 +522,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.banco,
         r.cod_conta,
         cb.cod_bc as codigo_banco_real
-      FROM db_manaus.dbreceb r
-      LEFT JOIN db_manaus.dbclien c ON c.codcli = r.codcli
-      LEFT JOIN db_manaus.dbbairro ba ON ba.codbairro = c.codbairrocobr
-      LEFT JOIN db_manaus.dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
+      FROM dbreceb r
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      LEFT JOIN dbbairro ba ON ba.codbairro = c.codbairrocobr
+      LEFT JOIN dbbanco cb ON cb.cod_banco = LPAD(COALESCE(r.banco, '0'), 4, '0')
       WHERE r.dt_venc BETWEEN $1 AND $2
         AND r.cancel = 'N'
         AND r.rec = 'N'
@@ -571,7 +571,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // NOTA: A tabela dbremessa_arquivo usa codremessa como identificador
     const seqResult = await pool.query(`
       SELECT COALESCE(MAX(codremessa), 0) + 1 as proximo_seq
-      FROM db_manaus.dbremessa_arquivo
+      FROM dbremessa_arquivo
       WHERE banco = $1
     `, [banco]);
 
@@ -638,7 +638,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Registrar na tabela dbremessa_arquivo
     // Colunas reais: codremessa, banco, data_gerado, nome_arquivo, usuario_importacao, codbodero
     const insertArquivo = await pool.query(`
-      INSERT INTO db_manaus.dbremessa_arquivo
+      INSERT INTO dbremessa_arquivo
       (codremessa, banco, data_gerado, nome_arquivo, usuario_importacao)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING codremessa
@@ -656,7 +656,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Buscar próximo código de borderô
     const boderoResult = await pool.query(`
       SELECT COALESCE(MAX(CAST(cod_bodero AS INTEGER)), 0) + 1 as proximo_cod
-      FROM db_manaus.dbboderobb
+      FROM dbboderobb
       WHERE cod_bodero ~ '^[0-9]+$'
     `);
     
@@ -665,7 +665,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Inserir registro no dbboderobb (tabela Oracle de borderô)
     await pool.query(`
-      INSERT INTO db_manaus.dbboderobb
+      INSERT INTO dbboderobb
       (cod_bodero, cod_conta, dtinicial, dtfinal, dtemissao, cancel)
       VALUES ($1, $2, $3, $4, $5, 'N')
     `, [codBodero, codConta, dtini, dtfim, dataGeracao]);
@@ -673,7 +673,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Buscar o último ID de detalhe para incrementar
     const maxDetalheResult = await pool.query(`
       SELECT COALESCE(MAX("CODREMESSA_DETALHE"), 0) as max_id
-      FROM db_manaus.dbremessa_detalhe
+      FROM dbremessa_detalhe
     `);
     let nextDetalheId = Number(maxDetalheResult.rows[0].max_id);
 
@@ -684,7 +684,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Inserir em dbremessa_detalhe (estrutura Oracle completa)
       // Campos: CODREMESSA_DETALHE, CODREMESSA, NROSEQ, CODCLI, CODRECEB, NROBANCO, DOCUMENTO, REGISTRO, CONTA, VALOR, ABATIMENTO
       await pool.query(`
-        INSERT INTO db_manaus.dbremessa_detalhe
+        INSERT INTO dbremessa_detalhe
         ("CODREMESSA_DETALHE", "CODREMESSA", "NROSEQ", "CODCLI", "CODRECEB", "NROBANCO", "DOCUMENTO", "REGISTRO", "CONTA", "VALOR", "ABATIMENTO")
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `, [
@@ -703,14 +703,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Inserir em dbdocboderobb (estrutura Oracle)
       await pool.query(`
-        INSERT INTO db_manaus.dbdocboderobb
+        INSERT INTO dbdocboderobb
         (cod_bodero, cod_receb, digito, operacao, valor, dt_venc)
         VALUES ($1, $2, '', 'I', $3, $4)
       `, [codBodero, titulo.cod_receb, titulo.valor_titulo, titulo.data_vencimento]);
 
       // Marcar título como enviado (bradesco = 'S')
       await pool.query(`
-        UPDATE db_manaus.dbreceb
+        UPDATE dbreceb
         SET bradesco = 'S'
         WHERE cod_receb = $1
       `, [titulo.cod_receb]);

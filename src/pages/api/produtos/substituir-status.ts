@@ -14,9 +14,9 @@ import { getPgPool } from '@/lib/pg';
 const SEL_PROD = `
   SELECT p.codprod, p.ref, p.descr, p.aplic_extendida, p.codmarca, p.qtest,
          p.local,
-         COALESCE((SELECT m.descr FROM db_manaus.dbmarcas m
+         COALESCE((SELECT m.descr FROM dbmarcas m
                     WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
-    FROM db_manaus.dbprod p
+    FROM dbprod p
    WHERE p.codprod = $1`;
 
 export default async function handle(
@@ -35,12 +35,12 @@ export default async function handle(
 
     // este produto foi substituído por outro?
     const orig = await client.query(
-      `SELECT codprod_subs FROM db_manaus.dbprod_substituir WHERE codprod_orig = $1 LIMIT 1`,
+      `SELECT codprod_subs FROM dbprod_substituir WHERE codprod_orig = $1 LIMIT 1`,
       [codprod],
     );
     // este produto é substituto de outro?
     const subs = await client.query(
-      `SELECT codprod_orig FROM db_manaus.dbprod_substituir WHERE codprod_subs = $1 LIMIT 1`,
+      `SELECT codprod_orig FROM dbprod_substituir WHERE codprod_subs = $1 LIMIT 1`,
       [codprod],
     );
 

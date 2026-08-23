@@ -31,11 +31,11 @@ export default async function handler(
         BOOL_OR(gp.exportar) AS exportar,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT lap.id_functions), NULL) AS funcoes,
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT u.login_user_login), NULL) AS usuarios
-      FROM db_manaus.tb_login_perfil p
-      LEFT JOIN db_manaus."tb_grupo_Permissao" gp ON gp."grupoId" = p.login_perfil_name
-      LEFT JOIN db_manaus.tb_telas t ON t."CODIGO_TELA" = gp.tela
-      LEFT JOIN db_manaus.tb_login_access_perfil lap ON lap.login_perfil_name = p.login_perfil_name
-      LEFT JOIN db_manaus.tb_login_user u ON u.login_perfil_name = p.login_perfil_name
+      FROM tb_login_perfil p
+      LEFT JOIN "tb_grupo_Permissao" gp ON gp."grupoId" = p.login_perfil_name
+      LEFT JOIN tb_telas t ON t."CODIGO_TELA" = gp.tela
+      LEFT JOIN tb_login_access_perfil lap ON lap.login_perfil_name = p.login_perfil_name
+      LEFT JOIN tb_login_user u ON u.login_perfil_name = p.login_perfil_name
       WHERE p.login_perfil_name = $1
       GROUP BY p.login_perfil_name, t."CODIGO_TELA", t."NOME_TELA"
     `,

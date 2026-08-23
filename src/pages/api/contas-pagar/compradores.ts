@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const result = await pool.query(
       `SELECT codcomprador, nome
-       FROM db_manaus.dbcompradores
+       FROM dbcompradores
        WHERE codcomprador LIKE $1 OR UPPER(nome) LIKE UPPER($2)
        ORDER BY codcomprador
        LIMIT 20`,

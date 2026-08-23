@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2. Criar registro de auditoria
     const analiseResult = await client.query(
-      `INSERT INTO db_manaus.dbanalise_liberacao (codvenda, resultado, usuario)
+      `INSERT INTO dbanalise_liberacao (codvenda, resultado, usuario)
        VALUES ($1, 'EDITADA', $2) RETURNING id`,
       [codvenda, user],
     );
@@ -70,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     for (const item of itensOriginais.rows) {
       await client.query(
-        `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
+        `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
          VALUES ($1, $2, 'ORIGINAL', $3)`,
         [idAnalise, item.codprod, `qtd:${item.qtd} pr:${Number(item.prunit).toFixed(2)}`],
       );
@@ -107,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Recalcular impostos via função PostgreSQL
         try {
           const { rows } = await client.query(
-            `SELECT * FROM db_manaus.calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
             [
               String(item.codprod).trim().padStart(6, '0'),
               String(codcli ?? '').trim(),
@@ -150,7 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Registrar auditoria
         await client.query(
-          `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, campo, valor_anterior, valor_novo)
+          `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, campo, valor_anterior, valor_novo)
            VALUES ($1, $2, 'ALTERAR', 'qtd', $3, $4)`,
           [idAnalise, item.codprod, String(qtdOriginal), String(novaQtd)],
         );
@@ -200,7 +200,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Registrar auditoria
         await client.query(
-          `INSERT INTO db_manaus.dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
+          `INSERT INTO dbanalise_liberacao_itens (id_analise, codprod, acao, valor_anterior)
            VALUES ($1, $2, 'REMOVER', $3)`,
           [idAnalise, codprod, `qtd:${qtdDel} pr:${prDel.toFixed(2)}`],
         );
@@ -229,7 +229,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 7. Marcar conclusão da auditoria
     await client.query(
-      `UPDATE db_manaus.dbanalise_liberacao
+      `UPDATE dbanalise_liberacao
        SET resultado = 'EDITADA', dt_conclusao = NOW()
        WHERE id = $1`,
       [idAnalise],
