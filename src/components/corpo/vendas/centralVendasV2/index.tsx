@@ -243,10 +243,13 @@ const VendasPage = () => {
   };
 
   const isAdmin = user?.perfil === 'ADMINISTRAÇÃO';
+  const temDBV = user?.funcoes?.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'DBV');
+  const temEV = user?.funcoes?.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'EV');
+  const podeVerTodos = isAdmin || temDBV || temEV;
 
-  // Carregar lista de vendedores para o filtro do admin
+  // Carregar lista de vendedores para o filtro
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!podeVerTodos) return;
     fetch('/api/vendedores/get?perPage=9999')
       .then(r => r.json())
       .then(data => {
@@ -255,10 +258,10 @@ const VendasPage = () => {
         }
       })
       .catch(() => {});
-  }, [isAdmin]);
+  }, [podeVerTodos]);
 
-  // Para admin: determina o codusr a filtrar (todos ou vendedor específico)
-  const codusrFiltro = isAdmin
+  // Determina o codusr a filtrar (todos ou vendedor específico)
+  const codusrFiltro = podeVerTodos
     ? (filtroVendedor === 'todos' ? undefined : filtroVendedor)
     : user?.codusr;
 
@@ -1822,7 +1825,7 @@ const VendasPage = () => {
 
             <div className="flex items-center gap-4">
               {/* Filtro Vendedor (admin) — padrão Material Input igual Nova Venda V2 */}
-              {isAdmin && (
+              {podeVerTodos && (
                 <div className="relative min-w-[200px]">
                   <input
                     ref={vendedorInputRef}
@@ -1906,7 +1909,7 @@ const VendasPage = () => {
                       if (showStatusDropdown) { setStatusIdx(p => { const n = Math.max(p - 1, 0); setTimeout(() => document.querySelector('[data-status-idx="' + n + '"]')?.scrollIntoView({ block: 'nearest' }), 0); return n; }); }
                     }
                     else if (e.key === 'Escape') { setShowStatusDropdown(false); }
-                    else if (e.key === 'ArrowLeft' && !showStatusDropdown) { e.preventDefault(); if (isAdmin) vendedorInputRef.current?.focus({ preventScroll: true }); }
+                    else if (e.key === 'ArrowLeft' && !showStatusDropdown) { e.preventDefault(); if (podeVerTodos) vendedorInputRef.current?.focus({ preventScroll: true }); }
                     else if (e.key === 'ArrowRight' && !showStatusDropdown) { e.preventDefault(); novaVendaBtnRef.current?.focus({ preventScroll: true }); }
                   }}
                   placeholder=" "
