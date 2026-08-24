@@ -1360,7 +1360,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     { headerName: 'Ref', field: 'ref', width: 100, editable: true,
       cellStyle: { backgroundColor: '#dbeafe', fontWeight: 600 },
     },
-    { headerName: 'P', field: 'promoAtiva', width: 40, maxWidth: 40, sortable: false,
+    { headerName: 'Promo', field: 'promoAtiva', width: 65, minWidth: 50, sortable: false,
       cellStyle: { display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
       cellRenderer: (p: any) => {
         if (!p.data?.promocao) return null;
@@ -2123,6 +2123,14 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 onColumnResized={onColumnResized}
                 onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
+                onCellKeyDown={(e: any) => {
+                  if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao && (e.event?.key === 'Enter' || e.event?.key === ' ')) {
+                    e.event?.preventDefault();
+                    const novoEstado = !e.data.promoAtiva;
+                    e.node.setData({ ...e.data, promoAtiva: novoEstado });
+                    setItensGrid((prev) => prev.map((r: any, i: number) => i === e.rowIndex ? { ...r, promoAtiva: novoEstado } : r));
+                  }
+                }}
                 onCellClicked={(e: any) => {
                   if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao) {
                     const novoEstado = !e.data.promoAtiva;
