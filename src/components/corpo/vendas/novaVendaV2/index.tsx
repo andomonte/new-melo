@@ -2449,6 +2449,14 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     </div>
                   ) : null}
               </div>
+
+              {/* Total da Venda */}
+              <div className="relative min-w-[160px]">
+                <div className={`${MI_INPUT} bg-gray-100 dark:bg-zinc-900 cursor-default text-right font-bold text-lg ${totalVenda > 0 ? 'text-green-700 dark:text-green-400' : 'text-gray-400'}`}>
+                  {totalVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <label className={MI_LABEL}>Total da Venda</label>
+              </div>
             </div>
 
             {/* Linha 2: Transportadora, Valor Transporte, Obs Fat, Pedido */}
