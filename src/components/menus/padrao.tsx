@@ -387,25 +387,7 @@ export const menus = [
             corpo: VendasDashboard,
           },
           {
-            name: 'Nova',
-            href: '/vendas/novaVenda',
-            icon: Plus,
-            corpo: NovasVendas,
-          },
-          {
-            name: 'Nova V2',
-            href: '/vendas/novaVendaV2',
-            icon: Plus,
-            corpo: NovaVendaV2,
-          },
-          {
-            name: 'Central',
-            href: '/vendas/centralVendas',
-            icon: ShoppingBag,
-            corpo: CentralVendas,
-          },
-          {
-            name: 'Central V2',
+            name: 'Central de Vendas',
             href: '/vendas/centralVendasV2',
             icon: ShoppingBag,
             corpo: CentralVendasV2,
@@ -415,12 +397,6 @@ export const menus = [
             href: '/vendas/promocoes',
             icon: ShoppingBag,
             corpo: Promocoes,
-          },
-          {
-            name: 'Desbloqueio',
-            href: '/vendas/bloqueadas',
-            icon: LockOpenIcon,
-            corpo: VendasBloqueadasPage,
           },
           {
             name: 'Locais',
