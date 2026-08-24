@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react';
-import { Menu, X, LockOpen } from 'lucide-react';
+import { Menu, X, LockOpen, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PerfilPagina from '@/components/template/perfil';
 import { AuthContext } from '@/contexts/authContexts';
@@ -22,6 +22,7 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
   const perfilUser = user;
   const router = useRouter();
   const [vendasBloqueadas, setVendasBloqueadas] = useState(0);
+  const [promoAlerta, setPromoAlerta] = useState<{ total: number; msg: string }>({ total: 0, msg: '' });
 
   // Verificar se o usuário tem função DBV (Desbloquear Venda)
   const temDBV = user?.funcoes?.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'DBV');
@@ -31,7 +32,6 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
   const fetchBloqueadas = useCallback(async () => {
     if (!temDBV) return;
     try {
-      // Admin vê todas as bloqueadas, outros veem só as próprias
       const url = isAdmin
         ? '/api/vendas/get?page=1&perPage=1&status=bloqueada'
         : `/api/vendas/get?page=1&perPage=1&status=bloqueada&codvend_usuario=${user?.codusr || ''}`;
@@ -41,12 +41,25 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
     } catch { /* ignora */ }
   }, [temDBV, isAdmin, user?.codusr]);
 
+  // Buscar notificações de promoção (expirando por data ou estoque acabando)
+  const fetchPromoAlerta = useCallback(async () => {
+    try {
+      const resp = await fetch('/api/vendas/notificacoes');
+      const data = await resp.json();
+      const qtdPromo = (data?.promoExpirando?.qtd || 0) + (data?.promoEstoque?.qtd || 0);
+      const msgs: string[] = [];
+      if (data?.promoExpirando?.qtd > 0) msgs.push(`${data.promoExpirando.qtd} expirando por data`);
+      if (data?.promoEstoque?.qtd > 0) msgs.push(`${data.promoEstoque.qtd} com estoque acabando`);
+      setPromoAlerta({ total: qtdPromo, msg: msgs.join(' | ') });
+    } catch { /* ignora */ }
+  }, []);
+
   useEffect(() => {
     fetchBloqueadas();
-    // Polling a cada 60 segundos
-    const interval = setInterval(fetchBloqueadas, 60000);
+    fetchPromoAlerta();
+    const interval = setInterval(() => { fetchBloqueadas(); fetchPromoAlerta(); }, 60000);
     return () => clearInterval(interval);
-  }, [fetchBloqueadas]);
+  }, [fetchBloqueadas, fetchPromoAlerta]);
 
   return (
     <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
@@ -78,6 +91,25 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
             </div>
           </div>
           <div className="w-[25%] flex items-center justify-end gap-3">
+            {/* Notificação de promoções expirando / estoque acabando */}
+            {promoAlerta.total > 0 ? (
+              <button
+                onClick={() => {
+                  if (window.location.pathname.includes('promocoes')) {
+                    window.location.reload();
+                  } else {
+                    router.push('/vendas/promocoes');
+                  }
+                }}
+                className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+                title={`Promoções: ${promoAlerta.msg}`}
+              >
+                <Tag size={20} className="text-yellow-300" />
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-yellow-500 text-black text-[10px] font-bold rounded-full px-1">
+                  {promoAlerta.total > 99 ? '99+' : promoAlerta.total}
+                </span>
+              </button>
+            ) : null}
             {/* Notificação de vendas bloqueadas */}
             {temDBV && vendasBloqueadas > 0 ? (
               <button

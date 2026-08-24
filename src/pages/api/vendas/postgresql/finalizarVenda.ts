@@ -612,7 +612,8 @@ async function insertPgItensAndStock(
          fcp, base_fcp, valor_fcp, fcp_subst, basefcp_subst, valorfcp_subst,
          ftp_st, fcp_substret, basefcp_substret, valorfcp_substret,
          codint, cfop, tipocfop, ncm, cstipi, cstpis, cstcofins, csticms,
-         aliquota_ibs, aliquota_cbs, valor_ibs, valor_cbs, ibs_e, ibs_m
+         aliquota_ibs, aliquota_cbs, valor_ibs, valor_cbs, ibs_e, ibs_m,
+         id_promocao, id_promocao_item
        ) VALUES (
          $1,$2,$3,$4,$5,$6,NULL,NULL,
          $7,$8,$9,$10,$11,$12,$13,$14,$15,
@@ -623,7 +624,8 @@ async function insertPgItensAndStock(
          $40,$41,$42,$43,$44,$45,
          $46,$47,$48,$49,
          $50,$51,$52,$53,$54,$55,$56,$57,
-         $58,$59,$60,$61,$62,$63
+         $58,$59,$60,$61,$62,$63,
+         $64,$65
        )`,
       [
         ids.codvenda,
@@ -691,8 +693,10 @@ async function insertPgItensAndStock(
         n(it.aliquota_cbs),
         n(it.valor_ibs),
         n(it.valor_cbs),
-        n(it.ibs_e),   // $61 IBS Estadual (substitui ICMS)
-        n(it.ibs_m),   // $62 IBS Municipal (substitui ISS)
+        n(it.ibs_e),   // $62 IBS Estadual (substitui ICMS)
+        n(it.ibs_m),   // $63 IBS Municipal (substitui ISS)
+        it.promocao_id ?? it.id_promocao ?? null,        // $64 id_promocao
+        it.id_promocao_item ?? null,                     // $65 id_promocao_item
       ],
     );
 
