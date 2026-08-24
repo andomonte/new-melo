@@ -1799,6 +1799,31 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Toggle promoção: ativa → aplica desconto, desativa → volta preço original
+  const togglePromo = (e: any) => {
+    const novoEstado = !e.data.promoAtiva;
+    const promo = e.data.promocao;
+    const precoOriginal = Number(e.data.prvenda_original) || Number(e.data.prunit);
+    let novoPreco = precoOriginal;
+
+    if (novoEstado && promo) {
+      // Ativando: aplica desconto da promoção
+      const tipo = (promo.tipo_desconto_item || promo.tipo_desconto || '').toUpperCase();
+      const valor = Number(promo.valor_desconto_item ?? promo.valor_desconto) || 0;
+      if (tipo.includes('PERC')) {
+        novoPreco = precoOriginal * (1 - valor / 100);
+      } else {
+        novoPreco = Math.max(precoOriginal - valor, 0);
+      }
+    }
+    // Desativando: volta ao preço original (precoOriginal já é o certo)
+
+    const totalItem = (Number(e.data.qtd) || 0) * novoPreco * (1 - (Number(e.data.desconto_percentual) || 0) / 100);
+    const updated = { ...e.data, promoAtiva: novoEstado, prunit: novoPreco, total_item: totalItem };
+    e.node.setData(updated);
+    setItensGrid((prev: any[]) => prev.map((r, i) => i === e.rowIndex ? { ...r, ...updated } : r));
+  };
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -2126,16 +2151,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 onCellKeyDown={(e: any) => {
                   if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao && (e.event?.key === 'Enter' || e.event?.key === ' ')) {
                     e.event?.preventDefault();
-                    const novoEstado = !e.data.promoAtiva;
-                    e.node.setData({ ...e.data, promoAtiva: novoEstado });
-                    setItensGrid((prev) => prev.map((r: any, i: number) => i === e.rowIndex ? { ...r, promoAtiva: novoEstado } : r));
+                    togglePromo(e);
                   }
                 }}
                 onCellClicked={(e: any) => {
                   if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao) {
-                    const novoEstado = !e.data.promoAtiva;
-                    e.node.setData({ ...e.data, promoAtiva: novoEstado });
-                    setItensGrid((prev) => prev.map((r, i) => i === e.rowIndex ? { ...r, promoAtiva: novoEstado } : r));
+                    togglePromo(e);
                   }
                   if (e.column?.getColId() === 'desconto_percentual' && e.data) {
                     const descAtual = Number(e.data.desconto_percentual) || 0;
