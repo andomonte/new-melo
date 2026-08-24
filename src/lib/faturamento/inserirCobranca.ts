@@ -11,6 +11,7 @@
 import { salvarParcelasPagamento } from '@/utils/parcelasPagamento';
 import { codigoFormaFatura } from '@/lib/faturamento/formaFatura';
 import { bancoInternoDbreceb, codBancoDbfatura } from '@/lib/faturamento/bancoCobranca';
+import { proximoNroBanco, LEN_NRO_BANCO } from '@/lib/boleto/nossoNumero';
 
 export interface ParcelaCobranca {
   vencimento: string;
@@ -99,6 +100,13 @@ export async function inserirCobranca(
   // Data de emissão do título = hoje (equivale a trunc(sysdate) no Delphi).
   const dtEmissao = new Date().toISOString().split('T')[0];
 
+  // BOLETO (forma_fat='2'): o Nosso Número base (nro_banco) é gerado AQUI, no
+  // faturamento, incrementando dbbanco_numero de forma atômica — fiel ao TCOBRANCA
+  // do Delphi (antes o web usava cod_receb, divergente). Assim o boleto já sai com o
+  // número final que a remessa vai enviar ao banco. Só para bancos com config (0..8);
+  // MELO/carteira não entra aqui.
+  const ehBoleto = codigoForma === '2' && !!LEN_NRO_BANCO[bancoDbreceb];
+
   // Gera os títulos (dbreceb).
   for (const parcela of parcelas) {
     const { rows } = await client.query(
@@ -106,13 +114,15 @@ export async function inserirCobranca(
     );
     const novoCod = rows[0].next_id.toString().padStart(9, '0');
 
+    const nroBanco = ehBoleto ? await proximoNroBanco(client, bancoDbreceb) : null;
+
     await client.query(
       `INSERT INTO dbreceb
          (cod_receb, codcli, cod_fat, cod_conta, dt_venc, dt_emissao, valor_pgto,
-          valor_rec, nro_doc, forma_fat, banco, tipo, rec, cancel, bradesco,
+          valor_rec, nro_doc, forma_fat, banco, nro_banco, tipo, rec, cancel, bradesco,
           venc_ant, dtvenc_previsao)
        VALUES ($1, $2, $3, $4, $5, $6, $7,
-          0, $8, $9, $10, 'F', 'N', 'N', 'N',
+          0, $8, $9, $10, $11, 'F', 'N', 'N', 'N',
           $5, $5)`,
       [
         novoCod,
@@ -125,6 +135,7 @@ export async function inserirCobranca(
         parcela.documento,
         codigoForma,
         bancoDbreceb,
+        nroBanco,
       ],
     );
   }

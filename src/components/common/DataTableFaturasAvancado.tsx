@@ -626,7 +626,29 @@ export default function DataTableFaturasAvancado({
   };
 
   const handleVisualizarBoletos = (fatura: any) => {
+    const frm = String(fatura?.frmfat ?? '');
+    // CARTEIRA (frmfat='4') → "Título em Carteira".
+    if (frm === '4') {
+      window.open(
+        `/api/faturamento/titulo-carteira?cod_fat=${fatura.codfat}`,
+        '_blank',
+      );
+      return;
+    }
+    // BOLETO (frmfat='2') → boleto bancário (Bradesco/Santander), FEBRABAN.
+    if (frm === '2') {
+      window.open(`/api/faturamento/boleto?cod_fat=${fatura.codfat}`, '_blank');
+      return;
+    }
+    // Demais formas → modal de boletos existente (fallback).
+    // (Recibo, frmfat='1', tem ação própria "Recibo" — ver handleRecibo.)
     setFaturaParaBoletos(fatura);
+  };
+
+  // RECIBO (frmfat='1') — comprovante de recebimento à vista. Ação própria,
+  // habilitada só para fatura de recibo (regra fiel ao "Imprimir → Recibo" do Delphi).
+  const handleRecibo = (fatura: any) => {
+    window.open(`/api/faturamento/recibo?cod_fat=${fatura.codfat}`, '_blank');
   };
 
   const handleEmitirNota = async (fatura: any) => {
@@ -1380,6 +1402,7 @@ const handleCancelarNota = async () => {
         onEmailDanfeClick={() => setEmaildanfeModalAberto(f)}
         onenviarCobrancaClick={() => setCobrancaEnviada(f)}
         onVisualizarBoletosClick={() => handleVisualizarBoletos(f)}
+        onReciboClick={() => handleRecibo(f)}
         onVerProdutosClick={() => handleLinhaClick(f)}
         isSelecionada={faturasSelecionadas.includes(f.codfat)}
         onVisualizarRejeicaoClick={() => {
