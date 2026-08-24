@@ -245,6 +245,8 @@ class RoboSeparacaoApp:
         self.rodando = False
         self.thread = None
         self.impressora_selecionada = None
+        self.armazem_selecionado = None  # None = TODOS
+        self.armazens_map = {}  # {'TODOS': None, '1001 - GERAL': 1001, ...}
         self.fila_nroimp = tk.StringVar(value='01')
         self.intervalo = tk.StringVar(value='20')
         self.db_host = tk.StringVar(value='servicos.melopecas.com.br')
@@ -291,7 +293,13 @@ class RoboSeparacaoApp:
                                    values=['01', '03', '05', '06', '10', '99'])
         combo_fila.pack(side='left', padx=(5, 20))
 
-        ttk.Label(row1, text='Intervalo (seg):').pack(side='left', padx=(20, 0))
+        ttk.Label(row1, text='Armazém:').pack(side='left')
+        self.combo_armazem = ttk.Combobox(row1, width=25, state='readonly', values=['TODOS'])
+        self.combo_armazem.current(0)
+        self.combo_armazem.pack(side='left', padx=(5, 10))
+        ttk.Button(row1, text='Carregar', command=self.carregar_armazens).pack(side='left', padx=(0, 20))
+
+        ttk.Label(row1, text='Intervalo (seg):').pack(side='left')
         ttk.Entry(row1, textvariable=self.intervalo, width=5).pack(side='left', padx=5)
 
         # ─── Frame impressora ───
@@ -340,6 +348,30 @@ class RoboSeparacaoApp:
         self.txt_log.see('end')
         self.txt_log.configure(state='disabled')
 
+    def carregar_armazens(self):
+        """Conecta no banco e carrega lista de armazéns"""
+        try:
+            conn = psycopg2.connect(**self._conn_params())
+            cur = conn.cursor()
+            cur.execute("SELECT arm_id, arm_descricao FROM cad_armazem ORDER BY arm_id")
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+
+            self.armazens_map = {'TODOS': None}
+            opcoes = ['TODOS']
+            for arm_id, descr in rows:
+                label = f'{arm_id} - {descr}'
+                self.armazens_map[label] = arm_id
+                opcoes.append(label)
+
+            self.combo_armazem['values'] = opcoes
+            self.combo_armazem.current(0)
+            self.log(f'{len(rows)} armazém(ns) carregado(s)')
+        except Exception as e:
+            self.log(f'ERRO ao carregar armazéns: {e}')
+            messagebox.showerror('Erro', f'Falha ao carregar armazéns:\n{e}\n\nVerifique a conexão com o banco.')
+
     def atualizar_impressoras(self):
         impressoras = listar_impressoras()
         self.combo_impressora['values'] = impressoras
@@ -378,6 +410,7 @@ class RoboSeparacaoApp:
             return
 
         self.impressora_selecionada = self.combo_impressora.get()
+        self.armazem_selecionado = self.armazens_map.get(self.combo_armazem.get())
 
         if not self.conectar_banco():
             return
@@ -386,7 +419,8 @@ class RoboSeparacaoApp:
         self.btn_iniciar.configure(state='disabled')
         self.btn_parar.configure(state='normal')
         self.lbl_status.configure(text='Rodando...', foreground='green')
-        self.log(f'Iniciado | Impressora: {self.impressora_selecionada} | Fila: {self.fila_nroimp.get()}')
+        arm_label = self.combo_armazem.get()
+        self.log(f'Iniciado | Impressora: {self.impressora_selecionada} | Fila: {self.fila_nroimp.get()} | Armazém: {arm_label}')
 
         self.thread = threading.Thread(target=self.loop_principal, daemon=True)
         self.thread.start()
@@ -428,14 +462,24 @@ class RoboSeparacaoApp:
             self.conn.autocommit = True
 
         cur = self.conn.cursor()
-        cur.execute(
-            """SELECT "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR",
-                      "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM", motivo
-               FROM dbservimp
-               WHERE "IMPRESSO" <> 'S' AND "NROIMP" = %s
-               ORDER BY "DATA" ASC, "HORA" ASC LIMIT 3""",
-            (self.fila_nroimp.get(),)
-        )
+        if self.armazem_selecionado is not None:
+            cur.execute(
+                """SELECT "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR",
+                          "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM", motivo
+                   FROM dbservimp
+                   WHERE "IMPRESSO" <> 'S' AND "NROIMP" = %s AND "ARMAZEM" = %s
+                   ORDER BY "DATA" ASC, "HORA" ASC LIMIT 3""",
+                (self.fila_nroimp.get(), int(self.armazem_selecionado))
+            )
+        else:
+            cur.execute(
+                """SELECT "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR",
+                          "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM", motivo
+                   FROM dbservimp
+                   WHERE "IMPRESSO" <> 'S' AND "NROIMP" = %s
+                   ORDER BY "DATA" ASC, "HORA" ASC LIMIT 3""",
+                (self.fila_nroimp.get(),)
+            )
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
 
