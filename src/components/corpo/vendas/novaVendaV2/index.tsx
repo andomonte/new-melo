@@ -1047,15 +1047,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     setEnvioStep('montando');
     setEnvioMsg('Preparando os dados para envio...');
 
-    if (!(clienteSelecionado?.codcli || clienteSelecionado?.CODCLI)) { setEnvioStep('erro'); setEnvioMsg('INFORME O CLIENTE'); return; }
-    if (clienteBloqueado) { setEnvioStep('erro'); setEnvioMsg('O CLIENTE ESTÁ BLOQUEADO, CONSULTE O SETOR DE COBRANÇA.'); return; }
-    if (itensGrid.length === 0) { setEnvioStep('erro'); setEnvioMsg('ESCOLHA PRODUTOS!'); return; }
-    if (itensGrid.length > 500) { setEnvioStep('erro'); setEnvioMsg('JÁ EXISTEM 500 ITENS SELECIONADOS PARA ESTA VENDA'); return; }
     // Se cartão e parcelas não definida, auto-setar 1x (timing do useEffect pode não ter executado)
     const parcelasEfetivas = isCartaoCredito ? (parcelasCartao > 0 ? parcelasCartao : 1) : 0;
-    if (isCartaoCredito && parcelasEfetivas <= 0) { setEnvioStep('erro'); setEnvioMsg('INFORME O PARCELAMENTO DO CARTÃO'); return; }
-    if (isClienteBalcao && totalVenda > 10000) { setEnvioStep('erro'); setEnvioMsg('CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.'); return; }
-    if (isClienteBalcao && !isAvista && !isCartaoCredito) { setEnvioStep('erro'); setEnvioMsg('CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.'); return; }
 
     try {
       const prazosPayload = prazosArray.map((p: any) => ({ data: p.dataVencimento, dia: Number(p.dias) }));
