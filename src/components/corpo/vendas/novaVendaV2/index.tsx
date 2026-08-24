@@ -2459,7 +2459,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               {/* Total da Venda + Qtd Itens */}
               <div className="flex items-center gap-3 whitespace-nowrap px-2">
                 <span className="text-sm font-semibold text-gray-800 dark:text-gray-300">{totalItens} itens</span>
-                <span className="font-bold text-xl text-blue-600 dark:text-blue-400">Total: {formatCurrency(totalVenda)}</span>
+                <span className="font-bold text-xl text-blue-600 dark:text-blue-400">{formatCurrency(totalVenda)}</span>
                 {isCartaoCredito && parcelasCartao > 0 ? (
                   <span className="text-sm font-bold text-orange-600">Cartão {parcelasCartao}x</span>
                 ) : null}
