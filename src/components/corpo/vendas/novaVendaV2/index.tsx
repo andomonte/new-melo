@@ -2586,6 +2586,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               {(() => {
                 let msg = '';
                 if (!clienteSelecionado) msg = 'INFORME O CLIENTE';
+                else if (clienteBloqueado) msg = 'CLIENTE BLOQUEADO — CONSULTE O SETOR DE COBRANÇA';
                 else if (totalItens === 0) msg = 'ESCOLHA PRODUTOS!';
                 else if (totalVenda > 0 && totalVenda < 30) msg = 'VENDA MÍNIMA DE R$ 30,00';
                 else if (isClienteBalcao && totalVenda > 10000) msg = 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.';
@@ -2631,7 +2632,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 </button>
                 {statusVenda === 'BLOQUEIO_PRECO' ? (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || totalVenda < 30}
+                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30}
                     onClick={async () => {
                       setEnvioOpen(true);
                       setEnvioStep('montando');
