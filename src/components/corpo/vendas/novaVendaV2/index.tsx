@@ -985,7 +985,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           vlrfrete: valTranspDec || 0,
           prazo: prazo || '',
           obs: obs || '',
-          obsfat: obsFat || '',
+          obsfat: obsfatTexto || obsFat || '',
           bloqueada: '0',
           estoque_virtual: 'N',
           uName: user?.usuario || '',
@@ -1076,7 +1076,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           vlrfrete: valTranspDec || 0,
           prazo: prazo || '',
           obs: obs || '',
-          obsfat: obsFat || '',
+          obsfat: obsfatTexto || obsFat || '',
           bloqueada,
           estoque_virtual: 'N',
           uName: user?.usuario || '',
@@ -1526,6 +1526,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return desc.includes('CREDITO') || desc.includes('CRÉDITO');
   }, [fPagamento, opcoesFP]);
 
+  // ---------- Boleto ----------
+  const isBoleto = useMemo(() => {
+    if (!fPagamento) return false;
+    const desc = (opcoesFP.find(f => f.id === fPagamento)?.descricao || '').toUpperCase();
+    return desc.includes('BOLETO');
+  }, [fPagamento, opcoesFP]);
+
   // Prazo bloqueado por regra do cliente — independente da forma de pagamento
   // Usa dados do cliente direto, não a resposta da API (que varia conforme forma)
   const saldoCliente = useMemo(() => {
@@ -1548,31 +1555,30 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return '';
   }, [clienteSelecionado, claspgto, temDescontoAvista, restricaoFinanceira]);
 
-  // Prazo desabilitado: por regra OU por escolha de forma à vista/cartão
+  // Prazo desabilitado: por regra, por fechamento na semana, ou por forma que não é boleto
   const prazoDesabilitado = useMemo(() => {
-    return prazoBloqueado || prazo === 'FECHAMENTO NA SEMANA';
-  }, [prazoBloqueado, prazo]);
+    if (prazoBloqueado) return true;
+    if (prazo === 'FECHAMENTO NA SEMANA') return true;
+    // Se tem forma selecionada e NÃO é boleto → prazo desabilitado (à vista)
+    if (fPagamento && !isBoleto) return true;
+    return false;
+  }, [prazoBloqueado, prazo, fPagamento, isBoleto]);
 
-  // Forma ↔ Prazo: quem clica por último ganha
-  // Quando escolhe forma à vista/cartão → limpa prazo
+  // Forma de pagamento controla o prazo:
+  // - Boleto → ativa prazo (usuário escolhe)
+  // - Qualquer outra (dinheiro, pix, débito, crédito) → prazo = "À VISTA", limpa prazos
+  // - Fechamento na semana → limpa forma de pagamento
   useEffect(() => {
-    if ((isAvista || isCartaoCredito) && prazo) {
+    if (!fPagamento) return;
+    if (isBoleto) {
+      // Boleto: prazo fica livre para o usuário escolher
+      return;
+    }
+    // Qualquer outra forma: limpa prazo (é à vista)
+    if (prazo && prazo !== 'FECHAMENTO NA SEMANA') {
       setPrazo(''); setPrazosArray([]);
     }
-  }, [isAvista, isCartaoCredito]);
-
-  // Quando escolhe prazo → auto-set forma como BOLETO
-  useEffect(() => {
-    if (prazo && prazo !== 'FECHAMENTO NA SEMANA') {
-      const boleto = opcoesFP.find(fp => (fp.descricao || '').toUpperCase().includes('BOLETO'));
-      if (boleto && fPagamento !== boleto.id) {
-        setFPagamento(boleto.id);
-      }
-    }
-    if (prazo === 'FECHAMENTO NA SEMANA' && fPagamento) {
-      setFPagamento('');
-    }
-  }, [prazo]);
+  }, [fPagamento, isBoleto]);
 
   // Cliente precisa solicitar crédito (saldo insuficiente + prazo não é à vista + NÃO é cartão)
   const precisaCreditoExtra = useMemo(() => {
@@ -1581,23 +1587,20 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return Number(clienteSelecionado.saldo || 0) - totalVenda < 0 && !isAvista;
   }, [clienteSelecionado, totalVenda, isAvista, isCartaoCredito]);
 
-  // Filtrar formas de pagamento por prazo
-  // Forma de pagamento: só DINHEIRO, PIX, CARTÃO DÉBITO, CARTÃO CRÉDITO
-  // BOLETO é implícito pelo prazo (auto-setado, não aparece na lista)
-  // Quando prazo está preenchido, forma fica fixa como BOLETO (não editável)
+  // Formas de pagamento visíveis: DINHEIRO, PIX, DÉBITO, CRÉDITO, BOLETO
   const opcoesFPFiltradas = useMemo(() => {
     if (!opcoesFP.length) return [];
     return opcoesFP.filter(fp => {
       const d = (fp.descricao || '').toUpperCase();
-      return d.includes('DINHEIRO') || d === 'PIX' || d.includes('DEBITO') || d.includes('DÉBITO') || d.includes('CREDITO') || d.includes('CRÉDITO');
+      return d.includes('DINHEIRO') || d === 'PIX' || d.includes('DEBITO') || d.includes('DÉBITO') || d.includes('CREDITO') || d.includes('CRÉDITO') || d.includes('BOLETO');
     });
   }, [opcoesFP]);
 
-  // Forma de pagamento travada como BOLETO quando tem prazo
+  // Forma de pagamento travada quando já tem prazo definido (não pode mudar FP depois de definir prazo)
   const fpTravadoBoleto = useMemo(() => {
     if (!prazo || prazo === 'FECHAMENTO NA SEMANA') return false;
-    return true;
-  }, [prazo]);
+    return isBoleto && prazosArray.length > 0;
+  }, [prazo, isBoleto, prazosArray]);
 
   const fpFiltradosPorBusca = useMemo(() => {
     if (!buscaFP.trim()) return opcoesFPFiltradas;
@@ -1635,9 +1638,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       return `A VISTA (${motivo})`;
     }
     if (prazo === 'FECHAMENTO NA SEMANA') return 'FECHAMENTO NA SEMANA';
+    if (isBoleto && prazo) return `BOLETO ${prazo}`;
+    if (isBoleto) return 'BOLETO';
     if (fpDesc) return fpDesc;
     return '';
-  }, [fPagamento, opcoesFP, isCartaoCredito, parcelasCartao, isAvista, avistaMotivo]);
+  }, [fPagamento, opcoesFP, isCartaoCredito, parcelasCartao, isAvista, avistaMotivo, isBoleto, prazo]);
 
   // ---------- Status da venda ----------
   const statusVenda = useMemo(() => {
@@ -2328,14 +2333,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
 
               {/* Prazo */}
               <div className="flex-1 relative min-w-[200px]">
-                  <input type="text" tabIndex={prazoBloqueado ? -1 : 0}
-                    readOnly={prazoBloqueado || (!!prazo && !showPrazoDropdown)}
-                    value={prazoBloqueado ? prazoBloqueadoMsg : (prazo && !showPrazoDropdown ? prazo : buscaPrazo)}
+                  <input type="text" tabIndex={prazoDesabilitado ? -1 : 0}
+                    readOnly={prazoDesabilitado || (!!prazo && !showPrazoDropdown)}
+                    value={prazoBloqueado ? prazoBloqueadoMsg : (prazoDesabilitado && fPagamento && !isBoleto ? 'À VISTA' : (prazo && !showPrazoDropdown ? prazo : buscaPrazo))}
                     onChange={(e) => { if (!prazoBloqueado) { setBuscaPrazo(e.target.value); setShowPrazoDropdown(true); setPrazoIdx(0); } }}
                     onClick={() => {
-                      if (prazoBloqueado) return;
-                      // Se tem forma à vista/cartão selecionada, limpar pra liberar prazo
-                      if ((isAvista || isCartaoCredito) && !prazoBloqueado) { setFPagamento(''); setBuscaFP(''); }
+                      if (prazoDesabilitado) return;
                       if (!showPrazoDropdown) { setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); }
                     }}
                     onFocus={() => {}}
@@ -2343,8 +2346,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     onBlur={() => setTimeout(() => { setShowPrazoDropdown(false); setBuscaPrazo(''); if (editingField === 'prazo') cancelEdit(); }, 150)}
                     onKeyDown={(e) => {
                       if (prazoBloqueado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
-                      // Se tem forma selecionada, Enter limpa forma e abre prazo
-                      if ((isAvista || isCartaoCredito) && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); setFPagamento(''); setBuscaFP(''); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
+                      if (prazoDesabilitado) { if (e.key === 'Enter') { e.preventDefault(); navegarFocavel('next'); } return; }
                       if (e.key === 'Escape' && editingField === 'prazo') { e.preventDefault(); cancelEdit(); setShowPrazoDropdown(false); setBuscaPrazo(''); return; }
                       if (prazo && !showPrazoDropdown) { if (e.key === 'Enter') { e.preventDefault(); startEdit('prazo', { prazo, prazosArray }); setPrazo(''); setPrazosArray([]); setBuscaPrazo(''); setShowPrazoDropdown(true); setPrazoIdx(0); } return; }
                       // Índices: 0=Fechamento, 1=Personalizar, 2..N+1=opções tabela filtradas
@@ -2365,7 +2367,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                       if (e.key === 'Escape') { setShowPrazoDropdown(false); setBuscaPrazo(''); }
                     }}
                     placeholder=" "
-                    className={`${MI_INPUT} ${prazoBloqueado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50 text-red-500 text-xs italic' : prazo && !showPrazoDropdown ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
+                    className={`${MI_INPUT} ${prazoBloqueado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-50 text-red-500 text-xs italic' : prazoDesabilitado ? 'bg-gray-100 dark:bg-zinc-900 cursor-not-allowed opacity-70' : prazo && !showPrazoDropdown ? 'bg-gray-100 dark:bg-zinc-900 cursor-default' : ''} ${prazo === 'FECHAMENTO NA SEMANA' ? 'text-purple-600 font-semibold' : ''}`}
                   />
                   <label className={MI_LABEL}>Prazo</label>
                   {showPrazoDropdown && !prazoDesabilitado ? (
@@ -2587,7 +2589,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                             transp: transporteSel?.DESCR || '',
                             codtptransp: transporteSel?.CODTPTRANSP ? Number(transporteSel.CODTPTRANSP) : null,
                             vlrfrete: valTranspDec || 0, prazo: prazo || '',
-                            obs: obs || '', obsfat: obsFat || '',
+                            obs: obs || '', obsfat: obsfatTexto || obsFat || '',
                             bloqueada: 'S',
                             estoque_virtual: 'N', uName: user?.usuario || '',
                             nomecf: clienteSelecionado.nomefant || clienteSelecionado.nome || null,
