@@ -9,20 +9,8 @@
 // salvar-cobranca.ts (que abre a própria transação em volta).
 
 import { salvarParcelasPagamento } from '@/utils/parcelasPagamento';
-
-// Mapeamento das formas de faturamento para seus códigos de 1 caractere (Delphi).
-const mapaFormaFatura: { [key: string]: string } = {
-  BOLETO: 'B',
-  'BOLETO BANCARIO': 'B',
-  'BOLETO BANCÁRIO': 'B',
-  DM: 'D', // Duplicata Mercantil
-  DUPLICATA: 'D',
-  'DUPLICATA MERCANTIL': 'D',
-  PIX: 'P',
-  'CARTÃO DE CRÉDITO': 'C',
-  'CARTÃO DE DÉBITO': 'V',
-  DINHEIRO: '$',
-};
+import { codigoFormaFatura } from '@/lib/faturamento/formaFatura';
+import { bancoInternoDbreceb, codBancoDbfatura } from '@/lib/faturamento/bancoCobranca';
 
 export interface ParcelaCobranca {
   vencimento: string;
@@ -54,15 +42,20 @@ export async function inserirCobranca(
   const { codfat, codcli, banco, tipofat, codvenda } = dados;
   const parcelas = dados.parcelas ?? [];
 
-  // Valida forma de faturamento e banco (fiel ao salvar-cobranca original).
-  const codigoFormaFatura = mapaFormaFatura[tipofat];
-  if (!codigoFormaFatura) {
+  // Forma de faturamento → código NUMÉRICO do Oracle (fonte única: formaFatura.ts).
+  // Ex.: BOLETO→'2', CARTEIRA→'4', CARTÃO→'6'. Aceita descrição, número ou letra legada.
+  const codigoForma = codigoFormaFatura(tipofat);
+  if (!codigoForma) {
     throw new Error(
       `O tipo de fatura '${tipofat}' não é válido ou não foi mapeado.`,
     );
   }
-  let codBancoNumerico = parseInt(String(banco), 10);
-  if (isNaN(codBancoNumerico)) {
+  // Código do banco vem do dropdown (dbbanco_cobranca, 1..9). Convertemos para os
+  // códigos INTERNOS do Oracle (fonte única: bancoCobranca.ts), fiel ao Delphi:
+  //   - dbreceb.banco      = código interno (ex.: MELO(5) → '9')
+  //   - dbfatura.cod_banco = código de 4 dígitos (ex.: MELO(5) → '0062')
+  let codDropdown = parseInt(String(banco), 10);
+  if (isNaN(codDropdown)) {
     // Fallback (mesma regra da UI: banco do cliente, senão MELO='5'): às vezes o
     // banco não chega do front por corrida de carregamento (opcoes-cobranca ainda
     // não hidratou formCobranca.banco). Resolve pelo cliente para não derrubar o
@@ -71,10 +64,11 @@ export async function inserirCobranca(
       `SELECT banco FROM dbclien WHERE codcli = $1`,
       [codcli],
     );
-    codBancoNumerico = parseInt(String(rc.rows[0]?.banco ?? ''), 10);
-    if (isNaN(codBancoNumerico)) codBancoNumerico = 5; // MELO (padrão da UI)
+    codDropdown = parseInt(String(rc.rows[0]?.banco ?? ''), 10);
+    if (isNaN(codDropdown)) codDropdown = 5; // MELO (padrão da UI)
   }
-  const codBancoFormatado = String(codBancoNumerico).padStart(4, '0');
+  const bancoDbreceb = bancoInternoDbreceb(codDropdown) ?? '9'; // default MELO interno
+  const codBancoFatura = codBancoDbfatura(codDropdown) ?? '0062'; // default MELO 4 díg.
 
   // Auto-corrige a sequence de cod_receb quando ela está ATRÁS do maior cod_receb
   // (artefato de migração Oracle→Postgres): senão o nextval devolve valor já usado
@@ -93,7 +87,7 @@ export async function inserirCobranca(
            cod_banco = $2,
            cobranca = 'S'
      WHERE codfat = $3`,
-    [codigoFormaFatura, codBancoFormatado, codfat],
+    [codigoForma, codBancoFatura, codfat],
   );
 
   // Herda a conta financeira da fatura para os títulos (mesmo elo do Delphi/TCOBRANCA).
@@ -129,8 +123,8 @@ export async function inserirCobranca(
         dtEmissao,
         parcela.valor,
         parcela.documento,
-        codigoFormaFatura,
-        codBancoFormatado,
+        codigoForma,
+        bancoDbreceb,
       ],
     );
   }

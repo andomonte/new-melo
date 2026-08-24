@@ -243,6 +243,9 @@ export default async function handler(
            ORDER BY (n.status = '100') DESC LIMIT 1
          ) nfe ON true
         WHERE fv.codvenda = ANY($1) AND fv.status = 'ativo'
+          -- Fatura CANCELADA não bloqueia reemissão (o cancelamento zera dbfatura.cancel='S'
+          -- mas não desativa o vínculo fatura_venda; sem isto a venda ficava presa).
+          AND COALESCE(f.cancel, 'N') <> 'S'
         LIMIT 1`,
       [vendasArray],
     );

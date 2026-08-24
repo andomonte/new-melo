@@ -69,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
      * - r.cancel = 'N' (não cancelado)
      * - r.rec = 'N' (não recebido)
      * - r.dt_venc = r.venc_ant (vencimento não alterado)
-     * - r.forma_fat = 'B' (boleto)
+     * - r.forma_fat = '2' (boleto — código numérico do Oracle; ver lib/faturamento/formaFatura)
      */
     const queryParte1 = `
       SELECT

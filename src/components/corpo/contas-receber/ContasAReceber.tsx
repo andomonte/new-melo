@@ -20,6 +20,7 @@ import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import SelectPadrao from '@/components/common/SelectPadrao';
+import { OPCOES_FORMA_FATURA, labelFormaFatura } from '@/lib/faturamento/formaFatura';
 
 export default function ContasAReceber() {
   const { user } = useContext(AuthContext);
@@ -133,7 +134,7 @@ export default function ContasAReceber() {
     valor_pgto: 0,
     nro_doc: '',
     tipo: 'R' as string,
-    forma_fat: 'B' as string,
+    forma_fat: '2' as string,
     banco: '',
     parcelado: false,
     num_parcelas: 1,
@@ -1084,7 +1085,7 @@ export default function ContasAReceber() {
           valor_pgto: 0,
           nro_doc: '',
           tipo: 'R',
-          forma_fat: 'B',
+          forma_fat: '2',
           banco: '',
           parcelado: false,
           num_parcelas: 1,
@@ -1914,7 +1915,7 @@ export default function ContasAReceber() {
 
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Forma Faturamento</p>
-                <p className="text-gray-900 dark:text-white">{contaSelecionada.forma_fat || '-'}</p>
+                <p className="text-gray-900 dark:text-white">{labelFormaFatura(contaSelecionada.forma_fat)}</p>
               </div>
 
               {contaSelecionada.obs && (
@@ -2082,7 +2083,7 @@ export default function ContasAReceber() {
             valor_pgto: 0,
             nro_doc: '',
             tipo: 'R',
-            forma_fat: 'B',
+            forma_fat: '2',
             banco: '',
             parcelado: false,
             num_parcelas: 1,
@@ -2155,10 +2156,9 @@ export default function ContasAReceber() {
                     <SelectValue placeholder="Selecione a forma" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="B">Boleto</SelectItem>
-                    <SelectItem value="C">Carteira</SelectItem>
-                    <SelectItem value="D">Depósito</SelectItem>
-                    <SelectItem value="P">PIX</SelectItem>
+                    {OPCOES_FORMA_FATURA.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

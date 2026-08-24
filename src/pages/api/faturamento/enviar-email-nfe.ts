@@ -342,7 +342,7 @@ export default async function handler(
             r.bradesco as codigobarras
           FROM dbreceb r
           WHERE r.cod_fat = $1
-          AND r.forma_fat = 'B'
+          AND r.forma_fat = '2'
           ORDER BY r.dt_venc
         `;
         
@@ -459,7 +459,7 @@ export default async function handler(
                 r.nro_banco as linha_digitavel,
                 r.bradesco as codigobarras
               FROM dbreceb r
-              WHERE cod_fat = $1 AND forma_fat = 'B'
+              WHERE cod_fat = $1 AND forma_fat = '2'
               ORDER BY dt_venc
             `;
             const parcelasAtualizadas = await clientUpdate.query(queryUpdate, [codfat]);
