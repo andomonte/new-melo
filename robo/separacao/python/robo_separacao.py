@@ -296,8 +296,9 @@ class RoboSeparacaoApp:
         ttk.Label(row1, text='Armazém:').pack(side='left')
         self.combo_armazem = ttk.Combobox(row1, width=25, state='readonly', values=['TODOS'])
         self.combo_armazem.current(0)
-        self.combo_armazem.pack(side='left', padx=(5, 10))
-        ttk.Button(row1, text='Carregar', command=self.carregar_armazens).pack(side='left', padx=(0, 20))
+        self.combo_armazem.pack(side='left', padx=(5, 20))
+        self._armazens_carregados = False
+        self.combo_armazem.bind('<Button-1>', lambda e: self._carregar_armazens_on_click())
 
         ttk.Label(row1, text='Intervalo (seg):').pack(side='left')
         ttk.Entry(row1, textvariable=self.intervalo, width=5).pack(side='left', padx=5)
@@ -348,6 +349,10 @@ class RoboSeparacaoApp:
         self.txt_log.see('end')
         self.txt_log.configure(state='disabled')
 
+    def _carregar_armazens_on_click(self):
+        if not self._armazens_carregados:
+            self.carregar_armazens()
+
     def carregar_armazens(self):
         """Conecta no banco e carrega lista de armazéns"""
         try:
@@ -367,6 +372,7 @@ class RoboSeparacaoApp:
 
             self.combo_armazem['values'] = opcoes
             self.combo_armazem.current(0)
+            self._armazens_carregados = True
             self.log(f'{len(rows)} armazém(ns) carregado(s)')
         except Exception as e:
             self.log(f'ERRO ao carregar armazéns: {e}')
