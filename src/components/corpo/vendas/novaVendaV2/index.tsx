@@ -2456,12 +2456,13 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   ) : null}
               </div>
 
-              {/* Total da Venda */}
-              <div className="relative min-w-[160px]">
-                <div className={`${MI_INPUT} bg-gray-100 dark:bg-zinc-900 cursor-default text-right font-bold text-lg ${totalVenda > 0 ? 'text-green-700 dark:text-green-400' : 'text-gray-400'}`}>
+              {/* Total da Venda + Qtd Itens */}
+              <div className="relative min-w-[200px] flex items-center gap-3">
+                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{totalItens} itens</span>
+                <div className={`flex-1 ${MI_INPUT} bg-gray-100 dark:bg-zinc-900 cursor-default text-right font-bold text-lg ${totalVenda > 0 ? 'text-green-700 dark:text-green-400' : 'text-gray-400'}`}>
                   {totalVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </div>
-                <label className={MI_LABEL}>Total da Venda</label>
+                <label className={`${MI_LABEL}`} style={{ left: 'auto', right: 0 }}>Total</label>
               </div>
             </div>
 
@@ -2618,15 +2619,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               />
             ) : null}
 
-            {/* Linha final: Totais + Saldo + Botões */}
-            <div className="flex items-center justify-between mt-3">
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-semibold text-gray-800">{totalItens} itens</span>
-                <span className="font-bold text-xl text-blue-600">Total: {formatCurrency(totalVenda)}</span>
-                {isCartaoCredito && parcelasCartao > 0 ? (
-                  <span className="text-sm font-bold text-orange-600">Cartão {parcelasCartao}x</span>
-                ) : null}
-              </div>
+            {/* Linha final: Botões */}
+            <div className="flex items-center justify-end mt-3">
               <div className="flex items-center gap-2">
                 <button
                   disabled={totalItens === 0 || !clienteSelecionado}
