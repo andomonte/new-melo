@@ -1679,6 +1679,21 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return 'LIBERADA';
   }, [clienteSelecionado, totalItens, itensGrid, temBPV, temMPV]);
 
+  // Mensagem de impedimento + disabled do botão — fonte única de verdade
+  const impedimentoVenda = useMemo(() => {
+    if (!clienteSelecionado) return 'INFORME O CLIENTE';
+    if (clienteBloqueado) return 'CLIENTE BLOQUEADO — CONSULTE O SETOR DE COBRANÇA';
+    if (totalItens === 0) return 'ESCOLHA PRODUTOS!';
+    if (totalVenda > 0 && totalVenda < 30) return 'VENDA MÍNIMA DE R$ 30,00';
+    if (isClienteBalcao && totalVenda > 10000) return 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.';
+    if (isClienteBalcao && !isAvista && !isCartaoCredito) return 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.';
+    if (isCartaoCredito && parcelasCartao <= 0) return 'INFORME O PARCELAMENTO DO CARTÃO';
+    if (statusVenda === 'BLOQUEIO_PRECO') return 'PREÇO ABAIXO DA TABELA — SERÁ ENVIADA PARA ANÁLISE';
+    return null;
+  }, [clienteSelecionado, clienteBloqueado, totalItens, totalVenda, isClienteBalcao, isAvista, isCartaoCredito, parcelasCartao, statusVenda]);
+
+  const vendaBloqueada = impedimentoVenda !== null && statusVenda !== 'BLOQUEIO_PRECO';
+
   // ---------- Atalhos de teclado ----------
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -2576,24 +2591,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 <label className="text-gray-700 before:content[' '] after:content[' '] pointer-events-none absolute left-0 -top-1.5 flex h-full w-full select-none text-[11px] font-normal leading-tight transition-all before:pointer-events-none before:mt-[6.5px] before:mr-1 before:box-border before:block before:h-1.5 before:w-2.5 before:rounded-tl-md before:border-t before:border-l before:border-gray-300 before:transition-all after:pointer-events-none after:mt-[6.5px] after:ml-1 after:box-border after:block after:h-1.5 after:w-2.5 after:flex-grow after:rounded-tr-md after:border-t after:border-r after:border-gray-300 after:transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:leading-[3.75] peer-placeholder-shown:text-gray-700 dark:peer-placeholder-shown:text-gray-800 peer-placeholder-shown:before:border-transparent peer-placeholder-shown:after:border-transparent peer-focus:text-[11px] peer-focus:leading-tight peer-focus:text-gray-600 dark:peer-focus:text-gray-200 peer-focus:before:border-t-1 peer-focus:before:border-l-2 peer-focus:before:border-gray-600 dark:peer-focus:before:border-gray-200 peer-focus:after:border-t-1 peer-focus:after:border-r-2 peer-focus:after:border-gray-600 dark:peer-focus:after:border-gray-200">Observação</label>
               </div>
               {/* Alerta de operação */}
-              {(() => {
-                let msg = '';
-                if (!clienteSelecionado) msg = 'INFORME O CLIENTE';
-                else if (clienteBloqueado) msg = 'CLIENTE BLOQUEADO — CONSULTE O SETOR DE COBRANÇA';
-                else if (totalItens === 0) msg = 'ESCOLHA PRODUTOS!';
-                else if (totalVenda > 0 && totalVenda < 30) msg = 'VENDA MÍNIMA DE R$ 30,00';
-                else if (isClienteBalcao && totalVenda > 10000) msg = 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.';
-                else if (isClienteBalcao && !isAvista && !isCartaoCredito) msg = 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.';
-                else if (isCartaoCredito && parcelasCartao <= 0) msg = 'INFORME O PARCELAMENTO DO CARTÃO';
-                else if (statusVenda === 'BLOQUEIO_PRECO') msg = 'ESSA VENDA ESTÁ BLOQUEADA — preço abaixo da tabela.';
-                if (!msg) return null;
-                return (
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md text-xs">
-                    <AlertTriangle size={13} className="text-amber-600 shrink-0" />
-                    <span className="font-semibold text-amber-700 dark:text-amber-300">{msg}</span>
-                  </div>
-                );
-              })()}
+              {impedimentoVenda ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md text-xs">
+                  <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                  <span className="font-semibold text-amber-700 dark:text-amber-300">{impedimentoVenda}</span>
+                </div>
+              ) : null}
             </div>
 
             {/* Modal Prazo */}
@@ -2625,7 +2628,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 </button>
                 {statusVenda === 'BLOQUEIO_PRECO' ? (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30}
+                    disabled={vendaBloqueada}
                     onClick={async () => {
                       setEnvioOpen(true);
                       setEnvioStep('montando');
@@ -2695,8 +2698,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   </button>
                 ) : (
                   <button
-                    disabled={totalItens === 0 || !clienteSelecionado || clienteBloqueado || totalVenda < 30 || (isClienteBalcao && totalVenda > 10000) || (isClienteBalcao && !isAvista && !isCartaoCredito)}
-                    title=""
+                    disabled={vendaBloqueada}
+                    title={impedimentoVenda || ''}
                     onClick={handleFinalizarVenda}
                     className="px-4 py-1.5 text-xs font-bold rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-40 disabled:cursor-not-allowed"
                   >
