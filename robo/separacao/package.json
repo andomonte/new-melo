@@ -1,0 +1,13 @@
+{
+  "name": "robo-separacao",
+  "version": "1.0.0",
+  "description": "Robô de impressão de separação (matricial)",
+  "main": "index.cjs",
+  "scripts": {
+    "start": "node index.cjs",
+    "listar-impressoras": "node listar-impressoras.cjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "database": {
+    "connectionString": "postgresql://postgres:Melodb@2025@servicos.melopecas.com.br:5432/postgres",
+    "schema": "db_manaus"
+  },
+  "polling": {
+    "intervaloMs": 20000,
+    "maxPorCiclo": 3
+  },
+  "impressora": {
+    "nome": "",
+    "tipo": "matricial"
+  },
+  "fila": {
+    "nroimp": "01",
+    "armazem": 1
+  }
+}
