@@ -92,6 +92,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // claspgto = 'B' → CLIENTE BLOQUEADO
+    if (claspgto === 'B') {
+      return res.status(200).json({
+        passou: 'NOK',
+        mensagem: 'CLIENTE BLOQUEADO — CONSULTE O SETOR DE COBRANÇA',
+        status: 'Bloqueado',
+        claspgto,
+      });
+    }
+
     // Pessoa física de outro estado
     if (tipo === 'F' && ufCliente && ufCliente !== ufEmpresa) {
       return res.status(200).json({
@@ -129,8 +139,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const temTituloAtrasado = Number(atrasoRes.rows[0]?.qtd || 0) > 0;
     const diasAtraso = Number(atrasoRes.rows[0]?.dias_atraso || 0);
 
-    if (temTituloAtrasado) {
-      // Se tem crédito temporário suficiente, desbloqueia
+    if (temTituloAtrasado && !isentaCredito) {
+      // Títulos atrasados bloqueiam venda a prazo, mas à vista/cartão pode vender
       if (creditoTemp >= valor && valor > 0) {
         // Passa — crédito temporário cobre
       } else {
@@ -139,6 +149,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mensagem: `CLIENTE COM TÍTULO(S) EM ATRASO HÁ ${diasAtraso} DIA(S). Solicite regularização ao setor de cobrança ou crédito temporário.`,
           status: 'Títulos Atrasados',
           diasAtraso,
+          claspgto,
         });
       }
     }
