@@ -2149,12 +2149,6 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 onColumnResized={onColumnResized}
                 onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
-                onCellKeyDown={(e: any) => {
-                  if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao && (e.event?.key === 'Enter' || e.event?.key === ' ')) {
-                    e.event?.preventDefault();
-                    togglePromo(e);
-                  }
-                }}
                 onCellClicked={(e: any) => {
                   if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao) {
                     togglePromo(e);
@@ -2163,9 +2157,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     const descAtual = Number(e.data.desconto_percentual) || 0;
                     const novoDesc = descAtual === 0 ? 2 : 0;
                     const rowIdx = e.rowIndex;
-                    // Atualizar via API do AG Grid para não perder foco
                     e.node.setData({ ...e.data, desconto_percentual: novoDesc, total_item: e.data.qtd * e.data.prunit * (1 - novoDesc / 100) });
-                    // Sync state silenciosamente
                     setItensGrid((prev) => {
                       const novos = [...prev];
                       novos[rowIdx] = { ...novos[rowIdx], desconto_percentual: novoDesc, total_item: novos[rowIdx].qtd * novos[rowIdx].prunit * (1 - novoDesc / 100) };
@@ -2174,6 +2166,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   }
                 }}
                 onCellKeyDown={(e: any) => {
+                  if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao && (e.event?.key === 'Enter' || e.event?.key === ' ')) {
+                    e.event?.preventDefault();
+                    e.event?.stopImmediatePropagation?.();
+                    togglePromo(e);
+                  }
                   if (e.event?.key === 'Enter' && e.column?.getColId() === '_delete' && e.data?.codprod) {
                     e.event.preventDefault();
                     e.event.stopImmediatePropagation();
