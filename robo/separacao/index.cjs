@@ -102,7 +102,10 @@ async function gerarTexto(client, registro) {
   const operador = oper.rows[0] || {};
 
   // Armazém
-  const arm = await client.query('SELECT arm_descricao FROM cad_armazem WHERE arm_id = $1', [ARMAZEM]);
+  // Buscar armazém do primeiro item da venda
+  const armItem = await client.query('SELECT arm_id FROM dbitvenda WHERE codvenda = $1 LIMIT 1', [codvenda]);
+  const armId = armItem.rows[0]?.arm_id || 1001;
+  const arm = await client.query('SELECT arm_descricao FROM cad_armazem WHERE arm_id = $1', [armId]);
   const armazem = arm.rows[0]?.arm_descricao || 'GERAL';
 
   // Itens (locação vem da cad_armazem_produto_locacao pelo armazém do item)
@@ -255,10 +258,10 @@ async function ciclo() {
       `SELECT "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR",
               "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM", motivo
        FROM dbservimp
-       WHERE "IMPRESSO" <> 'S' AND "NROIMP" = $1 AND "ARMAZEM" = $2
+       WHERE "IMPRESSO" <> 'S' AND "NROIMP" = $1
        ORDER BY "DATA" ASC, "HORA" ASC
-       LIMIT $3`,
-      [NROIMP, ARMAZEM, MAX_POR_CICLO]
+       LIMIT $2`,
+      [NROIMP, MAX_POR_CICLO]
     );
 
     if (result.rows.length === 0) {

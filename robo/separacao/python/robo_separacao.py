@@ -245,7 +245,6 @@ class RoboSeparacaoApp:
         self.rodando = False
         self.thread = None
         self.impressora_selecionada = None
-        self.armazem_id = tk.StringVar(value='1001')
         self.fila_nroimp = tk.StringVar(value='01')
         self.intervalo = tk.StringVar(value='20')
         self.db_host = tk.StringVar(value='servicos.melopecas.com.br')
@@ -291,9 +290,6 @@ class RoboSeparacaoApp:
         combo_fila = ttk.Combobox(row1, textvariable=self.fila_nroimp, width=8,
                                    values=['01', '03', '05', '06', '10', '99'])
         combo_fila.pack(side='left', padx=(5, 20))
-
-        ttk.Label(row1, text='Armazém:').pack(side='left')
-        ttk.Entry(row1, textvariable=self.armazem_id, width=5).pack(side='left', padx=5)
 
         ttk.Label(row1, text='Intervalo (seg):').pack(side='left', padx=(20, 0))
         ttk.Entry(row1, textvariable=self.intervalo, width=5).pack(side='left', padx=5)
@@ -390,7 +386,7 @@ class RoboSeparacaoApp:
         self.btn_iniciar.configure(state='disabled')
         self.btn_parar.configure(state='normal')
         self.lbl_status.configure(text='Rodando...', foreground='green')
-        self.log(f'Iniciado | Impressora: {self.impressora_selecionada} | Fila: {self.fila_nroimp.get()} | Armazém: {self.armazem_id.get()}')
+        self.log(f'Iniciado | Impressora: {self.impressora_selecionada} | Fila: {self.fila_nroimp.get()}')
 
         self.thread = threading.Thread(target=self.loop_principal, daemon=True)
         self.thread.start()
@@ -436,9 +432,9 @@ class RoboSeparacaoApp:
             """SELECT "CODIGO", "NRODOC", "TIPODOC", "CODCF", "NOMECF", "NOMEUSR",
                       "VALOR", "DATA", "HORA", "NROIMP", "IMPRESSO", "ARMAZEM", motivo
                FROM dbservimp
-               WHERE "IMPRESSO" <> 'S' AND "NROIMP" = %s AND "ARMAZEM" = %s
+               WHERE "IMPRESSO" <> 'S' AND "NROIMP" = %s
                ORDER BY "DATA" ASC, "HORA" ASC LIMIT 3""",
-            (self.fila_nroimp.get(), int(self.armazem_id.get()))
+            (self.fila_nroimp.get(),)
         )
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
