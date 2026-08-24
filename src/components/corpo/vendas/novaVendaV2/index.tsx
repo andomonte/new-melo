@@ -1280,10 +1280,9 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         row.desconto_percentual = Math.min(Math.max(Number(event.newValue) || 0, 0), 2);
       }
 
-      // Se editou preço ou desconto e tem promoção ativa, remove a promoção
+      // Se editou preço ou desconto e tem promoção ativa, desativa a promoção
       if ((field === 'prunit' || field === 'desconto_percentual') && row.promoAtiva && row.promocao) {
         row.promoAtiva = false;
-        row.promocao = null;
       }
 
       // Calcular preço efetivo (preço vendido - desconto à vista)
@@ -1800,15 +1799,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Toggle promoção: ativa → aplica desconto, desativa → volta preço original
+  // Toggle promoção: ativa → aplica desconto (zera desc à vista), desativa → volta preço original
   const togglePromo = (e: any) => {
     const novoEstado = !e.data.promoAtiva;
     const promo = e.data.promocao;
     const precoOriginal = Number(e.data.prvenda_original) || Number(e.data.prunit);
     let novoPreco = precoOriginal;
+    let novoDesconto = Number(e.data.desconto_percentual) || 0;
 
     if (novoEstado && promo) {
-      // Ativando: aplica desconto da promoção
+      // Ativando promoção: aplica desconto da promoção + zera desconto à vista
       const tipo = (promo.tipo_desconto_item || promo.tipo_desconto || '').toUpperCase();
       const valor = Number(promo.valor_desconto_item ?? promo.valor_desconto) || 0;
       if (tipo.includes('PERC')) {
@@ -1816,11 +1816,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       } else {
         novoPreco = Math.max(precoOriginal - valor, 0);
       }
+      novoDesconto = 0; // Promoção e desconto à vista são mutuamente exclusivos
     }
-    // Desativando: volta ao preço original (precoOriginal já é o certo)
 
-    const totalItem = (Number(e.data.qtd) || 0) * novoPreco * (1 - (Number(e.data.desconto_percentual) || 0) / 100);
-    const updated = { ...e.data, promoAtiva: novoEstado, prunit: novoPreco, total_item: totalItem };
+    const totalItem = (Number(e.data.qtd) || 0) * novoPreco * (1 - novoDesconto / 100);
+    const updated = { ...e.data, promoAtiva: novoEstado, prunit: novoPreco, desconto_percentual: novoDesconto, total_item: totalItem };
     e.node.setData(updated);
     setItensGrid((prev: any[]) => prev.map((r, i) => i === e.rowIndex ? { ...r, ...updated } : r));
   };
@@ -2157,10 +2157,19 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     const descAtual = Number(e.data.desconto_percentual) || 0;
                     const novoDesc = descAtual === 0 ? 2 : 0;
                     const rowIdx = e.rowIndex;
-                    e.node.setData({ ...e.data, desconto_percentual: novoDesc, total_item: e.data.qtd * e.data.prunit * (1 - novoDesc / 100) });
+                    // Se ativar desconto à vista e tem promoção → desativa promoção e volta preço original
+                    let novoPreco = e.data.prunit;
+                    let promoAtiva = e.data.promoAtiva;
+                    let promocao = e.data.promocao;
+                    if (novoDesc > 0 && promoAtiva && promocao) {
+                      promoAtiva = false;
+                      novoPreco = Number(e.data.prvenda_original) || novoPreco;
+                    }
+                    const totalItem = e.data.qtd * novoPreco * (1 - novoDesc / 100);
+                    e.node.setData({ ...e.data, desconto_percentual: novoDesc, prunit: novoPreco, promoAtiva, total_item: totalItem });
                     setItensGrid((prev) => {
                       const novos = [...prev];
-                      novos[rowIdx] = { ...novos[rowIdx], desconto_percentual: novoDesc, total_item: novos[rowIdx].qtd * novos[rowIdx].prunit * (1 - novoDesc / 100) };
+                      novos[rowIdx] = { ...novos[rowIdx], desconto_percentual: novoDesc, prunit: novoPreco, promoAtiva, total_item: totalItem };
                       return novos;
                     });
                   }
