@@ -504,6 +504,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         r.cod_receb,
         r.nro_doc as numero_documento,
         r.nro_docbanco,
+        r.nro_banco,
         r.dt_venc as data_vencimento,
         r.dt_emissao,
         r.venc_ant,
@@ -546,9 +547,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Preparar dados dos títulos
+    // Preparar dados dos títulos.
+    // Nosso Número = nro_banco (gerado no faturamento por dbbanco_numero, fiel ao
+    // Delphi). Fallback para cod_receb apenas em títulos legados sem nro_banco.
     const titulos: TituloCNAB[] = result.rows.map((row, index) => ({
-      nosso_numero: String(row.cod_receb),
+      nosso_numero: String(row.nro_banco || row.cod_receb),
       numero_documento: String(row.numero_documento || row.cod_receb),
       data_vencimento: new Date(row.data_vencimento),
       valor_titulo: parseFloat(row.valor_titulo),

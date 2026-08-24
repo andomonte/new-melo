@@ -274,7 +274,7 @@ export default async function handler(
              nro_banco = $3,
              dt_venc = $4,
              valor_pgto = $5,
-             forma_fat = 'B',
+             forma_fat = '2',
              banco = $6
            WHERE cod_receb = $1`,
           [
@@ -294,7 +294,7 @@ export default async function handler(
              cod_receb, codcli, cod_fat, dt_venc, valor_pgto,
              nro_doc, nro_docbanco, nro_banco, forma_fat, banco,
              rec, cancel
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'B', $9, 'N', 'N')`,
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '2', $9, 'N', 'N')`,
           [
             codReceb,
             dadosBanco.codcli,

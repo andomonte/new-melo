@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 
 import { Eye, FileText, History, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { formatarData, formatarMoeda } from './utils';
+import { labelFormaFatura } from '@/lib/faturamento/formaFatura';
 
 export default function ModaisDashboard() {
   const modais = useModaisContasReceber();
@@ -167,10 +168,7 @@ export default function ModaisDashboard() {
                 <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Forma de Faturamento:</span>
                   <Badge variant="outline" className="text-xs">
-                    {modais.contaSelecionada.forma_fat === 'B' ? 'Boleto' :
-                     modais.contaSelecionada.forma_fat === 'C' ? 'Carteira' :
-                     modais.contaSelecionada.forma_fat === 'D' ? 'Depósito' :
-                     modais.contaSelecionada.forma_fat === 'P' ? 'PIX' : modais.contaSelecionada.forma_fat || '-'}
+                    {labelFormaFatura(modais.contaSelecionada.forma_fat)}
                   </Badge>
                 </div>
 

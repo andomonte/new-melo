@@ -20,6 +20,7 @@ import {
   History,
   Ban,
   RefreshCw,
+  Receipt,
 } from 'lucide-react';
 //veroficar
 interface Props {
@@ -37,6 +38,7 @@ interface Props {
   onCancelarFaturaClick?: () => void;
   onEmitirNotaClick: () => void;
   onVisualizarBoletosClick: () => void;
+  onReciboClick: () => void;
   onVerProdutosClick?: () => void;
   onEventoClick?: () => void;
   onCartaCorrecaoClick?: () => void;
@@ -61,6 +63,7 @@ export default function DropdownFatura({
   onCancelarFaturaClick,
   onEmitirNotaClick,
   onVisualizarBoletosClick,
+  onReciboClick,
   onVerProdutosClick,
   onEventoClick,
   onCartaCorrecaoClick,
@@ -327,6 +330,23 @@ export default function DropdownFatura({
         >
           <DollarSign className="size-4 text-blue-700 group-hover:text-white transition" />
           Visualizar Boletos
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={onReciboClick}
+          disabled={String(fatura.frmfat ?? '') !== '1'}
+          title={
+            String(fatura.frmfat ?? '') !== '1'
+              ? 'Recibo disponível apenas para fatura à vista (recibo)'
+              : 'Imprimir o recibo (comprovante de recebimento à vista)'
+          }
+          className={`group flex items-center gap-2 px-2 py-2 transition ${
+            String(fatura.frmfat ?? '') === '1'
+              ? 'hover:bg-emerald-600 hover:text-white'
+              : 'opacity-50 cursor-not-allowed'
+          }`}
+        >
+          <Receipt className="size-4 text-emerald-600 group-hover:text-white transition group-disabled:text-gray-400" />
+          Recibo
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={onEmailDanfeClick}

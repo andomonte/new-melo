@@ -130,6 +130,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
       }
 
+      // 3b. Desativa o vínculo venda↔fatura. Sem isto, a trava anti-duplicata do
+      // salvar.ts continua enxergando a fatura cancelada como 'ativa' e bloqueia a
+      // reemissão ("a venda já possui a fatura ...").
+      await client.query(
+        `UPDATE fatura_venda SET status = 'cancelado' WHERE codfat = $1 AND status = 'ativo'`,
+        [codfat],
+      );
+
       // 4. Log da ação (espelha inc_acao_usr 'CANCELAR' / 'DBFATURA').
       await client.query(
         `INSERT INTO dbacao (codusr, acao, tabela, obs, data)

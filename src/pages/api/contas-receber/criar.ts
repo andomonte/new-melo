@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { codigoFormaFatura } from '@/lib/faturamento/formaFatura';
 
 const pool = getPgPool();
 
@@ -98,7 +99,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         valorDestaParcela.toFixed(2),
         nroDocParcela,
         tipo || 'R',
-        forma_fat || 'B',
+        codigoFormaFatura(forma_fat) || '2', // número do Oracle (fonte única); default BOLETO
         banco || null,
       ];
 

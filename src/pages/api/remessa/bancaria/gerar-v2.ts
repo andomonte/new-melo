@@ -165,7 +165,7 @@ async function buscarTitulosParaRemessa(
       AND COALESCE(r.bradesco, 'N') = 'N'
       AND COALESCE(r.cancel, 'N') = 'N'
       AND COALESCE(r.rec, 'N') = 'N'
-      AND COALESCE(r.forma_fat, '') = 'B'
+      AND COALESCE(r.forma_fat, '') = '2'
       AND r.valor_pgto > 0
       AND (r.venc_ant IS NULL OR r.dt_venc = r.venc_ant)
       ${conta ? `AND r.cod_conta = $4` : ''}

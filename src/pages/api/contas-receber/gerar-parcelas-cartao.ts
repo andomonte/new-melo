@@ -150,7 +150,7 @@ export default async function handler(
           ELSE 'N'
         END,
         dt_pgto = $2,
-        forma_fat = '005'
+        forma_fat = '6'
       WHERE cod_receb = $3
     `, [somaValores, dtAgora, cod_receb]);
 

@@ -942,6 +942,22 @@ export default function FaturamentoNota({
     };
   };
 
+  // Divide o total nas parcelas com o RESTO do arredondamento na ÚLTIMA parcela,
+  // para a soma dos títulos bater exatamente o total (ex.: 617,50/3 → 205,83 +
+  // 205,83 + 205,84). Fonte única usada pelos dois fluxos de cobrança.
+  const montarParcelasPayload = (combined: any[]) => {
+    const total = getTotalLiquidoCobranca();
+    const n = combined.length;
+    const base = Math.round((total / n) * 100) / 100;
+    const ultima = Math.round((total - base * (n - 1)) * 100) / 100;
+    return combined.map((p, index) => ({
+      vencimento: p.vencimento,
+      valor: index === n - 1 ? ultima : base,
+      documento: `NF${nroformulario}${String.fromCharCode(65 + index)}`,
+      nossoNumero: `693913${index + 1}`,
+    }));
+  };
+
   // Monta o payload de COBRANÇA para gravar JUNTO com a fatura numa transação única
   // (salvar.ts). Retorna null quando não há cobrança. Mesma regra de parcelas do fluxo
   // antigo (handleSalvarDadosCobranca), mas SEM chamar API — os dados vão no /salvar.
@@ -951,6 +967,8 @@ export default function FaturamentoNota({
     const requerParcelas =
       formCobranca.tipoFatura === 'BOLETO' ||
       formCobranca.tipoFatura === 'BOLETO BANCARIO' ||
+      formCobranca.tipoFatura === 'BOLETO BANCÁRIO' ||
+      formCobranca.tipoFatura === 'CARTEIRA' ||
       formCobranca.gerar30dias;
 
     const combinedParcelas = parcelas
@@ -973,14 +991,7 @@ export default function FaturamentoNota({
       banco: formCobranca.banco,
       tipofat: formCobranca.tipoFatura,
       codvenda,
-      parcelas: requerParcelas
-        ? combinedParcelas.map((p, index) => ({
-            vencimento: p.vencimento,
-            valor: getTotalLiquidoCobranca() / combinedParcelas.length,
-            documento: `NF${nroformulario}${String.fromCharCode(65 + index)}`,
-            nossoNumero: `693913${index + 1}`,
-          }))
-        : [],
+      parcelas: requerParcelas ? montarParcelasPayload(combinedParcelas) : [],
     };
   };
 
@@ -1101,6 +1112,8 @@ export default function FaturamentoNota({
     const requerParcelas =
       formCobranca.tipoFatura === 'BOLETO' ||
       formCobranca.tipoFatura === 'BOLETO BANCARIO' ||
+      formCobranca.tipoFatura === 'BOLETO BANCÁRIO' ||
+      formCobranca.tipoFatura === 'CARTEIRA' ||
       formCobranca.gerar30dias;
 
     // Combinar parcelas manuais e salvas para o preview
@@ -1153,14 +1166,7 @@ export default function FaturamentoNota({
         tipofat: formCobranca.tipoFatura,
         tipoDoc: formCobranca.tipoFatura,
         codvenda: codvenda, // Novo parâmetro para salvar parcelas na dbprazo_pagamento
-        parcelas: requerParcelas
-          ? combinedParcelas.map((p, index) => ({
-              vencimento: p.vencimento,
-              valor: getTotalLiquidoCobranca() / combinedParcelas.length, // Dividir o valor total pelas parcelas
-              documento: `NF${nroformulario}${String.fromCharCode(65 + index)}`,
-              nossoNumero: `693913${index + 1}`,
-            }))
-          : [],
+        parcelas: requerParcelas ? montarParcelasPayload(combinedParcelas) : [],
       });
     } catch (error: any) {
       console.error('Erro ao salvar cobrança:', error);
