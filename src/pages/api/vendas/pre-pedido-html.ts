@@ -41,11 +41,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Itens da venda com localização
     const itens = await client.query(
       `SELECT i.codprod, i.qtd, i.prunit, i.ref, i.descr, i.arm_id,
-              p.unimed, p.codmarca, p.local as locacao,
-              m.descr as marca_nome
+              p.unimed, p.codmarca,
+              m.descr as marca_nome,
+              COALESCE(loc.apl_descricao, p.local, '') as locacao
        FROM dbitvenda i
        LEFT JOIN dbprod p ON i.codprod = p.codprod
        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
+       LEFT JOIN cad_armazem_produto_locacao loc
+         ON loc.apl_codprod = i.codprod AND loc.apl_arm_id = i.arm_id::numeric
        WHERE i.codvenda = $1
        ORDER BY i.codprod`, [codvenda]);
 

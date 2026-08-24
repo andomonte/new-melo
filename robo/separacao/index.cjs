@@ -105,14 +105,17 @@ async function gerarTexto(client, registro) {
   const arm = await client.query('SELECT arm_descricao FROM cad_armazem WHERE arm_id = $1', [ARMAZEM]);
   const armazem = arm.rows[0]?.arm_descricao || 'GERAL';
 
-  // Itens
+  // Itens (locação vem da cad_armazem_produto_locacao pelo armazém do item)
   const itens = await client.query(
     `SELECT i.codprod, i.qtd, i.prunit, i.ref, i.descr, i.arm_id,
-            p.unimed, p.local, p.codmarca,
-            m.descr as marca_nome
+            p.unimed, p.codmarca,
+            m.descr as marca_nome,
+            COALESCE(loc.apl_descricao, p.local, '') as locacao
      FROM dbitvenda i
      LEFT JOIN dbprod p ON i.codprod = p.codprod
      LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
+     LEFT JOIN cad_armazem_produto_locacao loc
+       ON loc.apl_codprod = i.codprod AND loc.apl_arm_id = i.arm_id::numeric
      WHERE i.codvenda = $1 ORDER BY i.codprod`, [codvenda]);
 
   // Contagem de itens
@@ -158,7 +161,7 @@ async function gerarTexto(client, registro) {
 
   // Itens
   for (const it of itens.rows) {
-    L('    ' + pad(it.local || '', 31) + ' ' +
+    L('    ' + pad(it.locacao || '', 31) + ' ' +
       pad(it.unimed || 'PC', 2) +
       padN(String(Number(it.qtd)), 4) + ' ' +
       pad(it.ref || it.codprod || '', 14) + ' ' +

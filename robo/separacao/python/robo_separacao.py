@@ -134,12 +134,15 @@ def gerar_relatorio(conn, registro):
     row = cur.fetchone()
     armazem = row[0] if row else 'GERAL'
 
-    # Itens
-    cur.execute("""SELECT i.codprod, i.qtd, i.prunit, i.ref, i.descr,
-                          p.unimed, p.local, p.codmarca, m.descr as marca_nome
+    # Itens (locação vem da cad_armazem_produto_locacao pelo armazém do item)
+    cur.execute("""SELECT i.codprod, i.qtd, i.prunit, i.ref, i.descr, i.arm_id,
+                          p.unimed, p.codmarca, m.descr as marca_nome,
+                          COALESCE(loc.apl_descricao, p.local, '') as locacao
                    FROM dbitvenda i
                    LEFT JOIN dbprod p ON i.codprod = p.codprod
                    LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
+                   LEFT JOIN cad_armazem_produto_locacao loc
+                     ON loc.apl_codprod = i.codprod AND loc.apl_arm_id = i.arm_id::numeric
                    WHERE i.codvenda = %s ORDER BY i.codprod""", (codvenda,))
     itens = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
 
@@ -184,7 +187,7 @@ def gerar_relatorio(conn, registro):
     for it in itens:
         qtd = float(it.get('qtd', 0) or 0)
         prunit = float(it.get('prunit', 0) or 0)
-        L.append('    ' + pad(it.get('local', ''), 31) + ' ' +
+        L.append('    ' + pad(it.get('locacao', ''), 31) + ' ' +
                  pad(it.get('unimed', 'PC'), 2) +
                  padn(str(int(qtd)), 4) + ' ' +
                  pad(it.get('ref', '') or it.get('codprod', ''), 14) + ' ' +
