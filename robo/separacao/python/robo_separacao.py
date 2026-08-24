@@ -242,7 +242,7 @@ class RoboSeparacaoApp:
         self.rodando = False
         self.thread = None
         self.impressora_selecionada = None
-        self.armazem_id = tk.StringVar(value='1')
+        self.armazem_id = tk.StringVar(value='1001')
         self.fila_nroimp = tk.StringVar(value='01')
         self.intervalo = tk.StringVar(value='20')
         self.db_host = tk.StringVar(value='servicos.melopecas.com.br')
@@ -425,7 +425,7 @@ class RoboSeparacaoApp:
 
     def ciclo(self):
         if not self.conn or self.conn.closed:
-            self.conn = psycopg2.connect(self.db_url.get())
+            self.conn = psycopg2.connect(**self._conn_params())
             self.conn.autocommit = True
 
         cur = self.conn.cursor()
@@ -447,17 +447,9 @@ class RoboSeparacaoApp:
         self.root.after(0, lambda: self.log(f'{len(registros)} documento(s) na fila'))
 
         for reg in registros:
+            cod = reg['CODIGO']
             try:
-                cod = reg['CODIGO']
                 self.root.after(0, lambda c=cod: self.log(f'  Imprimindo: {c}...'))
-
-                # Marcar como impresso (otimista)
-                cur.execute(
-                    """UPDATE dbservimp SET "IMPRESSO" = 'S'
-                       WHERE "CODIGO" = %s AND "TIPODOC" = %s AND "NROIMP" = %s
-                       AND "IMPRESSO" <> 'S' AND "DATA" = %s AND "HORA" = %s""",
-                    (reg['CODIGO'], reg['TIPODOC'], reg['NROIMP'], reg['DATA'], reg['HORA'])
-                )
 
                 # Gerar texto
                 texto = gerar_relatorio(self.conn, reg)
@@ -465,29 +457,30 @@ class RoboSeparacaoApp:
                     self.root.after(0, lambda c=cod: self.log(f'  AVISO: Venda {c} não encontrada'))
                     continue
 
-                # Salvar e imprimir
+                # Salvar em temp
                 tmp = os.path.join(tempfile.gettempdir(), f'pre_pedido_{cod}_{int(time.time())}.txt')
                 with open(tmp, 'w', encoding='utf-8') as f:
                     f.write(texto)
 
+                # Enviar para impressora
                 imprimir_arquivo(self.impressora_selecionada, tmp)
-                self.root.after(0, lambda c=cod: self.log(f'  OK: {c} enviado para impressora'))
+
+                # Impressão OK → agora sim marca como impresso
+                cur.execute(
+                    """UPDATE dbservimp SET "IMPRESSO" = 'S'
+                       WHERE "CODIGO" = %s AND "TIPODOC" = %s AND "NROIMP" = %s
+                       AND "IMPRESSO" <> 'S' AND "DATA" = %s AND "HORA" = %s""",
+                    (reg['CODIGO'], reg['TIPODOC'], reg['NROIMP'], reg['DATA'], reg['HORA'])
+                )
+
+                self.root.after(0, lambda c=cod: self.log(f'  OK: {c} impresso com sucesso'))
 
                 # Limpar temp após 10s
                 threading.Timer(10, lambda f=tmp: os.unlink(f) if os.path.exists(f) else None).start()
 
             except Exception as e:
-                self.root.after(0, lambda c=reg['CODIGO'], err=str(e): self.log(f'  ERRO {c}: {err}'))
-                # Reverter
-                try:
-                    cur.execute(
-                        """UPDATE dbservimp SET "IMPRESSO" = 'N'
-                           WHERE "CODIGO" = %s AND "TIPODOC" = %s AND "NROIMP" = %s
-                           AND "DATA" = %s AND "HORA" = %s""",
-                        (reg['CODIGO'], reg['TIPODOC'], reg['NROIMP'], reg['DATA'], reg['HORA'])
-                    )
-                except:
-                    pass
+                # Erro na impressão → NÃO marca como impresso, tenta de novo no próximo ciclo
+                self.root.after(0, lambda c=cod, err=str(e): self.log(f'  ERRO {c}: {err} (vai tentar novamente)'))
 
         cur.close()
 

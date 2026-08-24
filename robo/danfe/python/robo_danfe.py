@@ -302,7 +302,7 @@ class RoboDanfeApp:
 
     def ciclo(self):
         if not self.conn or self.conn.closed:
-            self.conn = psycopg2.connect(self.db_url.get())
+            self.conn = psycopg2.connect(**self._conn_params())
             self.conn.autocommit = True
 
         cur = self.conn.cursor()
@@ -344,8 +344,6 @@ class RoboDanfeApp:
                     continue
 
                 codfat = fat_row[0]
-                tipodoc = (fat_row[1] or '').strip()
-                tipofat = (fat_row[2] or '').strip()
 
                 # Determinar impressora pelo tipo
                 impressora = self.impressoras.get('DANFE')
@@ -363,15 +361,15 @@ class RoboDanfeApp:
                 with open(tmp_pdf, 'wb') as f:
                     f.write(pdf_data)
 
-                # Marcar como impresso ANTES (estratégia otimista)
-                cur.execute(
-                    "UPDATE fin_impressao SET imp_impresso = 'S' WHERE imp_aut_id = %s AND imp_fila = %s",
-                    (imp_aut_id, int(self.fila_id.get()))
-                )
-
                 # Enviar para impressora
                 if impressora:
                     imprimir_pdf(impressora, tmp_pdf)
+
+                    # Impressão OK → agora sim marca como impresso
+                    cur.execute(
+                        "UPDATE fin_impressao SET imp_impresso = 'S' WHERE imp_aut_id = %s AND imp_fila = %s",
+                        (imp_aut_id, int(self.fila_id.get()))
+                    )
                     self.root.after(0, lambda c=codfat, p=impressora: self.log(f'  OK: DANFE {c} enviada para {p}'))
                 else:
                     self.root.after(0, lambda c=codfat, f=tmp_pdf: self.log(f'  PREVIEW: PDF salvo em {f}'))
@@ -380,7 +378,8 @@ class RoboDanfeApp:
                 threading.Timer(30, lambda f=tmp_pdf: os.unlink(f) if os.path.exists(f) else None).start()
 
             except Exception as e:
-                self.root.after(0, lambda c=imp_aut_id, err=str(e): self.log(f'  ERRO {c}: {err}'))
+                # Erro → NÃO marca como impresso, tenta de novo no próximo ciclo
+                self.root.after(0, lambda c=imp_aut_id, err=str(e): self.log(f'  ERRO {c}: {err} (vai tentar novamente)'))
 
         cur.close()
 
