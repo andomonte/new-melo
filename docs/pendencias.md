@@ -182,3 +182,4 @@
 - **Robô:** Faz polling na `fin_impressao` WHERE `imp_impresso = 'N'`, gera DANFE HTML/PDF e envia para impressora laser
 - **Referência Delphi:** `FIla de Impressao Nfe/UniDtMd.pas` → `tmrSerImpressoTimer` (polling 40s), `spNFE_EXISTE`, `spATUALIZAR_IMPRESSAO`
 - **ATENÇÃO:** NÃO inserir na finalização da venda — a DANFE só existe depois da NF-e autorizada
+- **IMPLEMENTADO:** Inserção na fin_impressao ao finalizar recebimento no Caixa (/api/caixa/receber) — tanto single quanto multi títulos

@@ -54,6 +54,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await client.query('ROLLBACK');
       return res.status(200).json({ sucesso: true, simulado: true, mensagem: 'Simulação — nada foi gravado.', ...resultado });
     }
+
+    // Inserir na fila de impressão DANFE (robô 2) para cada fatura envolvida
+    try {
+      const codRecebs: string[] = [];
+      if (ehMulti && resultado.resultados) {
+        for (const r of resultado.resultados) {
+          if (r.cod_receb) codRecebs.push(r.cod_receb);
+        }
+      } else if (body.cod_receb) {
+        codRecebs.push(body.cod_receb);
+      }
+      if (codRecebs.length > 0) {
+        const faturas = await client.query(
+          `SELECT DISTINCT cod_fat FROM dbreceb WHERE cod_receb = ANY($1) AND cod_fat IS NOT NULL`,
+          [codRecebs],
+        );
+        for (const f of faturas.rows) {
+          const existe = await client.query(
+            `SELECT 1 FROM fin_impressao WHERE imp_aut_id = $1 AND imp_impresso = 'N' LIMIT 1`,
+            [f.cod_fat],
+          );
+          if (existe.rows.length === 0) {
+            await client.query(
+              `INSERT INTO fin_impressao (imp_aut_id, imp_data, imp_impresso, imp_fila)
+               VALUES ($1, NOW(), 'N', 1)`,
+              [f.cod_fat],
+            );
+          }
+        }
+      }
+    } catch (filaErr: any) {
+      // Não bloqueia o recebimento se falhar a fila de impressão
+      console.error('Aviso: erro ao inserir na fila de impressão DANFE:', filaErr.message);
+    }
+
     await client.query('COMMIT');
     return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', ...resultado });
   } catch (error: any) {
