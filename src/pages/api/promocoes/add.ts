@@ -118,7 +118,10 @@ export default async function handler(
           qtde_maxima_por_cliente = $10,
           ativa = $11,
           criado_por = $12,
-          observacoes = $13
+          observacoes = $13,
+          clientes_vinculados = $15,
+          vendedores_vinculados = $16,
+          permite_balcao = $17
         WHERE id_promocao = $14
         RETURNING id_promocao; -- Retorna apenas o ID
       `;
@@ -137,6 +140,9 @@ export default async function handler(
         promocao.criado_por, // Usa o valor que veio do frontend
         promocao.observacoes,
         promocao.id_promocao, // ID para a cláusula WHERE
+        promocao.clientes_vinculados ? JSON.stringify(promocao.clientes_vinculados) : null,
+        promocao.vendedores_vinculados ? JSON.stringify(promocao.vendedores_vinculados) : null,
+        promocao.permite_balcao ?? true,
       ];
       const updateResult = await client.query(
         updatePromocaoQuery,
@@ -157,9 +163,10 @@ export default async function handler(
         INSERT INTO dbpromocao (
           nome_promocao, descricao_promocao, data_inicio, data_fim,
           tipo_promocao, valor_desconto, tipo_desconto, qtde_minima_ativacao,
-          qtde_maxima_total, qtde_maxima_por_cliente, ativa, criado_por, observacoes
+          qtde_maxima_total, qtde_maxima_por_cliente, ativa, criado_por, observacoes,
+          clientes_vinculados, vendedores_vinculados, permite_balcao
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING id_promocao; -- Retorna apenas o ID gerado automaticamente
       `;
       const insertValues = [
@@ -176,6 +183,9 @@ export default async function handler(
         promocao.ativa,
         promocao.criado_por, // Usa o valor que veio do frontend
         promocao.observacoes,
+        promocao.clientes_vinculados ? JSON.stringify(promocao.clientes_vinculados) : null,
+        promocao.vendedores_vinculados ? JSON.stringify(promocao.vendedores_vinculados) : null,
+        promocao.permite_balcao ?? true,
       ];
       const insertResult = await client.query(
         insertPromocaoQuery,

@@ -1280,6 +1280,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         row.desconto_percentual = Math.min(Math.max(Number(event.newValue) || 0, 0), 2);
       }
 
+      // Se editou preço ou desconto e tem promoção ativa, remove a promoção
+      if ((field === 'prunit' || field === 'desconto_percentual') && row.promoAtiva && row.promocao) {
+        row.promoAtiva = false;
+        row.promocao = null;
+      }
+
       // Calcular preço efetivo (preço vendido - desconto à vista)
       const desc = Number(row.desconto_percentual) || 0;
       const precoEfetivo = row.prunit * (1 - desc / 100);

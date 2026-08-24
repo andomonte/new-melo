@@ -60,6 +60,9 @@ export default async function handle(
         p.criado_em,
         p.criado_por,
         p.observacoes,
+        p.clientes_vinculados,
+        p.vendedores_vinculados,
+        p.permite_balcao,
         COALESCE(
           (
             SELECT jsonb_agg(
