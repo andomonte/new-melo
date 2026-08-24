@@ -1280,13 +1280,21 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         row.desconto_percentual = Math.min(Math.max(Number(event.newValue) || 0, 0), 2);
       }
 
-      // Se editou preço ou desconto e tem promoção ativa, desativa a promoção e volta preço original
-      if ((field === 'prunit' || field === 'desconto_percentual') && row.promoAtiva && row.promocao) {
-        row.promoAtiva = false;
+      // Promoção e desconto à vista são mutuamente exclusivos
+      if (row.promoAtiva && row.promocao) {
         if (field === 'desconto_percentual') {
-          // Desconto à vista: volta preço original (promoção e desconto são mutuamente exclusivos)
+          // Aplicou desconto → desativa promo e volta preço original
+          row.promoAtiva = false;
           row.prunit = Number(row.prvenda_original) || row.prunit;
+        } else if (field === 'prunit') {
+          // Editou preço → desativa promo (preço já é o novo digitado)
+          row.promoAtiva = false;
         }
+      }
+      if (row.desconto_percentual > 0 && row.promoAtiva) {
+        // Segurança: nunca ter os dois ativos ao mesmo tempo
+        row.promoAtiva = false;
+        row.prunit = Number(row.prvenda_original) || row.prunit;
       }
 
       // Calcular preço efetivo (preço vendido - desconto à vista)
