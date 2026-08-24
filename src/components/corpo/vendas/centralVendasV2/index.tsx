@@ -245,7 +245,7 @@ const VendasPage = () => {
   const isAdmin = user?.perfil === 'ADMINISTRAÇÃO';
   const temDBV = user?.funcoes?.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'DBV');
   const temEV = user?.funcoes?.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'EV');
-  const podeVerTodos = isAdmin || temDBV || temEV;
+  const podeVerTodos = isAdmin || temDBV;
 
   // Carregar lista de vendedores para o filtro
   useEffect(() => {
