@@ -234,7 +234,12 @@ class RoboSeparacaoApp:
         self.armazem_id = tk.StringVar(value='1')
         self.fila_nroimp = tk.StringVar(value='01')
         self.intervalo = tk.StringVar(value='20')
-        self.db_url = tk.StringVar(value='postgresql://postgres:Melodb@2025@servicos.melopecas.com.br:5432/postgres?options=-c%20search_path%3Ddb_manaus,public')
+        self.db_host = tk.StringVar(value='servicos.melopecas.com.br')
+        self.db_port = tk.StringVar(value='5432')
+        self.db_name = tk.StringVar(value='postgres')
+        self.db_user = tk.StringVar(value='postgres')
+        self.db_pass = tk.StringVar(value='Melodb@2025')
+        self.db_schema = tk.StringVar(value='db_manaus')
 
         self.criar_interface()
 
@@ -243,8 +248,23 @@ class RoboSeparacaoApp:
         frame_db = ttk.LabelFrame(self.root, text=' Conexão com Banco ', padding=10)
         frame_db.pack(fill='x', padx=10, pady=5)
 
-        ttk.Label(frame_db, text='URL PostgreSQL:').pack(anchor='w')
-        ttk.Entry(frame_db, textvariable=self.db_url, width=90).pack(fill='x')
+        row_db1 = ttk.Frame(frame_db)
+        row_db1.pack(fill='x', pady=2)
+        ttk.Label(row_db1, text='Host:').pack(side='left')
+        ttk.Entry(row_db1, textvariable=self.db_host, width=35).pack(side='left', padx=(5, 15))
+        ttk.Label(row_db1, text='Porta:').pack(side='left')
+        ttk.Entry(row_db1, textvariable=self.db_port, width=6).pack(side='left', padx=(5, 15))
+        ttk.Label(row_db1, text='Banco:').pack(side='left')
+        ttk.Entry(row_db1, textvariable=self.db_name, width=12).pack(side='left', padx=5)
+
+        row_db2 = ttk.Frame(frame_db)
+        row_db2.pack(fill='x', pady=2)
+        ttk.Label(row_db2, text='Usuário:').pack(side='left')
+        ttk.Entry(row_db2, textvariable=self.db_user, width=15).pack(side='left', padx=(5, 15))
+        ttk.Label(row_db2, text='Senha:').pack(side='left')
+        ttk.Entry(row_db2, textvariable=self.db_pass, width=20, show='*').pack(side='left', padx=(5, 15))
+        ttk.Label(row_db2, text='Schema:').pack(side='left')
+        ttk.Entry(row_db2, textvariable=self.db_schema, width=15).pack(side='left', padx=5)
 
         # ─── Frame configuração ───
         frame_cfg = ttk.LabelFrame(self.root, text=' Configuração ', padding=10)
@@ -317,9 +337,19 @@ class RoboSeparacaoApp:
             self.combo_impressora.current(0)
         self.log(f'{len(impressoras)} impressora(s) detectada(s)')
 
+    def _conn_params(self):
+        return dict(
+            host=self.db_host.get(),
+            port=int(self.db_port.get()),
+            dbname=self.db_name.get(),
+            user=self.db_user.get(),
+            password=self.db_pass.get(),
+            options=f'-c search_path={self.db_schema.get()},public',
+        )
+
     def conectar_banco(self):
         try:
-            self.conn = psycopg2.connect(self.db_url.get())
+            self.conn = psycopg2.connect(**self._conn_params())
             self.conn.autocommit = True
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(*) FROM dbservimp WHERE \"IMPRESSO\" = 'N'")
@@ -371,7 +401,7 @@ class RoboSeparacaoApp:
                 self.root.after(0, lambda: self.log(f'ERRO no ciclo: {e}'))
                 # Reconectar
                 try:
-                    self.conn = psycopg2.connect(self.db_url.get())
+                    self.conn = psycopg2.connect(**self._conn_params())
                     self.conn.autocommit = True
                 except:
                     pass
