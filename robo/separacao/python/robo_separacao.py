@@ -35,11 +35,22 @@ def listar_impressoras():
 
 
 def imprimir_arquivo(impressora, arquivo):
-    """Envia arquivo de texto para a impressora"""
+    """Envia arquivo de texto direto para a impressora (RAW, sem abrir Bloco de Notas)"""
     try:
         import win32print
-        import win32api
-        win32api.ShellExecute(0, "printto", arquivo, f'"{impressora}"', ".", 0)
+        with open(arquivo, 'r', encoding='utf-8') as f:
+            texto = f.read()
+        # cp850 para impressoras matriciais (suporta acentos pt-BR)
+        dados = texto.encode('cp850', errors='replace')
+        hPrinter = win32print.OpenPrinter(impressora)
+        try:
+            win32print.StartDocPrinter(hPrinter, 1, ("Pre-Pedido", None, "RAW"))
+            win32print.StartPagePrinter(hPrinter)
+            win32print.WritePrinter(hPrinter, dados)
+            win32print.EndPagePrinter(hPrinter)
+            win32print.EndDocPrinter(hPrinter)
+        finally:
+            win32print.ClosePrinter(hPrinter)
         return True
     except ImportError:
         import subprocess
