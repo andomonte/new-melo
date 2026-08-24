@@ -2162,10 +2162,16 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
                 onCellClicked={(e: any) => {
-                  if (e.column?.getColId() === 'promoAtiva' && e.data?.promocao) {
+                  // Clique único entra em edição na célula de preço e quantidade
+                  const col = e.column?.getColId();
+                  if ((col === 'prunit' || col === 'qtd') && e.rowIndex != null) {
+                    e.api.startEditingCell({ rowIndex: e.rowIndex, colKey: col });
+                    return;
+                  }
+                  if (col === 'promoAtiva' && e.data?.promocao) {
                     togglePromo(e);
                   }
-                  if (e.column?.getColId() === 'desconto_percentual' && e.data) {
+                  if (col === 'desconto_percentual' && e.data) {
                     const descAtual = Number(e.data.desconto_percentual) || 0;
                     const novoDesc = descAtual === 0 ? 2 : 0;
                     const rowIdx = e.rowIndex;
