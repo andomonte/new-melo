@@ -127,7 +127,7 @@ export default async function handle(
 
     // Buscar os produtos com subqueries para nomes (evita conflito de colunas com JOINs)
     const produtosQuery = `
-      SELECT p.*,
+      SELECT p.*, COALESCE(p.aplic_extendida, p.descr) as descr,
         COALESCE((SELECT m.descr FROM dbmarcas m WHERE m.codmarca = p.codmarca LIMIT 1), '') as marca_nome,
         COALESCE((SELECT gf.descr FROM dbgpfunc gf WHERE gf.codgpf = p.codgpf LIMIT 1), '') as grupo_funcao_nome,
         COALESCE((SELECT gp.descr FROM dbgpprod gp WHERE gp.codgpp = p.codgpp LIMIT 1), '') as grupo_produto_nome,
@@ -149,12 +149,12 @@ export default async function handle(
         const allowedCols: Record<string, string> = {
           codprod: 'p.codprod',
           ref: 'p.ref',
-          descr: 'p.descr',
+          descr: 'COALESCE(p.aplic_extendida, p.descr)',
           codmarca: 'p.codmarca',
           estoque_disponivel: 'estoque_disponivel',
           prvenda: 'p.prvenda',
         };
-        const col = allowedCols[String(sortBy)] || 'p.descr';
+        const col = allowedCols[String(sortBy)] || 'COALESCE(p.aplic_extendida, p.descr)';
         const dir = String(sortDir).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
         return `${col} ${dir}`;
       })()}

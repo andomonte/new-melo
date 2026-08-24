@@ -676,7 +676,7 @@ async function hydrateRows(client: PoolClient, rows: any[]) {
   const itensFinalizadosQuery = ` 
     SELECT di.*, JSON_BUILD_OBJECT(
       'codprod', dp.codprod,
-      'descr', dp.descr,
+      'descr', COALESCE(dp.aplic_extendida, dp.descr),
       'origem', dp.tipo,
       'qtest', dp.qtest,
       'prvenda', dp.prvenda,

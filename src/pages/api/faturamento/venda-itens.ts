@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { rows } = await getPgPool().query(
-      `SELECT p.ref AS referencia, m.descr AS marca, iv.qtd AS qtde, iv.prunit
+      `SELECT p.ref AS referencia, COALESCE(p.aplic_extendida, p.descr) AS descr, m.descr AS marca, iv.qtd AS qtde, iv.prunit
          FROM dbitvenda iv
          LEFT JOIN dbprod p ON p.codprod = iv.codprod
          LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
