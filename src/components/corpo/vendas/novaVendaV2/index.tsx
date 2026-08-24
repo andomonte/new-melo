@@ -1593,14 +1593,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     return Number(clienteSelecionado.saldo || 0) - totalVenda < 0 && !isAvista;
   }, [clienteSelecionado, totalVenda, isAvista, isCartaoCredito]);
 
-  // Formas de pagamento visíveis: DINHEIRO, PIX, DÉBITO, CRÉDITO, BOLETO
+  // Formas de pagamento visíveis: DINHEIRO, PIX, DÉBITO, CRÉDITO + BOLETO (só se cliente tem crédito para prazo)
   const opcoesFPFiltradas = useMemo(() => {
     if (!opcoesFP.length) return [];
     return opcoesFP.filter(fp => {
       const d = (fp.descricao || '').toUpperCase();
-      return d.includes('DINHEIRO') || d === 'PIX' || d.includes('DEBITO') || d.includes('DÉBITO') || d.includes('CREDITO') || d.includes('CRÉDITO') || d.includes('BOLETO');
+      if (d.includes('BOLETO')) return !prazoBloqueado; // Boleto só para quem pode comprar a prazo
+      return d.includes('DINHEIRO') || d === 'PIX' || d.includes('DEBITO') || d.includes('DÉBITO') || d.includes('CREDITO') || d.includes('CRÉDITO');
     });
-  }, [opcoesFP]);
+  }, [opcoesFP, prazoBloqueado]);
 
   // Forma de pagamento travada quando já tem prazo definido (não pode mudar FP depois de definir prazo)
   const fpTravadoBoleto = useMemo(() => {
