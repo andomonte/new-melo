@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react';
-import { Menu, X, LockOpen, Tag } from 'lucide-react';
+import { Menu, X, LockOpen, Tag, ShoppingCart, BarChart3, Receipt, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PerfilPagina from '@/components/template/perfil';
 import { AuthContext } from '@/contexts/authContexts';
@@ -83,11 +83,28 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
           </Button>
         </div>
         <div className={`w-[93%] flex items-center justify-end`}>
-          <div className="h-auto w-[75%] flex justify-start">
-            <div className="h-full w-auto">
-              <div className="w-full flex h-[70%] text-[14px] items-start justify-start">
-                {perfilUser.filial}
-              </div>
+          <div className="h-auto w-[75%] flex items-center justify-start gap-4">
+            <div className="text-[14px]">{perfilUser.filial}</div>
+            <div className="hidden md:flex items-center gap-1 ml-4">
+              {[
+                { icon: ShoppingCart, label: 'Central de Vendas', href: '/vendas/centralVendasV2' },
+                { icon: BarChart3, label: 'Dashboard', href: '/vendas/dashboard' },
+                { icon: Receipt, label: 'Faturamento', href: '/faturamento/consulta' },
+                { icon: DollarSign, label: 'Caixa', href: '/financeiro/caixa' },
+              ].map((atalho) => (
+                <button
+                  key={atalho.href}
+                  onClick={() => {
+                    if (window.location.pathname.includes(atalho.href.split('/').pop() || '')) return;
+                    router.push(atalho.href);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-white/80 hover:text-white hover:bg-white/15 transition-colors"
+                  title={atalho.label}
+                >
+                  <atalho.icon size={15} />
+                  <span className="hidden lg:inline">{atalho.label}</span>
+                </button>
+              ))}
             </div>
           </div>
           <div className="w-[25%] flex items-center justify-end gap-3">
