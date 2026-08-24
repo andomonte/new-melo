@@ -2785,21 +2785,28 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               </>
             ) : (
               <>
+                {salvarStep === 'enviando' || salvarStep === 'montando' ? (
+                  <div className="flex flex-col items-center justify-center py-8 gap-4">
+                    <div className="h-10 w-10 rounded-full border-3 border-slate-300 border-t-blue-600 animate-spin" />
+                    <div className="font-semibold text-gray-900 dark:text-white">
+                      {salvarStep === 'montando' ? 'Montando dados...' : 'Salvando orçamento...'}
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex items-center gap-3">
-                  {salvarStep === 'enviando' || salvarStep === 'montando' ? (
-                    <div className="h-6 w-6 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" />
-                  ) : salvarStep === 'ok' ? (
+                  {salvarStep === 'ok' ? (
                     <div className="h-6 w-6 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">✓</div>
                   ) : (
                     <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center text-white text-sm font-bold">!</div>
                   )}
                   <div className="flex-1">
                     <div className="font-semibold text-gray-900 dark:text-white">
-                      {salvarStep === 'montando' ? 'Montando dados' : salvarStep === 'enviando' ? 'Salvando orçamento' : salvarStep === 'ok' ? 'Orçamento salvo' : 'Falha ao salvar'}
+                      {salvarStep === 'ok' ? 'Orçamento salvo' : 'Falha ao salvar'}
                     </div>
                     {salvarStep === 'erro' ? <div className="text-sm text-red-600 mt-0.5">{salvarMsg}</div> : null}
                   </div>
                 </div>
+                )}
 
                 {salvarStep === 'ok' && salvarResp ? (
                   <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 text-center">
@@ -2837,21 +2844,29 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => { if (envioStep === 'ok' || envioStep === 'erro') { setEnvioOpen(false); setEnvioResp(null); setEnvioMsg(''); } }} />
           <div className="relative z-10 w-[92%] max-w-md rounded-xl bg-white dark:bg-zinc-800 p-5 shadow-xl border border-slate-200 dark:border-zinc-700">
+            {envioStep === 'enviando' || envioStep === 'montando' ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-4">
+                <div className="h-10 w-10 rounded-full border-3 border-slate-300 border-t-blue-600 animate-spin" />
+                <div className="font-semibold text-gray-900 dark:text-white">
+                  {envioStep === 'montando' ? 'Montando dados...' : 'Finalizando venda...'}
+                </div>
+                {envioMsg ? <div className="text-sm text-gray-500 dark:text-gray-400 text-center">{envioMsg}</div> : null}
+              </div>
+            ) : (
             <div className="flex items-center gap-3">
-              {envioStep === 'enviando' || envioStep === 'montando' ? (
-                <div className="h-6 w-6 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" />
-              ) : envioStep === 'ok' ? (
+              {envioStep === 'ok' ? (
                 <div className="h-6 w-6 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">✓</div>
               ) : (
                 <div className="h-6 w-6 rounded-full bg-red-500 flex items-center justify-center text-white text-sm font-bold">!</div>
               )}
               <div className="flex-1">
                 <div className="font-semibold text-gray-900 dark:text-white">
-                  {envioStep === 'montando' ? 'Montando dados' : envioStep === 'enviando' ? 'Finalizando venda' : envioStep === 'ok' ? 'Venda finalizada' : 'Falha ao finalizar'}
+                  {envioStep === 'ok' ? 'Venda finalizada' : 'Falha ao finalizar'}
                 </div>
                 {envioMsg ? <div className={`text-sm mt-0.5 ${envioStep === 'erro' ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'}`}>{envioMsg}</div> : null}
               </div>
             </div>
+            )}
 
             {envioStep === 'ok' && envioResp ? (
               <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 text-center">
