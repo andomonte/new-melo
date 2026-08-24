@@ -2238,7 +2238,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           {/* Painel de finalização */}
           <div ref={painelFinRef} className="shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-4 py-3">
             {/* Linha 1: (TMO) + Forma Pagamento + (Parcelas cartão) + Prazo */}
-            <div className={`grid gap-3`} style={{ gridTemplateColumns: `${temTMO ? '1fr 1fr ' : ''}1fr${isCartaoCredito ? ' 120px' : ''} 1fr` }}>
+            <div className={`grid gap-3`} style={{ gridTemplateColumns: `${temTMO ? '1fr 1fr ' : ''}1fr${isCartaoCredito ? ' 120px' : ''} 1fr auto` }}>
 
               {temTMO ? (
                 <>
@@ -2457,12 +2457,12 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
               </div>
 
               {/* Total da Venda + Qtd Itens */}
-              <div className="relative min-w-[200px] flex items-center gap-3">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{totalItens} itens</span>
-                <div className={`flex-1 ${MI_INPUT} bg-gray-100 dark:bg-zinc-900 cursor-default text-right font-bold text-lg ${totalVenda > 0 ? 'text-green-700 dark:text-green-400' : 'text-gray-400'}`}>
-                  {totalVenda.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </div>
-                <label className={`${MI_LABEL}`} style={{ left: 'auto', right: 0 }}>Total</label>
+              <div className="flex items-center gap-3 whitespace-nowrap px-2">
+                <span className="text-sm font-semibold text-gray-800 dark:text-gray-300">{totalItens} itens</span>
+                <span className="font-bold text-xl text-blue-600 dark:text-blue-400">Total: {formatCurrency(totalVenda)}</span>
+                {isCartaoCredito && parcelasCartao > 0 ? (
+                  <span className="text-sm font-bold text-orange-600">Cartão {parcelasCartao}x</span>
+                ) : null}
               </div>
             </div>
 
