@@ -1453,7 +1453,14 @@ const VendasPage = () => {
       // 👇 garantir que a coluna ID apareça primeiro
       id,
 
-      codcliente: vendaItem.dbclien?.nomefant || vendaItem.dbclien?.nome,
+      codcliente: (() => {
+        const fantasia = (vendaItem.dbclien?.nomefant || '').trim();
+        const razao = (vendaItem.dbclien?.nome || '').trim();
+        if (fantasia && razao && fantasia.toUpperCase() !== razao.toUpperCase()) {
+          return <div><span className="font-semibold">{fantasia}</span><br/><span className="text-xs text-gray-500 dark:text-gray-400">{razao}</span></div>;
+        }
+        return fantasia || razao || '';
+      })(),
       data_venda: vendaItem.data
         ? (() => {
             // Extrair yyyy-mm-dd da string ISO para evitar bug de timezone

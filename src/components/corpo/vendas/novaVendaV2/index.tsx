@@ -1872,7 +1872,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     <div ref={resultadosRef} className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {resultadosCliente.map((cli, idx) => {
                         const nome = cli.NOMEFANT || cli.NOME || '';
-                        const razao = cli.NOMEFANT ? cli.NOME : '';
+                        const razao = cli.NOMEFANT && cli.NOME && cli.NOMEFANT.toUpperCase() !== cli.NOME.toUpperCase() ? cli.NOME : '';
                         const campo = cli._campoBusca || 'nome';
                         return (
                           <div key={cli.CODCLI || idx}
