@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -121,13 +121,21 @@ const DashboardFinanceiro: React.FC<DashboardFinanceiroProps> = ({
       .reduce((acc, c) => acc + (Number(c.valor_pgto) - Number(c.valor_pago || 0)), 0)
   } : resumo;
 
-  // Filtrar contas por status se aplicável
-  const contasFiltradas = contas.filter(c => {
-    if (filtros.status !== 'todos' && c.status !== filtros.status) {
-      return false;
-    }
-    return true;
-  });
+  // Filtrar contas por status se aplicável.
+  // useMemo é OBRIGATÓRIO: contasFiltradas entra como dependência do useEffect que calcula
+  // as métricas (que faz setState). Sem memo, um novo array é criado a cada render → o
+  // effect dispara → setState → re-render → LOOP INFINITO que trava a aba (bug da tela
+  // default do usuário). Memoizado, só recalcula quando contas/status realmente mudam.
+  const contasFiltradas = useMemo(
+    () =>
+      contas.filter((c) => {
+        if (filtros.status !== 'todos' && c.status !== filtros.status) {
+          return false;
+        }
+        return true;
+      }),
+    [contas, filtros.status],
+  );
 
   useEffect(() => {
     calcularMetricas();
