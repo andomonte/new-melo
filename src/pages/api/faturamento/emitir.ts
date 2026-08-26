@@ -353,6 +353,26 @@ export default async function handler(
       console.log(`📌 Série vinda da dbfatura: ${serieEmissao}`);
     }
 
+    // 🎯 IE↔SÉRIE pela SÉRIE FINAL resolvida. O ajuste anterior (bloco acima) só roda
+    // quando a série vem no payload; se não vier, a IE ficava no default GLOBAL do
+    // dadosempresa (070000867 = IE tipo 07) e a série saía '1' (IE tipo 04) → rejeição
+    // SEFAZ 997 "Série já vinculada a outra IE". Aqui garantimos série↔IE consistentes
+    // com a série que será realmente emitida (fiel ao emitir-faturado da Consulta).
+    if (serieEmissao) {
+      const clientIE2 = await getPgPool().connect();
+      try {
+        const ieCorreta = await ieEmitentePorSerie(clientIE2, emitenteRaw.cgc, serieEmissao);
+        const ieAtual = String(emitenteRaw.inscricaoestadual || '').replace(/\D/g, '');
+        if (ieCorreta && ieCorreta !== ieAtual) {
+          emitenteRaw.inscricaoestadual = ieCorreta;
+          if (dados.emitente) (dados.emitente as any).ie = ieCorreta;
+          console.log(`🎯 IE reajustada pela série final ${serieEmissao}: ${ieAtual} → ${ieCorreta}`);
+        }
+      } finally {
+        clientIE2.release();
+      }
+    }
+
     if (!nroformEmissao || nroformEmissao === '') {
       console.log('⚠️ nroform ausente no payload — calculando (escopado por série + insc07)...');
       const client = await getPgPool().connect();

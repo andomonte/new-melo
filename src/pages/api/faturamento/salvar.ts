@@ -22,6 +22,10 @@ type FlagsFat = {
   suframa: string;
   mvaAnt: number;
   cfopManual: string | null;
+  // Desconto/acréscimo PERCENTUAIS do cabeçalho (fiel ao Delphi). Diluídos por item
+  // em dbprodfat.desconto/acrescimo (valor). 0 = sem desconto/acréscimo.
+  descPerc: number;
+  acrePerc: number;
 };
 
 /**
@@ -50,8 +54,34 @@ async function gravarItensFatRecalculado(
   ).rows;
 
   const num = (v: any) => Number(v ?? 0);
+  const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+  // DESCONTO/ACRÉSCIMO — rateio por item (fiel ao Delphi: dbprodfat.desconto = valor).
+  // Base do rateio = Σ(qtd×prunit) bruto (mesma base do frontend e do vProd da NF).
+  // O total do desconto = round(base × %); o resto de centavos vai no ÚLTIMO item,
+  // garantindo Σ(itens) = total → nota e cobrança batem exatamente.
+  const somaBrutoItens = itens.reduce(
+    (s: number, it: any) => s + num(it.qtd) * num(it.prunit),
+    0,
+  );
+  const descTotalFat = f.descPerc > 0 ? r2(somaBrutoItens * f.descPerc / 100) : 0;
+  const acreTotalFat = f.acrePerc > 0 ? r2(somaBrutoItens * f.acrePerc / 100) : 0;
+  let descAcum = 0;
+  let acreAcum = 0;
   let n = 0;
-  for (const it of itens) {
+  for (const [idxItem, it] of itens.entries()) {
+    const ehUltimoItem = idxItem === itens.length - 1;
+    const brutoItem = num(it.qtd) * num(it.prunit);
+    const descItem = f.descPerc > 0
+      ? (ehUltimoItem ? r2(descTotalFat - descAcum) : r2(brutoItem * f.descPerc / 100))
+      : 0;
+    const acreItem = f.acrePerc > 0
+      ? (ehUltimoItem ? r2(acreTotalFat - acreAcum) : r2(brutoItem * f.acrePerc / 100))
+      : 0;
+    descAcum += descItem;
+    acreAcum += acreItem;
+    // O desconto REDUZ a base de ICMS (validado no Oracle: pf.baseicms = base × (bruto−desc)/bruto).
+    // totalproduto permanece BRUTO; só a base/valor de ICMS (e ICMS) são líquidos do desconto.
+    const fatorDesc = descItem > 0 && brutoItem > 0 ? (brutoItem - descItem) / brutoItem : 1;
     const { rows } = await client.query(
       `SELECT * FROM calcular_imposto_item($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
       [
@@ -90,11 +120,11 @@ async function gravarItensFatRecalculado(
       ref: it.ref,
       nrequis: it.nrequis,
       nritem: it.nritem,
-      // ICMS
-      icms: num(r.totalicms),
+      // ICMS — base/valor líquidos do desconto (fator aplicado; fator=1 se sem desconto)
+      icms: r2(num(r.totalicms) * fatorDesc),
       aliquota_icms: num(r.icms),
-      baseicms: num(r.baseicms),
-      totalicms: num(r.totalicms),
+      baseicms: r2(num(r.baseicms) * fatorDesc),
+      totalicms: r2(num(r.totalicms) * fatorDesc),
       icmsinterno_dest: num(r.icmsinterno_dest),
       icmsexterno_orig: num(r.icmsexterno_orig),
       csticms: r.csticms ?? '',
@@ -132,9 +162,11 @@ async function gravarItensFatRecalculado(
       valor_cbs: num(r.valor_cbs),
       // pass-through não-fiscal (a procedure não computa; herdado da venda)
       fretebase: num(it.fretebase),
-      acrescimo: num(it.acrescimo),
+      // DESCONTO/ACRÉSCIMO diluídos do cabeçalho da fatura (valor por item, Delphi-fiel).
+      // Sobrepõe o desconto/acréscimo herdado da venda — a fonte é o % do faturamento.
+      acrescimo: acreItem,
       freteicms: num(it.freteicms),
-      desconto: num(it.desconto),
+      desconto: descItem,
       fcp: num(it.fcp),
       base_fcp: num(it.base_fcp),
       valor_fcp: num(it.valor_fcp),
@@ -177,6 +209,15 @@ export default async function handler(
     totalprod,
     totalfat,
     totalnf,
+    totalfrete = 0,       // valor do frete digitado no faturamento (dbfatura.totalfrete)
+    frete_nf = 'N',       // 'S' = frete compõe a NF (dbfatura.frete_nf)
+    // DESCONTO/ACRÉSCIMO percentuais (fiel ao Delphi: dbfatura guarda o %, o valor é
+    // diluído por item em dbprodfat). desconto_nf/acrescimo_nf = 'S' compõe a NF.
+    desconto = 0,
+    desconto_nf = 'N',
+    acrescimo = 0,
+    acrescimo_nf = 'N',
+    destfrete = '1',      // frete por conta, BASE 1 (Delphi): modFrete = destfrete − 1; default 1 = CIF
     cod_conta,     // Referência à dbconta (renomeado)
     tipodoc,
     cobranca,
@@ -464,9 +505,10 @@ export default async function handler(
     const insertQuery = `
       INSERT INTO dbfatura (
         codfat, codcli, nroform, data, codvend, codtransp,
-        totalprod, totalfat, totalnf, cod_conta, tipodoc, cobranca, insc07, pedido, nfs, selo, serie, descrcfop
+        totalprod, totalfat, totalnf, cod_conta, tipodoc, cobranca, insc07, pedido, nfs, selo, serie, descrcfop,
+        totalfrete, frete_nf, desconto, desconto_nf, acrescimo, acrescimo_nf, destfrete
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
     `;
 
     // Log dos valores antes do INSERT para debug
@@ -509,6 +551,13 @@ export default async function handler(
       novoSelo,       // Adiciona o selo incremental
       serieFatura,    // ✅ série pela regra Oracle (1 mod55 / 3 mod65 / 2 Insc.07)
       natOpFatura.substring(0, 60), // descrcfop = Natureza da Operação
+      Number(totalfrete) || 0,      // totalfrete
+      (Number(totalfrete) || 0) > 0 ? 'S' : (frete_nf === 'S' ? 'S' : 'N'), // frete_nf: compõe a NF quando há frete
+      Number(desconto) || 0,        // desconto (PERCENTUAL, fiel ao Delphi)
+      desconto_nf === 'S' ? 'S' : 'N',
+      Number(acrescimo) || 0,       // acrescimo (PERCENTUAL)
+      acrescimo_nf === 'S' ? 'S' : 'N',
+      String(destfrete ?? '1'),     // destfrete (BASE 1): modFrete = destfrete − 1
     ]);
 
     // Associa todas as vendas à fatura na tabela intermediária
@@ -556,6 +605,9 @@ export default async function handler(
         suframa: desconto_suframa === 'S' ? 'S' : 'N',
         mvaAnt: imposto_antecipado === 'S' ? Number(mva_antecipado) || 0 : 0,
         cfopManual: cfopManual ? String(cfopManual).trim() : null,
+        // % de desconto/acréscimo só entram quando compõem a NF (desconto_nf='S').
+        descPerc: desconto_nf === 'S' ? Number(desconto) || 0 : 0,
+        acrePerc: acrescimo_nf === 'S' ? Number(acrescimo) || 0 : 0,
       };
       const qtdItens = await gravarItensFatRecalculado(
         client, novoCodfat, codvenda, codcliVenda, movFat, opFat, flagsFat,

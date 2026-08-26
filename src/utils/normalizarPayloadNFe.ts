@@ -141,7 +141,63 @@ export async function normalizarPayloadNFe(payload: any) {
     return Math.round((acc + p.vProd) * 100) / 100;
   }, 0);
 
-  // CALCULAR TOTAIS DE IMPOSTOS (aritmética de centavos)
+  // ===============================
+  // DESCONTO/ACRÉSCIMO — RATEIO POR PRODUTO (fiel ao Delphi, FATURAMENTOS_NF_ELETRONICA_2)
+  // ===============================
+  // dbfatura.desconto/acrescimo guardam o PERCENTUAL; o valor é DILUÍDO POR PRODUTO
+  // (dbprodfat.desconto = round(bruto_item × %,2)). Na NF-e cada item leva vDesc/vOutro e
+  // o total = Σ dos itens (SEFAZ exige ICMSTot.vDesc = Σ det.prod.vDesc). Resto de centavos
+  // no ÚLTIMO item → Σ(itens) = round(totalProd × %) exatamente (bate com nota e cobrança).
+  // IMPORTANTE (validado com dados reais no Oracle): o desconto REDUZ a base de ICMS —
+  // baseicms_final = baseicms × (bruto−desconto)/bruto — e o valor do ICMS reduz junto.
+  // Feito ANTES dos totais de imposto abaixo, para que vBC/vICMS já saiam líquidos.
+  const r2n = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+  const descPercNf = String(dbfatura?.desconto_nf ?? 'N') === 'S' ? Number(dbfatura?.desconto ?? 0) : 0;
+  const acrePercNf = String(dbfatura?.acrescimo_nf ?? 'N') === 'S' ? Number(dbfatura?.acrescimo ?? 0) : 0;
+  const descTotalAlvo = descPercNf > 0 ? r2n(totalProdutos * descPercNf / 100) : 0;
+  const acreTotalAlvo = acrePercNf > 0 ? r2n(totalProdutos * acrePercNf / 100) : 0;
+  // Frete/seguro do cabeçalho: compõem o VALOR DA OPERAÇÃO (LC 214/2025 art. 12) e entram
+  // na base de IBS/CBS. Diluídos por produto proporcional ao vProd (resto no último item),
+  // igual ao desconto. NÃO alteram vProd nem o total da linha (ficam brutos no DANFE).
+  const freteNum = Math.round(Number(dbfatura?.totalfrete ?? dbfatura?.vlrfrete ?? dbvenda?.vlrfrete ?? 0) * 100) / 100;
+  const seguroNum = Math.round(Number(dbfatura?.vlrseg ?? dbvenda?.vlrseg ?? 0) * 100) / 100;
+  let dAcum = 0;
+  let aAcum = 0;
+  let fAcum = 0;
+  let sAcum = 0;
+  const rateioProp = (total: number, acum: number, vProd: number, ult: boolean) =>
+    total > 0 && totalProdutos > 0 ? (ult ? r2n(total - acum) : r2n(vProd * total / totalProdutos)) : 0;
+  produtos.forEach((p: any, i: number) => {
+    const ult = i === produtos.length - 1;
+    p.vDesc = descPercNf > 0 ? (ult ? r2n(descTotalAlvo - dAcum) : r2n(p.vProd * descPercNf / 100)) : 0;
+    p.vOutro = acrePercNf > 0 ? (ult ? r2n(acreTotalAlvo - aAcum) : r2n(p.vProd * acrePercNf / 100)) : 0;
+    p.vFrete = rateioProp(freteNum, fAcum, p.vProd, ult);
+    p.vSeg = rateioProp(seguroNum, sAcum, p.vProd, ult);
+    dAcum += p.vDesc;
+    aAcum += p.vOutro;
+    fAcum += p.vFrete;
+    sAcum += p.vSeg;
+    // Redução da base/valor de ICMS pelo desconto (proporcional, preservando qualquer
+    // redução de base já existente no item). Para item isento/ZFM (base 0) é no-op.
+    if (p.vDesc > 0 && p.vProd > 0) {
+      const fator = (p.vProd - p.vDesc) / p.vProd;
+      p.icms.baseICMS = r2n(p.icms.baseICMS * fator);
+      p.icms.vICMS = r2n(p.icms.vICMS * fator);
+    }
+    // Base de IBS/CBS = valor da operação por item = vProd − desconto + frete + seguro +
+    // acréscimo (LC 214/2025 art. 12). Recalcula IBS/CBS sobre a base composta. Antes a
+    // base era só vProd → IBS/CBS a menor (crítico a partir de 2027, CBS cheia).
+    const baseOperIbsCbs = r2n(p.vProd - p.vDesc + p.vFrete + p.vSeg + p.vOutro);
+    p.ibscbs.vBC = baseOperIbsCbs;
+    p.ibscbs.vIBSUF = Math.round(baseOperIbsCbs * (p.ibscbs.pIBSUF || 0)) / 100;
+    p.ibscbs.vIBSMun = Math.round(baseOperIbsCbs * (p.ibscbs.pIBSMun || 0)) / 100;
+    p.ibscbs.vIBS = r2n(p.ibscbs.vIBSUF + p.ibscbs.vIBSMun);
+    p.ibscbs.vCBS = Math.round(baseOperIbsCbs * (p.ibscbs.pCBS || 0)) / 100;
+  });
+  const descontoNum = descTotalAlvo;   // = Σ p.vDesc
+  const acrescimoNum = acreTotalAlvo;  // = Σ p.vOutro
+
+  // CALCULAR TOTAIS DE IMPOSTOS (aritmética de centavos) — já com a base de ICMS líquida
   const totalICMS = produtos.reduce((acc: number, p: any) => {
     return Math.round((acc + p.icms.vICMS) * 100) / 100;
   }, 0);
@@ -170,12 +226,9 @@ export async function normalizarPayloadNFe(payload: any) {
   const totalCBS = produtos.reduce((acc: number, p: any) => Math.round((acc + p.ibscbs.vCBS) * 100) / 100, 0);
 
   // vNF = vProd + vSeg + vFrete + vOutro - vDesc + vIPI (conforme manual Sefaz)
-  // ICMS, PIS, COFINS estão INCLUÍDOS no vProd (CST 00/01)
-  // IPI é "por fora" (CST 50) - deve ser somado
-  const descontoNum = Math.round(Number(dbfatura?.vlrdesc ?? dbvenda?.vlrdesc ?? 0) * 100) / 100;
-  const acrescimoNum = Math.round(Number(dbfatura?.vlracresc ?? dbvenda?.vlracresc ?? 0) * 100) / 100;
-  const freteNum = Math.round(Number(dbfatura?.vlrfrete ?? dbvenda?.vlrfrete ?? 0) * 100) / 100;
-  const seguroNum = Math.round(Number(dbfatura?.vlrseg ?? dbvenda?.vlrseg ?? 0) * 100) / 100;
+  // ICMS, PIS, COFINS estão INCLUÍDOS no vProd (CST 00/01); IPI é "por fora" (CST 50).
+  // desconto/acréscimo/frete/seguro já foram diluídos por item acima (freteNum/seguroNum
+  // declarados lá, antes dos totais de imposto, p/ compor a base de IBS/CBS).
 
   // Para Regime Normal com IPI por fora: vNF = vProd + vFrete + vSeg + vOutro - vDesc + vIPI
   const totalNF = Math.round((totalProdutos + freteNum + seguroNum + acrescimoNum - descontoNum + totalIPI) * 100) / 100;
@@ -225,7 +278,13 @@ export async function normalizarPayloadNFe(payload: any) {
     produtos,
     vendedor: dbvenda?.codvend ?? '',
     transportadora: nomeTransportadora,
-    modalidadeTransporte: dbvenda?.modalidadeTransporte ?? '0',
+    // modFrete (frete por conta) — fiel ao Delphi: dbfatura.destfrete é BASE 1 e o XML usa
+    // modFrete = destfrete − 1 (destfrete 1→0 CIF, 2→1 FOB, 10→9 sem ocorrência). Fallback
+    // p/ modalidadeTransporte da venda (já 0-based) e, por fim, 0 (Remetente/CIF).
+    modalidadeTransporte:
+      dbfatura?.destfrete != null && dbfatura?.destfrete !== ''
+        ? String((Number(dbfatura.destfrete) || 1) - 1)
+        : (dbvenda?.modalidadeTransporte ?? '0'),
     data:
       dbvenda?.data && new Date(dbvenda.data).getFullYear() > 2020
         ? dbvenda.data

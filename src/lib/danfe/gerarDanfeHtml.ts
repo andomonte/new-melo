@@ -365,7 +365,13 @@ export function gerarDanfeHtmlNFe(
       <div class="body">
         <div class="row">
           <div class="cell grow"><div class="k">RAZÃO SOCIAL</div><div class="v">${nbsp(getValue(venda.transp))}</div></div>
-          <div class="cell" style="flex:0.5"><div class="k">FRETE POR CONTA</div><div class="v">${esc(getValue(fatura.destfrete, '1'))} - ${num(fatura.destfrete) === 0 ? 'Emitente' : 'Destinatário'}</div></div>
+          <div class="cell" style="flex:0.5"><div class="k">FRETE POR CONTA</div><div class="v">${(() => {
+            // Fiel ao Delphi: dbfatura.destfrete é BASE 1; modFrete NF-e = destfrete − 1.
+            const df = Number(fatura.destfrete);
+            const mf = Number.isFinite(df) && df > 0 ? df - 1 : 0; // default 0 = Remetente/CIF
+            const desc = ({ 0: 'Remetente (CIF)', 1: 'Destinatário (FOB)', 2: 'Terceiros', 3: 'Próprio (Rem.)', 4: 'Próprio (Dest.)', 9: 'Sem ocorrência' })[mf] || 'Sem ocorrência';
+            return `${mf} - ${desc}`;
+          })()}</div></div>
           <div class="cell" style="flex:0.3"><div class="k">CÓDIGO ANTT.</div><div class="v">&nbsp;</div></div>
           <div class="cell" style="flex:0.35"><div class="k">PLACA DO VEÍCULO</div><div class="v">&nbsp;</div></div>
           <div class="cell" style="flex:0.12"><div class="k">UF</div><div class="v c">&nbsp;</div></div>

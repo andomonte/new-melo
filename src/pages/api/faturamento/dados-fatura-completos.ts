@@ -37,6 +37,15 @@ export default async function handler(
         f.serie,
         f.cfop1,
         f.cfop2,
+        f.totalfrete,
+        f.frete_nf,
+        -- ALIAS obrigatório: a query também traz i.acrescimo (item) e i.desconto seria
+        -- ambíguo; sem alias, firstRow.acrescimo pega o do item (0) e zera o acréscimo.
+        f.desconto  AS fat_desconto,
+        f.desconto_nf  AS fat_desconto_nf,
+        f.acrescimo AS fat_acrescimo,
+        f.acrescimo_nf AS fat_acrescimo_nf,
+        f.destfrete,
 
         -- Dados do cliente
         c.codcli,
@@ -191,6 +200,19 @@ export default async function handler(
       serie: firstRow.serie,
       cfop1: firstRow.cfop1,
       cfop2: firstRow.cfop2,
+      // FRETE: totalfrete é a coluna real da dbfatura. Expõe também como vlrfrete
+      // (alias) porque o normalizador do XML historicamente lia dbfatura.vlrfrete.
+      totalfrete: Number(firstRow.totalfrete) || 0,
+      vlrfrete: Number(firstRow.totalfrete) || 0,
+      frete_nf: firstRow.frete_nf,
+      // DESCONTO/ACRÉSCIMO: dbfatura guarda o PERCENTUAL (fiel ao Delphi). Lê os alias
+      // fat_* para não colidir com i.acrescimo/i.desconto (itens) na mesma query.
+      desconto: Number(firstRow.fat_desconto) || 0,
+      desconto_nf: firstRow.fat_desconto_nf,
+      acrescimo: Number(firstRow.fat_acrescimo) || 0,
+      acrescimo_nf: firstRow.fat_acrescimo_nf,
+      // Frete por conta (BASE 1); o DANFE mostra modFrete = destfrete − 1.
+      destfrete: firstRow.destfrete,
     };
 
     // FATURA / DUPLICATA para o preview (mesma regra da emissão): parcelas reais
@@ -451,9 +473,43 @@ export default async function handler(
         : 0;
     }
 
-    // Extrair frete, seguro, desconto, acréscimo
-    totaisImpostos.frete = parseFloat(dbvenda.vlrfrete || 0);
-    totaisImpostos.desconto = parseFloat(dbvenda.vlrdesc || 0);
+    // Extrair frete, seguro, desconto, acréscimo.
+    // FRETE: prioriza dbfatura.totalfrete (digitado no faturamento) — o preview da
+    // DANFE e o resumo financeiro leem daqui. Fallback p/ dbvenda.vlrfrete (frete
+    // que veio da venda). Antes lia só a venda → DANFE saía com frete 0,00.
+    totaisImpostos.frete =
+      Number(firstRow.totalfrete) > 0
+        ? Number(firstRow.totalfrete)
+        : parseFloat(dbvenda.vlrfrete || 0);
+    // DESCONTO/ACRÉSCIMO — fiel ao Delphi: dbfatura.desconto/acrescimo são PERCENTUAIS
+    // e só compõem a NF quando desconto_nf/acrescimo_nf='S'. O valor = % × totalProdutos
+    // (mesma base da emissão). Fallback p/ dbvenda.vlrdesc (faturas antigas sem o %).
+    const descPercFat = String(firstRow.fat_desconto_nf ?? 'N') === 'S' ? Number(firstRow.fat_desconto) || 0 : 0;
+    const acrePercFat = String(firstRow.fat_acrescimo_nf ?? 'N') === 'S' ? Number(firstRow.fat_acrescimo) || 0 : 0;
+    totaisImpostos.desconto = descPercFat > 0
+      ? Math.round(totaisImpostos.totalProdutos * descPercFat) / 100
+      : parseFloat(dbvenda.vlrdesc || 0);
+    totaisImpostos.acrescimo = acrePercFat > 0
+      ? Math.round(totaisImpostos.totalProdutos * acrePercFat) / 100
+      : 0;
+
+    // BASE DE IBS/CBS = valor da operação (LC 214/2025 art. 12): produtos − desconto +
+    // frete + seguro + acréscimo. Os valores por item foram somados sobre vProd; escala
+    // proporcional (base_composta / produtos) preserva a alíquota de cada item. Mantém o
+    // preview coerente com a emissão. Antes a base era só produtos → IBS/CBS a menor.
+    const baseIbsCbs =
+      totaisImpostos.totalProdutos -
+      totaisImpostos.desconto +
+      totaisImpostos.frete +
+      totaisImpostos.seguro +
+      totaisImpostos.acrescimo;
+    if (totaisImpostos.totalProdutos > 0 && baseIbsCbs !== totaisImpostos.totalProdutos) {
+      const fatorIbsCbs = baseIbsCbs / totaisImpostos.totalProdutos;
+      totaisImpostos.totalValorIBS = Math.round(totaisImpostos.totalValorIBS * fatorIbsCbs * 100) / 100;
+      totaisImpostos.totalValorCBS = Math.round(totaisImpostos.totalValorCBS * fatorIbsCbs * 100) / 100;
+      totaisImpostos.totalIBSEstadual = Math.round(totaisImpostos.totalIBSEstadual * fatorIbsCbs * 100) / 100;
+      totaisImpostos.totalIBSMunicipal = Math.round(totaisImpostos.totalIBSMunicipal * fatorIbsCbs * 100) / 100;
+    }
 
 
     // Calcular total de impostos e total geral

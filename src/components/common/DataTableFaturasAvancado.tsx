@@ -185,8 +185,11 @@ export default function DataTableFaturasAvancado({
 
       if (faturasComPagamentos.length > 0) {
         const codigosFaturas = faturasComPagamentos.join(', ');
-        toast.error(`As seguintes faturas já possuem pagamentos realizados e não podem ser agrupadas: ${codigosFaturas}`, {
-          duration: 5000,
+        pedirConfirmacao(() => {}, {
+          somenteOk: true,
+          type: 'warning',
+          title: 'Faturas com pagamentos',
+          message: `As seguintes faturas já possuem pagamentos realizados e não podem ser agrupadas: ${codigosFaturas}`,
         });
         return;
       }
@@ -204,8 +207,11 @@ export default function DataTableFaturasAvancado({
         .map(f => f.cliente_nome || f.codcli)
         .filter((value, index, self) => self.indexOf(value) === index);
 
-      toast.error(`Só é possível agrupar faturas do mesmo cliente. Clientes selecionados: ${nomesClientes.join(', ')}`, {
-        duration: 4000,
+      pedirConfirmacao(() => {}, {
+        somenteOk: true,
+        type: 'warning',
+        title: 'Clientes diferentes',
+        message: `Só é possível agrupar faturas do mesmo cliente.\nClientes selecionados: ${nomesClientes.join(', ')}`,
       });
       return;
     }
@@ -223,7 +229,12 @@ export default function DataTableFaturasAvancado({
     // Comportamento original (manter para compatibilidade)
     const codcli = getClienteSelecionado();
     if (!codcli) {
-      toast.error('Não foi possível identificar o cliente das faturas selecionadas.');
+      pedirConfirmacao(() => {}, {
+        somenteOk: true,
+        type: 'warning',
+        title: 'Cliente não identificado',
+        message: 'Não foi possível identificar o cliente das faturas selecionadas.',
+      });
       return;
     }
     
@@ -318,11 +329,26 @@ export default function DataTableFaturasAvancado({
     freteNa1Parcela: false,
   });
   const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string; valor: number }[]>([]);
-  const [opcoesTipoFatura] = useState([
-    { value: 'BOLETO', label: 'BOLETO' },
-    { value: 'BOLETO BANCARIO', label: 'BOLETO BANCÁRIO' },
-    { value: 'DM', label: 'DUPLICATA MERCANTIL' },
-  ]);
+  const [tiposDocumentoOriginais, setTiposDocumentoOriginais] = useState<
+    { codigo: string; descricao: string }[]
+  >([]);
+  // Opções de "Tipo de Fatura/Documento" DINÂMICAS pelo banco — idênticas à cobrança
+  // agrupada (GP): MELO → CARTEIRA + todos os tipos (carteira, dinheiro, cartão, boleto,
+  // pix, outros); banco do cliente → só BOLETO.
+  const opcoesTipoFatura = useMemo(() => {
+    if (!formCobranca.banco) return [];
+    const bancoSel = bancos.find((b) => b.banco === formCobranca.banco);
+    if ((bancoSel?.nome || '').toUpperCase() === 'MELO') {
+      const carteira = { codigo: 'W', descricao: 'CARTEIRA' };
+      const todas = [carteira, ...tiposDocumentoOriginais];
+      const unicas = todas.reduce((acc, doc) => {
+        if (!acc.find((x) => x.codigo === doc.codigo)) acc.push(doc);
+        return acc;
+      }, [] as typeof todas);
+      return unicas.map((doc) => ({ value: doc.descricao, label: doc.descricao }));
+    }
+    return [{ value: 'BOLETO', label: 'BOLETO' }];
+  }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
 
   // Atualizar faturas desabilitadas quando a lista de faturas ou seleção mudar
   useEffect(() => {
@@ -364,7 +390,10 @@ export default function DataTableFaturasAvancado({
   useEffect(() => {
     axios
       .get('/api/faturamento/opcoes-cobranca')
-      .then((res) => setBancosTodos(res.data?.bancos || []))
+      .then((res) => {
+        setBancosTodos(res.data?.bancos || []);
+        setTiposDocumentoOriginais(res.data?.tiposDocumento || []);
+      })
       .catch(() => setBancosTodos([]));
   }, []);
 
@@ -374,12 +403,17 @@ export default function DataTableFaturasAvancado({
   // Modo "Alterar Cobrança" (cancela títulos atuais e gera novos ao salvar).
   const [alterandoCobranca, setAlterandoCobranca] = useState(false);
 
-  const abrirModalCobranca = (f: any, alterar: boolean = false) => {
+  const abrirModalCobranca = async (f: any, alterar: boolean = false) => {
     setAlterandoCobranca(alterar);
     const melo = bancosTodos.find((b) => (b.nome || '').toUpperCase() === 'MELO');
-    const bancoCliente = bancosTodos.find(
-      (b) => String(b.banco).trim() === String(f.cliente_banco ?? '').trim(),
-    );
+    // Offset -1 do cadastro: dbbanco_cobranca.banco = dbclien.banco + 1 (mesmo do fluxo
+    // agrupado). f.cliente_banco vem da dbclien → soma 1 para casar o banco de cobrança.
+    const bancoCliente =
+      f.cliente_banco != null && String(f.cliente_banco).trim() !== ''
+        ? bancosTodos.find(
+            (b) => String(b.banco).trim() === String(Number(f.cliente_banco) + 1),
+          )
+        : undefined;
     const opcoes = [bancoCliente, melo].filter(
       (b, i, arr): b is { banco: string; nome: string } =>
         !!b && arr.findIndex((x) => x && x.banco === b!.banco) === i,
@@ -396,7 +430,24 @@ export default function DataTableFaturasAvancado({
       freteNa1Parcela: false,
     });
     setParcelas([]);
-    setCobrancaModalAberto(f);
+    // Busca impostos + frete reais da fatura (para os flags "cobrar imposto/frete na 1ª
+    // parcela"), igual ao fluxo de cobrança agrupada. Frete tem fallback pro totalfrete
+    // da própria linha; impostos = ICMS + IPI do resumo (ZFM normalmente 0).
+    let impostos = 0;
+    let frete = Number(f.totalfrete) || 0;
+    try {
+      const { data } = await axios.get(
+        `/api/faturamento/dados-fatura-completos?codfat=${f.codfat}`,
+      );
+      const rf = data?.resumoFinanceiro;
+      if (rf) {
+        impostos = (Number(rf.totalICMS) || 0) + (Number(rf.totalIPI) || 0);
+        frete = Number(rf.frete) || frete;
+      }
+    } catch {
+      /* segue com frete da linha e impostos 0 */
+    }
+    setCobrancaModalAberto({ ...f, _impostos: impostos, _frete: frete });
   };
 
   // Alterar Cobrança (fiel ao Delphi + salvaguardas): reabre a tela de cobrança;
@@ -1310,14 +1361,31 @@ const handleCancelarNota = async () => {
           type="checkbox"
           className="disabled:opacity-40 disabled:cursor-not-allowed"
           checked={faturasSelecionadas.includes(f.codfat)}
-          // Já tem cobrança gerada => não pode entrar em "Gerar Cobrança" de novo.
-          disabled={f.cobranca === 'S'}
-          title={f.cobranca === 'S' ? 'Fatura já possui cobrança gerada' : undefined}
+          // REGRA: cobrança agrupada exige NF-e EMITIDA (autorizada, 100). Também bloqueia
+          // quando a fatura já tem cobrança gerada.
+          disabled={f.cobranca === 'S' || f.nfe_status !== '100'}
+          title={
+            f.nfe_status !== '100'
+              ? 'Só é possível agrupar cobrança de faturas com NF-e emitida (autorizada)'
+              : f.cobranca === 'S'
+                ? 'Fatura já possui cobrança gerada'
+                : undefined
+          }
           onClick={e => e.stopPropagation()} // Evita propagar o clique para a linha
           onChange={async (e) => {
             console.log('🔄 onChange executado - checked:', e.target.checked, 'fatura:', f.codfat, 'cliente:', f.codcli);
             e.stopPropagation(); // Evita propagar o clique para a linha
             if (e.target.checked) {
+              // Safety net: cobrança agrupada só para NF-e emitida (autorizada).
+              if (f.nfe_status !== '100') {
+                pedirConfirmacao(() => {}, {
+                  somenteOk: true,
+                  type: 'warning',
+                  title: 'NF-e não emitida',
+                  message: `A fatura ${f.codfat} ainda não tem NF-e emitida (autorizada) e não pode ser agrupada.`,
+                });
+                return;
+              }
               console.log('📝 Tentando adicionar fatura:', f.codcli);
               console.log('📋 Faturas já selecionadas:', faturasSelecionadas.length);
               console.log('👤 Cliente selecionado atual:', getClienteSelecionado());
@@ -1330,8 +1398,11 @@ const handleCancelarNota = async () => {
                 const faturaAtual = faturas.find(f => f.codfat === faturasSelecionadas[0]);
                 const nomeClienteAtual = faturaAtual?.cliente_nome || clienteAtual;
                 const nomeClienteNovo = f.cliente_nome || f.codcli;
-                toast.error(`Só é possível selecionar faturas do mesmo cliente. Cliente atual: ${nomeClienteAtual}, Cliente selecionado: ${nomeClienteNovo}`, {
-                  duration: 4000,
+                pedirConfirmacao(() => {}, {
+                  somenteOk: true,
+                  type: 'warning',
+                  title: 'Clientes diferentes',
+                  message: `Só é possível selecionar faturas do mesmo cliente.\nCliente atual: ${nomeClienteAtual}\nCliente selecionado: ${nomeClienteNovo}`,
                 });
                 return;
               }
@@ -1343,9 +1414,12 @@ const handleCancelarNota = async () => {
                 const temPagamentos = await verificarFaturaTemPagamentos(f.codfat);
                 if (temPagamentos) {
                   console.log('🚫 Tentou selecionar fatura que já possui pagamentos:', f.codfat);
-                  console.log('📢 Mostrando toast de erro para fatura com pagamentos');
-                  toast.error(`A fatura ${f.codfat} já possui pagamentos realizados e não pode ser agrupada.`, {
-                    duration: 4000,
+                  console.log('📢 Mostrando aviso para fatura com pagamentos');
+                  pedirConfirmacao(() => {}, {
+                    somenteOk: true,
+                    type: 'warning',
+                    title: 'Fatura com pagamentos',
+                    message: `A fatura ${f.codfat} já possui pagamentos realizados e não pode ser agrupada.`,
                   });
                   return;
                 }
@@ -2225,10 +2299,25 @@ const handleCancelarNota = async () => {
           <Dialog open={!!cobrancaModalAberto} onOpenChange={() => setCobrancaModalAberto(null)}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>
-                  Gerar Cobrança - Fatura Nº {cobrancaModalAberto.codfat}
-                </DialogTitle>
+                <DialogTitle>Gerar Cobrança</DialogTitle>
               </DialogHeader>
+              {/* Cabeçalho igual ao da cobrança agrupada: cliente destacado + documentos (NF). */}
+              <div className="rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 px-4 py-3 mb-1">
+                <div className="text-base font-bold text-red-600">
+                  {cobrancaModalAberto.cliente_nome || cobrancaModalAberto.nome || 'Cliente'}
+                  {cobrancaModalAberto.codcli ? ` (${cobrancaModalAberto.codcli})` : ''}
+                </div>
+                <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                  <span className="font-semibold">Documentos:</span>{' '}
+                  <span className="font-bold text-red-600">
+                    {cobrancaModalAberto.nroform || cobrancaModalAberto.numero_nf || cobrancaModalAberto.codfat}
+                  </span>
+                  {' · '}
+                  <span className="font-semibold text-blue-600">
+                    {(Number(cobrancaModalAberto.totalnf) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+              </div>
               <div className="space-y-4">
                 <DadosCobranca
                   statusVenda={{ cobranca: 'S' }}
@@ -2239,75 +2328,69 @@ const handleCancelarNota = async () => {
                   setParcelas={setParcelas}
                   opcoesTipoFatura={opcoesTipoFatura}
                   totalNota={Number(cobrancaModalAberto.totalnf || 0)}
-                  onGerarPreviewBoleto={handleGerarPreviewBoleto}
+                  impostosTotal={Number(cobrancaModalAberto._impostos) || 0}
+                  freteTotal={Number(cobrancaModalAberto._frete) || 0}
                   padraoAberto={true}
+                  // Botão "Gerar Cobrança" no rodapé do card (onde ficava o preview do
+                  // boleto). O fechamento é pelo X do modal — sem botão Cancelar.
+                  botaoRodape={
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          if (!parcelas.length) {
+                            toast.error('Gere ao menos uma parcela antes de salvar.');
+                            return;
+                          }
+                          // Payload no formato que /salvar-cobranca espera:
+                          // codcli + tipofat + parcelas com { vencimento, valor }.
+                          const dadosCobranca = {
+                            codfat: cobrancaModalAberto.codfat,
+                            codcli: cobrancaModalAberto.codcli,
+                            banco: formCobranca.banco,
+                            tipofat: formCobranca.tipoFatura,
+                            // Alterar = cancela os títulos atuais e gera os novos.
+                            alterar: alterandoCobranca,
+                            parcelas: parcelas.map((p) => ({
+                              vencimento: p.vencimento,
+                              valor: p.valor,
+                              documento: null,
+                            })),
+                          };
+
+                          const response = await axios.post('/api/faturamento/salvar-cobranca', dadosCobranca);
+
+                          if (response.status === 200) {
+                            toast.success(alterandoCobranca ? 'Cobrança alterada com sucesso!' : 'Cobrança gerada com sucesso!');
+                            setCobrancaModalAberto(null);
+                            setFormCobranca({
+                              banco: '',
+                              tipoFatura: '',
+                              prazoSelecionado: '',
+                              valorVista: '',
+                              habilitarValor: false,
+                              impostoNa1Parcela: false,
+                              freteNa1Parcela: false,
+                            });
+                            setParcelas([]);
+                            if (onAtualizarLista) onAtualizarLista();
+                          }
+                        } catch (error: any) {
+                          console.error('Erro ao salvar cobrança:', error);
+                          toast.error(
+                            error.response?.data?.error ||
+                              error.response?.data?.message ||
+                              'Erro ao gerar cobrança',
+                          );
+                        }
+                      }}
+                      disabled={!formCobranca.banco || !formCobranca.tipoFatura || !parcelas.length}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    >
+                      Gerar Cobrança
+                    </button>
+                  }
                 />
-                <div className="flex justify-end gap-2 pt-4 border-t">
-                  <button
-                    onClick={() => setCobrancaModalAberto(null)}
-                    className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        if (!parcelas.length) {
-                          toast.error('Gere ao menos uma parcela antes de salvar.');
-                          return;
-                        }
-                        // Payload no formato que /salvar-cobranca espera:
-                        // codcli + tipofat + parcelas com { vencimento, valor }.
-                        const dadosCobranca = {
-                          codfat: cobrancaModalAberto.codfat,
-                          codcli: cobrancaModalAberto.codcli,
-                          banco: formCobranca.banco,
-                          tipofat: formCobranca.tipoFatura,
-                          // Alterar = cancela os títulos atuais e gera os novos.
-                          alterar: alterandoCobranca,
-                          parcelas: parcelas.map((p) => ({
-                            vencimento: p.vencimento,
-                            valor: p.valor,
-                            documento: null,
-                          })),
-                        };
-
-                        // Chamar API para salvar cobrança
-                        const response = await axios.post('/api/faturamento/salvar-cobranca', dadosCobranca);
-
-                        if (response.status === 200) {
-                          toast.success(alterandoCobranca ? 'Cobrança alterada com sucesso!' : 'Cobrança gerada com sucesso!');
-                          setCobrancaModalAberto(null);
-                          // Limpar formulário
-                          setFormCobranca({
-                            banco: '',
-                            tipoFatura: '',
-                            prazoSelecionado: '',
-                            valorVista: '',
-                            habilitarValor: false,
-                            impostoNa1Parcela: false,
-                            freteNa1Parcela: false,
-                          });
-                          setParcelas([]);
-                          
-                          // Atualizar lista
-                          if (onAtualizarLista) onAtualizarLista();
-                        }
-                      } catch (error: any) {
-                        console.error('Erro ao salvar cobrança:', error);
-                        toast.error(
-                          error.response?.data?.error ||
-                            error.response?.data?.message ||
-                            'Erro ao gerar cobrança',
-                        );
-                      }
-                    }}
-                    className="px-4 py-2 text-white bg-green-600 rounded hover:bg-green-700 transition-colors"
-                    disabled={!formCobranca.banco || !formCobranca.tipoFatura}
-                  >
-                    Gerar Cobrança
-                  </button>
-                </div>
               </div>
             </DialogContent>
           </Dialog>

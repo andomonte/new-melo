@@ -1264,7 +1264,11 @@ export const gerarPreviewNF = async (
   doc.setLineWidth(1);
   doc.rect(checkboxX, checkboxY, 14, 14);
   doc.setFont('helvetica', 'bold').setFontSize(11);
-  doc.text(getValue(fatura.destfrete, '1'), checkboxX + 7, checkboxY + 10, {
+  // Fiel ao Delphi: dbfatura.destfrete é BASE 1; o rótulo/checkbox mostra modFrete = destfrete − 1
+  // (destfrete 1→0 Remetente/CIF, 2→1 Destinatário/FOB, ...). Default 0 = Remetente/CIF.
+  const _df = Number(fatura.destfrete);
+  const _modFrete = Number.isFinite(_df) && _df > 0 ? _df - 1 : 0;
+  doc.text(String(_modFrete), checkboxX + 7, checkboxY + 10, {
     align: 'center',
   });
 

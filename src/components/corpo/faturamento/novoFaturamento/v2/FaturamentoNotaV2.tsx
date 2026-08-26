@@ -18,6 +18,13 @@ export type FatV2Ctx = {
   set: (k: string, v: any) => void;               // setter genérico
   data?: {
     titulo?: string;
+    // Preenchido no modo AGRUPAMENTO (gerar cobrança de N faturas do mesmo cliente).
+    agrupamento?: {
+      clienteNome: string;
+      clienteCod: string;
+      documentos: { codfat: string; nf: string; valor: number }[];
+      total: number;
+    };
     itens?: any[];
     cliente?: any;
     resumo?: any;
@@ -75,6 +82,7 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
   const itens = data.itens ?? [];
   const resumo = data.resumo ?? {};
   const titulo = data.titulo ?? 'FATURA · VENDA · CLIENTE';
+  const agr = data.agrupamento; // preenchido só no modo agrupamento
   const cli: any = data.cliente ?? {};
 
   // Natureza da operação (cabeçalho) = derivada da OPERAÇÃO (tipo_operacao),
@@ -144,8 +152,19 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
       <div className="densidade-compacta fat-v2 bg-white dark:bg-zinc-900 w-full h-full flex flex-col overflow-hidden text-gray-800 dark:text-gray-100">
 
         {/* CABEÇALHO */}
-        <div className="flex-shrink-0 flex items-center gap-3 px-3 border-b border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800" style={{ height: 34 }}>
-          <span className="text-[12px] font-semibold text-blue-600 dark:text-blue-300 whitespace-nowrap">{titulo}</span>
+        <div className="flex-shrink-0 flex items-center gap-3 px-3 border-b border-gray-200 dark:border-zinc-800 bg-gray-100 dark:bg-zinc-800" style={{ minHeight: 34 }}>
+          {agr ? (
+            <span className="flex items-baseline gap-2 whitespace-nowrap overflow-hidden">
+              <span className="text-[15px] font-extrabold text-red-600 dark:text-red-400">
+                {agr.clienteNome}{agr.clienteCod ? ` (${agr.clienteCod})` : ''}
+              </span>
+              <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate">
+                · Documentos: <b>{agr.documentos.map((d) => d.nf).join(', ')}</b>
+              </span>
+            </span>
+          ) : (
+            <span className="text-[12px] font-semibold text-blue-600 dark:text-blue-300 whitespace-nowrap">{titulo}</span>
+          )}
           <div className="fat-tabs ml-1">{TAB('natureza', 'Natureza da Nota')}{TAB('dados', 'Dados da Fatura')}{TAB('produtos', 'Produtos')}{TAB('cobranca', 'Cobrança e valores')}</div>
           <div className="ml-auto flex items-center gap-1.5">
             <button type="button" className="h-[22px] px-2.5 text-[11px] rounded border border-gray-300 dark:border-zinc-600" onClick={act.opcoes}>⚙️ Opções</button>
@@ -365,7 +384,21 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
             <div className="fat-sec"><div className="fat-sec-header"><span>Cobrança</span></div>
               <div className="fat-g">
                 <div className="fat-c3"><label>Gerar cobrança</label>
-                  <select value={f.cobranca} onChange={(e) => set('cobranca', e.target.value)}>
+                  {/* Cobrança só é permitida em Movimentação = SAÍDA e Operação = VENDA.
+                      Qualquer outra combinação trava o campo em "Não". */}
+                  <select
+                    value={
+                      String(f.tipoMovimentacao).toUpperCase() === 'SAIDA' &&
+                      String(f.operacaoFiscal).toUpperCase() === 'VENDA'
+                        ? f.cobranca
+                        : 'N'
+                    }
+                    disabled={
+                      !(String(f.tipoMovimentacao).toUpperCase() === 'SAIDA' &&
+                        String(f.operacaoFiscal).toUpperCase() === 'VENDA')
+                    }
+                    onChange={(e) => set('cobranca', e.target.value)}
+                  >
                     <option value="S">Sim</option><option value="N">Não</option></select></div>
                 <div className="fat-c4"><label>Banco</label>
                   <select value={f.banco ?? ''} onChange={(e) => set('banco', e.target.value)}>
@@ -374,11 +407,12 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                   <select value={f.tipoFatura ?? 'BOLETO'} onChange={(e) => set('tipoFatura', e.target.value)}>
                     {TIPOS_FAT.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
                 <div className="fat-c3"><label>Intervalo de dias</label>
-                  <input type="text" inputMode="numeric" placeholder="Ex: 30" value={f.intervaloDias ?? ''} onChange={(e) => set('intervaloDias', e.target.value.replace(/\D/g, ''))} /></div>
+                  <input type="text" inputMode="numeric" placeholder="Ex: 30" disabled={f.cobranca !== 'S'} value={f.intervaloDias ?? ''} onChange={(e) => set('intervaloDias', e.target.value.replace(/\D/g, ''))} /></div>
                 <div className="fat-c3"><label>Quantidade (vezes)</label>
-                  <input type="text" inputMode="numeric" placeholder="Ex: 3" value={f.qtdParcelas ?? ''} onChange={(e) => set('qtdParcelas', e.target.value.replace(/\D/g, ''))} /></div>
+                  <input type="text" inputMode="numeric" placeholder="Ex: 3" disabled={f.cobranca !== 'S'} value={f.qtdParcelas ?? ''} onChange={(e) => set('qtdParcelas', e.target.value.replace(/\D/g, ''))} /></div>
                 <div className="fat-c3" style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <button type="button" className="w-full h-[26px] text-[12px] rounded bg-blue-600 text-white" onClick={act.gerarParcelas}>+ Gerar parcelas</button></div>
+                  {/* "Gerar cobrança" = NÃO bloqueia a geração de parcelas. */}
+                  <button type="button" disabled={f.cobranca !== 'S'} title={f.cobranca !== 'S' ? 'Ative "Gerar cobrança" para gerar parcelas' : ''} className={`w-full h-[26px] text-[12px] rounded text-white ${f.cobranca !== 'S' ? 'bg-gray-400 opacity-60 cursor-not-allowed' : 'bg-blue-600'}`} onClick={act.gerarParcelas}>+ Gerar parcelas</button></div>
                 {chk('habilitarValor', 'Habilitar valor de entrada', 'fat-c3')}
                 {f.habilitarValor && (
                   <div className="fat-c3"><label>Valor de entrada (R$)</label>
@@ -403,11 +437,12 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
                 {chk('impostoNa1Parcela', 'Cobrar impostos na 1ª parcela', 'fat-c3')}
                 {chk('freteNa1Parcela', 'Cobrar frete na 1ª parcela', 'fat-c3')}
                 {chk('diferenciada', 'Comissão diferenciada', 'fat-c3')}
-                {f.tipoFatura &&
+                {f.cobranca === 'S' &&
+                  f.tipoFatura &&
                   !['BOLETO', 'BOLETO BANCARIO', 'BOLETO BANCÁRIO', 'CARTEIRA'].includes(
                     String(f.tipoFatura).toUpperCase(),
                   ) &&
-                  chk('gerar30dias', 'Gerar cobrança 30 dias (valor total)', 'fat-c4')}
+                  chk('gerar30dias', 'Gerar cobrança 1 dia (valor total)', 'fat-c4')}
               </div>
               <div className="fat-sub">Parcelas</div>
               <div className="fat-tbl-wrap"><table className="fat-tbl">
@@ -442,27 +477,49 @@ export default function FaturamentoNotaV2({ ctx }: { ctx?: FatV2Ctx }) {
           )}
         </div>
 
-        {/* RODAPÉ · ESPELHO DOS VALORES DA FATURA (padrão Delphi) */}
+        {/* RODAPÉ · agrupamento = resumo das faturas + total; senão espelho da fatura */}
         <div className="flex-shrink-0 border-t border-gray-200 dark:border-zinc-700 bg-gray-100 dark:bg-zinc-800" style={{ padding: '8px 12px' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--fat-muted)', marginBottom: 6 }}>Espelho dos valores da fatura</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: '8px 16px' }}>
-            {rzt('Base cálc. do ICMS', esp.baseIcms)}
-            {rzt('Valor do ICMS', esp.valorIcms)}
-            {rzt('Base cálc. ICMS subst.', esp.baseSt)}
-            {rzt('Valor do ICMS subst.', esp.valorSt)}
-            {rzt('Valor total dos produtos', esp.totalProd)}
-            {rzt('Total fatura', esp.totalFat)}
-            {rzt('Valor do frete', esp.totalFrete)}
-            {rzt('Valor do desconto', esp.valorDesconto)}
-            {rzt('Outras despesas acessórias', esp.despesa)}
-            {rzt('Valor total do IPI', esp.totalIpi)}
-            {rzt('Valor total da NF', esp.totalNf, '#dc2626', true)}
-            {rzt('Total produtos desc. ICMS', esp.totalProdSuframa)}
-          </div>
-          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--fat-border-soft)', display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 11, color: 'var(--fat-muted)', alignItems: 'center' }}>
-            <span>IBS <span className="fat-prov">provisório</span> · {n(resumo.ibs_aliq ?? 0.1).toFixed(2)}% · <b style={{ color: '#22d3ee' }}>R$ {money(resumo.ibs_valor)}</b></span>
-            <span>CBS <span className="fat-prov">provisório</span> · {n(resumo.cbs_aliq ?? 0.9).toFixed(2)}% · <b style={{ color: '#a78bfa' }}>R$ {money(resumo.cbs_valor)}</b></span>
-          </div>
+          {agr ? (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--fat-muted)', marginBottom: 6 }}>
+                Resumo das faturas agrupadas ({agr.documentos.length})
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '4px 20px', fontSize: 12 }}>
+                {agr.documentos.map((d) => (
+                  <div key={d.codfat} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ color: 'var(--fat-muted)' }}>NF {d.nf}</span>
+                    <b>R$ {money(d.valor)}</b>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--fat-border-soft)', display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'baseline' }}>
+                <span style={{ textTransform: 'uppercase', fontSize: 11, fontWeight: 700, color: 'var(--fat-muted)' }}>Total a Pagar</span>
+                <b style={{ fontSize: 17, color: '#dc2626' }}>R$ {money(agr.total)}</b>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--fat-muted)', marginBottom: 6 }}>Espelho dos valores da fatura</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: '8px 16px' }}>
+                {rzt('Base cálc. do ICMS', esp.baseIcms)}
+                {rzt('Valor do ICMS', esp.valorIcms)}
+                {rzt('Base cálc. ICMS subst.', esp.baseSt)}
+                {rzt('Valor do ICMS subst.', esp.valorSt)}
+                {rzt('Valor total dos produtos', esp.totalProd)}
+                {rzt('Total fatura', esp.totalFat)}
+                {rzt('Valor do frete', esp.totalFrete)}
+                {rzt('Valor do desconto', esp.valorDesconto)}
+                {rzt('Outras despesas acessórias', esp.despesa)}
+                {rzt('Valor total do IPI', esp.totalIpi)}
+                {rzt('Valor total da NF', esp.totalNf, '#dc2626', true)}
+                {rzt('Total produtos desc. ICMS', esp.totalProdSuframa)}
+              </div>
+              <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--fat-border-soft)', display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 11, color: 'var(--fat-muted)', alignItems: 'center' }}>
+                <span>IBS <span className="fat-prov">provisório</span> · {n(resumo.ibs_aliq ?? 0.1).toFixed(2)}% · <b style={{ color: '#22d3ee' }}>R$ {money(resumo.ibs_valor)}</b></span>
+                <span>CBS <span className="fat-prov">provisório</span> · {n(resumo.cbs_aliq ?? 0.9).toFixed(2)}% · <b style={{ color: '#a78bfa' }}>R$ {money(resumo.cbs_valor)}</b></span>
+              </div>
+            </>
+          )}
         </div>
 
       </div>

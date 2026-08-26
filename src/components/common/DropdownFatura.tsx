@@ -173,16 +173,24 @@ export default function DropdownFatura({
         {onCancelarFaturaClick && (
           <DropdownMenuItem
             onClick={onCancelarFaturaClick}
-            disabled={fatura.cancel === 'S'}
+            // REGRA: só cancela a fatura quando a NF-e já foi EMITIDA (autorizada, status 100)
+            // e a fatura ainda não está cancelada.
+            disabled={fatura.cancel === 'S' || fatura.nfe_status !== '100'}
             className={`group flex items-center gap-2 px-2 py-2 transition ${
-              fatura.cancel !== 'S'
+              fatura.cancel !== 'S' && fatura.nfe_status === '100'
                 ? 'hover:bg-red-800 hover:text-white'
                 : 'opacity-50 cursor-not-allowed'
             }`}
-            title="Cancelar o faturamento (NF-e + fatura + contas a receber + venda)"
+            title={
+              fatura.nfe_status !== '100'
+                ? 'Só é possível cancelar a fatura após a NF-e ser emitida (autorizada)'
+                : fatura.cancel === 'S'
+                  ? 'Fatura já cancelada'
+                  : 'Cancelar o faturamento (NF-e + fatura + contas a receber + venda)'
+            }
           >
             <Ban className={`size-4 transition ${
-              fatura.cancel !== 'S'
+              fatura.cancel !== 'S' && fatura.nfe_status === '100'
                 ? 'text-red-800 group-hover:text-white'
                 : 'text-gray-400'
             }`} />
@@ -213,16 +221,24 @@ export default function DropdownFatura({
 
         <DropdownMenuItem
           onClick={onCobrancaClick}
-          disabled={fatura.cobranca === 'S'}
+          // REGRA: gerar cobrança (inclui a agrupada) exige a NF-e EMITIDA (autorizada, 100)
+          // e que a fatura ainda não tenha cobrança.
+          disabled={fatura.cobranca === 'S' || fatura.nfe_status !== '100'}
           className={`group flex items-center gap-2 px-2 py-2 transition ${
-            fatura.cobranca !== 'S'
+            fatura.cobranca !== 'S' && fatura.nfe_status === '100'
               ? 'hover:bg-green-600 hover:text-white'
               : 'opacity-50 cursor-not-allowed'
           }`}
-          title={fatura.cobranca === 'S' ? 'Esta fatura já possui cobrança' : 'Gerar nova cobrança para esta fatura'}
+          title={
+            fatura.nfe_status !== '100'
+              ? 'Só é possível gerar cobrança após a NF-e ser emitida (autorizada)'
+              : fatura.cobranca === 'S'
+                ? 'Esta fatura já possui cobrança'
+                : 'Gerar nova cobrança para esta fatura'
+          }
         >
           <DollarSign className={`size-4 transition ${
-            fatura.cobranca !== 'S'
+            fatura.cobranca !== 'S' && fatura.nfe_status === '100'
               ? 'text-green-600 group-hover:text-white'
               : 'text-gray-400'
           }`} />

@@ -753,12 +753,19 @@ export default function FaturamentoNota({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosVenda, opcoesTipoFatura, bancos, formCobranca.banco, formCobranca.tipoFatura]);
 
-  // À vista (cartão crédito/débito, pix, dinheiro): já vem com "gerar 30 dias" MARCADO
-  // e a parcela única gerada. Aplica uma vez por tipo (não re-marca se o usuário desmarcar).
+  // Tipo de fatura DIFERENTE de BOLETO/CARTEIRA: gera automaticamente 1 parcela única com
+  // o valor total, vencendo em 1 DIA (próximo dia útil — valida fim de semana e feriado).
+  // Aplica uma vez por tipo (não re-marca se o usuário desmarcar). BOLETO/CARTEIRA seguem
+  // com o usuário gerando as parcelas manualmente ("Gerar parcelas").
   useEffect(() => {
+    // Não gera parcela automática quando "Gerar cobrança" = NÃO.
+    if (statusVenda?.cobranca !== 'S') {
+      auto30DiasRef.current = '';
+      return;
+    }
     const tipo = String(formCobranca.tipoFatura || '').toUpperCase();
-    const ehAVista = /CR[EÉ]DITO|D[EÉ]BITO|PIX|DINHEIRO/.test(tipo);
-    if (!ehAVista) {
+    const ehBoletoOuCarteira = /BOLETO|CARTEIRA/.test(tipo);
+    if (ehBoletoOuCarteira) {
       auto30DiasRef.current = '';
       return;
     }
@@ -766,10 +773,31 @@ export default function FaturamentoNota({
     auto30DiasRef.current = tipo;
     handleCobrancaChange('gerar30dias', true);
     const venc = new Date();
-    venc.setDate(venc.getDate() + 30);
-    setParcelas([{ dias: 30, vencimento: getProximoDiaUtil(venc).toISOString() }]);
+    venc.setDate(venc.getDate() + 1);
+    setParcelas([{ dias: 1, vencimento: getProximoDiaUtil(venc).toISOString() }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formCobranca.tipoFatura]);
+  }, [formCobranca.tipoFatura, statusVenda?.cobranca]);
+
+  // "Gerar cobrança" = NÃO: limpa qualquer parcela já gerada (não há cobrança a persistir).
+  useEffect(() => {
+    if (statusVenda?.cobranca !== 'S') {
+      setParcelas((prev: any[]) => (prev.length ? [] : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusVenda?.cobranca]);
+
+  // REGRA DE COBRANÇA: só é permitida quando Movimentação = SAÍDA e Operação = VENDA.
+  // Qualquer outra combinação (transferência, devolução, remessa, entrada, etc.) força
+  // "Gerar cobrança" = NÃO — não gera contas a receber. (O dropdown também trava no V2.)
+  const cobrancaPermitida =
+    String(tipoMovimentacao).toUpperCase() === 'SAIDA' &&
+    String(operacaoFiscal).toUpperCase() === 'VENDA';
+  useEffect(() => {
+    if (!cobrancaPermitida) {
+      setStatusVenda((p: any) => (p.cobranca === 'N' ? p : { ...p, cobranca: 'N' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobrancaPermitida]);
 
   // Semeia UMA vez o estado editável `parcelas` com as parcelas SALVAS na venda
   // (parcelasPagamento). Sem isso a tela mostrava as parcelas da venda mas os handlers
@@ -797,9 +825,33 @@ export default function FaturamentoNota({
 
   // Usar totalGeral do backend se disponível, senão calcular localmente
 
-  const totalNF = dadosResumoFinanceiro?.totalGeral ?? (
-    totalProdutos - Number(desconto) + Number(acrescimo) + Number(frete)
-  );
+  // No AGRUPAMENTO o total da cobrança é a SOMA das faturas selecionadas (fiel ao
+  // Delphi: total do GP = soma das faturas) — assim o rodapé e as parcelas batem.
+  const totalFaturasAgrupadas = agrupandoFaturas
+    ? (faturasAgrupadas || []).reduce(
+        (s: number, d: any) =>
+          s +
+          Number(
+            d?.faturas?.[0]?.totalnf ??
+              d?.faturas?.[0]?.valor_total ??
+              d?.faturas?.[0]?.valorTotal ??
+              0,
+          ),
+        0,
+      )
+    : 0;
+
+  // Total da NF / base da cobrança. A base (produtos + impostos) vem do resumo da VENDA
+  // (dadosResumoFinanceiro.totalGeral) — que NÃO inclui o frete/desconto/acréscimo do
+  // FATURAMENTO (digitados aqui na tela). Por isso aplicamos sempre: − desconto (só se
+  // "Sim") + acréscimo (só se "Sim") + frete. Sem isso a cobrança saía sobre 669 (só
+  // produtos), ignorando desconto e frete.
+  const descAplicadoNF = informarDescontoCorpo ? Number(desconto) || 0 : 0;
+  const acreAplicadoNF = informarAcrescimoCorpo ? Number(acrescimo) || 0 : 0;
+  const baseTotalNF = Number(dadosResumoFinanceiro?.totalGeral ?? totalProdutos) || 0;
+  const totalNF = agrupandoFaturas
+    ? totalFaturasAgrupadas
+    : Math.round((baseTotalNF - descAplicadoNF + acreAplicadoNF + (Number(frete) || 0)) * 100) / 100;
 
   // Valor de entrada (à vista) informado na cobrança. Subtrai do total ANTES de
   // dividir nas parcelas — ex.: total 1000, entrada 400, 3x → (600)/3 = 200 cada.
@@ -1039,6 +1091,22 @@ export default function FaturamentoNota({
         totalprod: totalProdutos,
         totalfat: totalNF,
         totalnf: totalNF, // ✅ Total da NF mapeado
+        // FRETE: valor digitado no faturamento (aba Valores/Frete). Persistido em
+        // dbfatura.totalfrete + frete_nf='S' (compõe a NF). Antes se perdia aqui →
+        // DANFE saía com Valor do Frete 0,00 e a cobrança não tinha de onde puxar.
+        totalfrete: Number(frete) || 0,
+        frete_nf: (Number(frete) || 0) > 0 ? 'S' : 'N',
+        // DESCONTO/ACRÉSCIMO: fiel ao Delphi, dbfatura.desconto/acrescimo guardam o
+        // PERCENTUAL (ex.: 10 = 10%); o valor é diluído por produto em dbprodfat no
+        // salvar.ts. desconto_nf/acrescimo_nf = 'S' quando compõe a NF.
+        desconto: Number(percDesconto) || 0,
+        desconto_nf: informarDescontoCorpo && (Number(percDesconto) || 0) > 0 ? 'S' : 'N',
+        acrescimo: Number(percAcrescimo) || 0,
+        acrescimo_nf: informarAcrescimoCorpo && (Number(percAcrescimo) || 0) > 0 ? 'S' : 'N',
+        // FRETE POR CONTA (modFrete): fiel ao Delphi, dbfatura.destfrete é BASE 1 e o XML
+        // usa modFrete = destfrete − 1. modalidadeTransporte no web já é o modFrete 0-based
+        // (0=Remetente/CIF, 1=Destinatário/FOB, 2=Terceiros, 3/4=próprio, 9=sem ocorrência).
+        destfrete: String(Number(modalidadeTransporte || '0') + 1),
         cod_conta: formCobranca?.banco || null, // ✅ cod_conta vindo do formulário de cobrança (renomeado)
         tipodoc: statusVenda?.tipodoc ?? 'N',
         cobranca: statusVenda?.cobranca ?? 'S',
@@ -2018,10 +2086,30 @@ export default function FaturamentoNota({
       // Garante que observacoes nunca seja vazio
       const observacoesValida =
         observacoes && observacoes.trim() ? observacoes : '.';
+      // FRETE: o emitir.ts confia no dbfatura do payload (não recarrega do banco),
+      // e dadosFatura é estado pré-save sem o frete digitado na UI. Injeta o frete
+      // aqui p/ o XML sair com Valor do Frete correto (vFrete) e compor o total.
+      const freteUI = Number(frete) || 0;
+      const descPercUI = Number(percDesconto) || 0;
+      const acrePercUI = Number(percAcrescimo) || 0;
+      const dbfaturaComFrete = {
+        ...(dadosFatura || {}),
+        totalfrete: freteUI,
+        vlrfrete: freteUI, // alias legado lido pelo normalizador/preview
+        frete_nf: freteUI > 0 ? 'S' : (dadosFatura?.frete_nf ?? 'N'),
+        // DESCONTO/ACRÉSCIMO percentuais (fiel ao Delphi) — o normalizador dilui por
+        // item no XML (vDesc/vOutro) para o SEFAZ. Sem isso a nota sai sem desconto.
+        desconto: descPercUI,
+        desconto_nf: informarDescontoCorpo && descPercUI > 0 ? 'S' : 'N',
+        acrescimo: acrePercUI,
+        acrescimo_nf: informarAcrescimoCorpo && acrePercUI > 0 ? 'S' : 'N',
+        // Frete por conta (base 1). XML/DANFE derivam modFrete = destfrete − 1.
+        destfrete: String(Number(modalidadeTransporte || '0') + 1),
+      };
       const payloadEmissao = {
         dbclien: cliente,
         dbvenda: dadosVenda,
-        dbfatura: dadosFatura,
+        dbfatura: dbfaturaComFrete,
         dbitvenda: itensVenda,
         emitente: dadosEmpresa, // Adicionar dados da empresa
         statusVenda,
@@ -2984,13 +3072,13 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
     // Banco = do cliente (se existir na lista); senão MELO (único outro permitido).
     // GARANTE que formCobranca.banco fique setado — senão o Tipo de fatura fica vazio
     // (opcoesTipoFatura retorna [] quando não há banco).
-    const bancoCliente = cliente?.banco
-      ? bancos.find(
-          (b) =>
-            b.banco.toString().trim().toLowerCase() ===
-            cliente.banco.toString().trim().toLowerCase(),
-        )
-      : null;
+    // offset -1 do cadastro: dbbanco_cobranca = dbclien.banco + 1 (convenção Delphi).
+    const bancoCliente =
+      cliente?.banco != null && String(cliente.banco).trim() !== ''
+        ? bancos.find(
+            (b) => String(b.banco).trim() === String(Number(cliente.banco) + 1),
+          )
+        : null;
     const melo = bancos.find((b) => b.nome === 'MELO');
     const alvo = bancoCliente || melo;
     if (alvo) {
@@ -3459,9 +3547,11 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
   }, [isOpen]);
 
   // Padrões quando o dado vem vazio da venda:
-  // - Modalidade de transporte: 9 (Sem ocorrência de transporte)
+  // - Frete por conta (modFrete): 0 = Remetente/CIF (MELO paga). É o padrão dominante do
+  //   Delphi (destfrete=1 → modFrete 0, ~1,19M faturas). Grava dbfatura.destfrete = modFrete+1.
+  //   Para "cliente retira" o usuário troca para 9 (sem ocorrência).
   useEffect(() => {
-    if (isOpen && !modalidadeTransporte) setModalidadeTransporte('9');
+    if (isOpen && !modalidadeTransporte) setModalidadeTransporte('0');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
   // - Transportadora: código 00051 (Cliente Retira - Melo) quando não há transportadora real
@@ -3631,6 +3721,8 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
 
   // Gerador de parcelas inline (V2): usa intervalo + quantidade, ajustando p/ dia útil (feriados/fim de semana)
   const gerarParcelasV2 = () => {
+    // Bloqueia a geração de parcelas quando "Gerar cobrança" = NÃO (não há cobrança).
+    if (statusVenda?.cobranca !== 'S') return;
     const prazo = parseInt(intervaloDias) || 0;
     const qtd = parseInt(qtdParcelas) || 0;
     if (prazo <= 0 || qtd <= 0) return;
@@ -3725,12 +3817,14 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
     habilitarValor: (v) => handleCobrancaChange('habilitarValor', v),
     valorVista: (v) => handleCobrancaChange('valorVista', v),
     gerar30dias: (v) => {
+      // Bloqueia quando "Gerar cobrança" = NÃO.
+      if (v && statusVenda?.cobranca !== 'S') return;
       handleCobrancaChange('gerar30dias', v);
       if (v) {
-        // 1 parcela de 30 dias com o valor total (próximo dia útil).
+        // 1 parcela única com o valor total, vencendo em 1 dia (próximo dia útil).
         const venc = new Date();
-        venc.setDate(venc.getDate() + 30);
-        setParcelas([{ dias: 30, vencimento: getProximoDiaUtil(venc).toISOString() }]);
+        venc.setDate(venc.getDate() + 1);
+        setParcelas([{ dias: 1, vencimento: getProximoDiaUtil(venc).toISOString() }]);
       } else {
         setParcelas([]);
       }
@@ -3811,6 +3905,33 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
     set: (k: string, v: any) => settersV2[k]?.(v),
     data: {
       titulo: `FATURA · VENDA Nº ${nroformulario || ''} · ${cliente?.nome || ''}${cliente?.codcli ? ` (${cliente.codcli})` : ''}`,
+      // Modo AGRUPAMENTO: cabeçalho destaca o cliente e lista os documentos (NF) das
+      // faturas selecionadas; o rodapé mostra o resumo dos valores + total a pagar.
+      agrupamento: agrupandoFaturas
+        ? {
+            clienteNome:
+              cliente?.nome ||
+              faturasAgrupadas?.[0]?.faturas?.[0]?.cliente_nome ||
+              faturasAgrupadas?.[0]?.cliente?.nome ||
+              '',
+            clienteCod:
+              cliente?.codcli ||
+              faturasAgrupadas?.[0]?.faturas?.[0]?.codcli ||
+              '',
+            documentos: (faturasAgrupadas || []).map((d: any) => {
+              const f = d?.faturas?.[0] || {};
+              return {
+                codfat: f.codfat,
+                nf: f.nroform || f.numero_nf || f.codfat,
+                valor: Number(f.totalnf ?? f.valor_total ?? f.valorTotal ?? 0),
+              };
+            }),
+            total: (faturasAgrupadas || []).reduce((s: number, d: any) => {
+              const f = d?.faturas?.[0] || {};
+              return s + Number(f.totalnf ?? f.valor_total ?? f.valorTotal ?? 0);
+            }, 0),
+          }
+        : undefined,
       itens: itensVenda,
       cliente,
       resumo: {
@@ -3826,9 +3947,10 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
         .filter(
           (b: any) =>
             b.nome === 'MELO' ||
-            (cliente?.banco &&
-              String(b.banco).trim().toLowerCase() ===
-                String(cliente.banco).trim().toLowerCase()),
+            // offset -1 do cadastro: dbbanco_cobranca = dbclien.banco + 1
+            (cliente?.banco != null &&
+              String(cliente.banco).trim() !== '' &&
+              String(b.banco).trim() === String(Number(cliente.banco) + 1)),
         )
         .map((b: any) => ({ value: b.banco, label: b.nome })),
       tiposFatura: opcoesTipoFatura,
@@ -3907,17 +4029,65 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       (s: number, f: any) => s + Number(f.totalnf || f.total || f.totalprod || 0),
       0,
     );
+    // Soma de impostos e frete das faturas — usados quando "Cobrar impostos/frete
+    // na 1ª parcela" (concentram o valor na parcela 1 em vez de diluir).
+    const impostosGrupo = faturasParaExibir.reduce(
+      (s: number, f: any) =>
+        s +
+        Number(f.valor_icms || 0) +
+        Number(f.totalipi || 0) +
+        Number(f.valoricms_subst || 0) +
+        Number(f.valorfcp_subst || 0),
+      0,
+    );
+    const freteGrupo = faturasParaExibir.reduce(
+      (s: number, f: any) => s + Number(f.totalfrete || f.frete || 0),
+      0,
+    );
+    // Banco: só o do CLIENTE (default) + MELO — mesma regra da aba "Cobrança e
+    // valores" do faturamento. Se o cliente não tiver banco, mostra só MELO.
+    // ATENÇÃO ao offset -1 do cadastro: dbclien.banco = código_dbbanco_cobranca - 1
+    // (convenção Delphi). Então o código real do banco é dbclien.banco + 1.
+    const bancoClienteRaw =
+      cliente?.banco ?? faturasParaExibir[0]?.cliente_banco ?? faturasParaExibir[0]?.banco;
+    const bancoCliente =
+      bancoClienteRaw != null && String(bancoClienteRaw).trim() !== ''
+        ? String(Number(bancoClienteRaw) + 1)
+        : undefined;
+    const bancosAgrup = (bancos || [])
+      .filter(
+        (b: any) =>
+          b.nome === 'MELO' ||
+          (bancoCliente &&
+            String(b.banco).trim().toLowerCase() ===
+              String(bancoCliente).trim().toLowerCase()),
+      )
+      .map((b: any) => ({ banco: b.banco, nome: b.nome }))
+      // Banco do cliente primeiro (default), MELO por último.
+      .sort((a: any, b: any) => (a.nome === 'MELO' ? 1 : 0) - (b.nome === 'MELO' ? 1 : 0));
     return (
       <>
         <div className="flex flex-col h-full bg-white dark:bg-zinc-900 text-black dark:text-white">
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 flex-shrink-0">
             <div className="min-w-0">
-              <div className="text-sm font-bold text-[#347ab6] truncate">
+              <div className="text-[11px] font-semibold text-[#347ab6] uppercase tracking-wide">
                 FATURAS AGRUPADAS · {faturasParaExibir.length} fatura(s)
               </div>
-              <div className="text-xs text-gray-600 dark:text-gray-300 truncate">
-                Faturas: {codigosFaturas} · Cliente:{' '}
-                {cliente?.nome || faturasParaExibir[0]?.cliente?.nome || '—'}
+              <div className="flex items-baseline gap-2 truncate">
+                <span className="text-[16px] font-extrabold text-red-600 dark:text-red-400 truncate">
+                  {cliente?.nome || faturasParaExibir[0]?.cliente?.nome || '—'}
+                  {cliente?.codcli || faturasParaExibir[0]?.codcli
+                    ? ` (${cliente?.codcli || faturasParaExibir[0]?.codcli})`
+                    : ''}
+                </span>
+                <span className="text-xs text-gray-600 dark:text-gray-300 truncate">
+                  · Documentos:{' '}
+                  <b>
+                    {faturasParaExibir
+                      .map((f: any) => f.nroform || f.numero_nf || f.codfat)
+                      .join(', ')}
+                  </b>
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -3939,15 +4109,59 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
           <div className="flex-1 overflow-auto p-4">
             <DadosCobranca
               statusVenda={{ cobranca: 'S' }}
-              bancos={bancos}
+              bancos={bancosAgrup}
               formCobranca={formCobranca as any}
               setFormCobranca={setFormCobranca as any}
               parcelas={parcelas as any}
               setParcelas={setParcelas as any}
               opcoesTipoFatura={opcoesTipoFatura}
               totalNota={totalGrupo || totalNF}
+              impostosTotal={impostosGrupo}
+              freteTotal={freteGrupo}
               padraoAberto
             />
+
+            {/* RODAPÉ · resumo inline (NF: valor | NF: valor …, quebra se muitas)
+                + total a pagar à direita, que NÃO quebra de linha. */}
+            <div className="mt-3 border-t border-gray-200 dark:border-zinc-700 pt-2 flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mr-2">
+                  Notas ({faturasParaExibir.length}):
+                </span>
+                <span className="text-xs leading-relaxed">
+                  {faturasParaExibir.map((f: any, i: number) => (
+                    <span key={f.codfat || i} className="whitespace-nowrap">
+                      {i > 0 && <span className="text-gray-400 mx-1">|</span>}
+                      <span className="font-bold text-red-600 dark:text-red-400">
+                        {f.nroform || f.numero_nf || f.codfat}
+                      </span>
+                      <span className="text-gray-500">: </span>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">
+                        R${' '}
+                        {Number(
+                          f.totalnf || f.total || f.totalprod || 0,
+                        ).toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 whitespace-nowrap flex-shrink-0">
+                <span className="uppercase text-[11px] font-bold text-gray-500">
+                  Total a Pagar
+                </span>
+                <b className="text-[16px] text-red-600">
+                  R${' '}
+                  {Number(totalGrupo).toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </b>
+              </div>
+            </div>
           </div>
         </div>
         {renderModalEmissao()}

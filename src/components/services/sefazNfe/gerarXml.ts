@@ -426,6 +426,10 @@ export function gerarXMLNFe(dados: any): string {
               uTrib: item.unidade ?? 'UN',
               qTrib: qtde.toFixed(4),
               vUnTrib: preco.toFixed(4), // CORREÇÃO: 4 casas decimais (não 10)
+              // Desconto/acréscimo diluídos por produto (fiel ao Delphi). O SEFAZ exige
+              // ICMSTot.vDesc = Σ prod.vDesc — por isso o rateio vem por item, não só total.
+              ...(Number(item.vDesc) > 0 ? { vDesc: Number(item.vDesc).toFixed(2) } : {}),
+              ...(Number(item.vOutro) > 0 ? { vOutro: Number(item.vOutro).toFixed(2) } : {}),
               indTot: '1',
             },
             imposto: {

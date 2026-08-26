@@ -11,6 +11,7 @@ import {
   carregarFeriados,
   getProximoDiaUtil,
 } from '@/components/corpo/vendas/novaVenda/prazo';
+import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 
 interface Banco {
   banco: string;
@@ -31,6 +32,7 @@ interface FormCobranca {
   habilitarValor: boolean;
   impostoNa1Parcela: boolean;
   freteNa1Parcela: boolean;
+  diferenciada?: boolean;
 }
 
 interface Props {
@@ -43,7 +45,13 @@ interface Props {
   opcoesTipoFatura: { value: string; label: string }[];
   /** Valor total da nota/fatura — base para dividir o valor das parcelas. */
   totalNota?: number;
+  /** Soma dos impostos das faturas — usado quando "Cobrar impostos na 1ª parcela". */
+  impostosTotal?: number;
+  /** Soma do frete das faturas — usado quando "Cobrar frete na 1ª parcela". */
+  freteTotal?: number;
   onGerarPreviewBoleto?: () => void;
+  /** Botão(ões) renderizado(s) no rodapé do card (onde ficava o preview do boleto). */
+  botaoRodape?: React.ReactNode;
   padraoAberto?: boolean;
 }
 
@@ -67,7 +75,10 @@ export default function DadosCobranca({
   setParcelas,
   opcoesTipoFatura,
   totalNota = 0,
+  impostosTotal = 0,
+  freteTotal = 0,
   onGerarPreviewBoleto,
+  botaoRodape,
   padraoAberto = true,
 }: Props) {
   // Intervalo + quantidade (mesmo mecanismo da tela de faturar V2).
@@ -82,13 +93,25 @@ export default function DadosCobranca({
     carregarFeriados(ano + 1);
   }, []);
 
+  // Default do banco = 1º da lista (banco do cliente) quando o atual não é válido.
+  useEffect(() => {
+    if (!bancos || bancos.length === 0) return;
+    if (!bancos.some((b) => b.banco === formCobranca.banco)) {
+      setFormCobranca((prev) => ({ ...prev, banco: bancos[0].banco }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bancos]);
+
   const handleCobrancaChange = (field: keyof FormCobranca, value: any) => {
     setFormCobranca((prev) => ({ ...prev, [field]: value }));
   };
 
-  const isBoleto =
+  // Parcelas são geradas para BOLETO (e variantes) e CARTEIRA — ambos parcelam o título.
+  const permiteParcelas =
     formCobranca.tipoFatura === 'BOLETO' ||
-    formCobranca.tipoFatura === 'BOLETO BANCARIO';
+    formCobranca.tipoFatura === 'BOLETO BANCARIO' ||
+    formCobranca.tipoFatura === 'BOLETO BANCÁRIO' ||
+    formCobranca.tipoFatura === 'CARTEIRA';
 
   // Gera N parcelas: intervalo acumulado, ajustando p/ dia útil, e divide o
   // total da nota igualmente (a última parcela absorve o arredondamento).
@@ -122,8 +145,18 @@ export default function DadosCobranca({
       });
       return;
     }
-    const total = Number(totalNota) || 0;
-    const valorBase = Math.floor((total / qtd) * 100) / 100;
+    // Valor de entrada (à vista) — subtrai do total ANTES de dividir nas parcelas.
+    const entrada = formCobranca.habilitarValor
+      ? desmascarar(String(formCobranca.valorVista ?? '')) || 0
+      : 0;
+    // Impostos/frete "na 1ª parcela": em vez de diluir, concentram na parcela 1.
+    const extra1a =
+      (formCobranca.impostoNa1Parcela ? Number(impostosTotal) || 0 : 0) +
+      (formCobranca.freteNa1Parcela ? Number(freteTotal) || 0 : 0);
+    // Base parcelável = total − entrada − (o que vai concentrado na 1ª).
+    const total = Math.max(0, (Number(totalNota) || 0) - entrada);
+    const parcelavel = Math.max(0, total - extra1a);
+    const valorBase = Math.floor((parcelavel / qtd) * 100) / 100;
     const base = new Date();
     const novas: Parcela[] = [];
     let acum = 0;
@@ -132,10 +165,10 @@ export default function DadosCobranca({
       const venc = new Date(base.getTime());
       venc.setDate(venc.getDate() + acum);
       const util = getProximoDiaUtil(venc);
-      const valor =
-        i === qtd - 1
-          ? Number((total - valorBase * (qtd - 1)).toFixed(2))
-          : valorBase;
+      // Resto do arredondamento na ÚLTIMA parcela; extra (impostos/frete) na 1ª.
+      const baseI =
+        i === qtd - 1 ? parcelavel - valorBase * (qtd - 1) : valorBase;
+      const valor = Number((baseI + (i === 0 ? extra1a : 0)).toFixed(2));
       novas.push({ dias: acum, vencimento: fmtLocal(util), valor });
     }
     setParcelas(novas);
@@ -162,6 +195,24 @@ export default function DadosCobranca({
     );
   };
 
+  // Editar pela quantidade de DIAS (recalcula o vencimento = hoje + dias, dia útil).
+  const atualizarDias = (idx: number, diasStr: string) => {
+    const dias = parseInt(diasStr, 10);
+    if (isNaN(dias) || dias <= 0) {
+      setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias: 0 } : p)));
+      return;
+    }
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    base.setDate(base.getDate() + dias);
+    const util = getProximoDiaUtil(base);
+    setParcelas((prev) =>
+      prev.map((p, i) =>
+        i === idx ? { ...p, dias, vencimento: fmtLocal(util) } : p,
+      ),
+    );
+  };
+
   const removerParcela = (idx: number) => {
     setParcelas((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -177,8 +228,8 @@ export default function DadosCobranca({
       icone={<FaMoneyBill />}
       padraoAberto={padraoAberto}
     >
-      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <fieldset className="col-span-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg p-4 space-y-4">
+      <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <fieldset className="col-span-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-lg p-3 space-y-2.5">
           <legend className="text-sm font-semibold px-2">
             Configurações da Cobrança
           </legend>
@@ -218,26 +269,78 @@ export default function DadosCobranca({
               Habilitar valor de entrada
             </label>
             {formCobranca.habilitarValor && (
-              <FormInput
-                label="Valor de Entrada (R$)"
-                name="valorVista"
-                type="number"
-                value={formCobranca.valorVista}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Valor de Entrada (R$)
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0,00"
+                  value={formCobranca.valorVista}
+                  onChange={(e) => {
+                    const masked = mascaraInputBRL(e.target.value);
+                    const valor = desmascarar(masked);
+                    const total = Number(totalNota) || 0;
+                    if (valor > total) {
+                      toast.error(
+                        'O valor de entrada não pode ser maior que o total a pagar.',
+                      );
+                      // Trava no total (não deixa passar).
+                      handleCobrancaChange(
+                        'valorVista',
+                        mascaraInputBRL(String(Math.round(total * 100))),
+                      );
+                      return;
+                    }
+                    handleCobrancaChange('valorVista', masked);
+                  }}
+                  className="w-full h-9 px-3 text-sm text-right font-mono tabular-nums rounded border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
+          </div>
+          <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!formCobranca.impostoNa1Parcela}
                 onChange={(e) =>
-                  handleCobrancaChange('valorVista', e.target.value)
+                  handleCobrancaChange('impostoNa1Parcela', e.target.checked)
                 }
               />
-            )}
+              Cobrar impostos na 1ª parcela
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!formCobranca.freteNa1Parcela}
+                onChange={(e) =>
+                  handleCobrancaChange('freteNa1Parcela', e.target.checked)
+                }
+              />
+              Cobrar frete na 1ª parcela
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={!!formCobranca.diferenciada}
+                onChange={(e) =>
+                  handleCobrancaChange('diferenciada', e.target.checked)
+                }
+              />
+              Comissão diferenciada
+            </label>
           </div>
         </fieldset>
 
         <fieldset
-          className={`col-span-1 border-2 rounded-lg p-4 flex flex-col justify-between ${
-            !isBoleto
+          className={`col-span-1 border-2 rounded-lg p-3 flex flex-col ${
+            !permiteParcelas
               ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 opacity-70'
               : 'border-zinc-200 dark:border-zinc-700'
           }`}
-          disabled={!isBoleto}
+          disabled={!permiteParcelas}
         >
           <legend className="text-sm font-semibold px-2">
             Prazo e Parcelas
@@ -249,7 +352,7 @@ export default function DadosCobranca({
               <div>
                 <label
                   className={`block text-sm font-medium mb-1 ${
-                    !isBoleto ? 'text-gray-500 dark:text-gray-400' : ''
+                    !permiteParcelas ? 'text-gray-500 dark:text-gray-400' : ''
                   }`}
                 >
                   Intervalo de dias
@@ -260,13 +363,13 @@ export default function DadosCobranca({
                   value={intervaloDias}
                   onChange={(e) => setIntervaloDias(e.target.value)}
                   placeholder="Ex: 30"
-                  disabled={!isBoleto}
+                  disabled={!permiteParcelas}
                 />
               </div>
               <div>
                 <label
                   className={`block text-sm font-medium mb-1 ${
-                    !isBoleto ? 'text-gray-500 dark:text-gray-400' : ''
+                    !permiteParcelas ? 'text-gray-500 dark:text-gray-400' : ''
                   }`}
                 >
                   Quantidade (vezes)
@@ -283,7 +386,7 @@ export default function DadosCobranca({
                     }
                   }}
                   placeholder="Ex: 3"
-                  disabled={!isBoleto}
+                  disabled={!permiteParcelas}
                 />
               </div>
             </div>
@@ -291,11 +394,11 @@ export default function DadosCobranca({
               type="button"
               onClick={gerarParcelas}
               className={`mt-2 h-9 w-full px-4 rounded text-sm font-medium ${
-                !isBoleto
+                !permiteParcelas
                   ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
-              disabled={!isBoleto}
+              disabled={!permiteParcelas}
             >
               + Gerar parcelas
             </button>
@@ -318,7 +421,20 @@ export default function DadosCobranca({
                       className="border-b border-gray-200 dark:border-zinc-700"
                     >
                       <td className="px-2 py-1">{i + 1}</td>
-                      <td className="px-2 py-1 text-center">{p.dias}</td>
+                      <td className="px-2 py-1 text-center">
+                        <input
+                          type="number"
+                          min={1}
+                          value={p.dias}
+                          onChange={(e) => atualizarDias(i, e.target.value)}
+                          className={`w-14 text-xs text-center px-1 py-0.5 border rounded ${
+                            !permiteParcelas
+                              ? 'bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-600 text-gray-500 cursor-not-allowed'
+                              : 'bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-black dark:text-white'
+                          }`}
+                          disabled={!permiteParcelas}
+                        />
+                      </td>
                       <td className="px-2 py-1">
                         <input
                           type="date"
@@ -327,11 +443,11 @@ export default function DadosCobranca({
                             atualizarVencimento(i, e.target.value)
                           }
                           className={`text-xs px-1 py-0.5 border rounded ${
-                            !isBoleto
+                            !permiteParcelas
                               ? 'bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-600 text-gray-500 cursor-not-allowed'
                               : 'bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-black dark:text-white'
                           }`}
-                          disabled={!isBoleto}
+                          disabled={!permiteParcelas}
                         />
                       </td>
                       <td className="px-2 py-1 text-right tabular-nums">
@@ -342,11 +458,11 @@ export default function DadosCobranca({
                           type="button"
                           onClick={() => removerParcela(i)}
                           className={`${
-                            !isBoleto
+                            !permiteParcelas
                               ? 'text-gray-400 cursor-not-allowed'
                               : 'text-red-500 hover:text-red-700'
                           }`}
-                          disabled={!isBoleto}
+                          disabled={!permiteParcelas}
                         >
                           <TrashIcon />
                         </button>
@@ -388,16 +504,18 @@ export default function DadosCobranca({
                 type="button"
                 onClick={onGerarPreviewBoleto}
                 className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md ${
-                  !isBoleto
+                  !permiteParcelas
                     ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
                     : 'bg-gray-600 text-white hover:bg-gray-700'
                 }`}
-                disabled={!isBoleto}
+                disabled={!permiteParcelas}
               >
                 <FileSymlink size={16} /> Gerar Preview do Boleto
               </button>
             </div>
           )}
+
+          {botaoRodape && <div className="mt-4">{botaoRodape}</div>}
         </fieldset>
       </div>
     </SecaoCollapse>

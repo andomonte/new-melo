@@ -231,6 +231,9 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
               barcodeSvg,
               cancelada: notaCancelada,
               marcaDagua: notaDenegada ? 'DENEGADA' : undefined,
+              // HOMOLOGAÇÃO (tpAmb=2): força "SEM VALOR FISCAL" + nome do destinatário
+              // padrão. Antes não era passado → a reimpressão saía sem a tarja.
+              homologacao: String(dadosEmpresa?.ambiente ?? '2') === '2',
             },
           );
           setHtmlContent(html);
