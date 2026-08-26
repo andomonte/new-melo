@@ -1157,22 +1157,18 @@ export default function Caixa() {
                       {formaBucket === 'tarifa' && ' (tarifa → 161, fixa)'}
                       {formaBucket === 'juros' && ' (juros → 160, fixa)'}
                     </Label>
-                    <select
-                      value={cofId}
-                      onChange={(e) => setCofId(e.target.value)}
+                    {/* Searchable: filtra por código e nome (o texto da opção inclui os dois). */}
+                    <SelectPadrao
+                      searchable
+                      value={String(cofId ?? '')}
+                      onValueChange={(v) => setCofId(v)}
                       disabled={formaBucket !== 'principal'}
-                      className={`w-full h-10 px-3 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 ${
-                        formaBucket !== 'principal' ? 'opacity-70 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      <option value="">SELECIONE A CONTA...</option>
-                      {contasFin.map((cf) => (
-                        <option key={cf.cof_id} value={cf.cof_id}>
-                          {cf.cof_id} — {cf.cof_descricao}
-                          {cf.centro_custo ? ` · ${cf.centro_custo}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="SELECIONE A CONTA..."
+                      options={contasFin.map((cf) => ({
+                        value: String(cf.cof_id),
+                        label: `${cf.cof_id} — ${cf.cof_descricao}${cf.centro_custo ? ` · ${cf.centro_custo}` : ''}`,
+                      }))}
+                    />
                   </div>
 
                   {ehCartao && (
