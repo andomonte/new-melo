@@ -18,14 +18,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const codFat = String(req.query.cod_fat || '').trim();
   const codReceb = String(req.query.cod_receb || '').trim();
-  if (!codFat && !codReceb) {
-    return res.status(400).json({ erro: 'Informe cod_fat ou cod_receb.' });
+  const codGp = String(req.query.codgp || '').trim();
+  if (!codFat && !codReceb && !codGp) {
+    return res.status(400).json({ erro: 'Informe cod_fat, cod_receb ou codgp.' });
   }
 
   const client = await getPgPool().connect();
   try {
-    const filtro = codReceb ? 'r.cod_receb = $1' : 'r.cod_fat = $1';
-    const param = codReceb || codFat;
+    // GP (grupo): títulos em dbreceb.codgp (cod_fat NULL). Individual: cod_fat/cod_receb.
+    const filtro = codGp
+      ? 'r.codgp = $1'
+      : codReceb
+      ? 'r.cod_receb = $1'
+      : 'r.cod_fat = $1';
+    const param = codGp || codReceb || codFat;
     const { rows } = await client.query(
       `SELECT r.cod_receb, r.nro_doc, r.dt_venc, r.dt_emissao, r.valor_pgto,
               r.codcli, r.forma_fat,
@@ -45,7 +51,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .json({ erro: 'Nenhum título em carteira encontrado para o filtro informado.' });
     }
 
-    const titulos: TituloCarteiraData[] = rows.map((r: any) => {
+    const totalParcelas = rows.length;
+    const titulos: TituloCarteiraData[] = rows.map((r: any, i: number) => {
       const partes = [r.ender, r.bairro, r.cidade, r.uf].filter(Boolean).join(' - ');
       const endereco = [partes, r.cep ? `CEP:${r.cep}` : '']
         .filter(Boolean)
@@ -60,6 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         sacadoCodigo: String(r.codcli || ''),
         sacadoNome: String(r.nome || r.nomefant || ''),
         sacadoEndereco: endereco || undefined,
+        parcela: `${i + 1}/${totalParcelas}`,
       };
     });
 

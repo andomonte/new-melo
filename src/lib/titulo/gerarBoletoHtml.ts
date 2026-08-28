@@ -35,6 +35,7 @@ export interface BoletoData {
   sacadoNome: string;
   sacadoCnpj?: string;
   sacadoEndereco?: string;
+  parcela?: string; // "1/5" — nº da parcela / total de parcelas
 }
 
 const MELO = {
@@ -99,6 +100,7 @@ function bloco(b: BoletoData): string {
     ${end}
     <div class="recibo-linha">
       <span><span class="r-in">Número Docto.:</span> <b>${b.numeroDocto}</b></span>
+      ${b.parcela ? `<span><span class="r-in">Parcela:</span> <b>${b.parcela}</b></span>` : ''}
       <span><span class="r-in">Data do Vencto:</span> <b>${dataBR(b.vencimento)}</b></span>
       <span><span class="r-in">Valor Documento:</span> <b>${brl(b.valorDocumento)}</b></span>
       <span class="nn"><span class="r-in">Nosso Número:</span> <b>${b.nossoNumero}</b></span>
@@ -124,7 +126,7 @@ function bloco(b: BoletoData): string {
       </tr>
       <tr>
         <td class="c"><span class="r">Data de Emissão</span>${dataBR(b.dataEmissao)}</td>
-        <td class="c"><span class="r">Número Docto</span>${b.numeroDocto}</td>
+        <td class="c"><span class="r">Número Docto</span>${b.numeroDocto}${b.parcela ? ` · Parc. ${b.parcela}` : ''}</td>
         <td class="c"><span class="r">Espécie Docto</span>${b.especieDocto ?? 'DM'}</td>
         <td class="c"><span class="r">Aceite</span>${b.aceite ?? 'N'}</td>
         <td class="c"><span class="r">Data Processamento</span>${dataBR(b.dataProcessamento || b.dataEmissao)}</td>

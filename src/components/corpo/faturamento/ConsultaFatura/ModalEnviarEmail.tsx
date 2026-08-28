@@ -86,7 +86,7 @@ export default function ModalEnviarEmail({
         const gb = await fetch('/api/faturamento/gerar-boleto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codfat }),
+          body: JSON.stringify({ codfat, codgp: ehGrupo ? codgp : undefined }),
         });
         const gbd = await gb.json();
         if (!gb.ok || !gbd.boleto) throw new Error(gbd.details || gbd.error || 'Falha ao gerar o boleto.');

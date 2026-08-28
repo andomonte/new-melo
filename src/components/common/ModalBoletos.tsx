@@ -345,10 +345,13 @@ const ModalBoletos: React.FC<Props> = ({ isOpen, onClose, fatura }) => {
       const toastId = toast.loading('Buscando dados e gerando PDF...');
 
       try {
+        const ehGrupo = fatura?.agp === 'S' && !!fatura?.codgp;
         const { data } = await axios.get(
           '/api/faturamento/buscar_boletos_fatura',
           {
-            params: { codfat: fatura.codfat },
+            params: ehGrupo
+              ? { codgp: fatura.codgp }
+              : { codfat: fatura.codfat },
           },
         );
 

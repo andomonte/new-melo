@@ -9,9 +9,10 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido.' });
   }
 
-  const { codfat, usuario, motivo } = req.body;
+  const { codfat, codgp, usuario, motivo } = req.body;
 
-  if (!codfat) {
+  const ehGrupo = codgp !== undefined && codgp !== null && String(codgp) !== '';
+  if (!ehGrupo && !codfat) {
     return res.status(400).json({ error: 'Código da fatura é obrigatório.' });
   }
 
@@ -28,6 +29,85 @@ export default async function handler(
     const client = await getPgPool().connect();
 
     try {
+      // ============================================================================
+      // COBRANÇA AGRUPADA (GP) — espelha TCOBRANCA.COBRANCA_CANCELAR_GP do Delphi.
+      // Os títulos do grupo estão em dbreceb.codgp (cod_fat NULL, tipo 'G'); o cancel
+      // por cod_fat (abaixo) não os alcança. Cancelar o GP NÃO desagrupa — só cancela
+      // os títulos do grupo e apaga os prazos (dbpzfat). Desagrupar é ação à parte.
+      // ============================================================================
+      if (ehGrupo) {
+        // VALIDA_COBRANCA_GP: bloqueia se algum título ATIVO do grupo estiver
+        // registrado no banco (bradesco='S'), recebido (valor_rec>0 / rec='S' /
+        // dt_pgto) ou vencido (dt_venc < hoje).
+        const val = await client.query(
+          `SELECT
+             COUNT(*) FILTER (WHERE bradesco = 'S')                       AS registrados,
+             COUNT(*) FILTER (WHERE COALESCE(valor_rec,0) > 0
+                                 OR rec = 'S' OR dt_pgto IS NOT NULL)      AS recebidos,
+             COUNT(*) FILTER (WHERE dt_venc < CURRENT_DATE)               AS vencidos
+           FROM dbreceb
+          WHERE codgp = $1 AND cod_fat IS NULL AND (cancel IS NULL OR cancel <> 'S')`,
+          [codgp],
+        );
+        const v = val.rows[0] || {};
+        if (Number(v.registrados) > 0) {
+          return res.status(409).json({
+            error:
+              'Cobrança do grupo não pode ser cancelada: possui título registrado no banco (Bradesco).',
+          });
+        }
+        if (Number(v.recebidos) > 0) {
+          return res.status(409).json({
+            error:
+              'Cobrança do grupo não pode ser cancelada: já possui título recebido.',
+          });
+        }
+        if (Number(v.vencidos) > 0) {
+          return res.status(409).json({
+            error:
+              'Cobrança do grupo não pode ser cancelada: possui título vencido.',
+          });
+        }
+
+        await client.query('BEGIN');
+        try {
+          // COBRANCA_CANCELAR_GP: cancela todos os títulos do grupo + apaga prazos.
+          const upd = await client.query(
+            `UPDATE dbreceb SET cancel = 'S'
+              WHERE codgp = $1 AND (cancel IS NULL OR cancel <> 'S')`,
+            [codgp],
+          );
+          await client.query(`DELETE FROM dbpzfat WHERE codgp = $1`, [codgp]);
+          // Web: reflete "sem cobrança ativa" nos membros (o grupo permanece — agp/codgp
+          // intactos; STATUS = 'COBRANÇA AGRUPADA'). Permite regerar a cobrança do grupo.
+          await client.query(
+            `UPDATE dbfatura SET cobranca = 'N' WHERE codgp = $1`,
+            [codgp],
+          );
+          // Histórico (Usuario.inc_acao_usr 'CANCEL.TITULO').
+          await client.query(
+            `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
+             VALUES ($1, 'CANCEL.TITULO', 'DBRECEB', $2, now())`,
+            [
+              usuarioTxt.substring(0, 60),
+              `GP:${codgp} | MOTIVO: ${motivoTxt}`.substring(0, 255),
+            ],
+          );
+          await client.query('COMMIT');
+          if (upd.rowCount === 0) {
+            return res.status(200).json({
+              message: 'Nenhum título ativo no grupo (já estava cancelado).',
+            });
+          }
+          return res.status(200).json({
+            message: `Cobrança do grupo GP${codgp} cancelada (${upd.rowCount} título(s)).`,
+          });
+        } catch (e) {
+          await client.query('ROLLBACK');
+          throw e;
+        }
+      }
+
       // 🛡️ REGRA (espelha o Delphi — VALIDA_COBRANCA_FAT): NÃO cancelar cobrança
       // que já possui parcela PAGA. Marcador de pago = rec='S' OU dt_pgto preenchido.
       // NÃO usar valor_pgto: em títulos em aberto ele guarda o valor projetado da

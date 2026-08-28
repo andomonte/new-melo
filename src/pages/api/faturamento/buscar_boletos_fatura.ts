@@ -12,23 +12,56 @@ export default async function handler(
       .json({ error: `Método ${req.method} não permitido.` });
   }
 
-  const { codfat } = req.query;
+  const { codfat, codgp } = req.query;
 
-  if (!codfat || typeof codfat !== 'string') {
-    return res.status(400).json({ error: "Parâmetro 'codfat' é obrigatório." });
+  const usaGrupo = typeof codgp === 'string' && codgp.length > 0;
+  if (!usaGrupo && (!codfat || typeof codfat !== 'string')) {
+    return res
+      .status(400)
+      .json({ error: "Parâmetro 'codfat' (ou 'codgp') é obrigatório." });
   }
 
   const client = await getPgPool().connect();
 
   try {
-    // 1. Buscar os boletos e o código do cliente (codcli)
-    const boletosQuery = `
+    // 1. Buscar os boletos e o código do cliente (codcli).
+    // GP (grupo): os títulos ficam em dbreceb.codgp (cod_fat NULL, tipo 'G'); os dados da
+    // fatura (banco, espécie) vêm de uma fatura-membro representativa. As parcelas
+    // individuais dos membros foram canceladas (cancel='S') no agrupamento.
+    const boletosQuery = usaGrupo
+      ? `
       SELECT
         r.cod_receb,
         r.nro_doc AS numero_documento,
         r.dt_venc AS vencimento,
         r.valor_pgto AS valor,
         r.nro_banco AS nosso_numero,
+        r.codcli,
+        r.forma_fat,
+        r.banco,
+        fm.cod_banco,
+        b.nome AS nome_banco,
+        fm.data AS data_emissao_fatura,
+        fm.frmfat AS especie_doc_codigo,
+        fm.tipofat
+      FROM dbreceb r
+      LEFT JOIN LATERAL (
+        SELECT cod_banco, data, frmfat, tipofat
+        FROM dbfatura WHERE codgp = $1 LIMIT 1
+      ) fm ON true
+      LEFT JOIN dbbanco_cobranca b ON fm.cod_banco = b.banco
+      WHERE r.codgp = $1 AND (r.cancel IS NULL OR r.cancel <> 'S')
+      ORDER BY r.dt_venc ASC;
+    `
+      : `
+      SELECT
+        r.cod_receb,
+        r.nro_doc AS numero_documento,
+        r.dt_venc AS vencimento,
+        r.valor_pgto AS valor,
+        r.nro_banco AS nosso_numero,
+        r.forma_fat,
+        r.banco,
         f.cod_banco,
         b.nome AS nome_banco,
         f.codcli,
@@ -38,10 +71,12 @@ export default async function handler(
       FROM dbreceb r
       LEFT JOIN dbfatura f ON r.cod_fat = f.codfat
       LEFT JOIN dbbanco_cobranca b ON f.cod_banco = b.banco
-      WHERE r.cod_fat = $1
+      WHERE r.cod_fat = $1 AND (r.cancel IS NULL OR r.cancel <> 'S')
       ORDER BY r.dt_venc ASC;
     `;
-    const boletosResult = await client.query(boletosQuery, [codfat]);
+    const boletosResult = await client.query(boletosQuery, [
+      usaGrupo ? codgp : codfat,
+    ]);
     const boletos = boletosResult.rows;
 
     if (boletos.length === 0) {

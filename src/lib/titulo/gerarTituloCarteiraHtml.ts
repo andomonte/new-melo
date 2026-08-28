@@ -22,6 +22,7 @@ export interface TituloCarteiraData {
   sacadoCodigo: string; // codcli
   sacadoNome: string;
   sacadoEndereco?: string; // logradouro, bairro, cidade-UF, CEP
+  parcela?: string; // "1/5" — nº da parcela / total de parcelas
 }
 
 // ---- Constantes MELO (fixas do modelo) ----
@@ -88,6 +89,7 @@ function bloco(t: TituloCarteiraData): string {
       ${sacadoLinha2}
       <div class="recibo-linha">
         <span><span class="rot-inline">Número Docto.:</span> <b>${t.numeroDocto}</b></span>
+        ${t.parcela ? `<span><span class="rot-inline">Parcela:</span> <b>${t.parcela}</b></span>` : ''}
         <span><span class="rot-inline">Data do Vencto:</span> <b>${dataBR(t.vencimento)}</b></span>
         <span><span class="rot-inline">Valor Documento:</span> <b>${brl(t.valorDocumento)}</b></span>
         <span class="autent">Autenticação Mecânica (no verso)</span>
@@ -113,7 +115,7 @@ function bloco(t: TituloCarteiraData): string {
       </tr>
       <tr>
         <td class="c"><span class="r">Data do Documento</span>${dataBR(t.dataDocumento)}</td>
-        <td class="c"><span class="r">Número Docto</span>${t.numeroDocto}</td>
+        <td class="c"><span class="r">Número Docto</span>${t.numeroDocto}${t.parcela ? ` · Parc. ${t.parcela}` : ''}</td>
         <td class="c"><span class="r">Espécie Docto</span></td>
         <td class="c"><span class="r">Aceite</span></td>
         <td class="c"><span class="r">Data Processamento</span>${dataBR(t.dataProcessamento || t.dataDocumento)}</td>

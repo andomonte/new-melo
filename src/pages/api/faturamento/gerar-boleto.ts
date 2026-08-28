@@ -1,8 +1,24 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
-import jsPDF from 'jspdf';
-import JsBarcode from 'jsbarcode';
+import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
+import { gerarBoletoHtml, type BoletoData } from '@/lib/titulo/gerarBoletoHtml';
+import {
+  gerarTituloCarteiraHtml,
+  type TituloCarteiraData,
+} from '@/lib/titulo/gerarTituloCarteiraHtml';
+import { digitoNossoNumero } from '@/lib/boleto/nossoNumero';
+import { gerarBoletoFebraban, CONFIG_BOLETO } from '@/lib/boleto/febraban';
 
+/**
+ * Gera o PDF da cobrança (base64) para ANEXAR no e-mail (ação "Enviar Cobrança").
+ * Usa os MESMOS renderizadores fiéis do "Visualizar Boletos":
+ *   - forma_fat='2' + banco real (Bradesco/Santander) → boleto FEBRABAN (gerarBoletoHtml)
+ *   - forma_fat='4' (ou fallback) → Título em Carteira (gerarTituloCarteiraHtml)
+ * Filtra forma_fat IN ('2','4') e cancel<>'S' — exclui recibos/pagos e títulos legados
+ * que colidem no mesmo cod_fat pela migração (ex.: recibo antigo forma_fat='1').
+ *
+ * POST { codfat }  ou  { codgp } (cobrança agrupada).
+ */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -11,113 +27,115 @@ export default async function handler(
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { codfat } = req.body;
-
-  if (!codfat) {
+  const { codfat, codgp } = req.body;
+  const usaGrupo = codgp !== undefined && codgp !== null && String(codgp) !== '';
+  if (!usaGrupo && !codfat) {
     return res.status(400).json({
-      error: 'Código da fatura é obrigatório',
+      error: 'Código da fatura (ou codgp) é obrigatório',
     });
   }
 
+  const client = await getPgPool().connect();
   try {
-    const client = await getPgPool().connect();
+    // Títulos da cobrança (individual por cod_fat; grupo por codgp). Só boleto ('2') ou
+    // carteira ('4'), ativos (cancel<>'S') — exclui recibo/promissória e legados.
+    const filtro = usaGrupo ? 'r.codgp = $1' : 'r.cod_fat = $1';
+    const param = usaGrupo ? codgp : codfat;
+    const { rows } = await client.query(
+      `SELECT r.cod_receb, r.nro_doc, r.dt_venc, r.dt_emissao, r.valor_pgto,
+              r.banco, r.nro_banco, r.forma_fat, r.codcli,
+              c.nome, c.nomefant, c.cpfcgc, c.ender, c.numero, c.bairro, c.cidade, c.uf, c.cep
+         FROM dbreceb r
+         LEFT JOIN dbclien c ON c.codcli = r.codcli
+        WHERE ${filtro}
+          AND COALESCE(r.cancel, 'N') <> 'S'
+          AND COALESCE(r.forma_fat, '') IN ('2', '4')
+        ORDER BY r.dt_venc, r.cod_receb`,
+      [param],
+    );
 
-    // Buscar dados da fatura, banco, cliente e parcelas
-    const queryFatura = `
-      SELECT 
-        f.*,
-        c.nomefant,
-        c.nome,
-        c.cpfcgc,
-        c.ender,
-        c.numero,
-        c.bairro,
-        c.cidade,
-        c.estado,
-        c.cep,
-        b.nome as banco_nome
-      FROM dbfatura f
-      LEFT JOIN dbclien c ON c.codcli = f.codcli
-      LEFT JOIN dbbanco b ON b.cod_banco = f.cod_banco
-      WHERE f.codfat = $1
-    `;
-
-    const faturaResult = await client.query(queryFatura, [codfat]);
-
-    if (faturaResult.rows.length === 0) {
-      client.release();
-      return res.status(404).json({ error: 'Fatura não encontrada' });
-    }
-
-    const fatura = faturaResult.rows[0];
-
-    // Buscar parcelas do recebimento
-    const queryParcelas = `
-      SELECT 
-        cod_receb,
-        dt_venc,
-        valor_pgto,
-        nro_doc,
-        forma_fat
-      FROM dbreceb
-      WHERE cod_fat = $1
-      ORDER BY dt_venc
-    `;
-
-    const parcelasResult = await client.query(queryParcelas, [codfat]);
-
-    // Buscar dados da empresa
-    const queryEmpresa = `
-      SELECT * FROM dadosempresa LIMIT 1
-    `;
-
-    const empresaResult = await client.query(queryEmpresa);
-
-    if (empresaResult.rows.length === 0) {
-      client.release();
-      return res
-        .status(500)
-        .json({ error: 'Dados da empresa não encontrados' });
-    }
-
-    const dadosEmpresa = empresaResult.rows[0];
-    client.release();
-
-    // Verificar se há parcelas
-    if (parcelasResult.rows.length === 0) {
-      return res.status(400).json({
-        error: 'Nenhuma parcela encontrada para esta fatura',
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: 'Nenhum boleto/título em carteira encontrado para esta cobrança',
       });
     }
 
-    console.log('📄 Gerando boleto para fatura:', codfat);
-    console.log('📊 Parcelas encontradas:', parcelasResult.rows.length);
-
-    // Preparar dados do sacado (cliente)
-    const dadosSacado = {
-      nome: fatura.nomefant || fatura.nome,
-      cpfcnpj: fatura.cpfcgc,
-      endereco: fatura.ender,
-      numero: fatura.numero,
-      bairro: fatura.bairro,
-      cidade: fatura.cidade,
-      uf: fatura.estado,
-      cep: fatura.cep,
+    const enderecoDe = (r: any) => {
+      const partes = [r.ender, r.bairro, r.cidade, r.uf].filter(Boolean).join(' - ');
+      return (
+        [partes, r.cep ? `CEP:${r.cep}` : ''].filter(Boolean).join(' - ') ||
+        undefined
+      );
     };
 
-    // Gerar PDF do boleto
-    const pdfBuffer = await gerarBoletoPDF(
-      dadosEmpresa,
-      dadosSacado,
-      parcelasResult.rows,
-      fatura,
-    );
+    const boletoRows = rows.filter((r: any) => String(r.forma_fat) === '2');
+    const carteiraRows = rows.filter((r: any) => String(r.forma_fat) === '4');
+    // Boleto bancário FEBRABAN só quando todos os títulos '2' têm banco suportado + nosso número.
+    const usarBoleto =
+      boletoRows.length > 0 &&
+      boletoRows.every((r: any) => CONFIG_BOLETO[String(r.banco)] && r.nro_banco);
 
-    // Retornar o PDF como base64
+    let html: string;
+    if (usarBoleto) {
+      const total = boletoRows.length;
+      const boletos: BoletoData[] = boletoRows.map((r: any, i: number) => {
+        const banco = String(r.banco);
+        const cfg = CONFIG_BOLETO[banco];
+        const nroBanco = String(r.nro_banco);
+        const dv = digitoNossoNumero(banco, nroBanco);
+        const valor = Number(r.valor_pgto) || 0;
+        const feb = gerarBoletoFebraban(banco, nroBanco, dv, valor, new Date(r.dt_venc));
+        const nossoNumeroDisplay =
+          banco === '0' ? `09 / ${nroBanco}-${dv}` : `${nroBanco} ${dv}`;
+        return {
+          bancoNome: cfg.bancoNome,
+          bancoCodigoDisplay: cfg.bancoCodigoDisplay,
+          linhaDigitavel: feb.linhaDigitavel,
+          codigoBarras: feb.codigoBarras,
+          nossoNumero: nossoNumeroDisplay,
+          agenciaCedente: cfg.agenciaCedenteDisplay,
+          carteira: cfg.carteiraDisplay,
+          localPagamento: cfg.localPagamento,
+          numeroDocto: String(r.nro_doc || ''),
+          especieDocto: 'DM',
+          aceite: 'N',
+          vencimento: r.dt_venc,
+          valorDocumento: valor,
+          dataEmissao: r.dt_emissao,
+          dataProcessamento: r.dt_emissao,
+          moraDia: Math.round((valor * 8) / 3000 * 100) / 100,
+          sacadoCodigo: String(r.codcli || ''),
+          sacadoNome: String(r.nome || r.nomefant || ''),
+          sacadoCnpj: r.cpfcgc ? String(r.cpfcgc) : undefined,
+          sacadoEndereco: enderecoDe(r),
+          parcela: `${i + 1}/${total}`,
+        };
+      });
+      html = gerarBoletoHtml(boletos);
+    } else {
+      // Carteira MELO (ou fallback quando o boleto bancário não é possível).
+      const alvo = carteiraRows.length ? carteiraRows : boletoRows;
+      const total = alvo.length;
+      const titulos: TituloCarteiraData[] = alvo.map((r: any, i: number) => ({
+        nossoNumero: String(r.cod_receb),
+        numeroDocto: String(r.nro_doc || ''),
+        vencimento: r.dt_venc,
+        valorDocumento: Number(r.valor_pgto) || 0,
+        dataDocumento: r.dt_emissao,
+        dataProcessamento: r.dt_emissao,
+        sacadoCodigo: String(r.codcli || ''),
+        sacadoNome: String(r.nome || r.nomefant || ''),
+        sacadoEndereco: enderecoDe(r),
+        parcela: `${i + 1}/${total}`,
+      }));
+      html = gerarTituloCarteiraHtml(titulos);
+    }
+
+    const pdf = await renderHtmlToPdf(html, { landscape: false });
     return res.status(200).json({
       success: true,
-      boleto: pdfBuffer.toString('base64'),
-      parcelas: parcelasResult.rows.length,
+      boleto: Buffer.from(pdf).toString('base64'),
+      parcelas: rows.length,
     });
   } catch (error) {
     console.error('❌ Erro ao gerar boleto:', error);
@@ -125,199 +143,7 @@ export default async function handler(
       error: 'Erro ao gerar boleto',
       details: error instanceof Error ? error.message : 'Erro desconhecido',
     });
+  } finally {
+    client.release();
   }
-}
-
-// Função para gerar o PDF do boleto
-async function gerarBoletoPDF(
-  dadosEmpresa: any,
-  dadosSacado: any,
-  parcelas: any[],
-  fatura: any,
-): Promise<Buffer> {
-  const doc = new jsPDF('p', 'pt', 'a4');
-  const _pageHeight = doc.internal.pageSize.height;
-  const margin = 20;
-  let y = margin;
-
-  // Processar boletos em pares (2 por página)
-  for (let i = 0; i < parcelas.length; i += 2) {
-    // Começar nova página para cada par (exceto o primeiro)
-    if (i > 0) {
-      doc.addPage();
-      y = margin;
-    }
-
-    // Desenhar primeiro boleto do par
-    if (i < parcelas.length) {
-      y = drawTicketBlock(
-        doc,
-        y,
-        parcelas[i],
-        dadosEmpresa,
-        dadosSacado,
-        fatura,
-        false, // isPreview = false
-      );
-
-      // Verificar se há segundo boleto para desenhar
-      if (i + 1 < parcelas.length) {
-        // Adicionar linha separadora
-        y += 5;
-        doc.setLineWidth(1);
-        doc.line(margin, y, doc.internal.pageSize.width - margin, y);
-        y += 10;
-
-        // Desenhar segundo boleto
-        y = drawTicketBlock(
-          doc,
-          y,
-          parcelas[i + 1],
-          dadosEmpresa,
-          dadosSacado,
-          fatura,
-          false,
-        );
-      }
-    }
-  }
-
-  return Buffer.from(doc.output('arraybuffer'));
-}
-
-// Função para desenhar um bloco de boleto
-function drawTicketBlock(
-  doc: jsPDF,
-  startY: number,
-  parcela: any,
-  dadosEmpresa: any,
-  dadosSacado: any,
-  fatura: any,
-  isPreview: boolean,
-): number {
-  let y = startY;
-  const margin = 20;
-  const pageWidth = doc.internal.pageSize.width;
-
-  // Configurações
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-
-  // Cabeçalho do banco
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Banco: ${fatura.banco_nome || 'Banco'}`, margin, y);
-  y += 20;
-
-  // Dados do cedente (empresa)
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('CEDENTE:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(dadosEmpresa.nomecontribuinte || '', margin + 60, y);
-  y += 15;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('CNPJ:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(dadosEmpresa.cgc || '', margin + 60, y);
-  y += 20;
-
-  // Dados do sacado (cliente)
-  doc.setFont('helvetica', 'bold');
-  doc.text('SACADO:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(dadosSacado.nome || '', margin + 60, y);
-  y += 15;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('CPF/CNPJ:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(dadosSacado.cpfcnpj || '', margin + 60, y);
-  y += 15;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('ENDEREÇO:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(
-    `${dadosSacado.endereco || ''}, ${dadosSacado.numero || ''}`,
-    margin + 70,
-    y,
-  );
-  y += 15;
-
-  doc.text(
-    `${dadosSacado.bairro || ''} - ${dadosSacado.cidade || ''}/${
-      dadosSacado.uf || ''
-    }`,
-    margin + 70,
-    y,
-  );
-  y += 20;
-
-  // Dados da parcela
-  doc.setFont('helvetica', 'bold');
-  doc.text('DOCUMENTO:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(parcela.nro_doc || '', margin + 90, y);
-  y += 15;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('VENCIMENTO:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  const dataVenc = new Date(parcela.dt_venc).toLocaleDateString('pt-BR');
-  doc.text(dataVenc, margin + 90, y);
-  y += 15;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('VALOR:', margin, y);
-  doc.setFont('helvetica', 'normal');
-  const valor = Number(parcela.valor_pgto).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
-  doc.text(valor, margin + 90, y);
-  y += 30;
-
-  // Código de barras (simulado)
-  if (!isPreview) {
-    // Gerar código de barras fictício para demonstração
-    const codigoBarras = '34191234567890123456789012345678901234567890';
-
-    try {
-      const canvas = document.createElement('canvas');
-      JsBarcode(canvas, codigoBarras, {
-        format: 'CODE128',
-        width: 2,
-        height: 50,
-        displayValue: false,
-      });
-
-      const barcodeImage = canvas.toDataURL('image/png');
-      doc.addImage(barcodeImage, 'PNG', margin, y, pageWidth - 2 * margin, 50);
-      y += 60;
-
-      // Linha digitável
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text(
-        '34191.23456 78901.234567 89012.345678 9 01234567890',
-        margin,
-        y,
-      );
-      y += 20;
-    } catch (error) {
-      console.error('Erro ao gerar código de barras:', error);
-      doc.text('CÓDIGO DE BARRAS NÃO DISPONÍVEL', margin, y);
-      y += 20;
-    }
-  } else {
-    // Modo preview
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'italic');
-    doc.text('(Código de barras será gerado no boleto final)', margin, y);
-    y += 30;
-  }
-
-  return y;
 }

@@ -450,6 +450,9 @@ export default function FaturamentoNota({
   // Marca (uma vez por tipo) que o "gerar 30 dias" já foi auto-ligado — não re-liga
   // se o usuário desmarcar depois.
   const auto30DiasRef = useRef<string>('');
+  // Marca a venda cujo TIPO DE FATURA já foi pré-preenchido pela forma — evita o efeito
+  // re-aplicar (e brigar com a escolha manual do usuário, ex.: voltar BOLETO → DINHEIRO).
+  const prefilFormaRef = useRef<string>('');
   // Modal central de confirmação (usado para a contingência da SEFAZ).
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
   // Alerta/erro no MODAL CENTRAL padrão (nunca toast no canto). O 2º arg (ex.: { id } do
@@ -719,9 +722,12 @@ export default function FaturamentoNota({
     if (!formCobranca.banco) return [];
     const bancoSelecionado = bancos.find((b) => b.banco === formCobranca.banco);
     if (bancoSelecionado?.nome === 'MELO') {
-      // Adiciona CARTEIRA como opção especial
+      // MELO nunca gera BOLETO (fiel ao Delphi INFORMACAO_FINANCEIRA: boleto exige banco
+      // real, que produz nosso número). MELO → carteira/cartão/dinheiro/pix/recibo/etc.
       const carteira = { codigo: 'W', descricao: 'CARTEIRA' };
-      const todasOpcoes = [carteira, ...tiposDocumentoOriginais];
+      const todasOpcoes = [carteira, ...tiposDocumentoOriginais].filter(
+        (doc) => (doc.descricao || '').toUpperCase() !== 'BOLETO',
+      );
 
       // Remove duplicatas baseado no código
       const opcoesUnicas = todasOpcoes.reduce((acc, doc) => {
@@ -736,8 +742,19 @@ export default function FaturamentoNota({
         label: doc.descricao,
       }));
     }
+    // Banco real (Bradesco/Santander/…) → forma forçada a BOLETO.
     return [{ value: 'BOLETO', label: 'BOLETO' }];
   }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
+
+  // Se o tipo atual sair das opções (ex.: banco MELO tira 'BOLETO' da lista), reajusta
+  // para a 1ª opção válida (CARTEIRA) — evita ficar com forma inválida selecionada.
+  useEffect(() => {
+    if (opcoesTipoFatura.length === 0) return;
+    const valido = opcoesTipoFatura.some((o) => o.value === formCobranca.tipoFatura);
+    if (!valido) {
+      setFormCobranca((prev) => ({ ...prev, tipoFatura: opcoesTipoFatura[0].value }));
+    }
+  }, [opcoesTipoFatura, formCobranca.tipoFatura]);
 
   // Pré-preenche o TIPO DE FATURA a partir da FORMA de pagamento da venda (obsfat) — o
   // vendedor escolhe na venda e o faturamento reflete. Mapeia TODAS as formas (antes só
@@ -745,8 +762,12 @@ export default function FaturamentoNota({
   // pix) só existem no banco MELO — força MELO quando necessário. Prazo "FECHAMENTO NA
   // SEMANA" → Boleto + Gerar Cobrança=NÃO (cobrança sai no fechamento, agrupada).
   useEffect(() => {
+    // AGRUPAMENTO: não herda a forma de uma venda individual — o grupo mantém o default
+    // (BOLETO) e o usuário escolhe. Pré-preenchimento só no faturamento individual.
+    if (agrupandoFaturas) return;
     const vendaObj = Array.isArray(dadosVenda) ? dadosVenda[0] : dadosVenda;
     if (!vendaObj) return;
+    const vendaId = String(vendaObj?.codvenda || vendaObj?.nrovenda || '');
     const semAcento = (s: string) =>
       String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const obs = semAcento(vendaObj?.obsfat);
@@ -760,8 +781,14 @@ export default function FaturamentoNota({
       setStatusVenda((p: any) => (p.cobranca === 'N' ? p : { ...p, cobranca: 'N' }));
     }
 
-    // Só pré-preenche enquanto o tipo ainda é o default BOLETO (não sobrescreve manual).
-    if (formCobranca.tipoFatura !== 'BOLETO') return;
+    // Pré-preenche o tipo UMA VEZ por venda. Depois de aplicado, NÃO re-aplica — senão
+    // brigaria com a escolha manual (o usuário volta pra BOLETO e o efeito trocava de novo).
+    if (prefilFormaRef.current === vendaId) return;
+    // Se o tipo já não é o default (usuário/outro efeito mudou), não sobrescreve — marca ok.
+    if (formCobranca.tipoFatura !== 'BOLETO') {
+      prefilFormaRef.current = vendaId;
+      return;
+    }
 
     const achar = (re: RegExp) =>
       opcoesTipoFatura.find((o) => re.test(String(o.value).toUpperCase()));
@@ -786,13 +813,17 @@ export default function FaturamentoNota({
 
     if (alvo) {
       if (alvo.value !== formCobranca.tipoFatura) handleCobrancaChange('tipoFatura', alvo.value);
+      prefilFormaRef.current = vendaId; // aplicado — não re-processa esta venda
     } else if (precisaMelo) {
       // Forma à vista não está nas opções (banco ≠ MELO) → força MELO, onde ela existe.
+      // NÃO marca ainda: re-roda quando as opções do MELO carregarem e o alvo aparecer.
       const melo = bancos.find((b: any) => b.nome === 'MELO');
       if (melo && formCobranca.banco !== melo.banco) handleCobrancaChange('banco', melo.banco);
+    } else {
+      prefilFormaRef.current = vendaId; // nada a pré-preencher (ex.: boleto) — não re-processa
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosVenda, opcoesTipoFatura, bancos, formCobranca.banco, formCobranca.tipoFatura]);
+  }, [dadosVenda, opcoesTipoFatura, bancos, formCobranca.banco, formCobranca.tipoFatura, agrupandoFaturas]);
 
   // Tipo de fatura DIFERENTE de BOLETO/CARTEIRA: gera automaticamente 1 parcela única com
   // o valor total, vencendo em 1 DIA (próximo dia útil — valida fim de semana e feriado).
@@ -1411,23 +1442,14 @@ export default function FaturamentoNota({
     `);
 
     const comCobranca = statusVenda.cobranca === 'S';
-    // Para agrupamento: salvamento (1) + cobrança opcional (2) + geração agrupamento (1) + notificação (1)
-    // Para individual: salvamento (1) + cobrança opcional (2) + emissão nota fiscal (2) ddd
-    const totalSteps = agrupandoFaturas
-      ? comCobranca
-        ? 5
-        : 2 // Agrupamento: salvamento + cobrança (opcional) + geração + notificação
-      : comCobranca
-      ? 5
-      : 3; // Individual: salvamento + cobrança (opcional) + nota fiscal
-
-    // Inicializa o checklist de etapas do modal de progresso.
+    // Etapas reais (sem "Enviando notificação" — o agrupamento NÃO envia e-mail).
+    // Agrupamento: salvamento + cobrança (opcional) + geração + finalização.
+    // Individual: salvamento + cobrança (opcional) + emissão + PDF.
     const stepsNomes = agrupandoFaturas
       ? [
           'Salvando dados da fatura',
           ...(comCobranca ? ['Configurando cobrança'] : []),
           'Criando agrupamento',
-          'Enviando notificação',
           'Finalizando processo',
         ]
       : [
@@ -1436,6 +1458,7 @@ export default function FaturamentoNota({
           'Emitindo nota fiscal',
           'Gerando PDF',
         ];
+    const totalSteps = stepsNomes.length; // sempre consistente com o checklist
     setEmissaoProgresso((prev) => ({
       ...prev,
       totalSteps,
@@ -1497,7 +1520,6 @@ export default function FaturamentoNota({
             'Salvando dados da fatura',
             ...(comCobranca ? ['Configurando cobrança'] : []),
             'Criando agrupamento',
-            'Enviando notificação',
             'Finalizando processo',
           ]
         : [
@@ -2006,56 +2028,25 @@ export default function FaturamentoNota({
             id: loadingToast,
           },
         );
-        if (agrupandoFaturas) {
-          // AGRUPAMENTO: cobrança segue como passo separado (comportamento original).
-          await handleSalvarDadosCobranca(novoCodfat);
-          // Salvar parcelas na nova tabela se houver
-          if (parcelas.length > 0 && dadosVenda.codvenda) {
-            await salvarParcelas(
-              dadosVenda.codvenda,
-              parcelas.map((p) => ({ dia: p.dias })),
-            );
-          }
-        }
-        // INDIVIDUAL: a cobrança (dbreceb + dbprazo) JÁ foi gravada na MESMA transação
-        // da fatura em salvar.ts — se falhasse, a fatura teria sido revertida junto,
-        // sem deixar fatura órfã (era o bug do fluxo antigo em 2 chamadas HTTP).
+        // AGRUPAMENTO: a cobrança do grupo (dbreceb.codgp + dbpzfat) JÁ foi gravada na MESMA
+        // transação do grupo-pagamento.ts (via cobranca_dados → inserirCobrancaGP). NÃO
+        // chamar handleSalvarDadosCobranca aqui: gerava títulos DUPLICADOS (cod_fat=codgp) e
+        // fora da transação (quebrava a atomicidade). O grupo-pagamento é atômico: se falhar,
+        // faz ROLLBACK de tudo (dbgpfatura + membros + dbreceb + dbpzfat), sem deixar meio-GP.
+        // INDIVIDUAL: idem — a cobrança já vai na mesma transação da fatura em salvar.ts.
         updateWindowProgress(currentStepNum, 'Cobrança configurada', 'success');
-
-        etapa = 'envio de e-mail da cobrança';
-        currentStepNum = 3;
-        updateWindowProgress(
-          currentStepNum,
-          agrupandoFaturas
-            ? 'Configurando E-mail da Cobrança Agrupada'
-            : 'Enviando Cobrança por E-mail',
-        );
-        toast.loading(
-          `[${currentStepNum}/${totalSteps}] ${
-            agrupandoFaturas
-              ? 'Configurando E-mail da Cobrança Agrupada'
-              : 'Enviando Cobrança por E-mail'
-          }...`,
-          {
-            id: loadingToast,
-          },
-        );
-        await handleEnviarEmailCobranca(novoCodfat);
-        updateWindowProgress(
-          currentStepNum,
-          'E-mail de cobrança enviado',
-          'success',
-        );
+        // NÃO há etapa de "envio de e-mail" aqui: o processo não notifica o cliente.
+        // O envio da cobrança por e-mail é ação separada e manual na Consulta de Faturas.
       }
 
       // Para agrupamento, não emitir nota fiscal - apenas salvar os dados
       if (agrupandoFaturas) {
         // Etapa específica para agrupamento - criação do grupo
         etapa = 'criação do agrupamento de faturas';
-        const stepAgrupamento = comCobranca ? 4 : 2;
-        updateWindowProgress(stepAgrupamento, 'Gerando Agrupamento de Faturas');
+        const stepAgrupamento = comCobranca ? 3 : 2;
+        updateWindowProgress(stepAgrupamento, 'Criando agrupamento');
         toast.loading(
-          `[${stepAgrupamento}/${totalSteps}] Gerando Agrupamento de Faturas...`,
+          `[${stepAgrupamento}/${totalSteps}] Criando agrupamento...`,
           {
             id: loadingToast,
           },
@@ -2065,22 +2056,8 @@ export default function FaturamentoNota({
         await new Promise((resolve) => setTimeout(resolve, 1000));
         updateWindowProgress(stepAgrupamento, 'Agrupamento criado', 'success');
 
-        // Se tem cobrança, mostrar etapa de envio de email
-        if (comCobranca) {
-          etapa = 'finalização e notificação do agrupamento';
-          const stepFinal = 5;
-          updateWindowProgress(stepFinal, 'Enviando Confirmação por E-mail');
-          toast.loading(
-            `[${stepFinal}/${totalSteps}] Enviando Confirmação por E-mail...`,
-            {
-              id: loadingToast,
-            },
-          );
-
-          // Simular delay do envio de email
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          updateWindowProgress(stepFinal, 'Confirmação enviada', 'success');
-        }
+        // Finalização (sem envio de e-mail — o processo não notifica o cliente).
+        updateWindowProgress(totalSteps, 'Finalizando processo', 'success');
 
         toast.success(
           `Agrupamento de faturas criado com sucesso! Código: ${novoCodfat}`,

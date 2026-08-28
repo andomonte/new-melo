@@ -150,7 +150,10 @@ export default function DataTableFaturasAvancado({
       async () => {
         const tId = toast.loading('Desagrupando GP...');
         try {
-          const { data } = await axios.post('/api/faturamento/desagrupar-grupo', { codgp });
+          const { data } = await axios.post('/api/faturamento/desagrupar-grupo', {
+            codgp,
+            usuario: user?.usuario || user?.codusr || '',
+          });
           toast.success(
             `GP ${codgp} desagrupada — ${data.faturasDesagrupadas} fatura(s) liberada(s).`,
             { id: tId },
@@ -158,7 +161,8 @@ export default function DataTableFaturasAvancado({
           setFaturasSelecionadas([]);
           onAtualizarLista?.();
         } catch (err: any) {
-          avisoErro(err?.response?.data?.erro || 'Erro ao desagrupar a GP.', { id: tId });
+          toast.dismiss(tId);
+          avisoErro(err?.response?.data?.erro || 'Erro ao desagrupar a GP.');
         }
       },
       {
@@ -350,16 +354,31 @@ export default function DataTableFaturasAvancado({
     if (!formCobranca.banco) return [];
     const bancoSel = bancos.find((b) => b.banco === formCobranca.banco);
     if ((bancoSel?.nome || '').toUpperCase() === 'MELO') {
+      // MELO nunca gera BOLETO (fiel ao Delphi INFORMACAO_FINANCEIRA: boleto exige banco
+      // real, que produz nosso número). MELO → carteira/cartão/dinheiro/pix/recibo/etc.
       const carteira = { codigo: 'W', descricao: 'CARTEIRA' };
-      const todas = [carteira, ...tiposDocumentoOriginais];
+      const todas = [carteira, ...tiposDocumentoOriginais].filter(
+        (doc) => (doc.descricao || '').toUpperCase() !== 'BOLETO',
+      );
       const unicas = todas.reduce((acc, doc) => {
         if (!acc.find((x) => x.codigo === doc.codigo)) acc.push(doc);
         return acc;
       }, [] as typeof todas);
       return unicas.map((doc) => ({ value: doc.descricao, label: doc.descricao }));
     }
+    // Banco real (Bradesco/Santander/…) → forma forçada a BOLETO.
     return [{ value: 'BOLETO', label: 'BOLETO' }];
   }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
+
+  // Se o tipo atual sair das opções (ex.: trocou p/ MELO e 'BOLETO' saiu da lista),
+  // reajusta para a 1ª opção válida — evita ficar com forma inválida selecionada.
+  useEffect(() => {
+    if (opcoesTipoFatura.length === 0) return;
+    const valido = opcoesTipoFatura.some((o) => o.value === formCobranca.tipoFatura);
+    if (!valido) {
+      setFormCobranca((prev) => ({ ...prev, tipoFatura: opcoesTipoFatura[0].value }));
+    }
+  }, [opcoesTipoFatura, formCobranca.tipoFatura]);
 
   // Atualizar faturas desabilitadas quando a lista de faturas ou seleção mudar
   useEffect(() => {
@@ -687,24 +706,66 @@ export default function DataTableFaturasAvancado({
     await abrirModalPreview(fatura);
   };
 
-  const handleVisualizarBoletos = (fatura: any) => {
-    const frm = String(fatura?.frmfat ?? '');
-    // CARTEIRA (frmfat='4') → "Título em Carteira".
-    if (frm === '4') {
-      window.open(
-        `/api/faturamento/titulo-carteira?cod_fat=${fatura.codfat}`,
-        '_blank',
+  const handleVisualizarBoletos = async (fatura: any) => {
+    const ehGrupo = fatura?.agp === 'S' && !!fatura?.codgp;
+    // Faturas individuais: roteia pela forma (frmfat). GP não usa frmfat do membro —
+    // os títulos do grupo (dbreceb.codgp) sempre vão pelo modal, buscando por codgp.
+    if (!ehGrupo) {
+      const frm = String(fatura?.frmfat ?? '');
+      // CARTEIRA (frmfat='4') → "Título em Carteira".
+      if (frm === '4') {
+        window.open(
+          `/api/faturamento/titulo-carteira?cod_fat=${fatura.codfat}`,
+          '_blank',
+        );
+        return;
+      }
+      // BOLETO (frmfat='2') → boleto bancário (Bradesco/Santander), FEBRABAN.
+      if (frm === '2') {
+        window.open(
+          `/api/faturamento/boleto?cod_fat=${fatura.codfat}`,
+          '_blank',
+        );
+        return;
+      }
+    }
+    // GP ou demais formas → PRÉ-CHECA antes de abrir/rotear: se não houver boletos,
+    // apenas avisa (NÃO abre o modal) — abrir e fechar em seguida deixava o <body> com
+    // pointer-events:none do Radix e travava a tela até dar refresh.
+    const tId = toast.loading('Buscando boletos...');
+    try {
+      const { data } = await axios.get(
+        '/api/faturamento/buscar_boletos_fatura',
+        { params: ehGrupo ? { codgp: fatura.codgp } : { codfat: fatura.codfat } },
       );
-      return;
+      if (!data?.boletos?.length) {
+        toast.warning('Nenhum boleto encontrado para esta fatura.', { id: tId });
+        return;
+      }
+      // GP: usa os MESMOS renderizadores fiéis do individual, por codgp, conforme a
+      // forma/banco do grupo (dbreceb): '4' carteira MELO; '2' + banco real (0=Bradesco,
+      // 5=Santander) boleto FEBRABAN. Combo legado inválido (MELO+boleto) cai no fallback.
+      if (ehGrupo) {
+        const forma = String(data.boletos[0]?.forma_fat ?? '');
+        const banco = String(data.boletos[0]?.banco ?? '');
+        if (forma === '4') {
+          toast.dismiss(tId);
+          window.open(`/api/faturamento/titulo-carteira?codgp=${fatura.codgp}`, '_blank');
+          return;
+        }
+        if (forma === '2' && (banco === '0' || banco === '5')) {
+          toast.dismiss(tId);
+          window.open(`/api/faturamento/boleto?codgp=${fatura.codgp}`, '_blank');
+          return;
+        }
+      }
+      // Demais formas (cartão/recibo/promissória) → modal jsPDF (fallback).
+      toast.dismiss(tId);
+      setFaturaParaBoletos(fatura);
+    } catch (e: any) {
+      toast.dismiss(tId);
+      avisoErro(e?.response?.data?.error || 'Falha ao buscar boletos.');
     }
-    // BOLETO (frmfat='2') → boleto bancário (Bradesco/Santander), FEBRABAN.
-    if (frm === '2') {
-      window.open(`/api/faturamento/boleto?cod_fat=${fatura.codfat}`, '_blank');
-      return;
-    }
-    // Demais formas → modal de boletos existente (fallback).
-    // (Recibo, frmfat='1', tem ação própria "Recibo" — ver handleRecibo.)
-    setFaturaParaBoletos(fatura);
   };
 
   // RECIBO (frmfat='1') — comprovante de recebimento à vista. Ação própria,
@@ -870,12 +931,17 @@ export default function DataTableFaturasAvancado({
     }
     setIsCancelandoCobranca(true);
     try {
-      await axios.post('/api/faturamento/cancelar-cobranca', {
+      // Cobrança agrupada (GP): cancela por codgp (COBRANCA_CANCELAR_GP do Delphi) —
+      // os títulos do grupo estão em dbreceb.codgp, não no cod_fat do membro.
+      const ehGrupo =
+        faturaCancelCobranca.agp === 'S' && !!faturaCancelCobranca.codgp;
+      const { data } = await axios.post('/api/faturamento/cancelar-cobranca', {
         codfat: faturaCancelCobranca.codfat,
+        codgp: ehGrupo ? faturaCancelCobranca.codgp : undefined,
         usuario: user?.usuario || user?.codusr || '',
         motivo: motivoCancelCobranca.trim(),
       });
-      toast.success('Cobrança cancelada com sucesso.');
+      toast.success(data?.message || 'Cobrança cancelada com sucesso.');
       setModalCancelCobrancaAberto(false);
       onAtualizarLista?.();
     } catch (err: any) {
@@ -1410,15 +1476,18 @@ const handleCancelarNota = async () => {
           type="checkbox"
           className="disabled:opacity-40 disabled:cursor-not-allowed"
           checked={faturasSelecionadas.includes(f.codfat)}
-          // REGRA: cobrança agrupada exige NF-e EMITIDA (autorizada, 100). Também bloqueia
-          // quando a fatura já tem cobrança gerada.
-          disabled={f.cobranca === 'S' || f.nfe_status !== '100'}
+          // REGRA: exige NF-e EMITIDA (autorizada, 100). Bloqueia AGRUPAR quando a fatura já
+          // tem cobrança individual — MAS permite selecionar faturas JÁ AGRUPADAS (agp='S')
+          // para DESAGRUPAR (elas têm cobranca='S', mas o objetivo aqui é soltar o grupo).
+          disabled={f.nfe_status !== '100' || (f.cobranca === 'S' && f.agp !== 'S')}
           title={
             f.nfe_status !== '100'
-              ? 'Só é possível agrupar cobrança de faturas com NF-e emitida (autorizada)'
-              : f.cobranca === 'S'
+              ? 'Só é possível agrupar/desagrupar faturas com NF-e emitida (autorizada)'
+              : f.cobranca === 'S' && f.agp !== 'S'
                 ? 'Fatura já possui cobrança gerada'
-                : undefined
+                : f.agp === 'S'
+                  ? 'Selecione para desagrupar este grupo'
+                  : undefined
           }
           onClick={e => e.stopPropagation()} // Evita propagar o clique para a linha
           onChange={async (e) => {
@@ -1456,9 +1525,10 @@ const handleCancelarNota = async () => {
                 return;
               }
 
-              // Validação removida - permite selecionar qualquer fatura
-              // A validação de pagamentos será feita apenas no agrupamento
-              if (f.cobranca === 'S') {
+              // Validação de pagamentos só se aplica ao AGRUPAR. Para faturas já agrupadas
+              // (agp='S'), a seleção é para DESAGRUPAR — a trava de recebido/registrado/vencido
+              // é feita no servidor (desagrupar-grupo, fiel ao VALIDA_COBRANCA_GP).
+              if (f.cobranca === 'S' && f.agp !== 'S') {
                 console.log('🔍 Verificando pagamentos para fatura:', f.codfat);
                 const temPagamentos = await verificarFaturaTemPagamentos(f.codfat);
                 if (temPagamentos) {

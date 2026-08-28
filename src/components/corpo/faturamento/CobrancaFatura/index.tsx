@@ -101,13 +101,15 @@ export default function ModalCobranca({
     const bancoSelecionado = bancos.find((b) => b.banco === form.banco);
 
     if (bancoSelecionado?.nome === 'MELO') {
-      const opcoesUnicas = new Set(['BOLETO', ...tiposDocumentoOriginais]);
-      return Array.from(opcoesUnicas).map((doc) => ({
-        value: doc,
-        label: doc,
-      }));
+      // MELO nunca gera BOLETO (fiel ao Delphi INFORMACAO_FINANCEIRA: boleto exige banco
+      // real). MELO → carteira/cartão/dinheiro/pix/recibo/etc.
+      const opcoesUnicas = Array.from(
+        new Set(['CARTEIRA', ...tiposDocumentoOriginais]),
+      ).filter((doc) => (doc || '').toUpperCase() !== 'BOLETO');
+      return opcoesUnicas.map((doc) => ({ value: doc, label: doc }));
     }
 
+    // Banco real (Bradesco/Santander/…) → forma forçada a BOLETO.
     return [{ value: 'BOLETO', label: 'BOLETO' }];
   }, [form.banco, tiposDocumentoOriginais, bancos]);
 
