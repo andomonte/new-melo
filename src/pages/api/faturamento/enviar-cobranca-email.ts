@@ -12,7 +12,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido.' });
-  const { codfat, destinatarios, assunto, mensagem, boletoBase64 } = req.body || {};
+  // resumoGpBase64 (opcional): "Resumo GP" anexado quando a cobrança é de um grupo (GP).
+  const { codfat, destinatarios, assunto, mensagem, boletoBase64, resumoGpBase64, codgp } = req.body || {};
 
   const codFat = String(codfat || '').trim();
   const lista: string[] = Array.isArray(destinatarios)
@@ -42,12 +43,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const corpo = String(mensagem || '').trim() || 'Segue em anexo o boleto para pagamento.';
     const html = corpo.replace(/\n/g, '<br>');
 
+    const attachments: any[] = [
+      { filename: `Boleto-${codFat}.pdf`, content: pdf, contentType: 'application/pdf' },
+    ];
+    // Cobrança de grupo (GP): anexa também o Resumo GP.
+    if (resumoGpBase64) {
+      attachments.push({
+        filename: `Resumo-GP-${String(codgp || codFat)}.pdf`,
+        content: Buffer.from(String(resumoGpBase64), 'base64'),
+        contentType: 'application/pdf',
+      });
+    }
+
     await transporter.sendMail({
       from: `"${smtp.fromName}" <${smtp.fromEmail}>`,
       to: unicos.join(', '),
       subject: assuntoFinal,
       html,
-      attachments: [{ filename: `Boleto-${codFat}.pdf`, content: pdf, contentType: 'application/pdf' }],
+      attachments,
     });
 
     return res.status(200).json({

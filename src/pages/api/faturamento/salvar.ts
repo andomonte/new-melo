@@ -218,6 +218,7 @@ export default async function handler(
     acrescimo = 0,
     acrescimo_nf = 'N',
     destfrete = '1',      // frete por conta, BASE 1 (Delphi): modFrete = destfrete − 1; default 1 = CIF
+    tipo_fechamento = null, // 'SEMANAL' quando a venda vem com prazo FECHAMENTO NA SEMANA (web-only)
     cod_conta,     // Referência à dbconta (renomeado)
     tipodoc,
     cobranca,
@@ -506,9 +507,9 @@ export default async function handler(
       INSERT INTO dbfatura (
         codfat, codcli, nroform, data, codvend, codtransp,
         totalprod, totalfat, totalnf, cod_conta, tipodoc, cobranca, insc07, pedido, nfs, selo, serie, descrcfop,
-        totalfrete, frete_nf, desconto, desconto_nf, acrescimo, acrescimo_nf, destfrete
+        totalfrete, frete_nf, desconto, desconto_nf, acrescimo, acrescimo_nf, destfrete, tipo_fechamento
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
     `;
 
     // Log dos valores antes do INSERT para debug
@@ -558,6 +559,7 @@ export default async function handler(
       Number(acrescimo) || 0,       // acrescimo (PERCENTUAL)
       acrescimo_nf === 'S' ? 'S' : 'N',
       String(destfrete ?? '1'),     // destfrete (BASE 1): modFrete = destfrete − 1
+      tipo_fechamento ? String(tipo_fechamento) : null, // tipo_fechamento (SEMANAL/null)
     ]);
 
     // Associa todas as vendas à fatura na tabela intermediária

@@ -367,6 +367,9 @@ export default function FaturamentoNota({
   const [desconto, setDesconto] = useState(0);
   const [acrescimo, setAcrescimo] = useState(0);
   const [nroformulario, setNroformulario] = useState('');
+  // Venda com prazo "FECHAMENTO NA SEMANA": marca a fatura (dbfatura.tipo_fechamento) e
+  // deixa a cobrança para o fechamento (Gerar Cobrança = NÃO). Conceito só do web.
+  const [fechamentoSemana, setFechamentoSemana] = useState(false);
   const [frete, setFrete] = useState('0');
   const [vendedor, setVendedor] = useState('');
   const [transportadora, setTransportadora] = useState('');
@@ -449,6 +452,17 @@ export default function FaturamentoNota({
   const auto30DiasRef = useRef<string>('');
   // Modal central de confirmação (usado para a contingência da SEFAZ).
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  // Alerta/erro no MODAL CENTRAL padrão (nunca toast no canto). O 2º arg (ex.: { id } do
+  // loading) é aceito só para descartar o toast de loading antes de abrir o modal.
+  const avisoErro = (msg: any, opts?: { id?: string; title?: string } | any) => {
+    if (opts?.id) toast.dismiss(opts.id);
+    pedirConfirmacao(() => {}, {
+      somenteOk: true,
+      type: 'warning',
+      title: opts?.title || 'Atenção',
+      message: String(msg ?? 'Ocorreu um erro.'),
+    });
+  };
   const confirmarContingencia = (mensagem: string): Promise<boolean> =>
     new Promise((resolve) => {
       pedirConfirmacao(() => resolve(true), {
@@ -534,7 +548,7 @@ export default function FaturamentoNota({
 
     const handleSave = async () => {
       if (!texto.trim()) {
-        toast.warning('Por favor, digite uma mensagem.');
+        avisoErro('Por favor, digite uma mensagem.');
         return;
       }
       setIsSaving(true);
@@ -682,7 +696,7 @@ export default function FaturamentoNota({
       }
     } catch (error: any) {
       console.error('Erro ao adicionar mensagem:', error);
-      toast.error(
+      avisoErro(
         error.response?.data?.error || 'Não foi possível adicionar a mensagem.',
       );
     }
@@ -725,30 +739,57 @@ export default function FaturamentoNota({
     return [{ value: 'BOLETO', label: 'BOLETO' }];
   }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
 
-  // Pré-preenche o TIPO DE FATURA a partir do obsfat da venda (ex.: "CARTAO DE
-  // CREDITO 01x" → Cartão de Crédito), como o Delphi faz ao abrir o faturamento.
+  // Pré-preenche o TIPO DE FATURA a partir da FORMA de pagamento da venda (obsfat) — o
+  // vendedor escolhe na venda e o faturamento reflete. Mapeia TODAS as formas (antes só
+  // "cartão de crédito", por isso caía sempre em crédito). Formas à vista (cartão/dinheiro/
+  // pix) só existem no banco MELO — força MELO quando necessário. Prazo "FECHAMENTO NA
+  // SEMANA" → Boleto + Gerar Cobrança=NÃO (cobrança sai no fechamento, agrupada).
   useEffect(() => {
-    // dadosVenda pode ser objeto (1 venda) ou array (várias) — pega a 1ª.
     const vendaObj = Array.isArray(dadosVenda) ? dadosVenda[0] : dadosVenda;
-    const obs = String(vendaObj?.obsfat || '').toUpperCase();
-    const ehCartao =
-      obs.startsWith('CARTAO DE CREDITO') || obs.startsWith('CARTÃO DE CRÉDITO');
-    if (!ehCartao) return;
-    // Só age enquanto o tipo ainda é o default BOLETO (não sobrescreve escolha manual).
+    if (!vendaObj) return;
+    const semAcento = (s: string) =>
+      String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const obs = semAcento(vendaObj?.obsfat);
+    const prazoVenda = String(vendaObj?.prazo || '').toUpperCase();
+    const ehFechamentoSemana =
+      prazoVenda.includes('FECHAMENTO NA SEMANA') || obs.includes('FECHAMENTO NA SEMANA');
+
+    // Fechamento da semana: marca a fatura e deixa a cobrança para o fechamento.
+    if (ehFechamentoSemana) {
+      if (!fechamentoSemana) setFechamentoSemana(true);
+      setStatusVenda((p: any) => (p.cobranca === 'N' ? p : { ...p, cobranca: 'N' }));
+    }
+
+    // Só pré-preenche enquanto o tipo ainda é o default BOLETO (não sobrescreve manual).
     if (formCobranca.tipoFatura !== 'BOLETO') return;
 
-    const cartaoOpt = opcoesTipoFatura.find((o) =>
-      /CR[EÉ]DITO/.test(String(o.value).toUpperCase()),
-    );
-    if (cartaoOpt) {
-      handleCobrancaChange('tipoFatura', cartaoOpt.value);
-      return;
+    const achar = (re: RegExp) =>
+      opcoesTipoFatura.find((o) => re.test(String(o.value).toUpperCase()));
+    // FONTE da forma: prefere forma_pgto (distingue pix/débito/dinheiro/crédito, salvo na
+    // venda); só cai no obsfat quando NULL (vendas antigas — obsfat só separa crédito/à vista).
+    const fonte = semAcento(vendaObj?.forma_pgto) || obs;
+    let alvo: { value: string } | undefined;
+    let precisaMelo = false;
+    if (ehFechamentoSemana) {
+      alvo = achar(/BOLETO/);
+    } else if (/CREDITO/.test(fonte)) {
+      alvo = achar(/CR[EÉ]DITO/); precisaMelo = true;
+    } else if (/DEBITO/.test(fonte)) {
+      alvo = achar(/D[EÉ]BITO/); precisaMelo = true;
+    } else if (/PIX/.test(fonte)) {
+      alvo = achar(/PIX/); precisaMelo = true;
+    } else if (/DINHEIRO|A VISTA/.test(fonte)) {
+      alvo = achar(/DINHEIRO/); precisaMelo = true;
+    } else if (/BOLETO/.test(fonte)) {
+      alvo = achar(/BOLETO/);
     }
-    // Cartão não está nas opções (banco atual não é MELO). Força MELO — onde as
-    // opções de cartão existem, como o Delphi força o banco/forma no cartão.
-    const melo = bancos.find((b: any) => b.nome === 'MELO');
-    if (melo && formCobranca.banco !== melo.banco) {
-      handleCobrancaChange('banco', melo.banco);
+
+    if (alvo) {
+      if (alvo.value !== formCobranca.tipoFatura) handleCobrancaChange('tipoFatura', alvo.value);
+    } else if (precisaMelo) {
+      // Forma à vista não está nas opções (banco ≠ MELO) → força MELO, onde ela existe.
+      const melo = bancos.find((b: any) => b.nome === 'MELO');
+      if (melo && formCobranca.banco !== melo.banco) handleCobrancaChange('banco', melo.banco);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dadosVenda, opcoesTipoFatura, bancos, formCobranca.banco, formCobranca.tipoFatura]);
@@ -1063,9 +1104,32 @@ export default function FaturamentoNota({
         .filter(Boolean);
       console.log('🔗 Faturas para agrupar:', codfats);
 
+      // Cobrança do grupo (fiel ao Delphi TCOBRANCA): banco + tipo + parcelas configurados
+      // na tela → gera os títulos dbreceb (codgp) + prazos (dbpzfat) no grupo-pagamento.ts.
+      let cobrancaDadosGP: any = null;
+      if (statusVenda?.cobranca === 'S' && parcelas.length > 0) {
+        const combined = parcelas
+          .map((p, idx) => ({ ...p, originalIndex: idx }))
+          .sort(
+            (a, b) =>
+              new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime(),
+          );
+        const payloadParc = montarParcelasPayload(combined);
+        cobrancaDadosGP = {
+          banco: formCobranca.banco,
+          tipofat: formCobranca.tipoFatura,
+          parcelas: payloadParc.map((p, i) => ({
+            vencimento: p.vencimento,
+            valor: p.valor,
+            dias: Number((combined[i] as any)?.dias ?? 0),
+          })),
+        };
+      }
+
       const payloadGrupo = {
         codfats: codfats,
         codcli: cliente?.codcli,
+        cobranca_dados: cobrancaDadosGP,
       };
 
       const res = await axios.post(
@@ -1107,6 +1171,9 @@ export default function FaturamentoNota({
         // usa modFrete = destfrete − 1. modalidadeTransporte no web já é o modFrete 0-based
         // (0=Remetente/CIF, 1=Destinatário/FOB, 2=Terceiros, 3/4=próprio, 9=sem ocorrência).
         destfrete: String(Number(modalidadeTransporte || '0') + 1),
+        // Marcador de fechamento (web-only): venda com prazo "FECHAMENTO NA SEMANA" →
+        // separa a fatura para o fechamento semanal (cobrança agrupada depois).
+        tipo_fechamento: fechamentoSemana ? 'SEMANAL' : null,
         cod_conta: formCobranca?.banco || null, // ✅ cod_conta vindo do formulário de cobrança (renomeado)
         tipodoc: statusVenda?.tipodoc ?? 'N',
         cobranca: statusVenda?.cobranca ?? 'S',
@@ -1266,7 +1333,7 @@ export default function FaturamentoNota({
       const venda = vendasSelecionadas[0];
       const nroOuCod = venda?.nrovenda || venda?.codvenda;
       if (!nroOuCod) {
-        toast.error('Não foi possível encontrar o número ou código da venda.');
+        avisoErro('Não foi possível encontrar o número ou código da venda.');
         toast.dismiss(loadingToast);
         return;
       }
@@ -1276,7 +1343,7 @@ export default function FaturamentoNota({
       setVendaData(data);
       const primeiroProduto = data.dbitvenda?.[0];
       if (!primeiroProduto) {
-        toast.error('Nenhum produto encontrado para esta venda.');
+        avisoErro('Nenhum produto encontrado para esta venda.');
         toast.dismiss(loadingToast);
         return;
       }
@@ -1285,7 +1352,7 @@ export default function FaturamentoNota({
       toast.dismiss(loadingToast);
     } catch (err) {
       toast.dismiss(loadingToast);
-      toast.error('Erro ao buscar detalhes do produto.');
+      avisoErro('Erro ao buscar detalhes do produto.');
       console.error(err);
     }
   };
@@ -2025,7 +2092,7 @@ export default function FaturamentoNota({
 
         // Abrir a janela apenas após o sucesso do agrupamento
         if (!pdfWindow || pdfWindow.closed) {
-          toast.error('A janela foi fechada inesperadamente. Verifique o resultado do agrupamento.');
+          avisoErro('A janela foi fechada inesperadamente. Verifique o resultado do agrupamento.');
           // ❌ NÃO redirecionar automaticamente quando janela foi fechada
           console.error('❌ Janela do agrupamento fechada - NÃO redirecionando');
           setTimeout(() => onClose(), 100);
@@ -2447,7 +2514,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
           ? `Fatura ${novoCodfat} salva, mas nota fiscal rejeitada por duplicidade (código 539) após 3 tentativas automáticas com números diferentes`
           : `Fatura ${novoCodfat} salva, mas nota fiscal não foi emitida: ${mensagemErroSefaz.length > 100 ? mensagemErroSefaz.substring(0, 100) + '...' : mensagemErroSefaz}`;
           
-        toast.warning(mensagemToast, {
+        avisoErro(mensagemToast, {
           id: loadingToast,
           duration: isDuplicidadeFinal ? 12000 : 8000,
         });
@@ -2458,7 +2525,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       if (erroSefaz) {
         // Se houve erro na SEFAZ, mostrar mensagem de sucesso parcial
         if (!pdfWindow || pdfWindow.closed) {
-          toast.error('A janela foi fechada inesperadamente.');
+          avisoErro('A janela foi fechada inesperadamente.');
           window.location.href = '/faturamento/consultaFatura';
           return;
         }
@@ -2496,7 +2563,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
 
           // Verificar se a janela ainda está aberta
           if (!pdfWindow || pdfWindow.closed) {
-            toast.error('A janela foi fechada inesperadamente. Por favor, verifique o resultado.');
+            avisoErro('A janela foi fechada inesperadamente. Por favor, verifique o resultado.');
             // ❌ NÃO redirecionar automaticamente - deixar usuário ver o erro
             console.error('❌ Janela fechada inesperadamente - NÃO redirecionando');
             return;
@@ -2513,12 +2580,12 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
             'error',
             'PDF não disponível',
           );
-          toast.warning('Nota emitida, mas o PDF não foi gerado.', {
+          avisoErro('Nota emitida, mas o PDF não foi gerado.', {
             id: loadingToast,
           });
 
           if (!pdfWindow || pdfWindow.closed) {
-            toast.error('A janela foi fechada inesperadamente. Verifique se a nota foi emitida.');
+            avisoErro('A janela foi fechada inesperadamente. Verifique se a nota foi emitida.');
             // ❌ NÃO redirecionar quando janela foi fechada
             console.error('❌ Janela fechada (sem PDF) - NÃO redirecionando');
             return;
@@ -2573,7 +2640,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
             );
           }
 
-          toast.warning(
+          avisoErro(
             `Fatura ${novoCodfat} salva, mas nota fiscal não foi emitida: ${mensagemErro}`,
             {
               id: loadingToast,
@@ -2602,7 +2669,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       }
 
       console.error(`Erro na etapa de ${etapa}:`, error);
-      toast.error(`Erro na etapa de ${etapa}: ${mensagemErro}`, {
+      avisoErro(`Erro na etapa de ${etapa}: ${mensagemErro}`, {
         id: loadingToast,
         duration: 10000,
       });
@@ -2614,14 +2681,14 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
   // --- FUNÇÕES DE VALIDAÇÃO PARA AGRUPAMENTO ---
   const validarAgrupamento = async () => {
     if (vendasSelecionadas.length === 0) {
-      toast.error('Nenhuma fatura selecionada para agrupamento.');
+      avisoErro('Nenhuma fatura selecionada para agrupamento.');
       return false;
     }
 
     // Regra 1: Todas as faturas devem ser do mesmo cliente
     const clientes = [...new Set(vendasSelecionadas.map((v) => v.codcli))];
     if (clientes.length > 1) {
-      toast.error(
+      avisoErro(
         'Todas as faturas devem pertencer ao mesmo cliente para agrupamento.',
       );
       return false;
@@ -2640,7 +2707,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       );
 
       if (!response.data.sucesso) {
-        toast.error(
+        avisoErro(
           response.data.error || 'Erro ao verificar status das cobranças.',
         );
         return false;
@@ -2651,14 +2718,14 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
         response.data.cobrancasPagas &&
         response.data.cobrancasPagas.length > 0
       ) {
-        toast.error('Não é possível agrupar faturas com cobranças já pagas.');
+        avisoErro('Não é possível agrupar faturas com cobranças já pagas.');
         return false;
       }
 
       return true;
     } catch (error: any) {
       console.error('Erro ao validar agrupamento:', error);
-      toast.error(
+      avisoErro(
         error.response?.data?.error || 'Erro ao validar regras de agrupamento.',
       );
       return false;
@@ -3043,9 +3110,9 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       parcelas /* semeado com as parcelas da venda; ver parcelasSeededRef */;
 
     if (parcelasParaGerar.length === 0)
-      return toast.error('Adicione parcelas para gerar o boleto.');
+      return avisoErro('Adicione parcelas para gerar o boleto.');
     if (!dadosEmpresa || !dadosSacado)
-      return toast.error(
+      return avisoErro(
         'Aguarde o carregamento dos dados da empresa e do cliente.',
       );
 
@@ -3061,7 +3128,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
       toast.success('Preview gerado!', { id: loadingToast });
     } catch (error) {
       console.error('Erro ao gerar PDF do boleto:', error);
-      toast.error('Falha ao gerar o preview do boleto.', { id: loadingToast });
+      avisoErro('Falha ao gerar o preview do boleto.', { id: loadingToast });
     }
   };
 
@@ -3406,7 +3473,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
         setMensagensNF(preSelecionadas);
       } catch (error) {
         console.error('Erro ao buscar dados iniciais:', error);
-        toast.error('Falha ao carregar dados de faturamento.');
+        avisoErro('Falha ao carregar dados de faturamento.');
       }
       carregandoDados = false;
     };
@@ -3420,7 +3487,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
         .then((res) => setDadosSacado(res.data))
         .catch((err) => {
           console.error(`Erro ao buscar cliente ${cliente.codcli}:`, err);
-          toast.error('Dados do cliente (sacado) não encontrados.');
+          avisoErro('Dados do cliente (sacado) não encontrados.');
         });
     }
   }, [isOpen, cliente]);
@@ -4994,7 +5061,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
                                     formCobranca.prazoSelecionado,
                                   );
                                   if (!dias || dias <= 0) {
-                                    toast.error('Insira um prazo válido.');
+                                    avisoErro('Insira um prazo válido.');
                                     return;
                                   }
                                   const vencimento = new Date();
@@ -5026,7 +5093,7 @@ Este é o retorno literal da SEFAZ. Confira a associação série ↔ Inscriçã
                                   formCobranca.prazoSelecionado,
                                 );
                                 if (!dias || dias <= 0)
-                                  return toast.error('Insira um prazo válido.');
+                                  return avisoErro('Insira um prazo válido.');
                                 const vencimento = new Date();
                                 vencimento.setDate(vencimento.getDate() + dias);
                                 setParcelas([

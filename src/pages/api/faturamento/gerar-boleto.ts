@@ -35,11 +35,10 @@ export default async function handler(
         c.cidade,
         c.estado,
         c.cep,
-        b.nome as banco_nome,
-        b.banco as cod_banco
+        b.nome as banco_nome
       FROM dbfatura f
       LEFT JOIN dbclien c ON c.codcli = f.codcli
-      LEFT JOIN dbbancos b ON b.banco = f.cod_banco
+      LEFT JOIN dbbanco b ON b.cod_banco = f.cod_banco
       WHERE f.codfat = $1
     `;
 

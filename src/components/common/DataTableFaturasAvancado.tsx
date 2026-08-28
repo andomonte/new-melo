@@ -104,6 +104,17 @@ export default function DataTableFaturasAvancado({
   const [faturasSelecionadas, setFaturasSelecionadas] = useState<string[]>([]);
   // Modal de confirmação padrão (substitui window.confirm) — usado no cancelar cobrança.
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  // Alerta/erro no MODAL CENTRAL padrão (nunca toast no canto). Aceita o 2º arg do toast
+  // (ex.: { id } do loading) só para descartar o toast de loading antes de abrir o modal.
+  const avisoErro = (msg: any, opts?: { id?: string; title?: string } | any) => {
+    if (opts?.id) toast.dismiss(opts.id);
+    pedirConfirmacao(() => {}, {
+      somenteOk: true,
+      type: 'warning',
+      title: opts?.title || 'Atenção',
+      message: String(msg ?? 'Ocorreu um erro.'),
+    });
+  };
   // Usuário logado — para registrar QUEM cancelou a cobrança (histórico dbacao).
   const { user } = useContext(AuthContext) as any;
   const getVendedorSelecionado = () => {
@@ -147,7 +158,7 @@ export default function DataTableFaturasAvancado({
           setFaturasSelecionadas([]);
           onAtualizarLista?.();
         } catch (err: any) {
-          toast.error(err?.response?.data?.erro || 'Erro ao desagrupar a GP.', { id: tId });
+          avisoErro(err?.response?.data?.erro || 'Erro ao desagrupar a GP.', { id: tId });
         }
       },
       {
@@ -248,7 +259,7 @@ export default function DataTableFaturasAvancado({
       onAtualizarLista?.();
       setFaturasSelecionadas([]);
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Erro ao criar grupo de pagamento.');
+      avisoErro(error?.response?.data?.error || 'Erro ao criar grupo de pagamento.');
     }
   };
   const headers = useMemo(
@@ -479,17 +490,17 @@ export default function DataTableFaturasAvancado({
   const handleGerarPreviewBoleto = async () => {
     try {
       if (!cobrancaModalAberto?.faturaId) {
-        toast.error('Fatura não selecionada.');
+        avisoErro('Fatura não selecionada.');
         return;
       }
 
       if (parcelas.length === 0) {
-        toast.error('Adicione parcelas para gerar o boleto.');
+        avisoErro('Adicione parcelas para gerar o boleto.');
         return;
       }
 
       if (!formCobranca.banco || !formCobranca.tipoFatura) {
-        toast.error('Selecione o banco e o tipo de fatura para gerar o boleto.');
+        avisoErro('Selecione o banco e o tipo de fatura para gerar o boleto.');
         return;
       }
 
@@ -586,7 +597,7 @@ export default function DataTableFaturasAvancado({
 
     } catch (error) {
       console.error('Erro ao gerar preview do boleto:', error);
-      toast.error('Erro ao gerar preview do boleto.');
+      avisoErro('Erro ao gerar preview do boleto.');
     }
   };
 
@@ -597,7 +608,7 @@ export default function DataTableFaturasAvancado({
   //     });
   //     setDadosEspelho(data);
   //   } catch (error: any) {
-  //     toast.error(error?.response?.data?.error || 'Erro ao buscar espelho.');
+  //     avisoErro(error?.response?.data?.error || 'Erro ao buscar espelho.');
   //   }
   // };
 
@@ -622,7 +633,7 @@ export default function DataTableFaturasAvancado({
       
       setIsPreviewOpen(true); // Abre o modal
     } catch (error: any) {
-      toast.error(
+      avisoErro(
         error?.response?.data?.error || 'Erro ao abrir preview.',
       );
     }
@@ -657,10 +668,10 @@ export default function DataTableFaturasAvancado({
           codfat: fatura.codfat,
         });
       } else {
-        toast.error('PDF da nota não encontrado.', { id: toastId });
+        avisoErro('PDF da nota não encontrado.', { id: toastId });
       }
     } catch (error: any) {
-      toast.error(
+      avisoErro(
         error?.response?.data?.error || 'Erro ao buscar PDF da nota.',
         { id: toastId }
       );
@@ -702,6 +713,29 @@ export default function DataTableFaturasAvancado({
     window.open(`/api/faturamento/recibo?cod_fat=${fatura.codfat}`, '_blank');
   };
 
+  // Resumo GP (relatório do grupo, fiel ao Delphi RESUMO_GP) — abre o PDF numa aba.
+  const handleResumoGp = async (fatura: any) => {
+    if (fatura.agp !== 'S' || !fatura.codgp) {
+      avisoErro('Esta fatura não pertence a um grupo de pagamento (GP).');
+      return;
+    }
+    const tId = toast.loading('Gerando Resumo GP...');
+    try {
+      const { data } = await axios.get(
+        `/api/faturamento/resumo-gp-pdf?codgp=${encodeURIComponent(String(fatura.codgp))}`,
+      );
+      if (!data?.pdf) throw new Error(data?.erro || 'Falha ao gerar o Resumo GP.');
+      toast.dismiss(tId);
+      const bytes = Uint8Array.from(atob(data.pdf), (ch) => ch.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err: any) {
+      avisoErro(err?.response?.data?.erro || err?.message || 'Erro ao gerar o Resumo GP.', {
+        id: tId,
+      });
+    }
+  };
+
   const handleEmitirNota = async (fatura: any) => {
     const toastId = toast.loading('Emitindo nota fiscal...');
     try {
@@ -732,7 +766,13 @@ export default function DataTableFaturasAvancado({
           toast.success('Nota emitida em CONTINGÊNCIA!', { id: tId2 });
           onAtualizarLista?.();
         } else {
-          toast.error(dataC?.motivo || dataC?.detalhe || 'Falha ao emitir em contingência.', { id: tId2 });
+          toast.dismiss(tId2);
+          pedirConfirmacao(() => {}, {
+            somenteOk: true,
+            type: 'warning',
+            title: 'Não foi possível emitir a nota',
+            message: dataC?.motivo || dataC?.detalhe || 'Falha ao emitir em contingência.',
+          });
         }
         return;
       }
@@ -774,7 +814,14 @@ export default function DataTableFaturasAvancado({
           err.response.data.motivo ||
           msg;
       }
-      toast.error(msg, { id: toastId });
+      // Rejeição SEFAZ (ex.: CFOP/UF) no modal central padrão, não em toast no canto.
+      toast.dismiss(toastId);
+      pedirConfirmacao(() => {}, {
+        somenteOk: true,
+        type: 'warning',
+        title: 'Não foi possível emitir a nota',
+        message: msg,
+      });
     }
   };
   const handleLinhaClick = async (fatura: any) => {
@@ -787,7 +834,7 @@ export default function DataTableFaturasAvancado({
       setProdutosRelacionados(data.produtos);
       setMostrarProdutos(true);
     } catch (err) {
-      toast.error('Erro ao buscar produtos da fatura.');
+      avisoErro('Erro ao buscar produtos da fatura.');
     }
   };
 
@@ -818,7 +865,7 @@ export default function DataTableFaturasAvancado({
   const executarCancelarCobranca = async () => {
     if (!faturaCancelCobranca) return;
     if (motivoCancelCobranca.trim().length < 5) {
-      toast.error('Informe o motivo do cancelamento (mínimo 5 caracteres).');
+      avisoErro('Informe o motivo do cancelamento (mínimo 5 caracteres).');
       return;
     }
     setIsCancelandoCobranca(true);
@@ -834,7 +881,7 @@ export default function DataTableFaturasAvancado({
     } catch (err: any) {
       // Surfacar o motivo real (ex.: 409 "já possui parcela(s) paga(s)").
       const msg = err?.response?.data?.error || 'Erro ao cancelar cobrança.';
-      toast.error(msg);
+      avisoErro(msg);
       console.error(err);
     } finally {
       setIsCancelandoCobranca(false);
@@ -856,7 +903,7 @@ export default function DataTableFaturasAvancado({
       return data;
     } catch (err: any) {
       const msg = err?.response?.data?.erro || 'Erro ao fechar a fatura.';
-      toast.error(msg);
+      avisoErro(msg);
       console.error(err);
     }
   };
@@ -901,7 +948,7 @@ export default function DataTableFaturasAvancado({
     const fatura = faturaCancelFatura;
     if (!fatura) return;
     if (motivoCancelFatura.trim().length < 15) {
-      toast.error('A justificativa deve ter no mínimo 15 caracteres.');
+      avisoErro('A justificativa deve ter no mínimo 15 caracteres.');
       return;
     }
     setIsCancelandoFatura(true);
@@ -937,7 +984,7 @@ export default function DataTableFaturasAvancado({
         err?.response?.data?.erro ||
         err?.response?.data?.error ||
         'Erro ao cancelar o faturamento.';
-      toast.error(msg);
+      avisoErro(msg);
       console.error(err);
     } finally {
       setIsCancelandoFatura(false);
@@ -953,7 +1000,7 @@ export default function DataTableFaturasAvancado({
       onAtualizarLista?.();
     } catch (error) {
       console.error('Erro ao atualizar fatura:', error);
-      toast.error('Erro ao atualizar fatura!');
+      avisoErro('Erro ao atualizar fatura!');
     }
   };
 
@@ -996,7 +1043,7 @@ const handleCancelarNota = async () => {
   if (!faturaParaCancelar) return;
 
   if (motivoCancelamento.trim().length < 15) {
-    toast.error('O motivo do cancelamento deve ter no mínimo 15 caracteres.');
+    avisoErro('O motivo do cancelamento deve ter no mínimo 15 caracteres.');
     return;
   }
   
@@ -1027,7 +1074,7 @@ const handleCancelarNota = async () => {
     ) {
       msg = err.response.data.motivo || err.response.data.erro;
     }
-    toast.error(msg);
+    avisoErro(msg);
 
   } finally {
     // 5. Desativa o estado de loading, independentemente do resultado (sucesso ou erro)
@@ -1076,7 +1123,7 @@ const handleCancelarNota = async () => {
   const handleEnviarCartaCorrecao = async () => {
     if (!faturaParaCC) return;
     if (textoCartaCorrecao.trim().length < 15) {
-      toast.error('O texto da correção deve ter no mínimo 15 caracteres.');
+      avisoErro('O texto da correção deve ter no mínimo 15 caracteres.');
       return;
     }
     setEnviandoCC(true);
@@ -1124,7 +1171,7 @@ const handleCancelarNota = async () => {
         a.click();
         URL.revokeObjectURL(url);
       } catch (pdfErr) {
-        toast.warning('CC-e registrada, mas houve falha ao gerar o PDF do comprovante.');
+        avisoErro('CC-e registrada, mas houve falha ao gerar o PDF do comprovante.');
       }
 
       setModalCartaCorrecaoAberto(false);
@@ -1134,7 +1181,7 @@ const handleCancelarNota = async () => {
     } catch (err: any) {
       const msg =
         err?.response?.data?.motivo || err?.response?.data?.erro || 'Erro ao enviar a Carta de Correção.';
-      toast.error(msg);
+      avisoErro(msg);
     } finally {
       setEnviandoCC(false);
     }
@@ -1158,14 +1205,14 @@ const handleCancelarNota = async () => {
       setTermoProdutos((data.produtos || []).map((p: any) => ({ ...p, check: true })));
       setModalTermoAberto(true);
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Erro ao carregar os produtos da fatura.');
+      avisoErro(err?.response?.data?.error || 'Erro ao carregar os produtos da fatura.');
     }
   };
 
   const handleGerarTermoBaterias = async () => {
     const selecionados = termoProdutos.filter((p) => p.check);
     if (selecionados.length === 0) {
-      toast.error('Marque ao menos um item (bateria) para gerar o termo.');
+      avisoErro('Marque ao menos um item (bateria) para gerar o termo.');
       return;
     }
     setGerandoTermo(true);
@@ -1190,7 +1237,7 @@ const handleCancelarNota = async () => {
       URL.revokeObjectURL(url);
       setModalTermoAberto(false);
     } catch (err) {
-      toast.error('Erro ao gerar o PDF do termo.');
+      avisoErro('Erro ao gerar o PDF do termo.');
     } finally {
       setGerandoTermo(false);
     }
@@ -1234,11 +1281,11 @@ const handleCancelarNota = async () => {
   const handleGerarEstornoDI = async () => {
     if (!estornoFatura) return;
     if (estornoJustificativa.trim().length < 15) {
-      toast.error('A justificativa deve ter no mínimo 15 caracteres.');
+      avisoErro('A justificativa deve ter no mínimo 15 caracteres.');
       return;
     }
     if (!/^\d{4}$/.test(estornoCfop.trim())) {
-      toast.error('Informe um CFOP de devolução válido (4 dígitos).');
+      avisoErro('Informe um CFOP de devolução válido (4 dígitos).');
       return;
     }
     setEstornandoDI(true);
@@ -1252,7 +1299,7 @@ const handleCancelarNota = async () => {
       toast.success(`DI de devolução gerada: fatura ${data.codfatDI} (form ${data.nroformDI}).`);
       onAtualizarLista?.();
     } catch (err: any) {
-      toast.error(err?.response?.data?.erro || 'Erro ao gerar o estorno.');
+      avisoErro(err?.response?.data?.erro || 'Erro ao gerar o estorno.');
     } finally {
       setEstornandoDI(false);
     }
@@ -1269,7 +1316,7 @@ const handleCancelarNota = async () => {
       onAtualizarLista?.();
       return true;
     } catch (err: any) {
-      toast.error(err?.response?.data?.motivo || err?.response?.data?.erro || 'Erro ao emitir a devolução.');
+      avisoErro(err?.response?.data?.motivo || err?.response?.data?.erro || 'Erro ao emitir a devolução.');
       return false;
     } finally {
       setEmitindoDevolucao(null);
@@ -1288,7 +1335,7 @@ const handleCancelarNota = async () => {
       setGruposPagamento(response.data.grupos);
     } catch (error) {
       console.error('Erro ao carregar grupos de pagamento:', error);
-      toast.error('Erro ao carregar grupos de pagamento.');
+      avisoErro('Erro ao carregar grupos de pagamento.');
     } finally {
       setCarregandoGrupos(false);
     }
@@ -1305,7 +1352,7 @@ const handleCancelarNota = async () => {
       setMostrarDetalhesGrupo(true);
     } catch (error) {
       console.error('Erro ao carregar detalhes do grupo:', error);
-      toast.error('Erro ao carregar detalhes do grupo.');
+      avisoErro('Erro ao carregar detalhes do grupo.');
     }
   };
 
@@ -1317,11 +1364,13 @@ const handleCancelarNota = async () => {
   };
 
   // Categoria de COR DA LINHA (prioridade estilo Delphi):
-  // Cancelado > Denegada > Agrupado > Com cobrança > Sem cobrança.
+  // Cancelado > Denegada > Agrupado > Faturamento na Semana > Com cobrança > Sem cobrança.
   const statusCorLinha = (f: any): string => {
     if (f.cancel === 'S' || f.nfe_status === 'C') return 'cancel';
     if (f.denegada === 'S') return 'denegada';
     if (f.agp === 'S') return 'agrupado';
+    // Fechamento da semana: fatura que fica aguardando a cobrança do fechamento (roxa).
+    if (String(f.tipo_fechamento || '').toUpperCase() === 'SEMANAL') return 'fechamento_semana';
     if (f.cobranca === 'S') return 'cobranca';
     return 'sem';
   };
@@ -1461,7 +1510,7 @@ const handleCancelarNota = async () => {
         onEspelhoClick={() => handleVisualizarNota(f)}
         onCobrancaClick={() => {
           if (f.cobranca === 'S') {
-            toast.warning('Esta fatura já possui cobrança gerada.');
+            avisoErro('Esta fatura já possui cobrança gerada.');
             return;
           }
           // Abre o modal com bancos filtrados (cliente + MELO) e banco default.
@@ -1477,6 +1526,7 @@ const handleCancelarNota = async () => {
         onenviarCobrancaClick={() => setCobrancaEnviada(f)}
         onVisualizarBoletosClick={() => handleVisualizarBoletos(f)}
         onReciboClick={() => handleRecibo(f)}
+        onResumoGpClick={() => handleResumoGp(f)}
         onVerProdutosClick={() => handleLinhaClick(f)}
         isSelecionada={faturasSelecionadas.includes(f.codfat)}
         onVisualizarRejeicaoClick={() => {
@@ -1506,7 +1556,7 @@ const handleCancelarNota = async () => {
               { duration: 8000 }
             );
           } else {
-            toast.warning(
+            avisoErro(
               `Não foi encontrada informação adicional para a fatura ${f.codfat}`
             );
           }
@@ -2339,7 +2389,7 @@ const handleCancelarNota = async () => {
                       onClick={async () => {
                         try {
                           if (!parcelas.length) {
-                            toast.error('Gere ao menos uma parcela antes de salvar.');
+                            avisoErro('Gere ao menos uma parcela antes de salvar.');
                             return;
                           }
                           // Payload no formato que /salvar-cobranca espera:
@@ -2377,7 +2427,7 @@ const handleCancelarNota = async () => {
                           }
                         } catch (error: any) {
                           console.error('Erro ao salvar cobrança:', error);
-                          toast.error(
+                          avisoErro(
                             error.response?.data?.error ||
                               error.response?.data?.message ||
                               'Erro ao gerar cobrança',
@@ -2440,6 +2490,8 @@ const handleCancelarNota = async () => {
           nomeCliente={cobrancaEnviada?.cliente_nome}
           numeroNota={cobrancaEnviada?.numero_nfe || cobrancaEnviada?.nroform}
           tipo="cobranca"
+          // GP: anexa o Resumo GP quando a fatura pertence a um grupo de pagamento.
+          codgp={cobrancaEnviada?.agp === 'S' ? cobrancaEnviada?.codgp : undefined}
         />
         
         {/* Modal Detalhes do Grupo */}

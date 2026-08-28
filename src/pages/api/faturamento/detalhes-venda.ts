@@ -216,6 +216,8 @@ export default async function handler(
             transp: row.transp,
             obs: row.obs,
             obsfat: row.obsfat, // forma de pagamento (ex.: "CARTAO DE CREDITO 01x")
+            forma_pgto: row.forma_pgto, // forma REAL selecionada (DINHEIRO/PIX/DÉBITO/CRÉDITO)
+            prazo: row.prazo,   // prazo textual (ex.: "FECHAMENTO NA SEMANA")
             total: row.total,
             codcli: row.codcli,
             codvend: row.codvend,

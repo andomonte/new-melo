@@ -8,6 +8,7 @@ import { DefaultButton } from '@/components/common/Buttons';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import NovoFaturamento from '../novoFaturamento';
 import { toast } from 'sonner';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { StatusEstruturaBanco } from '@/components/common/StatusEstruturaBanco';
 import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 
@@ -22,6 +23,8 @@ const MAPA_COR_LINHA: Record<string, string> = {
   denegada: 'shadow-[inset_4px_0_0_0_#f59e0b] [&_td]:text-amber-700 dark:[&_td]:text-amber-300',
   agrupado: 'shadow-[inset_4px_0_0_0_#3b82f6] [&_td]:text-blue-700 dark:[&_td]:text-blue-300',
   cobranca: 'shadow-[inset_4px_0_0_0_#10b981] [&_td]:text-emerald-700 dark:[&_td]:text-emerald-300',
+  // Faturamento na semana (roxo): fatura aguardando a cobrança do fechamento semanal.
+  fechamento_semana: 'shadow-[inset_4px_0_0_0_#9333ea] [&_td]:text-purple-700 dark:[&_td]:text-purple-300',
   sem:      'shadow-[inset_4px_0_0_0_#ec4899] [&_td]:text-pink-700 dark:[&_td]:text-pink-300',
 };
 
@@ -44,6 +47,17 @@ const calcPeriodo = (preset: string): { de: string; ate: string } => {
 };
 
 export default function ConsultaFaturasPage() {
+  // Alerta/erro no MODAL CENTRAL padrão (nunca toast no canto).
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  const avisoErro = (msg: any, opts?: { id?: string; title?: string } | any) => {
+    if (opts?.id) toast.dismiss(opts.id);
+    pedirConfirmacao(() => {}, {
+      somenteOk: true,
+      type: 'warning',
+      title: opts?.title || 'Atenção',
+      message: String(msg ?? 'Ocorreu um erro.'),
+    });
+  };
   const [faturas, setFaturas] = useState<any[]>([]);
   const [meta, setMeta] = useState({
     currentPage: 1,
@@ -71,6 +85,8 @@ export default function ConsultaFaturasPage() {
   const [filtroAgrupadas, setFiltroAgrupadas] = useState<'todas' | 'agrupadas'>('todas');
   const [filtroStatusNFe, setFiltroStatusNFe] = useState<'todas' | 'autorizadas' | 'canceladas' | 'rejeitadas' | 'denegadas' | 'pendentes'>('todas');
   const [filtroCobranca, setFiltroCobranca] = useState<'todas' | 'com' | 'sem'>('todas');
+  // Filtro "Faturamento na Semana" (client-side): mostra só as faturas de fechamento semanal.
+  const [filtroFechamento, setFiltroFechamento] = useState(false);
   const [faturasParaFaturar, setFaturasParaFaturar] = useState<any[] | null>(null);
   const [dadosFaturasAgrupadas, setDadosFaturasAgrupadas] = useState<any[] | null>(null);
   const [primeiroCarregamento, setPrimeiroCarregamento] = useState(true);
@@ -219,13 +235,13 @@ export default function ConsultaFaturasPage() {
     setMeta(data.meta || { currentPage: 1, lastPage: 1, perPage: 10, total: 0 });
   
   } catch (error: any) {
-     toast.error('Erro ao buscar faturas');
+     avisoErro('Erro ao buscar faturas');
     if (error.code === 'ECONNABORTED') {
-      toast.error('A requisição demorou muito para responder. Tente novamente.');
+      avisoErro('A requisição demorou muito para responder. Tente novamente.');
     } else if (error.response) {
-      toast.error(`Erro ao buscar faturas: ${error.response.data?.error || error.message}`);
+      avisoErro(`Erro ao buscar faturas: ${error.response.data?.error || error.message}`);
     } else {
-      toast.error('Erro ao buscar faturas. Verifique sua conexão.');
+      avisoErro('Erro ao buscar faturas. Verifique sua conexão.');
     }
     setFaturas([]);
     setMeta({ currentPage: 1, lastPage: 1, perPage: 10, total: 0 });
@@ -287,7 +303,7 @@ export default function ConsultaFaturasPage() {
     const clientesUnicos = Array.from(new Set(faturas.map(f => f.codcli || f.cliente_nome)));
     if (clientesUnicos.length > 1) {
       const clientesFormatados = clientesUnicos.map(c => c || 'Cliente não identificado').join(', ');
-      toast.error(`Só é permitido agrupar faturas do mesmo cliente. Clientes selecionados: ${clientesFormatados}`, {
+      avisoErro(`Só é permitido agrupar faturas do mesmo cliente. Clientes selecionados: ${clientesFormatados}`, {
         position: 'top-right',
         duration: 4000,
       });
@@ -299,7 +315,7 @@ export default function ConsultaFaturasPage() {
     const faturasComCobranca = faturas.filter(f => f.cobranca === 'S');
     // if (faturasComCobranca.length > 0) {
     //   const codigosFaturas = faturasComCobranca.map(f => f.codfat).join(', ');
-    //   toast.error(`As seguintes faturas já possuem cobrança gerada e não podem ser agrupadas: ${codigosFaturas}`, {
+    //   avisoErro(`As seguintes faturas já possuem cobrança gerada e não podem ser agrupadas: ${codigosFaturas}`, {
     //     position: 'top-right',
     //     duration: 5000,
     //   });
@@ -337,7 +353,7 @@ export default function ConsultaFaturasPage() {
       );
       
       if (faturasValidas.length === 0) {
-        toast.error('Nenhuma fatura válida selecionada para agrupamento.');
+        avisoErro('Nenhuma fatura válida selecionada para agrupamento.');
         setCarregando(false);
         return;
       }
@@ -393,7 +409,7 @@ export default function ConsultaFaturasPage() {
       setAbrirNovoFaturamento(true);
     } catch (err) {
       console.error('❌ Erro ao buscar detalhes das faturas agrupadas:', err);
-      toast.error('Erro ao buscar detalhes das faturas agrupadas.');
+      avisoErro('Erro ao buscar detalhes das faturas agrupadas.');
     } finally {
       setCarregando(false);
     }
@@ -427,7 +443,14 @@ export default function ConsultaFaturasPage() {
   };
 
   // ---- Legenda-filtro (cada chip alterna um filtro existente do backend) ----
-  const toggleLegenda = (cat: 'cancel' | 'denegada' | 'agrupado' | 'cobranca' | 'sem') => {
+  const toggleLegenda = (
+    cat: 'cancel' | 'denegada' | 'agrupado' | 'cobranca' | 'sem' | 'fechamento_semana',
+  ) => {
+    if (cat === 'fechamento_semana') {
+      // Filtro client-side (marcador tipo_fechamento já vem na fatura).
+      setFiltroFechamento((v) => !v);
+      return;
+    }
     if (cat === 'cancel') {
       const n = filtroStatusNFe === 'canceladas' ? 'todas' : 'canceladas';
       setFiltroStatusNFe(n as any);
@@ -470,6 +493,7 @@ export default function ConsultaFaturasPage() {
     ['cancel', 'Cancelado', 'bg-rose-500', filtroStatusNFe === 'canceladas'],
     ['denegada', 'Denegada', 'bg-amber-400', filtroStatusNFe === 'denegadas'],
     ['agrupado', 'Agrupado', 'bg-blue-500', filtroAgrupadas === 'agrupadas'],
+    ['fechamento_semana', 'Faturamento na Semana', 'bg-purple-600', filtroFechamento],
     ['cobranca', 'Com cobrança', 'bg-emerald-500', filtroCobranca === 'com'],
     ['sem', 'Sem cobrança', 'bg-pink-500', filtroCobranca === 'sem'],
   ] as [any, string, string, boolean][];
@@ -487,6 +511,7 @@ export default function ConsultaFaturasPage() {
           <span className="w-2 h-2 rounded-full bg-rose-500" />
           <span className="w-2 h-2 rounded-full bg-amber-400" />
           <span className="w-2 h-2 rounded-full bg-blue-500" />
+          <span className="w-2 h-2 rounded-full bg-purple-600" />
           <span className="w-2 h-2 rounded-full bg-emerald-500" />
           <span className="w-2 h-2 rounded-full bg-pink-500" />
         </span>
@@ -658,7 +683,13 @@ export default function ConsultaFaturasPage() {
         {/* Toolbar (Tipo + Período) foi para o HEADER da tabela (headerLeftSlot),
             junto da busca e do Opções — barra única, mais espaço pra grade. */}
         <DataTableFaturasAvancado
-          faturas={faturas}
+          faturas={
+            filtroFechamento
+              ? faturas.filter(
+                  (f: any) => String(f.tipo_fechamento || '').toUpperCase() === 'SEMANAL',
+                )
+              : faturas
+          }
           meta={meta}
           carregando={carregando}
           colunasFiltro={[
@@ -736,6 +767,7 @@ export default function ConsultaFaturasPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {ConfirmacaoSalvarModal}
     </div>
   );
 }

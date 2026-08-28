@@ -39,6 +39,8 @@ interface Props {
   onEmitirNotaClick: () => void;
   onVisualizarBoletosClick: () => void;
   onReciboClick: () => void;
+  /** Abre o Resumo GP (relatório do grupo). Habilitado só quando a fatura é agrupada. */
+  onResumoGpClick?: () => void;
   onVerProdutosClick?: () => void;
   onEventoClick?: () => void;
   onCartaCorrecaoClick?: () => void;
@@ -64,6 +66,7 @@ export default function DropdownFatura({
   onEmitirNotaClick,
   onVisualizarBoletosClick,
   onReciboClick,
+  onResumoGpClick,
   onVerProdutosClick,
   onEventoClick,
   onCartaCorrecaoClick,
@@ -347,6 +350,22 @@ export default function DropdownFatura({
           <DollarSign className="size-4 text-blue-700 group-hover:text-white transition" />
           Visualizar Boletos
         </DropdownMenuItem>
+        {onResumoGpClick && (
+          <DropdownMenuItem
+            onClick={onResumoGpClick}
+            // Resumo GP (relatório do grupo) — só faz sentido em fatura agrupada.
+            disabled={fatura.agp !== 'S'}
+            title={
+              fatura.agp !== 'S'
+                ? 'Disponível apenas para faturas agrupadas (GP)'
+                : 'Abrir o Resumo do Grupo de Pagamento (GP)'
+            }
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-purple-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <FileText className="size-4 text-purple-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Resumo GP
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onClick={onReciboClick}
           disabled={String(fatura.frmfat ?? '') !== '1'}

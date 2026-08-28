@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import jsPDF from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import ModalFormulario from '@/components/common/modalform';
@@ -57,6 +58,17 @@ export default function ModalCobranca({
   fatura,
   onCobrancaSalva,
 }: Props) {
+  // Alerta/erro no MODAL CENTRAL padrão (nunca toast no canto).
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  const avisoErro = (msg: any, opts?: { id?: string; title?: string } | any) => {
+    if (opts?.id) toast.dismiss(opts.id);
+    pedirConfirmacao(() => {}, {
+      somenteOk: true,
+      type: 'warning',
+      title: opts?.title || 'Atenção',
+      message: String(msg ?? 'Ocorreu um erro.'),
+    });
+  };
   const [bancos, setBancos] = useState<Banco[]>([]);
   const [tiposDocumentoOriginais, setTiposDocumentoOriginais] = useState<
     string[]
@@ -118,7 +130,7 @@ export default function ModalCobranca({
         })
         .catch((err) => {
           console.error('Erro ao buscar dados da empresa:', err);
-          toast.error('Não foi possível carregar os dados da empresa.');
+          avisoErro('Não foi possível carregar os dados da empresa.');
         });
 
       const codcli = fatura.codcli || fatura.cliente?.codcli;
@@ -130,10 +142,10 @@ export default function ModalCobranca({
           })
           .catch((err) => {
             console.error(`Erro ao buscar cliente ${codcli}:`, err);
-            toast.error('Dados do cliente (sacado) não encontrados.');
+            avisoErro('Dados do cliente (sacado) não encontrados.');
           });
       } else {
-        toast.warning('Código do cliente não encontrado na fatura.');
+        avisoErro('Código do cliente não encontrado na fatura.');
       }
 
       setTotais({
@@ -545,10 +557,10 @@ export default function ModalCobranca({
 
   const handleGerarPreview = () => {
     if (parcelas.length === 0) {
-      return toast.error('Adicione ao menos uma parcela para gerar o preview.');
+      return avisoErro('Adicione ao menos uma parcela para gerar o preview.');
     }
     if (!dadosEmpresa || !dadosSacado) {
-      return toast.error(
+      return avisoErro(
         'Aguarde o carregamento dos dados da empresa e do cliente.',
       );
     }
@@ -582,7 +594,7 @@ export default function ModalCobranca({
       onCobrancaSalva?.();
       onClose();
     } catch (err) {
-      toast.error('Erro ao salvar cobrança.');
+      avisoErro('Erro ao salvar cobrança.');
       console.error(err);
     }
   };
@@ -603,10 +615,12 @@ export default function ModalCobranca({
     try {
       toast.success('Cobrança enviada  para o email do cliente com sucesso!');
     } catch (error: any) {
-      toast.error('error ao  enviar cobrança para o email do cliente.');
+      avisoErro('error ao  enviar cobrança para o email do cliente.');
     }
   };
   return (
+    <>
+    {ConfirmacaoSalvarModal}
     <ModalFormulario
       titulo={`Gerar Cobrança - Fatura ${
         fatura.nrovenda || fatura.codfat || fatura.nroform || ''
@@ -766,7 +780,7 @@ export default function ModalCobranca({
                     onClick={() => {
                       const dias = parseInt(form.prazoSelecionado);
                       if (!dias || dias <= 0)
-                        return toast.error('Insira um prazo válido em dias.');
+                        return avisoErro('Insira um prazo válido em dias.');
                       const vencimento = new Date();
                       vencimento.setDate(vencimento.getDate() + dias);
                       setParcelas([
@@ -810,5 +824,6 @@ export default function ModalCobranca({
         )
       }
     />
+    </>
   );
 }

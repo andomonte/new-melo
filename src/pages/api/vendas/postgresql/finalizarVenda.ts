@@ -392,11 +392,13 @@ async function insertPgVenda(
        operacao, codvenda, codusr, codvend, nrovenda, codcli, data, total, nronf, pedido,
        status, transp, prazo, obs, tipo_desc, tipo, tele, cancel, statusest, impresso,
        vlrfrete, codtptransp, bloqueada, estoque_virtual, numeroserie, numerocupom,
-       obsfat, localentregacliente, statuspedido, dtupdate, cnpj_empresa, ie_empresa
+       obsfat, localentregacliente, statuspedido, dtupdate, cnpj_empresa, ie_empresa,
+       forma_pgto
      ) VALUES (
        $1,$2,$3,$4,$5,$6,NOW() AT TIME ZONE '${filialTz}',$7,NULL,$8,
        $9,$10,$11,$12,$13,$14,$15,'N',NULL,'N',
-       $16,$17,'0','N',$18,NULL,$19,$20, 1, NOW() AT TIME ZONE '${filialTz}', $21, $22
+       $16,$17,'0','N',$18,NULL,$19,$20, 1, NOW() AT TIME ZONE '${filialTz}', $21, $22,
+       $23
      )`,
     [
       h.operacao ?? null,
@@ -421,6 +423,9 @@ async function insertPgVenda(
       h.localentregacliente ?? null,
       empresaData.cnpj,
       empresaData.ie,
+      // Forma REAL selecionada (aditivo): a mesma que já chega em formaPagamento e antes
+      // era só usada pro obsfat. Persistir aqui NÃO altera o comportamento existente.
+      h.formaPagamento ? String(h.formaPagamento).slice(0, 30) : null,
     ],
   );
 

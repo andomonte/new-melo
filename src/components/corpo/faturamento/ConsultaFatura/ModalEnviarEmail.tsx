@@ -13,6 +13,8 @@ interface Props {
   numeroNota?: string;
   /** 'danfe' anexa a DANFE; 'cobranca' anexa o boleto (futuro). */
   tipo?: 'danfe' | 'cobranca';
+  /** Código do grupo de pagamento — quando presente, anexa o "Resumo GP" à cobrança. */
+  codgp?: string | number | null;
 }
 
 /**
@@ -28,8 +30,10 @@ export default function ModalEnviarEmail({
   nomeCliente,
   numeroNota,
   tipo = 'danfe',
+  codgp,
 }: Props) {
   const tituloDoc = tipo === 'cobranca' ? 'Cobrança' : 'DANFE';
+  const ehGrupo = codgp != null && String(codgp).trim() !== '';
   const [destinatarios, setDestinatarios] = useState<string[]>([]);
   const [novoEmail, setNovoEmail] = useState('');
   const [assunto, setAssunto] = useState('');
@@ -86,10 +90,26 @@ export default function ModalEnviarEmail({
         });
         const gbd = await gb.json();
         if (!gb.ok || !gbd.boleto) throw new Error(gbd.details || gbd.error || 'Falha ao gerar o boleto.');
+        // Cobrança de grupo (GP): gera também o Resumo GP para anexar junto do boleto.
+        let resumoGpBase64: string | undefined;
+        if (ehGrupo) {
+          const rg = await fetch(`/api/faturamento/resumo-gp-pdf?codgp=${encodeURIComponent(String(codgp))}`);
+          const rgd = await rg.json();
+          if (!rg.ok || !rgd.pdf) throw new Error(rgd.detalhes || rgd.erro || 'Falha ao gerar o Resumo GP.');
+          resumoGpBase64 = rgd.pdf;
+        }
         const resp = await fetch('/api/faturamento/enviar-cobranca-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codfat, destinatarios, assunto, mensagem, boletoBase64: gbd.boleto }),
+          body: JSON.stringify({
+            codfat,
+            destinatarios,
+            assunto,
+            mensagem,
+            boletoBase64: gbd.boleto,
+            resumoGpBase64,
+            codgp: ehGrupo ? codgp : undefined,
+          }),
         });
         const d = await resp.json();
         if (!resp.ok) throw new Error(d.detalhes || d.erro || 'Falha ao enviar.');
@@ -191,10 +211,18 @@ export default function ModalEnviarEmail({
           {/* Anexos */}
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {tipo === 'cobranca' ? (
-              <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
-                <Paperclip size={14} className="text-gray-500" />
-                Boleto.pdf
-              </span>
+              <>
+                <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
+                  <Paperclip size={14} className="text-gray-500" />
+                  Boleto.pdf
+                </span>
+                {ehGrupo && (
+                  <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
+                    <Paperclip size={14} className="text-gray-500" />
+                    Resumo-GP-{String(codgp)}.pdf
+                  </span>
+                )}
+              </>
             ) : (
               <>
                 <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
