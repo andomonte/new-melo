@@ -35,6 +35,22 @@ async function criarGrupoPagamento(req: NextApiRequest, res: NextApiResponse) {
     return res.status(400).json({ error: 'Código do cliente é obrigatório.' });
   }
 
+  // REGRA (fiel ao Delphi "Gerar Cobrança Posterior"): a cobrança é dirigida pelos prazos
+  // → sem parcela, não há título (CALCULAR_PARCELAS conta dbpzfataux). Se a intenção é
+  // gerar cobrança (cobranca_dados presente), exige ao menos uma parcela — senão criaria
+  // um GP com cobranca='S' e ZERO títulos (estado quebrado).
+  if (cobranca_dados != null) {
+    const parcelasCob = Array.isArray(cobranca_dados.parcelas)
+      ? cobranca_dados.parcelas
+      : [];
+    if (parcelasCob.length === 0) {
+      return res.status(400).json({
+        error:
+          'Gere ao menos uma parcela para a cobrança (informe intervalo + quantidade e clique em "Gerar parcelas").',
+      });
+    }
+  }
+
   const client = await getPgPool().connect();
 
   try {

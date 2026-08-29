@@ -578,6 +578,16 @@ export default async function handler(
         [codvenda],
       );
 
+      // Registra o FATURAMENTO em dbfecharvendas — espelha FATURA.Fechar_Venda(codvenda,
+      // codfat, dataFat, '1'): status '1' = FATURADO (NF-e), com o codfat da fatura e a
+      // MESMA data gravada na dbfatura (igual ao Delphi: vDataFat = dbFatura.Data).
+      // É o registro que os relatórios de custo (ANALISE_CUSTO.FATURADOS) leem via codfat.
+      await client.query(
+        `INSERT INTO dbfecharvendas (codvenda, codfat, data, status)
+         VALUES ($1, $2, $3, '1')`,
+        [codvenda, novoCodfat, data],
+      );
+
       console.log(
         `✅ Status da venda ${codvenda} atualizado para 'F' (faturado) - Fatura: ${novoCodfat}`,
       );

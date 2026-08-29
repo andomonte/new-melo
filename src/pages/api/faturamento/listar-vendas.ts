@@ -40,6 +40,9 @@ export default async function handler(
   const termoBusca = (req.query.search as string) || '';
   // Usuário atual: usado só para marcar quais reservas são de OUTRAS pessoas.
   const usuarioAtual = (req.query.usuario as string) || '';
+  // modo='fechadas' → lista vendas fechadas administrativamente (status='F' com registro
+  // em dbfecharvendas de codfat NULL, ou seja, reversíveis via "Voltar Venda"). Padrão: a faturar.
+  const modo = (req.query.modo as string) || 'faturar';
 
   let filtros: any[] = [];
   try {
@@ -54,10 +57,15 @@ export default async function handler(
   const filtrosGlobais = filtros.filter((f) => f.global);
   const filtrosNormais = filtros.filter((f) => !f.global);
 
-  const whereAND: string[] = [
-    `v.status NOT IN ('F', 'B', 'C')`,
-    `v.cancel = 'N'`,
-  ];
+  const whereAND: string[] =
+    modo === 'fechadas'
+      ? [
+          `v.status = 'F'`,
+          `v.cancel = 'N'`,
+          // só as fechadas ADMINISTRATIVAMENTE (reversíveis): têm registro codfat NULL.
+          `EXISTS (SELECT 1 FROM dbfecharvendas fv WHERE fv.codvenda = v.codvenda AND fv.codfat IS NULL)`,
+        ]
+      : [`v.status NOT IN ('F', 'B', 'C')`, `v.cancel = 'N'`];
   const whereOR: string[] = [];
 
   // Busca global por termo (pesquisa em múltiplos campos)

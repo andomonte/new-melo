@@ -70,7 +70,7 @@ export function useConfirmarSalvar(opcoes?: OpcoesConfirmarSalvar) {
       title={ef.title ?? 'Confirmar'}
       message={ef.message ?? 'Deseja realmente salvar os dados informados?'}
       type={ef.type ?? 'info'}
-      confirmText={ef.confirmText ?? 'Sim, salvar'}
+      confirmText={ef.confirmText ?? (ef.somenteOk ? 'OK' : 'Sim, salvar')}
       cancelText={ef.cancelText ?? 'Cancelar'}
       hideCancel={ef.somenteOk}
     />

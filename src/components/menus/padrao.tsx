@@ -88,7 +88,6 @@ import DashboardFinanceiro from '@/components/common/DashboardFinanceiro';
 import HistoricoNF from '@/components/corpo/faturamento/historicoNF';
 import NovoFaturamento from '@/components/corpo/faturamento/novoFaturamento';
 import ConsultaFaturasPage from '../corpo/faturamento/ConsultaFatura/ConsultaFatura';
-import FecharVendas from '../corpo/faturamento/FecharVendas';
 
 // Vendas / Operacional - Lazy loading para componentes pesados
 const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
@@ -608,12 +607,8 @@ export const menus = [
             icon: LiaFileInvoiceSolid,
             corpo: HistoricoNF,
           },
-          {
-            name: 'Fechar Vendas',
-            href: '/faturamento/FecharVendas',
-            icon: LockIcon,
-            corpo: FecharVendas,
-          },
+          // "Fechar Vendas" virou ação no Novo Faturamento (fecha as vendas selecionadas).
+          // Tela dedicada aposentada — endpoint fechar-vendas.ts reutilizado lá.
         ],
       },
 

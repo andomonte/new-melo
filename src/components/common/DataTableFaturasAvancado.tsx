@@ -143,9 +143,32 @@ export default function DataTableFaturasAvancado({
     }
   };
   
+  // Validação ANTECIPADA (fiel ao NAVEGA_GP do Delphi, que nem lista GP não-operável):
+  // antes de abrir a tela/confirm de qualquer operação de GP, checa VALIDA_COBRANCA_GP e,
+  // se bloqueado, mostra o motivo específico (recebido/registrado/vencido) e não prossegue.
+  const checarGpOperavel = async (codgp: any): Promise<boolean> => {
+    try {
+      const { data } = await axios.get(
+        `/api/faturamento/validar-gp?codgp=${encodeURIComponent(String(codgp))}`,
+      );
+      if (!data?.operavel) {
+        avisoErro(
+          data?.motivo ||
+            'Este grupo não pode ser alterado (cobrança recebida/registrada/vencida).',
+        );
+        return false;
+      }
+      return true;
+    } catch (e: any) {
+      avisoErro(e?.response?.data?.erro || 'Erro ao validar o grupo.');
+      return false;
+    }
+  };
+
   // Desagrupar uma GP (regras do Delphi AGRUPAMENTO.GP_DESAGRUPAR): libera as faturas
   // (codgp=NULL, agp='N'), cancela a cobrança agrupada e remove a fatura-GP sintética.
-  const handleDesagrupar = (codgp: any) => {
+  const handleDesagrupar = async (codgp: any) => {
+    if (!(await checarGpOperavel(codgp))) return;
     pedirConfirmacao(
       async () => {
         const tId = toast.loading('Desagrupando GP...');
@@ -173,6 +196,93 @@ export default function DataTableFaturasAvancado({
         cancelText: 'Cancelar',
       },
     );
+  };
+
+  // Remover Fatura do GP (fiel ao GP_REMOVER_FATURA): tira as faturas SELECIONADAS do grupo
+  // e recalcula a cobrança das restantes. Trava (servidor): precisa sobrar >=2 faturas.
+  const handleRemoverFaturaGp = async (codgp: any, codfatsSel: string[]) => {
+    if (!(await checarGpOperavel(codgp))) return;
+    pedirConfirmacao(
+      async () => {
+        const tId = toast.loading('Removendo do grupo...');
+        try {
+          const { data } = await axios.post(
+            '/api/faturamento/remover-fatura-grupo',
+            { codgp, codfats: codfatsSel, usuario: user?.usuario || '' },
+          );
+          toast.success(
+            `${data.removidas?.length ?? 0} fatura(s) removida(s). Cobrança recalculada (${data.parcelasRecriadas ?? 0} parcela(s)).`,
+            { id: tId },
+          );
+          setFaturasSelecionadas([]);
+          onAtualizarLista?.();
+        } catch (err: any) {
+          toast.dismiss(tId);
+          avisoErro(err?.response?.data?.erro || 'Erro ao remover fatura do grupo.');
+        }
+      },
+      {
+        type: 'warning',
+        title: 'Remover Fatura do Grupo',
+        message:
+          `Remover ${codfatsSel.length} fatura(s) do grupo GP ${codgp}?\n\n` +
+          'As faturas voltam a ser individuais e a cobrança das restantes é recalculada. (Precisa sobrar ao menos 2 no grupo — senão use Desagrupar.)',
+        confirmText: 'Sim, remover',
+        cancelText: 'Cancelar',
+      },
+    );
+  };
+
+  // Alterar Prazo do GP (fiel ao GP_ALTERAR): reabre o editor de cobrança pré-carregado
+  // com a config atual; ao salvar, cancela e recria a cobrança do grupo com os novos prazos.
+  const handleAlterarPrazoGp = async (codgp: any) => {
+    if (!(await checarGpOperavel(codgp))) return; // valida antes de abrir a tela
+    const tId = toast.loading('Carregando cobrança do grupo...');
+    try {
+      const { data } = await axios.get(
+        `/api/faturamento/alterar-prazo-gp?codgp=${encodeURIComponent(String(codgp))}`,
+      );
+      toast.dismiss(tId);
+      const fatura = faturas.find((f) => String(f.codgp) === String(codgp));
+      // Popula a lista de bancos exibida (senão o select fica vazio) com o banco do GP.
+      const bancoGp =
+        bancosTodos.find((b) => String(b.banco) === String(data.banco)) ??
+        bancosTodos.find((b) => (b.nome || '').toUpperCase() === 'MELO');
+      setBancos(bancoGp ? [bancoGp] : []);
+      const tipoMap: Record<string, string> = {
+        '1': 'RECIBO',
+        '2': 'BOLETO',
+        '3': 'PROMISSÓRIA',
+        '4': 'CARTEIRA',
+        '6': 'CARTÃO',
+      };
+      const tipoLabel = tipoMap[String(data.tipofat)] || 'CARTEIRA';
+      setFormCobranca((prev) => ({
+        ...prev,
+        banco: bancoGp?.banco ?? String(data.banco || ''),
+        tipoFatura: tipoLabel,
+      }));
+      setParcelas(
+        (data.parcelas || []).map((p: any) => ({
+          dias: Number(p.dias) || 0, // prazo original vindo do GET (dt_venc − dt_emissao)
+          vencimento: p.vencimento,
+          valor: Number(p.valor) || 0,
+        })),
+      );
+      setCobrancaModalAberto({
+        __alterarGpCodgp: codgp,
+        cliente_nome: fatura?.cliente_nome || fatura?.nome,
+        codcli: fatura?.codcli,
+        nroform: `GP ${codgp}`,
+        totalnf: (data.parcelas || []).reduce(
+          (s: number, p: any) => s + (Number(p.valor) || 0),
+          0,
+        ),
+      });
+    } catch (err: any) {
+      toast.dismiss(tId);
+      avisoErro(err?.response?.data?.erro || 'Erro ao carregar a cobrança do grupo.');
+    }
   };
 
   const handleCriarGrupoPagamento = async () => {
@@ -347,28 +457,22 @@ export default function DataTableFaturasAvancado({
   const [tiposDocumentoOriginais, setTiposDocumentoOriginais] = useState<
     { codigo: string; descricao: string }[]
   >([]);
-  // Opções de "Tipo de Fatura/Documento" DINÂMICAS pelo banco — idênticas à cobrança
-  // agrupada (GP): MELO → CARTEIRA + todos os tipos (carteira, dinheiro, cartão, boleto,
-  // pix, outros); banco do cliente → só BOLETO.
+  // Opções de "Tipo de Fatura/Documento" na COBRANÇA (posterior/agrupada) — FIEL AO FRONT
+  // do Delphi (UnitFrmGerarTitulosPosteriores: RbBanco_FormaFat):
+  //   - banco MELO  → só CARTEIRA (padrão), PROMISSÓRIA e RECIBO;
+  //   - banco real  → forma travada em BOLETO.
   const opcoesTipoFatura = useMemo(() => {
     if (!formCobranca.banco) return [];
     const bancoSel = bancos.find((b) => b.banco === formCobranca.banco);
     if ((bancoSel?.nome || '').toUpperCase() === 'MELO') {
-      // MELO nunca gera BOLETO (fiel ao Delphi INFORMACAO_FINANCEIRA: boleto exige banco
-      // real, que produz nosso número). MELO → carteira/cartão/dinheiro/pix/recibo/etc.
-      const carteira = { codigo: 'W', descricao: 'CARTEIRA' };
-      const todas = [carteira, ...tiposDocumentoOriginais].filter(
-        (doc) => (doc.descricao || '').toUpperCase() !== 'BOLETO',
-      );
-      const unicas = todas.reduce((acc, doc) => {
-        if (!acc.find((x) => x.codigo === doc.codigo)) acc.push(doc);
-        return acc;
-      }, [] as typeof todas);
-      return unicas.map((doc) => ({ value: doc.descricao, label: doc.descricao }));
+      return [
+        { value: 'CARTEIRA', label: 'CARTEIRA' }, // ItemIndex 0 (default) → forma_fat 4
+        { value: 'PROMISSÓRIA', label: 'PROMISSÓRIA' }, // ItemIndex 1 → forma_fat 3
+        { value: 'RECIBO', label: 'RECIBO' }, // ItemIndex 2 → forma_fat 1
+      ];
     }
-    // Banco real (Bradesco/Santander/…) → forma forçada a BOLETO.
     return [{ value: 'BOLETO', label: 'BOLETO' }];
-  }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
+  }, [formCobranca.banco, bancos]);
 
   // Se o tipo atual sair das opções (ex.: trocou p/ MELO e 'BOLETO' saiu da lista),
   // reajusta para a 1ª opção válida — evita ficar com forma inválida selecionada.
@@ -482,7 +586,7 @@ export default function DataTableFaturasAvancado({
 
   // Alterar Cobrança (fiel ao Delphi + salvaguardas): reabre a tela de cobrança;
   // ao salvar, cancela os títulos atuais e gera os novos.
-  const handleAlterarCobranca = (f: any) => {
+  const handleAlterarCobranca = async (f: any) => {
     if (f.codgp || f.agp === 'S') {
       pedirConfirmacao(() => {}, {
         somenteOk: true,
@@ -499,6 +603,27 @@ export default function DataTableFaturasAvancado({
         type: 'warning',
         title: 'Cobrança paga',
         message: 'Cobrança com parcela paga não pode ser alterada.',
+      });
+      return;
+    }
+    // Aviso "só à vista" (fiel ao Delphi VERIFICA_VENDAAVISTA + claspgto): se a fatura é à
+    // vista, avisa; ao clicar OK, abre o editor mesmo assim (igual ao Delphi).
+    let avista = false;
+    try {
+      const { data } = await axios.get(
+        `/api/faturamento/verifica-avista?codfat=${f.codfat}`,
+      );
+      avista = !!data?.avista;
+    } catch {
+      /* sem o dado, segue sem o aviso */
+    }
+    if (avista) {
+      pedirConfirmacao(() => abrirModalCobranca(f, true), {
+        somenteOk: true,
+        type: 'warning',
+        title: 'Fatura à vista',
+        message:
+          'Esta fatura é à vista — a cobrança deve ser à vista (parcela única).',
       });
       return;
     }
@@ -1713,12 +1838,39 @@ const handleCancelarNota = async () => {
                       : `${faturasSelecionadas.length} fatura(s) selecionada(s) para agrupamento`}
                   </span>
                   {selGp ? (
-                    <button
-                      onClick={() => handleDesagrupar(selGp)}
-                      className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
-                    >
-                      Desagrupar GP {selGp}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleAlterarPrazoGp(selGp)}
+                        className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors"
+                        title="Cancela e recria a cobrança do grupo com novos prazos"
+                      >
+                        Alterar Prazo GP
+                      </button>
+                      <button
+                        onClick={() =>
+                          handleRemoverFaturaGp(
+                            selGp,
+                            faturas
+                              .filter(
+                                (x: any) =>
+                                  faturasSelecionadas.includes(x.codfat) &&
+                                  String(x.codgp) === String(selGp),
+                              )
+                              .map((x: any) => x.codfat),
+                          )
+                        }
+                        className="px-3 py-1 bg-rose-600 text-white rounded hover:bg-rose-700 transition-colors"
+                        title="Remove a(s) fatura(s) selecionada(s) do grupo e recalcula a cobrança"
+                      >
+                        Remover Fatura GP
+                      </button>
+                      <button
+                        onClick={() => handleDesagrupar(selGp)}
+                        className="px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+                      >
+                        Desagrupar GP {selGp}
+                      </button>
+                    </div>
                   ) : (
                     <button
                       onClick={handleCriarGrupoPagamento}
@@ -2419,7 +2571,13 @@ const handleCancelarNota = async () => {
           <Dialog open={!!cobrancaModalAberto} onOpenChange={() => setCobrancaModalAberto(null)}>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Gerar Cobrança</DialogTitle>
+                <DialogTitle>
+                  {cobrancaModalAberto.__alterarGpCodgp
+                    ? `Alterar Prazo — GP ${cobrancaModalAberto.__alterarGpCodgp}`
+                    : alterandoCobranca
+                      ? 'Alterar Cobrança'
+                      : 'Gerar Cobrança'}
+                </DialogTitle>
               </DialogHeader>
               {/* Cabeçalho igual ao da cobrança agrupada: cliente destacado + documentos (NF). */}
               <div className="rounded-lg border border-gray-200 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800/50 px-4 py-3 mb-1">
@@ -2462,6 +2620,30 @@ const handleCancelarNota = async () => {
                             avisoErro('Gere ao menos uma parcela antes de salvar.');
                             return;
                           }
+                          // ALTERAR PRAZO GP: cancela e recria a cobrança do grupo inteiro.
+                          if (cobrancaModalAberto.__alterarGpCodgp) {
+                            const resp = await axios.post('/api/faturamento/alterar-prazo-gp', {
+                              codgp: cobrancaModalAberto.__alterarGpCodgp,
+                              usuario: user?.usuario || '',
+                              cobranca_dados: {
+                                banco: formCobranca.banco,
+                                tipofat: formCobranca.tipoFatura,
+                                parcelas: parcelas.map((p) => ({
+                                  vencimento: p.vencimento,
+                                  valor: p.valor,
+                                  dias: Number((p as any).dias) || 0,
+                                })),
+                              },
+                            });
+                            if (resp.status === 200) {
+                              toast.success('Prazo do GP alterado com sucesso!');
+                              setCobrancaModalAberto(null);
+                              setParcelas([]);
+                              setFaturasSelecionadas([]);
+                              if (onAtualizarLista) onAtualizarLista();
+                            }
+                            return;
+                          }
                           // Payload no formato que /salvar-cobranca espera:
                           // codcli + tipofat + parcelas com { vencimento, valor }.
                           const dadosCobranca = {
@@ -2498,7 +2680,8 @@ const handleCancelarNota = async () => {
                         } catch (error: any) {
                           console.error('Erro ao salvar cobrança:', error);
                           avisoErro(
-                            error.response?.data?.error ||
+                            error.response?.data?.erro ||
+                              error.response?.data?.error ||
                               error.response?.data?.message ||
                               'Erro ao gerar cobrança',
                           );

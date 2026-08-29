@@ -722,8 +722,18 @@ export default function FaturamentoNota({
     if (!formCobranca.banco) return [];
     const bancoSelecionado = bancos.find((b) => b.banco === formCobranca.banco);
     if (bancoSelecionado?.nome === 'MELO') {
-      // MELO nunca gera BOLETO (fiel ao Delphi INFORMACAO_FINANCEIRA: boleto exige banco
-      // real, que produz nosso número). MELO → carteira/cartão/dinheiro/pix/recibo/etc.
+      // GP AGRUPADA → fiel ao front do Delphi "Gerar Cobrança Posterior"
+      // (UnitFrmGerarTitulosPosteriores.RbBanco_FormaFat): banco MELO só oferece
+      // CARTEIRA (padrão), PROMISSÓRIA e RECIBO. Boleto/cartão/pix/dinheiro NÃO existem lá.
+      if (agrupandoFaturas) {
+        return [
+          { value: 'CARTEIRA', label: 'CARTEIRA' },
+          { value: 'PROMISSÓRIA', label: 'PROMISSÓRIA' },
+          { value: 'RECIBO', label: 'RECIBO' },
+        ];
+      }
+      // Faturamento INDIVIDUAL: MELO nunca gera BOLETO, mas permite as formas à vista
+      // (carteira/cartão/dinheiro/pix/…) — reflete a forma real da venda.
       const carteira = { codigo: 'W', descricao: 'CARTEIRA' };
       const todasOpcoes = [carteira, ...tiposDocumentoOriginais].filter(
         (doc) => (doc.descricao || '').toUpperCase() !== 'BOLETO',
@@ -744,7 +754,7 @@ export default function FaturamentoNota({
     }
     // Banco real (Bradesco/Santander/…) → forma forçada a BOLETO.
     return [{ value: 'BOLETO', label: 'BOLETO' }];
-  }, [formCobranca.banco, tiposDocumentoOriginais, bancos]);
+  }, [formCobranca.banco, tiposDocumentoOriginais, bancos, agrupandoFaturas]);
 
   // Se o tipo atual sair das opções (ex.: banco MELO tira 'BOLETO' da lista), reajusta
   // para a 1ª opção válida (CARTEIRA) — evita ficar com forma inválida selecionada.
@@ -1135,6 +1145,15 @@ export default function FaturamentoNota({
         .filter(Boolean);
       console.log('🔗 Faturas para agrupar:', codfats);
 
+      // REGRA (fiel ao Delphi): a cobrança é dirigida pelos prazos → sem parcela não há
+      // título. Se o usuário quer cobrança ('S') mas não gerou parcela, BLOQUEIA — senão
+      // criaria um GP com cobranca='S' e ZERO títulos (estado quebrado).
+      if (statusVenda?.cobranca === 'S' && parcelas.length === 0) {
+        throw new Error(
+          'Gere ao menos uma parcela para a cobrança (informe intervalo + quantidade e clique em "Gerar parcelas").',
+        );
+      }
+
       // Cobrança do grupo (fiel ao Delphi TCOBRANCA): banco + tipo + parcelas configurados
       // na tela → gera os títulos dbreceb (codgp) + prazos (dbpzfat) no grupo-pagamento.ts.
       let cobrancaDadosGP: any = null;
@@ -1411,6 +1430,15 @@ export default function FaturamentoNota({
   };
 
   const handleProcessoCompleto = async (faturasAgrupadasParam?: any[]) => {
+    // GUARD (fiel ao Delphi): no GP agrupado, cobrança exige ao menos uma parcela — senão
+    // criaria um GP com cobranca='S' e ZERO títulos. Avisa ANTES de abrir o progresso.
+    if (agrupandoFaturas && statusVenda?.cobranca === 'S' && parcelas.length === 0) {
+      avisoErro(
+        'Gere ao menos uma parcela para a cobrança (informe intervalo + quantidade e clique em "Gerar parcelas").',
+      );
+      return;
+    }
+
     // Progresso agora em modal in-page (renderModalEmissao) — NÃO abre nova janela.
     // Sentinela mantém válidas as verificações antigas de "janela" sem popup.
     const pdfWindow: any = {

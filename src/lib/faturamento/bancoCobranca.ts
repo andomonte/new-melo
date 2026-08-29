@@ -57,3 +57,16 @@ export function codBancoDbfatura(codDropdown: string | number | null | undefined
   const k = normalizarDropdown(codDropdown);
   return k ? MAPA_BANCO[k].codBanco : null;
 }
+
+/**
+ * Reverso: código INTERNO do dbreceb.banco → código do dropdown (dbbanco_cobranca).
+ * Usado ao RECRIAR a cobrança de um GP (alterar prazo / remover fatura), quando só temos
+ * o interno gravado nos títulos e precisamos alimentar o inserirCobrancaGP (que espera o
+ * dropdown). Ex.: interno '9' (MELO) → '5'.
+ */
+export function dropdownDeBancoInterno(interno: string | number | null | undefined): string | null {
+  if (interno === null || interno === undefined || String(interno).trim() === '') return null;
+  const alvo = String(interno).trim();
+  const entrada = Object.entries(MAPA_BANCO).find(([, v]) => v.interno === alvo);
+  return entrada ? entrada[0] : null;
+}
