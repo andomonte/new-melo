@@ -193,7 +193,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             WHEN r.dt_venc < CURRENT_DATE AND (r.rec IS NULL OR r.rec != 'S')
             THEN CURRENT_DATE - r.dt_venc
             ELSE 0
-          END as dias_atraso
+          END as dias_atraso,
+          -- Parcela X/N: títulos da MESMA fatura (cod_fat) são as parcelas; o nº da parcela
+          -- vem da ordem por vencimento (o nro_doc traz o sufixo A/B/C…). Títulos avulsos
+          -- (sem cod_fat) ficam 1/1 (partição própria pelo cod_receb).
+          ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(r.cod_fat, 'AV' || CAST(r.cod_receb AS TEXT))
+            ORDER BY r.dt_venc, r.nro_doc, r.cod_receb
+          ) AS parcela_num,
+          COUNT(*) OVER (
+            PARTITION BY COALESCE(r.cod_fat, 'AV' || CAST(r.cod_receb AS TEXT))
+          ) AS parcela_total
         FROM dbreceb r
         LEFT JOIN dbclien c ON c.codcli = r.codcli
         LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
@@ -255,28 +265,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const total = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(total / parseInt(limit as string));
 
-    // Formatar dados de resposta - MOSTRAR CADA PARCELA INDIVIDUALMENTE
-    const contasFormatadas = await Promise.all(result.rows.map(async row => {
-      // Extrair número da parcela do campo nro_doc (formato: "base/01", "base/02")
-      let parcela_atual = null;
-      let qtd_parcelas = null;
-      
-      if (row.nro_doc && row.nro_doc.includes('/')) {
-        const partes = row.nro_doc.split('/');
-        const base = partes[0]; // base do nro_doc
-        const numParcela = parseInt(partes[1]); // "01" -> 1
-        
-        // Buscar total de parcelas com mesmo base
-        const totalParcelasResult = await pool.query(
-          `SELECT COUNT(*) as total FROM dbreceb WHERE nro_doc LIKE $1`,
-          [`${base}/%`]
-        );
-        const totalParcelas = parseInt(totalParcelasResult.rows[0].total);
-        
-        // Formato: "1 de 2", "2 de 2"
-        parcela_atual = `${numParcela} de ${totalParcelas}`;
-        qtd_parcelas = totalParcelas;
-      }
+    // Formatar dados de resposta - MOSTRAR CADA PARCELA INDIVIDUALMENTE.
+    // Parcela X/N vem das window functions (por cod_fat) — sem query por linha.
+    const contasFormatadas = result.rows.map(row => {
+      const parcela_total = parseInt(row.parcela_total || 1);
+      const parcela_num = parseInt(row.parcela_num || 1);
+      const parcela_atual = `${parcela_num}/${parcela_total}`; // ex.: "1/6"
+      const qtd_parcelas = parcela_total;
 
       return {
         id: row.id,
@@ -304,11 +299,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         grupo_pagamento_id: row.grupo_pagamento_id,
         status: row.status,
         dias_atraso: parseInt(row.dias_atraso || 0),
-        parcela_atual: parcela_atual, // Formato: "1 de 2", "2 de 2"
+        parcela_atual: parcela_atual, // Formato: "1/6", "2/6"
+        parcela_num: parcela_num,
         qtd_parcelas: qtd_parcelas,
-        eh_parcelada: parcela_atual !== null // Se tem parcela, é parcelada
+        eh_parcelada: parcela_total > 1 // Fatura com mais de 1 título = parcelada
       };
-    }));
+    });
 
     // Calcular resumo (usando valor_pgto como valor original a receber)
     const resumoQuery = `

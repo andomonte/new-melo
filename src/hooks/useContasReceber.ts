@@ -37,7 +37,8 @@ export interface ContaReceber {
   // Campos de parcelamento/agrupamento
   eh_parcelada?: boolean;
   qtd_parcelas?: number;
-  parcela_atual?: string;
+  parcela_atual?: string; // Formato "X/N" (ex.: "1/6")
+  parcela_num?: number;   // Nº da parcela dentro da fatura
   valor_rec_total?: number;
   parcelas?: ContaReceber[];
   grupo_pagamento_id?: number | null; // Novo campo do PostgreSQL

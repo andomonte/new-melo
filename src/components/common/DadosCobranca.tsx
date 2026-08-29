@@ -165,9 +165,9 @@ export default function DadosCobranca({
       const venc = new Date(base.getTime());
       venc.setDate(venc.getDate() + acum);
       const util = getProximoDiaUtil(venc);
-      // Resto do arredondamento na ÚLTIMA parcela; extra (impostos/frete) na 1ª.
+      // Resto do arredondamento na PRIMEIRA parcela; extra (impostos/frete) também na 1ª.
       const baseI =
-        i === qtd - 1 ? parcelavel - valorBase * (qtd - 1) : valorBase;
+        i === 0 ? parcelavel - valorBase * (qtd - 1) : valorBase;
       const valor = Number((baseI + (i === 0 ? extra1a : 0)).toFixed(2));
       novas.push({ dias: acum, vencimento: fmtLocal(util), valor });
     }

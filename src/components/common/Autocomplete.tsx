@@ -40,7 +40,13 @@ export function Autocomplete({
   const [modified, setModified] = useState(false);
   const initialValueRef = useRef<string | null | undefined>(undefined);
   const [isResetting, setIsResetting] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Reseta o destaque quando a lista de opções muda.
+  useEffect(() => {
+    setHighlight(-1);
+  }, [opcoes]);
 
   // Reset completo do componente quando resetKey muda
   const prevResetKeyRef = useRef(resetKey);
@@ -103,7 +109,7 @@ export function Autocomplete({
     }
   }, [value, isResetting, initialLabel]);
 
-  const buscarOpcoes = async (termoBusca: string) => {
+  const buscarOpcoes = async (termoBusca: string): Promise<AutocompleteOption[]> => {
     try {
       setCarregando(true);
       const url = termoBusca
@@ -124,12 +130,42 @@ export function Autocomplete({
           setBusca(opcaoEncontrada.label);
         }
       }
+      return opcoesFormatadas;
     } catch (error) {
       console.error('Erro ao buscar opções:', error);
       setOpcoes([]);
+      return [];
     } finally {
       setCarregando(false);
     }
+  };
+
+  // Escolhe a melhor opção para o termo digitado: 1º match exato por código (value),
+  // depois label que começa com o termo, senão a 1ª da lista.
+  const melhorMatch = (lista: AutocompleteOption[], termo: string) => {
+    const t = termo.trim().toLowerCase();
+    if (!t) return lista[0] ?? null;
+    return (
+      lista.find((o) => String(o.value).toLowerCase() === t) ||
+      lista.find((o) => o.label.trim().toLowerCase().startsWith(t)) ||
+      lista[0] ||
+      null
+    );
+  };
+
+  // Enter: se há item destacado, seleciona; senão busca imediatamente (ignora o debounce)
+  // e seleciona o melhor match — permite digitar "111" + Enter sem usar o mouse.
+  const selecionarPorEnter = async () => {
+    if (highlight >= 0 && opcoes[highlight]) {
+      handleSelect(opcoes[highlight]);
+      return;
+    }
+    // Sem item destacado: refaz a busca do termo atual (evita lista defasada pelo debounce)
+    // e seleciona o melhor match.
+    const termo = busca.trim();
+    const lista = await buscarOpcoes(termo);
+    const escolha = melhorMatch(lista, termo);
+    if (escolha) handleSelect(escolha);
   };
 
   const handleSelect = (opcao: AutocompleteOption) => {
@@ -203,6 +239,21 @@ export function Autocomplete({
           value={busca}
           onChange={handleInputChange}
           onFocus={() => setAberto(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              selecionarPorEnter();
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              if (!aberto) setAberto(true);
+              setHighlight((h) => Math.min(h + 1, opcoes.length - 1));
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setHighlight((h) => Math.max(h - 1, 0));
+            } else if (e.key === 'Escape') {
+              setAberto(false);
+            }
+          }}
           disabled={disabled}
           className={`pl-7 pr-7 text-xs h-[30px] ${modified ? '!border-emerald-400 dark:!border-emerald-500/60 !bg-emerald-50/30 dark:!bg-emerald-900/10' : ''}`}
         />
@@ -233,9 +284,10 @@ export function Autocomplete({
                 <button
                   key={index}
                   type="button"
+                  onMouseEnter={() => setHighlight(index)}
                   onClick={() => handleSelect(opcao)}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors ${
-                    opcaoSelecionada?.value === opcao.value ? 'bg-accent' : ''
+                    highlight === index || opcaoSelecionada?.value === opcao.value ? 'bg-accent' : ''
                   }`}
                 >
                   {opcao.label}

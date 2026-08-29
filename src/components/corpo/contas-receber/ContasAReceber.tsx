@@ -21,6 +21,29 @@ import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import { OPCOES_FORMA_FATURA, labelFormaFatura } from '@/lib/faturamento/formaFatura';
+import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
+
+// Data local yyyy-MM-dd (sem shift de timezone).
+const fmtLocalData = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Banco / Forma de Faturar do Novo Título — fiel ao Delphi (UniContasR) e à cobrança GP.
+// value = código do dropdown dbbanco_cobranca (1..9).
+const BANCOS_NOVO_TITULO = [
+  { value: '1', label: 'BRADESCO' },
+  { value: '2', label: 'BANCO DO BRASIL' },
+  { value: '3', label: 'ITAÚ' },
+  { value: '4', label: 'RURAL' },
+  { value: '5', label: 'MELO' },
+  { value: '6', label: 'SANTANDER' },
+  { value: '7', label: 'SAFRA' },
+  { value: '8', label: 'CITIBANK' },
+  { value: '9', label: 'CAIXA ECONÔMICA' },
+];
+// RURAL(4)/SAFRA(7)/CITIBANK(8): emissão de boleto suspensa (bloqueia salvar).
+const BANCOS_BOLETO_SUSPENSO = new Set(['4', '7', '8']);
+// MELO(5): forma só pode ser CARTEIRA(4)/PROMISSÓRIA(3)/RECIBO(1).
+const FORMAS_MELO = OPCOES_FORMA_FATURA.filter((o) => ['4', '3', '1'].includes(o.value));
 
 export default function ContasAReceber() {
   const { user } = useContext(AuthContext);
@@ -130,6 +153,7 @@ export default function ContasAReceber() {
   const [novaContaDados, setNovaContaDados] = useState({
     codcli: null as string | null,
     rec_cof_id: null as string | null,
+    dt_emissao: new Date().toISOString().split('T')[0],
     dt_venc: new Date().toISOString().split('T')[0],
     valor_pgto: 0,
     nro_doc: '',
@@ -209,6 +233,7 @@ export default function ContasAReceber() {
     'Juros',                 // valor_juros (quando aplicável)
     'Nº Documento',          // nro_doc / nro_nf
     'Fatura',                // cod_fat
+    'Parcela',               // parcela_atual (X/N)
     'Conta Financeira',      // descricao_conta
     'Banco',                 // banco
     'Observações',           // obs
@@ -405,19 +430,9 @@ export default function ContasAReceber() {
 
         // Cliente
         <div key={`cliente-${conta.cod_receb}`} className="min-w-[180px]">
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-900 dark:text-white">
-              {conta.nome_cliente}
-            </span>
-            {conta.parcela_atual && (
-              <Badge variant="secondary" className="text-xs font-normal">
-                Parcela {conta.parcela_atual}
-              </Badge>
-            )}
-          </div>
-          {conta.eh_parcelada && conta.qtd_parcelas && conta.qtd_parcelas > 1 && (
-            <div className="text-xs text-gray-500 mt-1">{conta.qtd_parcelas}x parcelas</div>
-          )}
+          <span className="text-xs text-gray-900 dark:text-white">
+            {conta.codcli ? `${conta.codcli} - ` : ''}{conta.nome_cliente}
+          </span>
         </div>,
 
         // Emissão
@@ -446,6 +461,14 @@ export default function ContasAReceber() {
 
         // Fatura
         <span key={`fat-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.cod_fat || '-'}</span>,
+
+        // Parcela (X/N — títulos da mesma fatura são as parcelas)
+        <span
+          key={`parcela-${conta.cod_receb}`}
+          className={`text-xs font-mono tabular-nums ${conta.eh_parcelada ? 'text-gray-900 dark:text-white font-semibold' : 'text-gray-400'}`}
+        >
+          {conta.parcela_atual || '-'}
+        </span>,
 
         // Conta Financeira
         <span key={`conta-fin-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{conta.descricao_conta || '-'}</span>,
@@ -1034,6 +1057,108 @@ export default function ContasAReceber() {
     setPaginaAtual(1);
   };
 
+  // Carrega feriados (para o ajuste de dia útil das parcelas do Novo Título).
+  useEffect(() => {
+    const ano = new Date().getFullYear();
+    carregarFeriados(ano);
+    carregarFeriados(ano + 1);
+  }, []);
+
+  // Busca o banco de cobrança padrão do cliente (dbclien.banco + 1) e pré-preenche,
+  // já coagindo a forma pela regra banco↔forma (MELO libera carteira; demais → boleto).
+  const preencherBancoDoCliente = async (codcli: string | null) => {
+    if (!codcli) return;
+    try {
+      const r = await fetch(`/api/contas-receber/cliente-banco?codcli=${encodeURIComponent(codcli)}`);
+      const d = await r.json();
+      const banco = d?.banco as string | null;
+      if (!banco) return;
+      setNovaContaDados((prev) => {
+        const novaForma =
+          banco === '5'
+            ? (FORMAS_MELO.some((f) => f.value === prev.forma_fat) ? prev.forma_fat : '4')
+            : '2';
+        return { ...prev, banco, forma_fat: novaForma };
+      });
+    } catch {
+      /* silencioso — banco fica em branco para o usuário escolher */
+    }
+  };
+
+  // --- Parcelas do Novo Título: mesma mecânica do faturamento (dia útil/feriado),
+  //     porém a base do prazo é a DATA DE EMISSÃO (fiel ao Delphi UniContasR). ---
+  const baseEmissaoNT = () => {
+    const iso = novaContaDados.dt_emissao || new Date().toISOString().split('T')[0];
+    const d = new Date(iso + 'T00:00:00');
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  // Valor de cada parcela: divide o total, resto de centavos na 1ª (igual criar.ts).
+  const valorParcelaNT = (i: number, n: number) => {
+    const total = Number(novaContaDados.valor_pgto) || 0;
+    if (n <= 0) return 0;
+    const base = Math.floor((total / n) * 100) / 100;
+    const resto = total - base * n;
+    return i === 0 ? base + resto : base;
+  };
+
+  const gerarParcelasNT = () => {
+    const num = parseInt(numParcelasInput);
+    const intervalo = Number(novaContaDados.intervalo_dias) || 30;
+    if (!num || num < 1 || num > 60) {
+      toast.error('Informe a quantidade de parcelas (1 a 60).');
+      return;
+    }
+    if (!novaContaDados.dt_emissao) {
+      toast.error('Informe a data de emissão primeiro.');
+      return;
+    }
+    const base = baseEmissaoNT();
+    const novas: { dias: number; vencimento: string }[] = [];
+    let acum = 0;
+    for (let i = 0; i < num; i++) {
+      acum += intervalo;
+      const venc = new Date(base.getTime());
+      venc.setDate(venc.getDate() + acum);
+      const util = getProximoDiaUtil(venc);
+      novas.push({ dias: acum, vencimento: fmtLocalData(util) });
+    }
+    setParcelas(novas);
+  };
+
+  // Edita pela quantidade de DIAS → vencimento = emissão + dias (dia útil).
+  const atualizarDiasNT = (idx: number, diasStr: string) => {
+    const dias = parseInt(diasStr, 10);
+    if (isNaN(dias) || dias <= 0) {
+      setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias: 0 } : p)));
+      return;
+    }
+    const base = baseEmissaoNT();
+    base.setDate(base.getDate() + dias);
+    const util = getProximoDiaUtil(base);
+    setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias, vencimento: fmtLocalData(util) } : p)));
+  };
+
+  // Edita a DATA → dias = venc − emissão (dia útil).
+  const atualizarVencimentoNT = (idx: number, isoDate: string) => {
+    if (!isoDate) return;
+    const d = new Date(isoDate + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    const emis = baseEmissaoNT();
+    if (d <= emis) {
+      toast.error('O vencimento deve ser maior que a data de emissão.');
+      return;
+    }
+    const util = getProximoDiaUtil(d);
+    const novosDias = Math.ceil((util.getTime() - emis.getTime()) / (1000 * 60 * 60 * 24));
+    setParcelas((prev) =>
+      prev.map((p, i) => (i === idx ? { ...p, vencimento: fmtLocalData(util), dias: novosDias } : p)),
+    );
+  };
+
+  const removerParcelaNT = (idx: number) => setParcelas((prev) => prev.filter((_, i) => i !== idx));
+
   // Função para salvar nova conta
   const handleSalvarNovaConta = async () => {
     try {
@@ -1046,33 +1171,45 @@ export default function ContasAReceber() {
         toast.error('Selecione uma conta financeira');
         return;
       }
-      if (!novaContaDados.dt_venc) {
-        toast.error('Informe a data de vencimento');
+      if (!novaContaDados.dt_emissao) {
+        toast.error('Informe a data de emissão');
         return;
       }
       if (!novaContaDados.valor_pgto || novaContaDados.valor_pgto <= 0) {
         toast.error('Informe um valor válido');
         return;
       }
-
-      if (novaContaDados.parcelado && parcelas.length === 0) {
-        toast.error('Adicione ao menos uma parcela');
+      // Regra banco↔forma (fiel Delphi/GP): RURAL/SAFRA/CITIBANK têm boleto suspenso.
+      if (BANCOS_BOLETO_SUSPENSO.has(novaContaDados.banco)) {
+        toast.error('Emissão de boleto suspensa para este banco. Escolha outro banco.');
         return;
       }
+      // Parcelamento sempre ativo: exige ao menos uma parcela (a data de vencimento
+      // do título vem das parcelas — não há mais campo de vencimento avulso).
+      if (parcelas.length === 0) {
+        toast.error('Gere ao menos uma parcela para salvar o título.');
+        return;
+      }
+
+      // dt_venc do título = vencimento da 1ª parcela (o backend usa o vencimento de
+      // cada parcela; dt_venc serve de validação/fallback).
+      const dtVencTitulo = parcelas[0]?.vencimento || novaContaDados.dt_emissao;
 
       const response = await fetch('/api/contas-receber/criar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...novaContaDados,
-          parcelas: novaContaDados.parcelado ? parcelas : [],
+          dt_venc: dtVencTitulo,
+          parcelado: true,
+          parcelas,
         }),
       });
 
       const data = await response.json();
 
       if (data.sucesso) {
-        const dtVencCriado = new Date(novaContaDados.dt_venc + 'T00:00:00');
+        const dtVencCriado = new Date(dtVencTitulo + 'T00:00:00');
         const dtInicio = filtros.data_inicio ? new Date(filtros.data_inicio + 'T00:00:00') : null;
         const dtFim = filtros.data_fim ? new Date(filtros.data_fim + 'T23:59:59') : null;
         const foraDoPeriodo = dtInicio && dtFim && (dtVencCriado < dtInicio || dtVencCriado > dtFim);
@@ -1081,6 +1218,7 @@ export default function ContasAReceber() {
         setNovaContaDados({
           codcli: null,
           rec_cof_id: null,
+          dt_emissao: new Date().toISOString().split('T')[0],
           dt_venc: new Date().toISOString().split('T')[0],
           valor_pgto: 0,
           nro_doc: '',
@@ -1108,7 +1246,7 @@ export default function ContasAReceber() {
 
         consultarContasReceber(paginaAtual, itensPorPagina, filtros);
       } else {
-        toast.error(data.mensagem || 'Erro ao criar título');
+        toast.error(data.erro || data.mensagem || 'Erro ao criar título');
       }
     } catch (error) {
       console.error('Erro ao criar título:', error);
@@ -2079,6 +2217,7 @@ export default function ContasAReceber() {
           setNovaContaDados({
             codcli: null,
             rec_cof_id: null,
+            dt_emissao: new Date().toISOString().split('T')[0],
             dt_venc: new Date().toISOString().split('T')[0],
             valor_pgto: 0,
             nro_doc: '',
@@ -2093,12 +2232,14 @@ export default function ContasAReceber() {
           setNumParcelasInput('');
         }}
         title="Novo Título a Receber"
+        width="w-[96%] max-w-[1400px]"
       >
         <div className="form-compact space-y-3">
-          {/* Seção: Informações Básicas */}
+          {/* Seção: Dados do Título (2 linhas de 4 campos) */}
           <div className="border-b pb-3">
-            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Informações Básicas</h3>
-            <div className="grid grid-cols-4 gap-3">
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Dados do Título</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Linha 1 */}
               <div>
                 <Label>Cliente *</Label>
                 <Autocomplete
@@ -2107,6 +2248,8 @@ export default function ContasAReceber() {
                   value={novaContaDados.codcli}
                   onChange={(value) => {
                     setNovaContaDados({ ...novaContaDados, codcli: value });
+                    // Pré-preenche o banco de cobrança padrão do cliente (cadastro).
+                    preencherBancoDoCliente(value);
                   }}
                   mapResponse={(data) => data.clientes || []}
                 />
@@ -2131,19 +2274,35 @@ export default function ContasAReceber() {
               </div>
 
               <div>
-                <Label>Tipo</Label>
+                <Label>Banco</Label>
                 <Select
-                  value={novaContaDados.tipo}
-                  onValueChange={(value) => setNovaContaDados({ ...novaContaDados, tipo: value })}
+                  value={novaContaDados.banco}
+                  onValueChange={(value) => {
+                    // Regra banco↔forma (fiel Delphi/GP): MELO libera carteira/promissória/
+                    // recibo; qualquer outro banco força BOLETO.
+                    const novaForma =
+                      value === '5'
+                        ? (FORMAS_MELO.some((f) => f.value === novaContaDados.forma_fat)
+                            ? novaContaDados.forma_fat
+                            : '4')
+                        : '2';
+                    setNovaContaDados({ ...novaContaDados, banco: value, forma_fat: novaForma });
+                  }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
+                    <SelectValue placeholder="Selecione o banco" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="R">Recebimento</SelectItem>
-                    <SelectItem value="D">Devolução</SelectItem>
+                    {BANCOS_NOVO_TITULO.map((b) => (
+                      <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {BANCOS_BOLETO_SUSPENSO.has(novaContaDados.banco) && (
+                  <p className="text-[11px] text-red-600 mt-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Emissão de boleto suspensa para este banco.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -2151,31 +2310,31 @@ export default function ContasAReceber() {
                 <Select
                   value={novaContaDados.forma_fat}
                   onValueChange={(value) => setNovaContaDados({ ...novaContaDados, forma_fat: value })}
+                  disabled={novaContaDados.banco !== '5'}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a forma" />
                   </SelectTrigger>
                   <SelectContent>
-                    {OPCOES_FORMA_FATURA.map((o) => (
+                    {(novaContaDados.banco === '5' ? FORMAS_MELO : OPCOES_FORMA_FATURA.filter((o) => o.value === '2')).map((o) => (
                       <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {novaContaDados.banco !== '' && novaContaDados.banco !== '5' && (
+                  <p className="text-[11px] text-gray-500 mt-1">Boleto obrigatório fora da MELO.</p>
+                )}
               </div>
-            </div>
-          </div>
 
-          {/* Seção: Valores e Datas */}
-          <div className="border-b pb-3">
-            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Valores e Datas</h3>
-            <div className="grid grid-cols-4 gap-3">
+              {/* Linha 2 */}
               <div>
-                <Label>Data de Vencimento *</Label>
+                <Label>Data de Emissão *</Label>
                 <Input
                   type="date"
-                  value={novaContaDados.dt_venc}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, dt_venc: e.target.value })}
+                  value={novaContaDados.dt_emissao}
+                  onChange={(e) => setNovaContaDados({ ...novaContaDados, dt_emissao: e.target.value })}
                 />
+                <p className="text-[11px] text-gray-500 mt-1">Base para o prazo das parcelas.</p>
               </div>
 
               <div>
@@ -2210,155 +2369,135 @@ export default function ContasAReceber() {
               </div>
 
               <div>
-                <Label>Banco</Label>
-                <Autocomplete
-                  placeholder="Buscar banco..."
-                  apiUrl="/api/contas-receber/bancos"
-                  value={novaContaDados.banco}
-                  onChange={(value) => {
-                    setNovaContaDados({ ...novaContaDados, banco: value });
-                  }}
-                  mapResponse={(data) => data.bancos || []}
-                />
+                <Label>Tipo</Label>
+                <Select
+                  value={novaContaDados.tipo}
+                  onValueChange={(value) => setNovaContaDados({ ...novaContaDados, tipo: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="R">Recebimento</SelectItem>
+                    <SelectItem value="D">Devolução</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
 
-          {/* Seção: Parcelamento */}
+          {/* Seção: Parcelas (sempre ativa — o vencimento do título vem das parcelas).
+              Mesma mecânica do Novo Faturamento: intervalo + quantidade → gerar, com dias e
+              vencimento editáveis e ajuste automático de dia útil (fim de semana/feriado). */}
           <div className="border-b pb-3">
-            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Parcelamento</h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="parcelado"
-                  checked={novaContaDados.parcelado}
-                  onChange={(e) => {
-                    setNovaContaDados({ ...novaContaDados, parcelado: e.target.checked });
-                    if (!e.target.checked) {
-                      setParcelas([]);
-                      setNumParcelasInput('');
+            <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Parcelas</h3>
+            <div className="flex flex-wrap items-end gap-2 mb-2">
+              <div className="w-36">
+                <Label>Intervalo de dias</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={novaContaDados.intervalo_dias}
+                  onChange={(e) =>
+                    setNovaContaDados({ ...novaContaDados, intervalo_dias: parseInt(e.target.value) || 0 })
+                  }
+                  placeholder="30"
+                />
+              </div>
+              <div className="w-36">
+                <Label>Quantidade (vezes)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={numParcelasInput}
+                  onChange={(e) => setNumParcelasInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      gerarParcelasNT();
                     }
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  placeholder="Ex: 3"
                 />
-                <Label htmlFor="parcelado" className="cursor-pointer">Parcelar título</Label>
               </div>
+              <Button type="button" onClick={gerarParcelasNT} className="h-9">
+                + Gerar parcelas
+              </Button>
+            </div>
 
-              {novaContaDados.parcelado && (
-                <div className="pl-6 space-y-3">
-                  <div className="flex gap-2 items-end">
-                    <div className="flex-1">
-                      <Label>Número de Parcelas</Label>
-                      <Input
-                        type="number"
-                        min="2"
-                        max="60"
-                        value={numParcelasInput}
-                        onChange={(e) => setNumParcelasInput(e.target.value)}
-                        placeholder="Ex: 3"
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        const num = parseInt(numParcelasInput);
-                        if (!num || num < 2 || num > 60) {
-                          toast.error('Informe um número entre 2 e 60');
-                          return;
-                        }
-                        if (!novaContaDados.dt_venc) {
-                          toast.error('Informe a data de vencimento primeiro');
-                          return;
-                        }
+            <p className="text-[11px] text-gray-500 mb-2">
+              Vencimentos contados a partir da <strong>data de emissão</strong>, com ajuste
+              automático para dia útil. Você pode editar os dias e o vencimento de cada parcela.
+            </p>
 
-                        // Gerar parcelas automaticamente (30, 60, 90 dias...)
-                        const novasParcelas: { dias: number; vencimento: string }[] = [];
-                        const baseDate = new Date(novaContaDados.dt_venc + 'T00:00:00');
-
-                        for (let i = 0; i < num; i++) {
-                          const parcelaDate = new Date(baseDate);
-                          parcelaDate.setDate(parcelaDate.getDate() + (i * 30));
-                          novasParcelas.push({
-                            dias: i * 30,
-                            vencimento: parcelaDate.toISOString().split('T')[0]
-                          });
-                        }
-
-                        setParcelas(novasParcelas);
-                        setNovaContaDados({ ...novaContaDados, num_parcelas: num });
-                        toast.success(`${num} parcelas geradas!`);
-                      }}
-                    >
-                      Gerar Parcelas
-                    </Button>
-                  </div>
-
-                  <p className="text-xs text-gray-500">
-                    As parcelas serão geradas com intervalos de 30 dias a partir da data de vencimento (30, 60, 90 dias...)
-                  </p>
-
-                  {/* Lista de Parcelas */}
-                  {parcelas.length > 0 && (
-                    <div>
-                      <p className="text-sm font-medium mb-2">
-                        Parcelas Geradas ({parcelas.length}):
-                      </p>
-                      <div className="space-y-2 max-h-48 overflow-y-auto bg-gray-50 dark:bg-gray-800 p-2 rounded">
-                        {parcelas.map((p, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-2 bg-white dark:bg-gray-700 p-2 rounded text-sm"
-                          >
-                            <span className="font-medium text-blue-600 dark:text-blue-400 min-w-[80px]">
-                              {i + 1}ª Parcela
-                            </span>
-                            <span className="text-gray-500 min-w-[60px]">
-                              {p.dias} dias
-                            </span>
-                            <Input
-                              type="date"
-                              value={p.vencimento}
-                              onChange={(e) => {
-                                const novasParcelas = [...parcelas];
-                                novasParcelas[i] = { ...novasParcelas[i], vencimento: e.target.value };
-                                setParcelas(novasParcelas);
-                              }}
-                              className="w-36 text-xs"
-                            />
-                            {novaContaDados.valor_pgto > 0 && (
-                              <span className="text-green-600 dark:text-green-400 font-medium min-w-[100px] text-right">
-                                {formatarMoeda(novaContaDados.valor_pgto / parcelas.length)}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+            <div className="max-h-64 overflow-y-auto rounded border border-gray-200 dark:border-zinc-700">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-gray-100 dark:bg-zinc-800">
+                  <tr>
+                    <th className="px-2 py-1 text-left">Parcela</th>
+                    <th className="px-2 py-1 text-center">Dias</th>
+                    <th className="px-2 py-1 text-left">Vencimento</th>
+                    <th className="px-2 py-1 text-right">Valor</th>
+                    <th className="px-2 py-1 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parcelas.map((p, i) => (
+                    <tr key={i} className="border-b border-gray-100 dark:border-zinc-800">
+                      <td className="px-2 py-1">{i + 1}</td>
+                      <td className="px-2 py-1 text-center">
+                        <input
+                          type="number"
+                          min={1}
+                          value={p.dias}
+                          onChange={(e) => atualizarDiasNT(i, e.target.value)}
+                          className="w-16 text-xs text-center px-1 py-0.5 border rounded bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-black dark:text-white"
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="date"
+                          value={p.vencimento}
+                          onChange={(e) => atualizarVencimentoNT(i, e.target.value)}
+                          className="text-xs px-1 py-0.5 border rounded bg-white dark:bg-zinc-900 border-gray-300 dark:border-zinc-700 text-black dark:text-white"
+                        />
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums">
+                        {formatarMoeda(valorParcelaNT(i, parcelas.length))}
+                      </td>
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removerParcelaNT(i)}
+                          className="text-red-500 hover:text-red-700"
+                          title="Remover parcela"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {parcelas.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-2 py-4 text-center text-gray-500">
+                        Sem parcelas. Informe intervalo + quantidade e clique em "Gerar parcelas".
+                      </td>
+                    </tr>
                   )}
-
-                  {/* Resumo */}
-                  {parcelas.length > 0 && novaContaDados.valor_pgto > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                        Resumo do Parcelamento:
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                        • {parcelas.length}x de {formatarMoeda(novaContaDados.valor_pgto / parcelas.length)}
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300">
-                        • Total: {formatarMoeda(novaContaDados.valor_pgto)}
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300">
-                        • Primeira parcela: {parcelas[0]?.vencimento ? new Date(parcelas[0].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300">
-                        • Última parcela: {parcelas[parcelas.length - 1]?.vencimento ? new Date(parcelas[parcelas.length - 1].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+                </tbody>
+                {parcelas.length > 0 && (
+                  <tfoot>
+                    <tr className="font-semibold bg-gray-100 dark:bg-zinc-800">
+                      <td className="px-2 py-1 text-left" colSpan={3}>Total</td>
+                      <td className="px-2 py-1 text-right tabular-nums">
+                        {formatarMoeda(Number(novaContaDados.valor_pgto) || 0)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
             </div>
           </div>
 

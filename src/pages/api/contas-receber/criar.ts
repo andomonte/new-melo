@@ -1,8 +1,19 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import { codigoFormaFatura } from '@/lib/faturamento/formaFatura';
+import { bancoInternoDbreceb } from '@/lib/faturamento/bancoCobranca';
 
 const pool = getPgPool();
+
+// Regra banco↔forma do Delphi (UniContasR — Novo Título), a MESMA da cobrança GP:
+//   - códigos do dropdown dbbanco_cobranca: 1 BRADESCO 2 BB 3 ITAU 4 RURAL 5 MELO
+//     6 SANTANDER 7 SAFRA 8 CITIBANK 9 CAIXA.
+//   - RURAL(4)/SAFRA(7)/CITIBANK(8): emissão de boleto SUSPENSA → bloqueia.
+//   - MELO(5): forma só pode ser CARTEIRA(4)/PROMISSÓRIA(3)/RECIBO(1).
+//   - Qualquer outro banco: forma forçada para BOLETO(2).
+const BANCOS_BOLETO_SUSPENSO = new Set(['4', '7', '8']);
+const MELO_DROPDOWN = '5';
+const FORMAS_MELO = new Set(['4', '3', '1']);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -33,11 +44,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!dt_venc) return res.status(400).json({ erro: 'Data de vencimento é obrigatória' });
     if (!valor_pgto || Number(valor_pgto) <= 0) return res.status(400).json({ erro: 'Valor inválido' });
 
+    // --- Regra banco ↔ forma (fiel ao Delphi/GP) ---------------------------------
+    // `banco` chega como código do dropdown dbbanco_cobranca ('1'..'9') ou vazio.
+    const bancoDropdown = banco ? String(banco).trim() : '';
+    if (bancoDropdown && BANCOS_BOLETO_SUSPENSO.has(bancoDropdown)) {
+      return res
+        .status(400)
+        .json({ erro: 'Emissão de boleto está suspensa para este banco. Escolha outro banco.' });
+    }
+    // Forma coagida pela regra: MELO libera carteira/promissória/recibo; demais → boleto.
+    let formaCod = codigoFormaFatura(forma_fat) || '2';
+    if (bancoDropdown === MELO_DROPDOWN) {
+      if (!FORMAS_MELO.has(formaCod)) formaCod = '4'; // default CARTEIRA na MELO
+    } else if (bancoDropdown) {
+      formaCod = '2'; // BOLETO obrigatório fora da MELO
+    }
+    // Código interno gravado em dbreceb.banco (ex.: MELO(5) → '9').
+    const bancoInterno = bancoDropdown ? bancoInternoDbreceb(bancoDropdown) : null;
+
     // Normalizar campos
     const valorTotal = parseFloat(valor_pgto);
     const totalParcelas = parcelado && parcelas.length > 0 ? parcelas.length : 1;
-    
-    // Para distribuir os centavos restantes
+
+    // Para distribuir os centavos restantes (vão na PRIMEIRA parcela)
     const valorParcela = Math.floor((valorTotal / totalParcelas) * 100) / 100;
     const restoCentavos = valorTotal - (valorParcela * totalParcelas);
 
@@ -69,8 +98,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? parcelas[i].vencimento 
         : dt_venc;
 
-      // Calcular valor desta parcela (última parcela recebe os centavos restantes)
-      const valorDestaParcela = i === totalParcelas - 1 
+      // Calcular valor desta parcela (a PRIMEIRA parcela recebe os centavos restantes)
+      const valorDestaParcela = i === 0
         ? valorParcela + restoCentavos
         : valorParcela;
 
@@ -99,8 +128,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         valorDestaParcela.toFixed(2),
         nroDocParcela,
         tipo || 'R',
-        codigoFormaFatura(forma_fat) || '2', // número do Oracle (fonte única); default BOLETO
-        banco || null,
+        formaCod, // forma coagida pela regra banco↔forma (fonte única)
+        bancoInterno, // código interno do Oracle (dbreceb.banco), 1 dígito
       ];
 
       const r = await client.query(insertQuery, values);
