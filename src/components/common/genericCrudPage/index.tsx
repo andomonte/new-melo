@@ -63,6 +63,11 @@ interface GenericCrudPageProps<T> {
   FormComponent: React.ComponentType<FormComponentProps<T>>;
   validationSchema: z.Schema<T>;
   emptyState: T;
+  /**
+   * Rótulos amigáveis por coluna. Sem isso o cabeçalho mostra o nome cru da
+   * coluna do banco (chave = nome da coluna vinda da API).
+   */
+  columnLabels?: Record<string, string>;
 }
 
 export function GenericCrudPage<T extends { [key: string]: any }>({
@@ -75,6 +80,7 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
   FormComponent,
   validationSchema,
   emptyState,
+  columnLabels,
 }: GenericCrudPageProps<T>) {
   const [data, setData] = useState<ListApiResponse<T>>({
     data: [],
@@ -491,6 +497,7 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
           headers={headers}
           rows={tableRows}
           semColunaDeAcaoPadrao={true}
+          columnLabels={columnLabels}
           onColunaSubstituida={handleColunaSubstituida}
           meta={data.meta}
           onPageChange={(newPage) => {

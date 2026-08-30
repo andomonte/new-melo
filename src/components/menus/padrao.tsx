@@ -141,6 +141,16 @@ import { FaNoteSticky } from 'react-icons/fa6';
 import RelatorioConciliacaoCartao from '../corpo/contas-receber/RelatorioConciliacaoCartao';
 import CalculadoraTributariaManual from '../corpo/admin/calculadora/CalculadoraTributariaManual';
 
+// Financeiro > Arquivos — porte do menu homônimo do Delphi (UniPrincipal.dfm)
+import ArqCompradores from '../corpo/admin/financeiro/arquivos/compradores';
+import ArqCentrosCusto from '../corpo/admin/financeiro/arquivos/centrosCusto';
+import ArqUf from '../corpo/admin/financeiro/arquivos/uf';
+import ArqBancosCentrais from '../corpo/admin/financeiro/arquivos/bancosCentrais';
+import ArqAgencias from '../corpo/admin/financeiro/arquivos/agencias';
+import ArqContasBancarias from '../corpo/admin/financeiro/arquivos/contasBancarias';
+import ArqOperadorCaixa from '../corpo/admin/financeiro/arquivos/operadorCaixa';
+import ArqServicos from '../corpo/admin/financeiro/arquivos/servicos';
+
 
 export const menus = [
   {
@@ -320,6 +330,60 @@ export const menus = [
         icon: BadgeDollarSignIcon,
         corpo: '',
         subItems: [
+          {
+            // Espelha "Financeiro > Arquivos" do Delphi, na mesma ordem
+            // (o separador do menu Delphi fica entre UF e Bancos Centrais).
+            name: 'Arquivos',
+            icon: DiamondPlusIcon,
+            hasSubmenu: true,
+            subMenuItems: [
+              {
+                name: 'Compradores',
+                href: '/financeiro/arquivos/compradores',
+                corpo: ArqCompradores,
+              },
+              {
+                name: 'Centro de Custos',
+                href: '/financeiro/arquivos/centrosCusto',
+                corpo: ArqCentrosCusto,
+              },
+              {
+                name: 'CFOP',
+                href: '/financeiro/arquivos/cfop',
+                corpo: CfopPage,
+              },
+              {
+                name: 'UF',
+                href: '/financeiro/arquivos/uf',
+                corpo: ArqUf,
+              },
+              {
+                name: 'Bancos Centrais',
+                href: '/financeiro/arquivos/bancosCentrais',
+                corpo: ArqBancosCentrais,
+              },
+              {
+                name: 'Agências',
+                href: '/financeiro/arquivos/agencias',
+                corpo: ArqAgencias,
+              },
+              {
+                name: 'Contas Bancárias',
+                href: '/financeiro/arquivos/contasBancarias',
+                corpo: ArqContasBancarias,
+              },
+              {
+                name: 'Operador Caixa',
+                href: '/financeiro/arquivos/operadorCaixa',
+                corpo: ArqOperadorCaixa,
+              },
+              {
+                name: 'Serviços',
+                href: '/financeiro/arquivos/servicos',
+                corpo: ArqServicos,
+              },
+            ],
+          },
           {
             name: 'Dashboard',
             href: '/admin/financeiro/dashboard',
@@ -638,10 +702,7 @@ interface PageSidebarProps {
 interface SubMenuItemThirdLevel {
   name: string;
   href: string;
-}
-interface SubMenuItemThirdLevel {
-  name: string;
-  href: string;
+  corpo?: React.ComponentType<any> | string;
 }
 
 interface SubMenuItem {
@@ -663,6 +724,28 @@ interface MenuItem {
   hasSubmenu?: boolean;
   subMenuItems?: SubMenuItemThirdLevel[];
 }
+/**
+ * Mantém só os subitens permitidos. Num grupo de 3º nível (ex.: Financeiro >
+ * Arquivos) também poda os filhos, para o usuário ver apenas as telas às quais
+ * tem direito — e some com o grupo inteiro quando não sobra nenhuma.
+ */
+function filtrarSubItems(
+  subItems: SubMenuItem[],
+  permitidos: string[],
+): SubMenuItem[] {
+  return subItems
+    .map((sub) => {
+      if (sub.hasSubmenu && sub.subMenuItems) {
+        const filhos = sub.subMenuItems.filter((t) =>
+          permitidos.includes(t.href),
+        );
+        return filhos.length ? { ...sub, subMenuItems: filhos } : null;
+      }
+      return sub.href && permitidos.includes(sub.href) ? sub : null;
+    })
+    .filter(Boolean) as SubMenuItem[];
+}
+
 function encontrarCorpoPorTela(
   tela: string,
   menus: any[],
@@ -682,9 +765,16 @@ function encontrarCorpoPorTela(
   for (const menu of menus) {
     for (const item of menu.items) {
       if (item.href && item.href === tela) return item.corpo;
+      for (const terceiro of item.subMenuItems ?? []) {
+        if (terceiro.href === tela) return terceiro.corpo;
+      }
       if (item.subItems?.length > 0) {
         for (const subItem of item.subItems) {
           if (subItem.href && subItem.href === tela) return subItem.corpo;
+          // 3º nível (ex.: Financeiro > Arquivos > Compradores)
+          for (const terceiro of subItem.subMenuItems ?? []) {
+            if (terceiro.href === tela) return terceiro.corpo;
+          }
         }
       }
     }
@@ -717,30 +807,20 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
           // Se item principal é permitido
           if (novoItem.href && (permissoes ?? []).includes(novoItem.href)) {
             if (novoItem.subItems?.length) {
-              novoItem.subItems = novoItem.subItems.filter((sub) => {
-                if (sub.hasSubmenu && sub.subMenuItems) {
-                  return sub.subMenuItems.some((third) =>
-                    (permissoes ?? []).includes(third.href),
-                  );
-                }
-                return sub.href && (permissoes ?? []).includes(sub.href);
-              });
+              novoItem.subItems = filtrarSubItems(
+                novoItem.subItems,
+                permissoes ?? [],
+              );
             }
             return novoItem;
           }
 
           // Se não é permitido no principal, verificar subItems
           if (novoItem.subItems?.length) {
-            const novosSubItems = novoItem.subItems.filter((sub) => {
-              // Se o subItem tem subMenuItems (3º nível), verificar se algum filho é permitido
-              if (sub.hasSubmenu && sub.subMenuItems) {
-                return sub.subMenuItems.some((third) =>
-                  (permissoes ?? []).includes(third.href),
-                );
-              }
-              // Caso contrário, verificar se o subItem é permitido diretamente
-              return sub.href && (permissoes ?? []).includes(sub.href);
-            });
+            const novosSubItems = filtrarSubItems(
+              novoItem.subItems,
+              permissoes ?? [],
+            );
 
             if (novosSubItems.length > 0)
               return { ...novoItem, subItems: novosSubItems };
