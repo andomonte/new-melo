@@ -17,9 +17,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         CONCAT(cod_banco, ' - ', nome) as label,
         nome
       FROM dbbanco
-      WHERE 
-        CAST(cod_banco AS TEXT) LIKE $1
-        OR UPPER(nome) LIKE UPPER($2)
+      WHERE
+        COALESCE(status, 'ativo') = 'ativo'
+        AND (CAST(cod_banco AS TEXT) LIKE $1
+        OR UPPER(nome) LIKE UPPER($2))
       ORDER BY cod_banco
       LIMIT 50
     `;

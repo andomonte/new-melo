@@ -43,7 +43,7 @@ export function AlterarBancoModal({
   const fetchBancos = async () => {
     setLoadingBancos(true);
     try {
-      const response = await fetch('/api/bancos/get?perPage=9999');
+      const response = await fetch('/api/bancos/get?perPage=9999&status=ativo');
       if (!response.ok) throw new Error('Erro ao buscar bancos');
       const result = await response.json();
       setBancos(result.data || []);

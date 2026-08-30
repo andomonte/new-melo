@@ -85,7 +85,7 @@ export function FinancialTab() {
   useEffect(() => {
     async function fetchBancos() {
       try {
-        const response = await fetch('/api/bancos/get?perPage=9999');
+        const response = await fetch('/api/bancos/get?perPage=9999&status=ativo');
         if (response.ok) {
           const data = await response.json();
           setBancos(data.data || []);

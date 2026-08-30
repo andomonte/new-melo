@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Bancos, getBancos, deletarBanco, Banco } from '@/data/bancos/bancos';
+import { Bancos, getBancos, deletarBanco, setBancoStatus, Banco } from '@/data/bancos/bancos';
 import { useDebouncedCallback } from 'use-debounce';
-import { PlusIcon, Pencil, Trash2 } from 'lucide-react';
+import { PlusIcon, Pencil, Trash2, Power } from 'lucide-react';
+import { toast } from 'sonner';
 import DataTable from '@/components/common/DataTable';
 import { DefaultButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
@@ -61,6 +62,19 @@ const BancosContasPage = () => {
     setIsDeleteModalOpen(true);
   };
 
+  const handleToggleStatus = async (banco: Banco) => {
+    if (!banco.banco) return;
+    const atual = (banco.status || 'ativo') === 'ativo' ? 'ativo' : 'inativo';
+    const novo = atual === 'ativo' ? 'inativo' : 'ativo';
+    try {
+      await setBancoStatus(banco.banco, novo);
+      toast.success(novo === 'ativo' ? 'Banco ativado.' : 'Banco inativado.');
+      handleBancos();
+    } catch {
+      toast.error('Falha ao alterar o status do banco.');
+    }
+  };
+
   const handleConfirmDelete = async () => {
     if (bancoToDelete?.banco) {
       try {
@@ -75,26 +89,39 @@ const BancosContasPage = () => {
     }
   };
 
-  const rowsBanco = bancos.data?.map((banco) => ({
-    action: (
-      <div className="flex gap-2">
-        <button
-          onClick={() => handleOpenDetail(banco)}
-          className="p-1 text-gray-500 hover:text-gray-700"
-        >
-          <Pencil size={16} />
-        </button>
-        <button
-          onClick={() => handleDeleteClick(banco)}
-          className="p-1 text-red-500 hover:text-red-700"
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
-    ),
-    nome: banco.nome,
-    codigo: banco.banco,
-  }));
+  const rowsBanco = bancos.data?.map((banco) => {
+    const ativo = (banco.status || 'ativo') === 'ativo';
+    return {
+      action: (
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleOpenDetail(banco)}
+            className="p-1 text-gray-500 hover:text-gray-700"
+            title="Editar"
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            onClick={() => handleToggleStatus(banco)}
+            className={`p-1 ${ativo ? 'text-gray-500 hover:text-red-600' : 'text-gray-500 hover:text-green-600'}`}
+            title={ativo ? 'Inativar' : 'Ativar'}
+          >
+            <Power size={16} />
+          </button>
+          <button
+            onClick={() => handleDeleteClick(banco)}
+            className="p-1 text-red-500 hover:text-red-700"
+            title="Excluir"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+      nome: banco.nome,
+      codigo: banco.banco,
+      status: ativo ? '🟢 Ativo' : '⚪ Inativo',
+    };
+  });
 
   if (isDetailOpen) {
     return (
@@ -136,7 +163,7 @@ const BancosContasPage = () => {
         </div>
         <div className="flex-1 overflow-y-auto">
           <DataTable
-            headers={['Ações', 'Nome', 'Código']}
+            headers={['Ações', 'Nome', 'Código', 'Status']}
             rows={rowsBanco || []}
             meta={bancos.meta}
             onPageChange={setPageBanco}

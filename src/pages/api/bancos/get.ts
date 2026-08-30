@@ -8,13 +8,16 @@ interface GetParams {
   page?: string;
   perPage?: string;
   search?: string;
+  status?: string;
 }
 
 export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse,
 ): Promise<void> {
-  const { page = '1', perPage = '9999', search = '' }: GetParams = req.query;
+  const { page = '1', perPage = '9999', search = '', status = '' }: GetParams = req.query;
+  // status: 'ativo' | 'inativo' filtra; vazio/'todos' devolve todos (usado pelo cadastro).
+  const filtraStatus = status === 'ativo' || status === 'inativo';
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo;
 
@@ -33,17 +36,19 @@ export default async function handle(
     const offset = (pageNumber - 1) * perPageNumber;
     const searchTerm = `%${search}%`;
 
+    const statusFilterSql = filtraStatus ? ` AND COALESCE(status, 'ativo') = $4` : '';
+
     // Consulta para buscar os bancos com paginação e filtro
     const bancosResult = await client.query(
       `
       SELECT *
       FROM dbbanco_cobranca
-      WHERE nome ILIKE $1
+      WHERE nome ILIKE $1${statusFilterSql}
       ORDER BY banco
       OFFSET $2
       LIMIT $3
     `,
-      [searchTerm, offset, perPageNumber],
+      filtraStatus ? [searchTerm, offset, perPageNumber, status] : [searchTerm, offset, perPageNumber],
     );
 
     const bancos = bancosResult.rows;
@@ -53,9 +58,9 @@ export default async function handle(
       `
       SELECT COUNT(*) as total
       FROM dbbanco_cobranca
-      WHERE nome ILIKE $1
+      WHERE nome ILIKE $1${filtraStatus ? ' AND COALESCE(status, \'ativo\') = $2' : ''}
     `,
-      [searchTerm],
+      filtraStatus ? [searchTerm, status] : [searchTerm],
     );
     const total = parseInt(countResult.rows[0].total, 10);
 

@@ -5,6 +5,11 @@ import { GetParams } from '../common/getParams';
 export interface Banco {
   banco?: string;
   nome: string;
+  status?: string; // 'ativo' | 'inativo'
+}
+
+export async function setBancoStatus(banco: string, status: 'ativo' | 'inativo'): Promise<void> {
+  await api.patch('/api/bancos/status', { banco, status });
 }
 
 export interface Bancos {
