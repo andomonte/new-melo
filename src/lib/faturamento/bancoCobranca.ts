@@ -70,3 +70,16 @@ export function dropdownDeBancoInterno(interno: string | number | null | undefin
   const entrada = Object.entries(MAPA_BANCO).find(([, v]) => v.interno === alvo);
   return entrada ? entrada[0] : null;
 }
+
+/**
+ * Nome do banco a partir do código INTERNO gravado em dbreceb.banco (1 dígito).
+ * Ex.: '9' → 'MELO', '0' → 'BRADESCO', '5' → 'SANTANDER'. Usado para exibir o nome do
+ * banco no grid de Contas a Receber/Pagar (onde só temos o interno). Retorna null se não
+ * reconhecer (mostra só o código).
+ */
+export function nomeBancoPorInterno(interno: string | number | null | undefined): string | null {
+  if (interno === null || interno === undefined || String(interno).trim() === '') return null;
+  const alvo = String(parseInt(String(interno), 10)); // normaliza '09'→'9'
+  const entrada = Object.values(MAPA_BANCO).find((v) => v.interno === alvo);
+  return entrada ? entrada.nome : null;
+}

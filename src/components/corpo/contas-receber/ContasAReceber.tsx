@@ -22,7 +22,9 @@ import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import { OPCOES_FORMA_FATURA, labelFormaFatura } from '@/lib/faturamento/formaFatura';
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
+import { nomeBancoPorInterno } from '@/lib/faturamento/bancoCobranca';
 import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
+import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
 import { formatarBRL } from '@/utils/monetario';
 
 // Data local yyyy-MM-dd (sem shift de timezone).
@@ -145,7 +147,22 @@ export default function ContasAReceber() {
   const [modalNovaContaAberto, setModalNovaContaAberto] = useState(false);
   const [modalRelatorioAberto, setModalRelatorioAberto] = useState(false);
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
-  const [tipoRelatorio, setTipoRelatorio] = useState<'geral' | 'por_cliente'>('geral');
+  type TipoRelatorio =
+    | 'geral'
+    | 'por_cliente'
+    | 'receber_periodo'
+    | 'em_atraso'
+    | 'diario_avista'
+    | 'recebimento_clientes';
+  const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio>('receber_periodo');
+  const OPCOES_RELATORIO: { value: TipoRelatorio; label: string; desc: string }[] = [
+    { value: 'receber_periodo', label: 'Receber no Período', desc: 'Títulos em aberto por vencimento no período' },
+    { value: 'por_cliente', label: 'Receber por Cliente', desc: 'Agrupado por cliente, com subtotais' },
+    { value: 'em_atraso', label: 'Em Atraso no Período', desc: 'Títulos vencidos (em aberto) no período' },
+    { value: 'diario_avista', label: 'Títulos Diário à Vista', desc: 'Clientes à vista (claspgto=V), por emissão' },
+    { value: 'recebimento_clientes', label: 'Recebimento de Clientes', desc: 'O que foi recebido no período (por pagamento)' },
+    { value: 'geral', label: 'Geral (lista)', desc: 'Todos os títulos do período' },
+  ];
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [modalImportacaoCartao, setModalImportacaoCartao] = useState(false);
   const [contaSelecionada, setContaSelecionada] = useState<ContaReceber | null>(null);
@@ -191,6 +208,7 @@ export default function ContasAReceber() {
   // Seleção múltipla para Dar Baixa em lote (mesmo cliente).
   const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
   const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
+  const [modalComprovantesAberto, setModalComprovantesAberto] = useState(false);
 
   // Bancos do Novo Título: vêm da dbbanco_cobranca filtrada por ATIVO (mesma fonte do
   // cadastro do cliente). Fallback = lista fixa se a busca falhar.
@@ -459,13 +477,13 @@ export default function ContasAReceber() {
   // Preparar dados da tabela (seguindo estrutura do legado)
   const prepararDadosTabela = () => {
     // Criar mapa de bancos para lookup rápido
-    const mapaBancos = new Map(bancosDisponiveis.map(banco => [banco.value, banco.nome]));
 
     return contasReceber.map((conta) => {
       // Adicionar nome_banco à conta se disponível
       const contaComNomeBanco = {
         ...conta,
-        nome_banco: conta.banco ? mapaBancos.get(conta.banco) || null : null
+        // Nome pelo código INTERNO do dbreceb.banco (ex.: 9→MELO); dbbanco não casa aqui.
+        nome_banco: nomeBancoPorInterno(conta.banco)
       };
 
       const vencido = contaComNomeBanco.dt_venc && new Date(contaComNomeBanco.dt_venc) < new Date() && contaComNomeBanco.status !== 'recebido' && contaComNomeBanco.status !== 'cancelado';
@@ -657,11 +675,10 @@ export default function ContasAReceber() {
   };
 
   const abrirModalDetalhes = (conta: ContaReceber) => {
-    // Adicionar nome_banco à conta
-    const mapaBancos = new Map(bancosDisponiveis.map(banco => [banco.value, banco.nome]));
+    // Nome do banco pelo código interno (dbreceb.banco), ex.: 9→MELO.
     const contaComNomeBanco = {
       ...conta,
-      nome_banco: conta.banco ? mapaBancos.get(conta.banco) || null : null
+      nome_banco: nomeBancoPorInterno(conta.banco)
     };
     setContaSelecionada(contaComNomeBanco);
     setModalDetalhesAberto(true);
@@ -894,7 +911,7 @@ export default function ContasAReceber() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const nomeArquivo = tipoRelatorio === 'por_cliente' ? 'contas_receber_por_cliente' : 'contas_receber';
+      const nomeArquivo = `contas_receber_${tipoRelatorio}`;
       a.download = formato === 'pdf' ? `${nomeArquivo}.pdf` : `${nomeArquivo}.xlsx`;
       document.body.appendChild(a);
       a.click();
@@ -1467,6 +1484,13 @@ export default function ContasAReceber() {
               onClick={() => setModalImportacaoCartao(true)}
               icon={<CreditCard className="w-4 h-4" />}
               text="Importar Cartão"
+            />
+            <AuxButton
+              variant="secondary"
+              size="default"
+              onClick={() => setModalComprovantesAberto(true)}
+              icon={<FileText className="w-4 h-4" />}
+              text="Comprovantes"
             />
             <DefaultButton
               variant="primary"
@@ -2644,6 +2668,13 @@ export default function ContasAReceber() {
         }}
       />
 
+      {/* Modal de Comprovantes de Pagamento (aba do Delphi) */}
+      <ModalComprovantes
+        isOpen={modalComprovantesAberto}
+        onClose={() => setModalComprovantesAberto(false)}
+        username={user?.usuario || ''}
+      />
+
       {/* Modal de Importação de Cartão */}
       <Modal
         isOpen={modalImportacaoCartao}
@@ -2981,29 +3012,24 @@ export default function ContasAReceber() {
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
             Tipo de Relatório
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setTipoRelatorio('geral')}
-              className={`flex-1 px-3 py-2 text-xs rounded-md border transition ${
-                tipoRelatorio === 'geral'
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
-              }`}
-            >
-              Geral (lista)
-            </button>
-            <button
-              type="button"
-              onClick={() => setTipoRelatorio('por_cliente')}
-              className={`flex-1 px-3 py-2 text-xs rounded-md border transition ${
-                tipoRelatorio === 'por_cliente'
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
-              }`}
-            >
-              Por Cliente (agrupado)
-            </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {OPCOES_RELATORIO.map((op) => (
+              <button
+                key={op.value}
+                type="button"
+                onClick={() => setTipoRelatorio(op.value)}
+                className={`text-left px-3 py-2 rounded-md border transition ${
+                  tipoRelatorio === op.value
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
+                }`}
+              >
+                <div className="text-xs font-semibold">{op.label}</div>
+                <div className={`text-[10px] ${tipoRelatorio === op.value ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {op.desc}
+                </div>
+              </button>
+            ))}
           </div>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">

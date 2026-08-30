@@ -39,23 +39,40 @@ function groupByCliente(rows: any[]): Map<string, any[]> {
 
 // ─── SQL ────────────────────────────────────────────────────────────────────
 
+// Configuração dos relatórios do Delphi (Financeiro → Contas a Receber → Relatórios).
+// layout: 'geral' (lista) ou 'por_cliente' (agrupado). fonte: dbreceb (títulos) ou dbfreceb (recebimentos).
+export const TIPO_CONFIG: Record<
+  string,
+  { layout: 'geral' | 'por_cliente'; titulo: string; extraWhere: string; dateField: string; fonte: 'dbreceb' | 'dbfreceb' }
+> = {
+  geral:                { layout: 'geral',       titulo: 'RELATÓRIO DE CONTAS A RECEBER', extraWhere: '',                                                            dateField: 'dt_venc',    fonte: 'dbreceb' },
+  por_cliente:          { layout: 'por_cliente', titulo: 'CONTAS A RECEBER POR CLIENTE',  extraWhere: '',                                                            dateField: 'dt_venc',    fonte: 'dbreceb' },
+  receber_periodo:      { layout: 'geral',       titulo: 'RECEBER NO PERÍODO',            extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
+  em_atraso:            { layout: 'geral',       titulo: 'TÍTULOS EM ATRASO NO PERÍODO',  extraWhere: ` AND r.rec IS DISTINCT FROM 'S' AND r.dt_venc < CURRENT_DATE`,  dateField: 'dt_venc',    fonte: 'dbreceb' },
+  diario_avista:        { layout: 'geral',       titulo: 'TÍTULOS DIÁRIO À VISTA',        extraWhere: ` AND UPPER(COALESCE(c.claspgto,'')) = 'V'`,                    dateField: 'dt_emissao', fonte: 'dbreceb' },
+  recebimento_clientes: { layout: 'geral',       titulo: 'RECEBIMENTO DE CLIENTES',       extraWhere: ` AND fr.tipo <> 'E'`,                                          dateField: 'dt_pgto',    fonte: 'dbfreceb' },
+};
+
 function buildQuery(
   tipo: string,
   data_inicio?: string,
   data_fim?: string,
   status?: string,
   colFiltros: { cod_receb?: string; cliente?: string; nro_doc?: string; cod_fat?: string; search?: string } = {},
-): { sql: string; params: any[]; countSql: string } {
+): { sql: string; params: any[]; countSql: string; layout: 'geral' | 'por_cliente'; titulo: string } {
+  const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG.geral;
   const params: any[] = [];
   let idx = 1;
   let whereClause = '';
 
+  // Período: dbreceb usa r.<campo> (dt_venc/dt_emissao); dbfreceb usa fr.dt_pgto.
+  const campoData = cfg.fonte === 'dbfreceb' ? `fr.${cfg.dateField}` : `r.${cfg.dateField}`;
   if (data_inicio) {
-    whereClause += ` AND r.dt_venc >= $${idx++}`;
+    whereClause += ` AND ${campoData} >= $${idx++}`;
     params.push(data_inicio);
   }
   if (data_fim) {
-    whereClause += ` AND r.dt_venc <= $${idx++}`;
+    whereClause += ` AND ${campoData} <= $${idx++}`;
     params.push(data_fim);
   }
 
@@ -80,6 +97,43 @@ function buildQuery(
   if (colFiltros.search) {
     whereClause += ` AND (CAST(r.cod_receb AS TEXT) ILIKE $${idx} OR c.nome ILIKE $${idx} OR r.nro_doc ILIKE $${idx})`;
     params.push(`%${colFiltros.search}%`); idx++;
+  }
+
+  // Filtro específico do tipo de relatório.
+  whereClause += cfg.extraWhere;
+
+  // ── Fonte dbfreceb: "Recebimento de Clientes" (o que foi recebido no período) ──
+  if (cfg.fonte === 'dbfreceb') {
+    const sqlFr = `
+      SELECT
+        fr.cod_receb,
+        r.nro_doc,
+        '' AS parcela,
+        0 AS dias,
+        COALESCE(c.codcli::text, '') || ' ' || COALESCE(c.nome, '') AS cliente,
+        fr.cod_conta,
+        0 AS valor_pgto,
+        CASE WHEN fr.tipo = 'J' THEN COALESCE(fr.valor,0) ELSE 0 END AS valor_juros,
+        COALESCE(fr.valor, 0) AS valor_rec,
+        0 AS valor_aberto,
+        r.dt_emissao,
+        r.dt_venc,
+        0 AS tarifa,
+        fr.dt_pgto
+      FROM dbfreceb fr
+      JOIN dbreceb r ON r.cod_receb = fr.cod_receb
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      WHERE 1=1 ${whereClause}
+      ORDER BY cliente ASC, fr.dt_pgto ASC
+    `;
+    const countFr = `
+      SELECT COUNT(*) AS total
+      FROM dbfreceb fr
+      JOIN dbreceb r ON r.cod_receb = fr.cod_receb
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      WHERE 1=1 ${whereClause}
+    `;
+    return { sql: sqlFr, params, countSql: countFr, layout: cfg.layout, titulo: cfg.titulo };
   }
 
   // Determinar filtro de status após CTE
@@ -147,14 +201,15 @@ function buildQuery(
     WHERE 1=1 ${whereClause}
   `;
 
-  return { sql, params, countSql };
+  return { sql, params, countSql, layout: cfg.layout, titulo: cfg.titulo };
 }
 
 // ─── PDF generator ──────────────────────────────────────────────────────────
 
 function gerarPDF(
   rows: any[],
-  tipo: string,
+  layout: 'geral' | 'por_cliente',
+  titulo: string,
   data_inicio?: string,
   data_fim?: string,
 ): Buffer {
@@ -163,10 +218,7 @@ function gerarPDF(
   const pageW = doc.internal.pageSize.getWidth();
 
   // Title
-  const titleText =
-    tipo === 'por_cliente'
-      ? 'RELATÓRIO DE CONTAS A RECEBER POR CLIENTE'
-      : 'RELATÓRIO DE CONTAS A RECEBER';
+  const titleText = titulo;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
@@ -193,7 +245,7 @@ function gerarPDF(
   // Money column indices (0-based): VALOR_PGTO=4, VALOR_JUROS=5, VALOR_REC=6, VALOR_ABERTO=7, TARIFA=10
   const moneyColSpan = headers.length;
 
-  if (tipo === 'por_cliente') {
+  if (layout === 'por_cliente') {
     const grouped = groupByCliente(rows);
 
     for (const [clienteKey, grupo] of Array.from(grouped.entries())) {
@@ -375,7 +427,8 @@ function gerarPDF(
 
 async function gerarExcel(
   rows: any[],
-  tipo: string,
+  layout: 'geral' | 'por_cliente',
+  titulo: string,
   data_inicio?: string,
   data_fim?: string,
 ): Promise<Buffer> {
@@ -391,10 +444,7 @@ async function gerarExcel(
   const NUM_COLS = 13;
   const lastCol = 'M'; // column 13
 
-  const titleText =
-    tipo === 'por_cliente'
-      ? 'RELATÓRIO DE CONTAS A RECEBER POR CLIENTE'
-      : 'RELATÓRIO DE CONTAS A RECEBER';
+  const titleText = titulo;
 
   const titleRow = ws.addRow([titleText]);
   ws.mergeCells(`A${titleRow.number}:${lastCol}${titleRow.number}`);
@@ -500,7 +550,7 @@ async function gerarExcel(
     return { valorPgto, valorJuros, valorRec, valorAberto };
   };
 
-  if (tipo === 'por_cliente') {
+  if (layout === 'por_cliente') {
     const grouped = groupByCliente(rows);
 
     for (const [clienteKey, grupo] of Array.from(grouped.entries())) {
@@ -604,14 +654,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const tipoVal = (tipo as string) || 'geral';
-  if (tipoVal !== 'geral' && tipoVal !== 'por_cliente') {
+  if (!TIPO_CONFIG[tipoVal]) {
     return res.status(400).json({
-      erro: 'Parâmetro "tipo" deve ser "geral" ou "por_cliente".',
+      erro: `Parâmetro "tipo" inválido. Use: ${Object.keys(TIPO_CONFIG).join(', ')}.`,
     });
   }
 
   try {
-    const { sql, params, countSql } = buildQuery(
+    const { sql, params, countSql, layout, titulo } = buildQuery(
       tipoVal,
       data_inicio as string | undefined,
       data_fim as string | undefined,
@@ -664,7 +714,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (formato === 'pdf') {
       const buffer = gerarPDF(
         rows,
-        tipoVal,
+        layout,
+        titulo,
         data_inicio as string | undefined,
         data_fim as string | undefined,
       );
@@ -679,7 +730,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Excel
     const buffer = await gerarExcel(
       rows,
-      tipoVal,
+      layout,
+      titulo,
       data_inicio as string | undefined,
       data_fim as string | undefined,
     );
