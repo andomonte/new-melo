@@ -18,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               cc.cec_descricao AS centro_custo
          FROM cad_conta_financeira cf
          LEFT JOIN cad_centro_custo cc ON cc.cec_id = cf.cof_cec_id
+        WHERE COALESCE(cf.status, 'ativo') = 'ativo'
         ORDER BY cf.cof_descricao`,
     );
     return res.status(200).json({ contas: r.rows });

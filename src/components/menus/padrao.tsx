@@ -69,6 +69,8 @@ import ClassificacaoFiscal from '@/components/corpo/admin/cadastro/classificacao
 import RefFabrica from '@/components/corpo/admin/cadastro/refFabrica';
 import Armazens from '@/components/corpo/admin/cadastro/armazens';
 import BancosContas from '@/components/corpo/admin/cadastro/bancosContas';
+import ContaFinanceira from '@/components/corpo/admin/cadastro/contaFinanceira';
+import FormaPagamento from '@/components/corpo/admin/cadastro/formaPagamento';
 import KickbackBosch from '@/components/corpo/gerenciamento/produtos/kickback';
 import DadosEmpresa from '@/components/corpo/admin/cadastro/dadosEmpresa';
 import TransportadorasPage from '../corpo/admin/cadastro/transportadoras';
@@ -302,6 +304,18 @@ export const menus = [
             href: '/admin/cadastros/bancos',
             icon: LandmarkIcon,
             corpo: BancosContas,
+          },
+          {
+            name: 'Conta Financeira',
+            href: '/admin/cadastros/contaFinanceira',
+            icon: WalletIcon,
+            corpo: ContaFinanceira,
+          },
+          {
+            name: 'Forma de Pagamento',
+            href: '/admin/cadastros/formaPagamento',
+            icon: BadgeDollarSignIcon,
+            corpo: FormaPagamento,
           },
 
           {

@@ -14,7 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await pool.connect();
   try {
     const r = await client.query(
-      `SELECT codfpgt, descricao FROM dbforma_pagto ORDER BY codfpgt`,
+      `SELECT codfpgt, descricao FROM dbforma_pagto
+        WHERE COALESCE(status, 'ativo') = 'ativo'
+        ORDER BY codfpgt`,
     );
     return res.status(200).json({ formas: r.rows });
   } catch (error: any) {

@@ -38,6 +38,7 @@ import Vendedores from '@/components/corpo/admin/cadastro/vendedores';
 import Marcas from '@/components/corpo/admin/cadastro/marcas';
 import GrupoDeProdutos from '@/components/corpo/admin/cadastro/grupoDeProdutos';
 import BancosContas from '@/components/corpo/admin/cadastro/bancosContas';
+import ContaFinanceira from '@/components/corpo/admin/cadastro/contaFinanceira';
 import Cfop from '@/components/corpo/admin/cadastro/cfop';
 import Informativos from '@/components/corpo/admin/cadastro/informativos';
 import GruposFuncao from '@/components/corpo/admin/cadastro/gruposFuncao';
@@ -124,6 +125,12 @@ const menus = [
             href: '/admin/cadastros/bancosContas',
             icon: LandmarkIcon,
             corpo: BancosContas,
+          },
+          {
+            name: 'Conta Financeira',
+            href: '/admin/cadastros/contaFinanceira',
+            icon: WalletIcon,
+            corpo: ContaFinanceira,
           },
           {
             name: 'CFOP',

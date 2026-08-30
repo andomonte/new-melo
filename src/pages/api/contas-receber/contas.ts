@@ -11,12 +11,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { search } = req.query;
 
-    let whereClause = '';
     const params: any[] = [];
+
+    // Só contas financeiras ATIVAS (status do cadastro).
+    let whereClause = `WHERE COALESCE(cf.status, 'ativo') = 'ativo'`;
 
     // Filtro de busca por código ou descrição
     if (search) {
-      whereClause = `WHERE CAST(cf.cof_id AS TEXT) LIKE $1 OR UPPER(cf.cof_descricao) LIKE UPPER($2)`;
+      whereClause += ` AND (CAST(cf.cof_id AS TEXT) LIKE $1 OR UPPER(cf.cof_descricao) LIKE UPPER($2))`;
       params.push(`%${search}%`, `%${search}%`);
     }
 
