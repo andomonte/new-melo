@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { gerarComprovante } from '@/lib/financeiro/gerarComprovante';
 
 const pool = getPgPool();
 
@@ -338,6 +339,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Não quebrar a operação principal caso não encontre usuário ou tabela de auditoria
         console.warn('Não foi possível registrar auditoria para', username, ':', e);
       }
+    }
+
+    // Comprovante de pagamento (fin_autenticacao) — fiel ao Delphi. Não bloqueia a baixa.
+    try {
+      let codusrComp: string | null = null;
+      if (username) {
+        const u = await client.query(`SELECT codusr FROM dbusuario WHERE nomeusr = $1 LIMIT 1`, [username]);
+        codusrComp = u.rows[0]?.codusr ?? null;
+      }
+      const docRow = await client.query(`SELECT nro_doc FROM dbreceb WHERE cod_receb = $1`, [cod_receb]);
+      await gerarComprovante(client, {
+        codusr: codusrComp,
+        cod_conta: cod_conta || null,
+        itens: [
+          {
+            cod_receb,
+            valor: valorReceberNum + jurosNum,
+            nro_doc: docRow.rows[0]?.nro_doc ?? null,
+            valor_areceber: valorReceberNum,
+            valor_juros: jurosNum,
+            valor_total: valorReceberNum + jurosNum,
+          },
+        ],
+      });
+    } catch (e) {
+      console.warn('Falha ao gerar comprovante (não bloqueia a baixa):', e);
     }
 
     await client.query('COMMIT');
