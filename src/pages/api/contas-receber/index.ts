@@ -184,8 +184,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           r.grupo_pagamento_id,
           CASE
             WHEN r.cancel = 'S' THEN 'cancelado'
-            WHEN r.rec = 'S' AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0) THEN 'recebido'
-            WHEN r.rec = 'S' AND COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
+            -- Quitado: flag rec='S' OU o recebido já cobre o valor do título.
+            WHEN r.rec = 'S' OR (COALESCE(r.valor_rec, 0) > 0 AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0)) THEN 'recebido'
+            -- Parcial: recebeu algo mas ainda não cobriu o total (baixa em cascata deixa rec='N').
+            WHEN COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
             WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
             ELSE 'pendente'
           END as status,
@@ -237,8 +239,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           r.cod_receb,
           CASE
             WHEN r.cancel = 'S' THEN 'cancelado'
-            WHEN r.rec = 'S' AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0) THEN 'recebido'
-            WHEN r.rec = 'S' AND COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
+            -- Quitado: flag rec='S' OU o recebido já cobre o valor do título.
+            WHEN r.rec = 'S' OR (COALESCE(r.valor_rec, 0) > 0 AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0)) THEN 'recebido'
+            -- Parcial: recebeu algo mas ainda não cobriu o total (baixa em cascata deixa rec='N').
+            WHEN COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
             WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
             ELSE 'pendente'
           END as status,

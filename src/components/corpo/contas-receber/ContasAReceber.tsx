@@ -22,6 +22,8 @@ import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import { OPCOES_FORMA_FATURA, labelFormaFatura } from '@/lib/faturamento/formaFatura';
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
+import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
+import { formatarBRL } from '@/utils/monetario';
 
 // Data local yyyy-MM-dd (sem shift de timezone).
 const fmtLocalData = (d: Date) =>
@@ -185,6 +187,25 @@ export default function ContasAReceber() {
   const [exportando, setExportando] = useState(false);
   const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string }[]>([]);
   const [numParcelasInput, setNumParcelasInput] = useState('');
+
+  // Seleção múltipla para Dar Baixa em lote (mesmo cliente).
+  const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
+  const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
+
+  // Bancos do Novo Título: vêm da dbbanco_cobranca filtrada por ATIVO (mesma fonte do
+  // cadastro do cliente). Fallback = lista fixa se a busca falhar.
+  const [bancosNovoTitulo, setBancosNovoTitulo] = useState(BANCOS_NOVO_TITULO);
+  useEffect(() => {
+    fetch('/api/bancos/get?perPage=9999&status=ativo')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const lista = (d?.data || [])
+          .map((b: any) => ({ value: String(b.banco), label: b.nome }))
+          .filter((b: any) => b.value);
+        if (lista.length > 0) setBancosNovoTitulo(lista);
+      })
+      .catch(() => {});
+  }, []);
   const [contasDbconta, setContasDbconta] = useState<{value: string; label: string}[]>([]);
 
   // Estados para operadoras de cartão
@@ -221,6 +242,7 @@ export default function ContasAReceber() {
 
   // Cabeçalhos da tabela (ordenados seguindo o padrão: Ações, Status, ...)
   const headers = [
+    '☑️',                    // seleção múltipla (Dar Baixa em lote)
     'Ações',                 // ações (dropdown / botões)
     'Status',                // status (badge)
     'Número Título',         // cod_receb
@@ -391,6 +413,49 @@ export default function ContasAReceber() {
     }
   };
 
+  // ---- Seleção múltipla para Dar Baixa (recebimento em lote) ----
+  const podeReceberTitulo = (c: ContaReceber) =>
+    c.cancel !== 'S' && c.status !== 'recebido' && c.status !== 'cancelado';
+
+  const estaSelecionadoBaixa = (c: ContaReceber) =>
+    selecionadosBaixa.some((x) => x.cod_receb === c.cod_receb);
+
+  // Após a 1ª seleção, bloqueia marcar títulos de OUTRO cliente (ou cartão operadora isolado).
+  const bloqueadoParaBaixa = (c: ContaReceber) => {
+    if (selecionadosBaixa.length === 0 || estaSelecionadoBaixa(c)) return false;
+    if (String(selecionadosBaixa[0].codcli) !== String(c.codcli)) return true;
+    if (String(c.forma_fat) === '6' || selecionadosBaixa.some((x) => String(x.forma_fat) === '6')) return true;
+    return false;
+  };
+
+  const toggleSelecionadoBaixa = (conta: ContaReceber) => {
+    if (!podeReceberTitulo(conta)) {
+      toast.error('Este título não pode ser recebido (já recebido ou cancelado).');
+      return;
+    }
+    const ja = estaSelecionadoBaixa(conta);
+    if (!ja && selecionadosBaixa.length > 0) {
+      // Regra Delphi/Caixa: todos os títulos devem ser do MESMO cliente.
+      if (String(selecionadosBaixa[0].codcli) !== String(conta.codcli)) {
+        toast.error('Só é possível receber títulos do MESMO cliente.');
+        return;
+      }
+      // Título "cartão a receber da operadora" (forma_fat=6) é recebido isoladamente.
+      if (String(conta.forma_fat) === '6' || selecionadosBaixa.some((x) => String(x.forma_fat) === '6')) {
+        toast.error('Título de cartão (a receber da operadora) deve ser recebido isoladamente.');
+        return;
+      }
+    }
+    setSelecionadosBaixa((prev) =>
+      ja ? prev.filter((x) => x.cod_receb !== conta.cod_receb) : [...prev, conta],
+    );
+  };
+
+  const totalSelecionadoBaixa = selecionadosBaixa.reduce(
+    (s, c) => s + Math.max(0, Number(c.valor_original || 0) - Number(c.valor_recebido || 0)),
+    0,
+  );
+
   // Preparar dados da tabela (seguindo estrutura do legado)
   const prepararDadosTabela = () => {
     // Criar mapa de bancos para lookup rápido
@@ -405,8 +470,25 @@ export default function ContasAReceber() {
 
       const vencido = contaComNomeBanco.dt_venc && new Date(contaComNomeBanco.dt_venc) < new Date() && contaComNomeBanco.status !== 'recebido' && contaComNomeBanco.status !== 'cancelado';
 
-      // Retornar array na ordem dos headers (Ações, Status, ...)
+      // Retornar array na ordem dos headers (☑️, Ações, Status, ...)
       return [
+        // Seleção (checkbox) — só para títulos recebíveis
+        <input
+          key={`sel-${conta.cod_receb}`}
+          type="checkbox"
+          checked={estaSelecionadoBaixa(conta)}
+          disabled={!podeReceberTitulo(conta) || bloqueadoParaBaixa(conta)}
+          onChange={() => toggleSelecionadoBaixa(conta)}
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+          title={
+            !podeReceberTitulo(conta)
+              ? 'Título não recebível'
+              : bloqueadoParaBaixa(conta)
+              ? 'Título de outro cliente — só é possível receber do mesmo cliente'
+              : 'Selecionar para dar baixa'
+          }
+        />,
+
         // Ações
         <DropdownContasReceber
           key={`acoes-${conta.cod_receb}`}
@@ -1402,6 +1484,25 @@ export default function ContasAReceber() {
           </div>
         )}
 
+        {/* Barra de seleção múltipla — aparece ao marcar títulos (Dar Baixa em lote) */}
+        {selecionadosBaixa.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-2.5 flex-shrink-0">
+            <div className="text-sm text-blue-900 dark:text-blue-100">
+              <b>{selecionadosBaixa.length}</b> título(s) selecionado(s) ·{' '}
+              cliente <b>{selecionadosBaixa[0].codcli}{selecionadosBaixa[0].nome_cliente ? ` - ${selecionadosBaixa[0].nome_cliente}` : ''}</b> ·{' '}
+              a receber <b className="font-mono">{formatarBRL(totalSelecionadoBaixa)}</b>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setSelecionadosBaixa([])}>
+                Limpar
+              </Button>
+              <Button type="button" size="sm" onClick={() => setModalRecebLoteAberto(true)}>
+                Dar Baixa
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Container da tabela com altura calculada */}
         <div className="flex-1 min-h-20 flex flex-col">
           <DataTableContasPagar
@@ -1428,7 +1529,7 @@ export default function ContasAReceber() {
             noDataMessage="Nenhum título a receber encontrado."
             onFiltroChange={handleFiltroAvancado}
             onExportarExcel={handleExportarDireto}
-            nonsortableColumns={['Ações']}
+            nonsortableColumns={['☑️', 'Ações']}
             colunasFiltro={[
               'cod_receb',
               'nome_cliente',
@@ -2293,7 +2394,7 @@ export default function ContasAReceber() {
                     <SelectValue placeholder="Selecione o banco" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BANCOS_NOVO_TITULO.map((b) => (
+                    {bancosNovoTitulo.map((b) => (
                       <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -2362,7 +2463,7 @@ export default function ContasAReceber() {
                 <Label>Número do Documento</Label>
                 <Input
                   type="text"
-                  placeholder="Ex: 001/2024"
+                  placeholder="EX: DESCRIÇÃO"
                   value={novaContaDados.nro_doc}
                   onChange={(e) => setNovaContaDados({ ...novaContaDados, nro_doc: e.target.value })}
                 />
@@ -2519,6 +2620,29 @@ export default function ContasAReceber() {
           </div>
         </div>
       </Modal>
+
+      {/* Modal de Recebimento em lote (Dar Baixa) — reusa o motor do Caixa */}
+      <ModalRecebimentoTitulos
+        isOpen={modalRecebLoteAberto}
+        titulos={selecionadosBaixa.map((c) => ({
+          cod_receb: c.cod_receb,
+          codcli: c.codcli,
+          nome_cliente: c.nome_cliente,
+          nro_doc: c.nro_doc,
+          dt_venc: c.dt_venc,
+          valor_original: Number(c.valor_original || 0),
+          valor_recebido: Number(c.valor_recebido || 0),
+          forma_fat: c.forma_fat,
+        }))}
+        username={user?.usuario || ''}
+        user={user as any}
+        onClose={() => setModalRecebLoteAberto(false)}
+        onSuccess={() => {
+          setModalRecebLoteAberto(false);
+          setSelecionadosBaixa([]);
+          consultarContasReceber(paginaAtual, itensPorPagina, filtros);
+        }}
+      />
 
       {/* Modal de Importação de Cartão */}
       <Modal
