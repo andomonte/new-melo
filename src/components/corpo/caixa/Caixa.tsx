@@ -524,6 +524,26 @@ export default function Caixa() {
       return;
     }
 
+    // Regra do Caixa (UniCaixa.bbtnSalvarClick): SEMPRE amortizar o juros. Não pode baixar o
+    // principal deixando juros pendente — o juros do atraso entra integral.
+    if (
+      jurosVal > 0.005 &&
+      (recJuros <= 0.005 || (recTitulos > 0.005 && recJuros < jurosVal - 0.005))
+    ) {
+      toast.error('Você deve sempre amortizar o juros. O restante baixar do valor principal.');
+      return;
+    }
+
+    // Se o PRINCIPAL não é totalmente coberto, o título fica ABERTO (parcial) — confirma no salvamento real.
+    if (!simular && recTitulos < principalPend - 0.005) {
+      const ok = window.confirm(
+        'O valor recebido é MENOR que o valor total do título.\n' +
+          'Com esse valor o título permanecerá ABERTO (recebido parcial).\n\n' +
+          'Deseja continuar mesmo assim?',
+      );
+      if (!ok) return;
+    }
+
     setSalvando(true);
     setPrevia(null);
     try {
