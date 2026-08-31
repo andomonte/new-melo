@@ -123,6 +123,12 @@ export default function ModalRecebimentoTitulos({
   const [simular, setSimular] = useState(true);
   const [previa, setPrevia] = useState<any | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [refetchDados, setRefetchDados] = useState(0); // bump p/ recarregar juros após liberar
+  // Liberação de juros (baixar juros): taxa autorizada + motivo (≥15) para os títulos selecionados.
+  const [liberarAberto, setLiberarAberto] = useState(false);
+  const [liberarTaxa, setLiberarTaxa] = useState('');
+  const [liberarMotivo, setLiberarMotivo] = useState('');
+  const [liberando, setLiberando] = useState(false);
 
   const ehCartao = forma === 'credito' || forma === 'debito';
   const formaBucket = bucketDaForma(codFpgt);
@@ -192,7 +198,7 @@ export default function ModalRecebimentoTitulos({
         setDadosMap(m);
       })
       .catch(() => setDadosMap({}));
-  }, [isOpen, titulos, dataPgto]);
+  }, [isOpen, titulos, dataPgto, refetchDados]);
 
   // ---- Derivados (somam todos os títulos selecionados) ----
   const principalPend = useMemo(
@@ -236,6 +242,43 @@ export default function ModalRecebimentoTitulos({
   const faltaJuros = Math.max(0, jurosVal - recJuros);
   const quitado = totalReceber > 0 && recebidoTotal >= totalReceber - 0.005;
   const parcial = recTitulos > 0 && recTitulos < principalPend - 0.005;
+
+  // Abre o painel "Baixar Juros" já com a taxa aplicada atual como padrão.
+  const abrirLiberarJuros = () => {
+    const taxaAtual = titulos.map((t) => dadosMap[t.cod_receb]?.taxa).find((x) => x != null);
+    setLiberarTaxa(taxaAtual != null ? String(taxaAtual) : '');
+    setLiberarMotivo('');
+    setLiberarAberto(true);
+  };
+
+  const confirmarLiberarJuros = async () => {
+    const taxa = Number(String(liberarTaxa).replace(',', '.'));
+    if (!Number.isFinite(taxa) || taxa < 0) {
+      toast.error('Informe uma taxa de juros válida (0 = isentar).');
+      return;
+    }
+    if (liberarMotivo.trim().length < 15) {
+      toast.error('O motivo é obrigatório (mínimo 15 caracteres).');
+      return;
+    }
+    setLiberando(true);
+    try {
+      const r = await fetch('/api/contas-receber/liberar-juros', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cod_receb: titulos.map((t) => t.cod_receb), taxa, motivo: liberarMotivo.trim(), usuario: username }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'Erro ao liberar juros');
+      toast.success(`Juros liberado em ${d.liberados} título(s) à taxa ${taxa}%${d.jaRecebidos?.length ? ` (${d.jaRecebidos.length} já recebido[s] ignorado[s])` : ''}.`);
+      setLiberarAberto(false);
+      setRefetchDados((x) => x + 1); // recalcula o juros com a taxa liberada
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLiberando(false);
+    }
+  };
 
   const adicionarPassada = () => {
     if (titulos.length === 0) {
@@ -733,6 +776,72 @@ export default function ModalRecebimentoTitulos({
                 Principal <b>parcial</b>: o(s) título(s) ficam <b>em aberto</b> no restante (baixa em cascata).
               </div>
             )}
+
+            {/* Baixar Juros (liberar taxa) — porte do Delphi UniContasR.BaixarJuros */}
+            <div className="mt-3">
+              {!liberarAberto ? (
+                <button
+                  type="button"
+                  onClick={abrirLiberarJuros}
+                  disabled={titulos.length === 0}
+                  className="text-xs font-medium text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-40"
+                  title="Autoriza uma taxa de juros (0 = isentar) para os títulos selecionados"
+                >
+                  Baixar juros (liberar taxa)…
+                </button>
+              ) : (
+                <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/20 p-3 space-y-2">
+                  <div className="text-xs font-bold text-blue-900 dark:text-blue-100">
+                    Baixar juros — {titulos.length} título(s)
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-end">
+                    <div>
+                      <Label className="text-[11px]">Taxa liberada (% a.m.) — 0 isenta</Label>
+                      <Input
+                        value={liberarTaxa}
+                        onChange={(e) => setLiberarTaxa(e.target.value)}
+                        inputMode="decimal"
+                        placeholder="ex: 0"
+                        className="font-mono h-9"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Motivo (mín. 15 caracteres)</Label>
+                    <textarea
+                      value={liberarMotivo}
+                      onChange={(e) => setLiberarMotivo(e.target.value)}
+                      rows={2}
+                      className="w-full text-xs rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5"
+                      placeholder="Justificativa da liberação de juros…"
+                    />
+                    <div className={`text-[10px] mt-0.5 ${liberarMotivo.trim().length < 15 ? 'text-red-600' : 'text-gray-400'}`}>
+                      {liberarMotivo.trim().length}/15
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setLiberarAberto(false)}
+                      className="text-xs px-3 h-8 rounded-md bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmarLiberarJuros}
+                      disabled={liberando}
+                      className="text-xs px-3 h-8 rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                    >
+                      {liberando ? 'Liberando…' : 'Confirmar liberação'}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-500">
+                    Autoriza a taxa para o próximo recebimento (registra usuário, data e motivo). Não recebe o título.
+                  </p>
+                </div>
+              )}
+            </div>
 
             {/* Conta operador + depósito + simulação */}
             <div className="mt-4 grid grid-cols-3 gap-3 items-end">

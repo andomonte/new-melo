@@ -37,6 +37,32 @@ function groupByCliente(rows: any[]): Map<string, any[]> {
   return new Map(sorted);
 }
 
+// ─── Colunas do relatório (selecionáveis + reordenáveis) ─────────────────────
+type ColTipo = 'text' | 'money' | 'date' | 'num';
+export const COLS_REL: Record<string, { label: string; tipo: ColTipo; campo: string }> = {
+  nro_doc:      { label: 'NRO_DOC',      tipo: 'text',  campo: 'nro_doc' },
+  dias:         { label: 'DIAS',         tipo: 'num',   campo: 'dias' },
+  cliente:      { label: 'CLIENTE',      tipo: 'text',  campo: 'cliente' },
+  cod_conta:    { label: 'COD_CONTA',    tipo: 'text',  campo: 'cod_conta' },
+  valor_pgto:   { label: 'VALOR_PGTO',   tipo: 'money', campo: 'valor_pgto' },
+  valor_juros:  { label: 'VALOR_JUROS',  tipo: 'money', campo: 'valor_juros' },
+  valor_rec:    { label: 'VALOR_REC',    tipo: 'money', campo: 'valor_rec' },
+  valor_aberto: { label: 'VALOR_ABERTO', tipo: 'money', campo: 'valor_aberto' },
+  dt_emissao:   { label: 'DT_EMISSAO',   tipo: 'date',  campo: 'dt_emissao' },
+  dt_venc:      { label: 'DT_VENC',      tipo: 'date',  campo: 'dt_venc' },
+  parcela:      { label: 'PARCELA',      tipo: 'text',  campo: 'parcela' },
+  tarifa:       { label: 'TARIFA',       tipo: 'money', campo: 'tarifa' },
+  dt_pgto:      { label: 'DT_PGTO',      tipo: 'date',  campo: 'dt_pgto' },
+};
+export const COLS_ORDER_DEFAULT = Object.keys(COLS_REL);
+
+/** Lê o parâmetro `colunas` (chaves separadas por vírgula, na ordem) ou usa o padrão. */
+function parseColunas(param?: string): string[] {
+  if (!param) return COLS_ORDER_DEFAULT;
+  const lista = param.split(',').map((s) => s.trim()).filter((k) => COLS_REL[k]);
+  return lista.length > 0 ? lista : COLS_ORDER_DEFAULT;
+}
+
 // ─── SQL ────────────────────────────────────────────────────────────────────
 
 // Configuração dos relatórios do Delphi (Financeiro → Contas a Receber → Relatórios).
@@ -59,11 +85,14 @@ function buildQuery(
   data_fim?: string,
   status?: string,
   colFiltros: { cod_receb?: string; cliente?: string; nro_doc?: string; cod_fat?: string; search?: string } = {},
+  extra: { codcli?: string; cod_conta?: string; classe_pgto?: string; tx_juros?: string } = {},
 ): { sql: string; params: any[]; countSql: string; layout: 'geral' | 'por_cliente'; titulo: string } {
   const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG.geral;
   const params: any[] = [];
   let idx = 1;
   let whereClause = '';
+  // Taxa de juros (número seguro — interpolada direto no SQL do juros projetado).
+  const tx = Number(String(extra.tx_juros ?? '').replace(',', '.')) || 0;
 
   // Período: dbreceb usa r.<campo> (dt_venc/dt_emissao); dbfreceb usa fr.dt_pgto.
   const campoData = cfg.fonte === 'dbfreceb' ? `fr.${cfg.dateField}` : `r.${cfg.dateField}`;
@@ -97,6 +126,21 @@ function buildQuery(
   if (colFiltros.search) {
     whereClause += ` AND (CAST(r.cod_receb AS TEXT) ILIKE $${idx} OR c.nome ILIKE $${idx} OR r.nro_doc ILIKE $${idx})`;
     params.push(`%${colFiltros.search}%`); idx++;
+  }
+
+  // Parâmetros próprios do relatório (Delphi TFrmRelContasR): cliente, conta, classe pgto.
+  if (extra.codcli) {
+    whereClause += ` AND LTRIM(CAST(r.codcli AS TEXT), '0') = LTRIM($${idx}, '0')`;
+    params.push(String(extra.codcli)); idx++;
+  }
+  if (extra.cod_conta) {
+    const contaCol = cfg.fonte === 'dbfreceb' ? 'fr.cod_conta' : 'r.cod_conta';
+    whereClause += ` AND ${contaCol} = $${idx}`;
+    params.push(String(extra.cod_conta)); idx++;
+  }
+  if (extra.classe_pgto === 'V' || extra.classe_pgto === 'I') {
+    whereClause += ` AND UPPER(COALESCE(c.claspgto,'')) = $${idx}`;
+    params.push(extra.classe_pgto); idx++;
   }
 
   // Filtro específico do tipo de relatório.
@@ -169,7 +213,13 @@ function buildQuery(
         COALESCE(c.codcli::text, '') || ' ' || COALESCE(c.nome, '') AS cliente,
         r.cod_conta,
         COALESCE(r.valor_pgto, 0) AS valor_pgto,
-        GREATEST(0, COALESCE(r.valor_rec, 0) - COALESCE(r.valor_pgto, 0)) AS valor_juros,
+        ${
+          tx > 0
+            ? `CASE WHEN r.rec IS DISTINCT FROM 'S' AND r.dt_venc < CURRENT_DATE
+                 THEN ROUND((GREATEST(0, CURRENT_DATE - r.dt_venc) * COALESCE(r.valor_pgto,0) * (${tx}/3000.0))::numeric, 2)
+                 ELSE GREATEST(0, COALESCE(r.valor_rec, 0) - COALESCE(r.valor_pgto, 0)) END`
+            : `GREATEST(0, COALESCE(r.valor_rec, 0) - COALESCE(r.valor_pgto, 0))`
+        } AS valor_juros,
         COALESCE(r.valor_rec, 0) AS valor_rec,
         COALESCE(r.valor_pgto, 0) - COALESCE(r.valor_rec, 0) AS valor_aberto,
         r.dt_emissao,
@@ -210,21 +260,17 @@ function gerarPDF(
   rows: any[],
   layout: 'geral' | 'por_cliente',
   titulo: string,
+  colunas: string[],
   data_inicio?: string,
   data_fim?: string,
 ): Buffer {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
   const pageW = doc.internal.pageSize.getWidth();
-
-  // Title
-  const titleText = titulo;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text(titleText, pageW / 2, 14, { align: 'center' });
+  doc.text(titulo, pageW / 2, 14, { align: 'center' });
 
-  // Subtitle
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   const periodo =
@@ -233,190 +279,96 @@ function gerarPDF(
       : 'Todos os períodos';
   doc.text(periodo, pageW / 2, 20, { align: 'center' });
 
-  // Column headers
-  const headers = [
-    'NRO_DOC', 'DIAS', 'CLIENTE', 'COD_CONTA',
-    'VALOR_PGTO', 'VALOR_JUROS', 'VALOR_REC', 'VALOR_ABERTO',
-    'DT_EMISSAO', 'DT_VENC', 'PARCELA', 'TARIFA', 'DT_PGTO',
-  ];
+  const cols = colunas.map((k) => ({ key: k, ...COLS_REL[k] }));
+  const headers = cols.map((c) => c.label);
+  const moneyKeys = cols.filter((c) => c.tipo === 'money').map((c) => c.key);
+  const firstMoneyIdx = cols.findIndex((c) => c.tipo === 'money');
+  const labelSpan = Math.max(1, firstMoneyIdx < 0 ? cols.length : firstMoneyIdx);
+
+  const cellVal = (row: any, c: any) => {
+    if (c.tipo === 'money') return fmtMoney(fmtMoneyNum(row[c.campo]));
+    if (c.tipo === 'date') return fmtDate(row[c.campo]);
+    return row[c.campo] ?? '';
+  };
+  const dataRow = (row: any) => cols.map((c) => cellVal(row, c));
+
+  const linhaTotal = (label: string, somas: Record<string, number>, fill?: [number, number, number]) => {
+    const r: any[] = [
+      {
+        content: label,
+        colSpan: labelSpan,
+        styles: { fontStyle: 'bold' as const, fontSize: 7, ...(fill ? { fillColor: fill } : {}) },
+      },
+    ];
+    for (let i = labelSpan; i < cols.length; i++) {
+      const c = cols[i];
+      if (c.tipo === 'money') {
+        r.push({
+          content: fmtMoney(somas[c.key] || 0),
+          styles: { fontStyle: 'bold' as const, halign: 'right' as const, ...(fill ? { fillColor: fill } : {}) },
+        });
+      } else {
+        r.push(fill ? { content: '', styles: { fillColor: fill } } : '');
+      }
+    }
+    return r;
+  };
 
   const allBody: any[] = [];
+  const grand: Record<string, number> = {};
+  moneyKeys.forEach((k) => (grand[k] = 0));
 
-  // Money column indices (0-based): VALOR_PGTO=4, VALOR_JUROS=5, VALOR_REC=6, VALOR_ABERTO=7, TARIFA=10
-  const moneyColSpan = headers.length;
+  const addRows = (grupo: any[]) => {
+    const sub: Record<string, number> = {};
+    moneyKeys.forEach((k) => (sub[k] = 0));
+    for (const row of grupo) {
+      allBody.push(dataRow(row));
+      moneyKeys.forEach((k) => {
+        const v = fmtMoneyNum(row[COLS_REL[k].campo]);
+        sub[k] += v;
+        grand[k] += v;
+      });
+    }
+    return sub;
+  };
 
   if (layout === 'por_cliente') {
     const grouped = groupByCliente(rows);
-
     for (const [clienteKey, grupo] of Array.from(grouped.entries())) {
-      // Group header row
-      const groupRow = [
+      allBody.push([
         {
           content: `--------- CLIENTE: ${clienteKey}`,
-          colSpan: headers.length,
-          styles: {
-            fontStyle: 'bold' as const,
-            fillColor: [220, 230, 241] as [number, number, number],
-            textColor: [0, 0, 0] as [number, number, number],
-            fontSize: 7,
-          },
+          colSpan: cols.length,
+          styles: { fontStyle: 'bold' as const, fillColor: [220, 230, 241] as [number, number, number], fontSize: 7 },
         },
-      ];
-      allBody.push(groupRow);
-
-      let subValorPgto = 0;
-      let subValorJuros = 0;
-      let subValorRec = 0;
-      let subValorAberto = 0;
-
-      for (const r of grupo) {
-        const valorPgto = fmtMoneyNum(r.valor_pgto);
-        const valorJuros = fmtMoneyNum(r.valor_juros);
-        const valorRec = fmtMoneyNum(r.valor_rec);
-        const valorAberto = fmtMoneyNum(r.valor_aberto);
-        subValorPgto += valorPgto;
-        subValorJuros += valorJuros;
-        subValorRec += valorRec;
-        subValorAberto += valorAberto;
-
-        allBody.push([
-          r.nro_doc ?? '',
-          r.dias ?? 0,
-          r.cliente ?? '',
-          r.cod_conta ?? '',
-          fmtMoney(valorPgto),
-          fmtMoney(valorJuros),
-          fmtMoney(valorRec),
-          fmtMoney(valorAberto),
-          fmtDate(r.dt_emissao),
-          fmtDate(r.dt_venc),
-          r.parcela ?? '',
-          fmtMoney(r.tarifa ?? 0),
-          fmtDate(r.dt_pgto),
-        ]);
-      }
-
-      // Subtotal row per client
-      allBody.push([
-        {
-          content: `Subtotal ${clienteKey}`,
-          colSpan: 4,
-          styles: { fontStyle: 'bold' as const, fontSize: 7 },
-        },
-        { content: fmtMoney(subValorPgto), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
-        { content: fmtMoney(subValorJuros), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
-        { content: fmtMoney(subValorRec), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
-        { content: fmtMoney(subValorAberto), styles: { fontStyle: 'bold' as const, halign: 'right' as const } },
-        '', '', '', '', '',
       ]);
+      const sub = addRows(grupo);
+      allBody.push(linhaTotal(`Subtotal ${clienteKey}`, sub));
     }
   } else {
-    // Geral: flat list
-    for (const r of rows) {
-      allBody.push([
-        r.nro_doc ?? '',
-        r.dias ?? 0,
-        r.cliente ?? '',
-        r.cod_conta ?? '',
-        fmtMoney(fmtMoneyNum(r.valor_pgto)),
-        fmtMoney(fmtMoneyNum(r.valor_juros)),
-        fmtMoney(fmtMoneyNum(r.valor_rec)),
-        fmtMoney(fmtMoneyNum(r.valor_aberto)),
-        fmtDate(r.dt_emissao),
-        fmtDate(r.dt_venc),
-        r.parcela ?? '',
-        fmtMoney(r.tarifa ?? 0),
-        fmtDate(r.dt_pgto),
-      ]);
-    }
+    addRows(rows);
   }
+  allBody.push(linhaTotal(`TOTAL GERAL (${rows.length} registro${rows.length !== 1 ? 's' : ''})`, grand, [189, 215, 238]));
 
-  // Grand total
-  const grandValorPgto = rows.reduce((s, r) => s + fmtMoneyNum(r.valor_pgto), 0);
-  const grandValorJuros = rows.reduce((s, r) => s + fmtMoneyNum(r.valor_juros), 0);
-  const grandValorRec = rows.reduce((s, r) => s + fmtMoneyNum(r.valor_rec), 0);
-  const grandValorAberto = rows.reduce((s, r) => s + fmtMoneyNum(r.valor_aberto), 0);
-
-  allBody.push([
-    {
-      content: `TOTAL GERAL (${rows.length} registro${rows.length !== 1 ? 's' : ''})`,
-      colSpan: 4,
-      styles: {
-        fontStyle: 'bold' as const,
-        fillColor: [189, 215, 238] as [number, number, number],
-        fontSize: 8,
-      },
-    },
-    {
-      content: fmtMoney(grandValorPgto),
-      styles: {
-        fontStyle: 'bold' as const,
-        fillColor: [189, 215, 238] as [number, number, number],
-        halign: 'right' as const,
-      },
-    },
-    {
-      content: fmtMoney(grandValorJuros),
-      styles: {
-        fontStyle: 'bold' as const,
-        fillColor: [189, 215, 238] as [number, number, number],
-        halign: 'right' as const,
-      },
-    },
-    {
-      content: fmtMoney(grandValorRec),
-      styles: {
-        fontStyle: 'bold' as const,
-        fillColor: [189, 215, 238] as [number, number, number],
-        halign: 'right' as const,
-      },
-    },
-    {
-      content: fmtMoney(grandValorAberto),
-      styles: {
-        fontStyle: 'bold' as const,
-        fillColor: [189, 215, 238] as [number, number, number],
-        halign: 'right' as const,
-      },
-    },
-    '', '', '', '', '',
-  ]);
+  const columnStyles: any = {};
+  cols.forEach((c, i) => {
+    if (c.tipo === 'money' || c.tipo === 'num') columnStyles[i] = { halign: 'right' };
+  });
 
   autoTable(doc, {
     startY: 25,
     head: [headers],
     body: allBody,
     styles: { fontSize: 7, cellPadding: 1, overflow: 'ellipsize' },
-    headStyles: {
-      fillColor: [31, 73, 125],
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 7,
-    },
-    columnStyles: {
-      1:  { halign: 'right' },  // DIAS
-      4:  { halign: 'right' },  // VALOR_PGTO
-      5:  { halign: 'right' },  // VALOR_JUROS
-      6:  { halign: 'right' },  // VALOR_REC
-      7:  { halign: 'right' },  // VALOR_ABERTO
-      11: { halign: 'right' },  // TARIFA (deslocada por PARCELA)
-    },
+    headStyles: { fillColor: [31, 73, 125], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+    columnStyles,
     tableWidth: 'auto',
     theme: 'grid',
     margin: { top: 25, left: 3, right: 3 },
     didDrawPage: (data) => {
       doc.setFontSize(7);
-      doc.text(
-        `Página ${data.pageNumber}`,
-        pageW - 10,
-        doc.internal.pageSize.getHeight() - 5,
-        { align: 'right' },
-      );
-      doc.text(
-        `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
-        10,
-        doc.internal.pageSize.getHeight() - 5,
-      );
+      doc.text(`Página ${data.pageNumber}`, pageW - 10, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 10, doc.internal.pageSize.getHeight() - 5);
     },
   });
 
@@ -429,25 +381,24 @@ async function gerarExcel(
   rows: any[],
   layout: 'geral' | 'por_cliente',
   titulo: string,
+  colunas: string[],
   data_inicio?: string,
   data_fim?: string,
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sistema Melo';
   wb.created = new Date();
+  const ws = wb.addWorksheet('Contas a Receber', { pageSetup: { orientation: 'landscape', paperSize: 9 } });
 
-  const ws = wb.addWorksheet('Contas a Receber', {
-    pageSetup: { orientation: 'landscape', paperSize: 9 },
-  });
+  const cols = colunas.map((k) => ({ key: k, ...COLS_REL[k] }));
+  const NUM_COLS = cols.length;
+  const moneyKeys = cols.filter((c) => c.tipo === 'money').map((c) => c.key);
+  const firstMoneyIdx = cols.findIndex((c) => c.tipo === 'money');
+  const labelSpan = Math.max(1, firstMoneyIdx < 0 ? NUM_COLS : firstMoneyIdx);
 
-  // ── Title rows ──────────────────────────────────────────────────────────
-  const NUM_COLS = 13;
-  const lastCol = 'M'; // column 13
-
-  const titleText = titulo;
-
-  const titleRow = ws.addRow([titleText]);
-  ws.mergeCells(`A${titleRow.number}:${lastCol}${titleRow.number}`);
+  // Título + período
+  const titleRow = ws.addRow([titulo]);
+  ws.mergeCells(titleRow.number, 1, titleRow.number, NUM_COLS);
   titleRow.font = { bold: true, size: 13 };
   titleRow.alignment = { horizontal: 'center' };
 
@@ -456,183 +407,104 @@ async function gerarExcel(
       ? `Período: ${data_inicio ? fmtDate(data_inicio + 'T00:00:00') : 'início'} a ${data_fim ? fmtDate(data_fim + 'T00:00:00') : 'fim'}`
       : 'Todos os períodos';
   const subRow = ws.addRow([periodo]);
-  ws.mergeCells(`A${subRow.number}:${lastCol}${subRow.number}`);
+  ws.mergeCells(subRow.number, 1, subRow.number, NUM_COLS);
   subRow.font = { size: 9, italic: true };
   subRow.alignment = { horizontal: 'center' };
 
-  ws.addRow([]); // blank
+  ws.addRow([]);
 
-  // ── Header row ──────────────────────────────────────────────────────────
-  const headerLabels = [
-    'NRO_DOC', 'DIAS', 'CLIENTE', 'COD_CONTA',
-    'VALOR_PGTO', 'VALOR_JUROS', 'VALOR_REC', 'VALOR_ABERTO',
-    'DT_EMISSAO', 'DT_VENC', 'PARCELA', 'TARIFA', 'DT_PGTO',
-  ];
-  const headerRow = ws.addRow(headerLabels);
+  // Cabeçalho
+  const headerRow = ws.addRow(cols.map((c) => c.label));
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
-  headerRow.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FF1F497D' },
-  };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } };
   headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
   headerRow.height = 18;
 
-  // ── Column widths ───────────────────────────────────────────────────────
-  ws.columns = [
-    { key: 'nro_doc',      width: 18 },
-    { key: 'dias',         width: 10 },
-    { key: 'cliente',      width: 45 },
-    { key: 'cod_conta',    width: 14 },
-    { key: 'valor_pgto',   width: 18 },
-    { key: 'valor_juros',  width: 16 },
-    { key: 'valor_rec',    width: 18 },
-    { key: 'valor_aberto', width: 18 },
-    { key: 'dt_emissao',   width: 14 },
-    { key: 'dt_venc',      width: 14 },
-    { key: 'parcela',      width: 12 },
-    { key: 'tarifa',       width: 14 },
-    { key: 'dt_pgto',      width: 14 },
-  ];
+  ws.columns = cols.map((c) => ({
+    width: c.tipo === 'money' ? 18 : c.tipo === 'date' ? 14 : c.key === 'cliente' ? 45 : 14,
+  }));
 
-  // Money columns: E, F, G, H, L (TARIFA deslocada por PARCELA)
-  const moneyCols = ['E', 'F', 'G', 'H', 'L'];
-  // Date columns: I, J, M
-  const dateCols = ['I', 'J', 'M'];
+  const grand: Record<string, number> = {};
+  moneyKeys.forEach((k) => (grand[k] = 0));
 
-  let grandValorPgto = 0;
-  let grandValorJuros = 0;
-  let grandValorRec = 0;
-  let grandValorAberto = 0;
-
-  const addDataRow = (r: any) => {
-    const valorPgto = fmtMoneyNum(r.valor_pgto);
-    const valorJuros = fmtMoneyNum(r.valor_juros);
-    const valorRec = fmtMoneyNum(r.valor_rec);
-    const valorAberto = fmtMoneyNum(r.valor_aberto);
-    grandValorPgto += valorPgto;
-    grandValorJuros += valorJuros;
-    grandValorRec += valorRec;
-    grandValorAberto += valorAberto;
-
-    const dataRow = ws.addRow({
-      nro_doc:      r.nro_doc ?? '',
-      dias:         r.dias ?? 0,
-      cliente:      r.cliente ?? '',
-      cod_conta:    r.cod_conta ?? '',
-      valor_pgto:   valorPgto,
-      valor_juros:  valorJuros,
-      valor_rec:    valorRec,
-      valor_aberto: valorAberto,
-      dt_emissao:   r.dt_emissao ? new Date(r.dt_emissao) : '',
-      dt_venc:      r.dt_venc ? new Date(r.dt_venc) : '',
-      parcela:      r.parcela ?? '',
-      tarifa:       fmtMoneyNum(r.tarifa ?? 0),
-      dt_pgto:      r.dt_pgto ? new Date(r.dt_pgto) : '',
+  const addData = (row: any) => {
+    const values = cols.map((c) => {
+      if (c.tipo === 'money') {
+        const v = fmtMoneyNum(row[c.campo]);
+        grand[c.key] += v;
+        return v;
+      }
+      if (c.tipo === 'date') return row[c.campo] ? new Date(row[c.campo]) : '';
+      return row[c.campo] ?? '';
     });
-
-    dataRow.font = { size: 8 };
-    dataRow.alignment = { vertical: 'middle' };
-
-    moneyCols.forEach((col) => {
-      const cell = dataRow.getCell(col);
-      cell.numFmt = '#,##0.00';
-      cell.alignment = { horizontal: 'right' };
-    });
-
-    dateCols.forEach((col) => {
-      const cell = dataRow.getCell(col);
-      if (cell.value instanceof Date) {
+    const dr = ws.addRow(values);
+    dr.font = { size: 8 };
+    dr.alignment = { vertical: 'middle' };
+    cols.forEach((c, i) => {
+      const cell = dr.getCell(i + 1);
+      if (c.tipo === 'money') {
+        cell.numFmt = '#,##0.00';
+        cell.alignment = { horizontal: 'right' };
+      } else if (c.tipo === 'num') {
+        cell.alignment = { horizontal: 'right' };
+      } else if (c.tipo === 'date' && cell.value instanceof Date) {
         cell.numFmt = 'dd/mm/yyyy';
       }
     });
+    return values;
+  };
 
-    return { valorPgto, valorJuros, valorRec, valorAberto };
+  const linhaTotal = (label: string, somas: Record<string, number>, fillArgb: string, bold = true) => {
+    const arr: any[] = [];
+    for (let i = 0; i < NUM_COLS; i++) {
+      if (i === 0) arr.push(label);
+      else if (i < labelSpan) arr.push('');
+      else {
+        const c = cols[i];
+        arr.push(c.tipo === 'money' ? somas[c.key] || 0 : '');
+      }
+    }
+    const tr = ws.addRow(arr);
+    if (labelSpan > 1) ws.mergeCells(tr.number, 1, tr.number, labelSpan);
+    tr.font = { bold, size: 9 };
+    tr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
+    cols.forEach((c, i) => {
+      if (c.tipo === 'money') {
+        const cell = tr.getCell(i + 1);
+        cell.numFmt = '#,##0.00';
+        cell.alignment = { horizontal: 'right' };
+        cell.font = { bold, size: 9 };
+      }
+    });
+    return tr;
   };
 
   if (layout === 'por_cliente') {
     const grouped = groupByCliente(rows);
-
     for (const [clienteKey, grupo] of Array.from(grouped.entries())) {
-      // Group separator row
       const sepRow = ws.addRow([`--------- CLIENTE: ${clienteKey}`]);
-      ws.mergeCells(`A${sepRow.number}:${lastCol}${sepRow.number}`);
+      ws.mergeCells(sepRow.number, 1, sepRow.number, NUM_COLS);
       sepRow.font = { bold: true, size: 9 };
-      sepRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFDCE6F1' },
-      };
+      sepRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } };
       sepRow.alignment = { horizontal: 'left', vertical: 'middle' };
       sepRow.height = 16;
 
-      let subValorPgto = 0;
-      let subValorJuros = 0;
-      let subValorRec = 0;
-      let subValorAberto = 0;
-
+      const sub: Record<string, number> = {};
+      moneyKeys.forEach((k) => (sub[k] = 0));
       for (const r of grupo) {
-        const totals = addDataRow(r);
-        subValorPgto += totals.valorPgto;
-        subValorJuros += totals.valorJuros;
-        subValorRec += totals.valorRec;
-        subValorAberto += totals.valorAberto;
+        addData(r);
+        moneyKeys.forEach((k) => (sub[k] += fmtMoneyNum(r[COLS_REL[k].campo])));
       }
-
-      // Subtotal row per client
-      const subRow2 = ws.addRow([
-        `Subtotal ${clienteKey}`, '', '', '',
-        subValorPgto, subValorJuros, subValorRec, subValorAberto,
-        '', '', '', '', '',
-      ]);
-      subRow2.font = { bold: true, size: 8 };
-      subRow2.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFEAF1F8' },
-      };
-      moneyCols.forEach((col) => {
-        const cell = subRow2.getCell(col);
-        cell.numFmt = '#,##0.00';
-        cell.alignment = { horizontal: 'right' };
-      });
+      linhaTotal(`Subtotal ${clienteKey}`, sub, 'FFEAF1F8', true);
     }
   } else {
-    // Geral: flat list
-    for (const r of rows) {
-      addDataRow(r);
-    }
+    for (const r of rows) addData(r);
   }
 
-  // Grand total row
-  const totalRow = ws.addRow([
-    `TOTAL GERAL (${rows.length} registro${rows.length !== 1 ? 's' : ''})`,
-    '', '', '',
-    grandValorPgto, grandValorJuros, grandValorRec, grandValorAberto,
-    '', '', '', '', '',
-  ]);
-  totalRow.font = { bold: true, size: 9, color: { argb: 'FF000000' } };
-  totalRow.fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FFBDD7EE' },
-  };
-  totalRow.height = 18;
-  moneyCols.forEach((col) => {
-    const cell = totalRow.getCell(col);
-    cell.numFmt = '#,##0.00';
-    cell.alignment = { horizontal: 'right' };
-    cell.font = { bold: true, size: 9 };
-  });
+  linhaTotal(`TOTAL GERAL (${rows.length} registro${rows.length !== 1 ? 's' : ''})`, grand, 'FFBDD7EE', true);
 
-  // Freeze header row (row 4)
   ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 4 }];
-
-  // Auto-filter on header row
-  ws.autoFilter = {
-    from: { row: 4, column: 1 },
-    to: { row: 4, column: NUM_COLS },
-  };
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: NUM_COLS } };
 
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer as ArrayBuffer);
@@ -645,7 +517,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search } = req.query;
+  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, colunas } = req.query;
+  const colunasSel = parseColunas(colunas as string | undefined);
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel')) {
     return res.status(400).json({
@@ -672,6 +545,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         nro_doc: nro_doc as string | undefined,
         cod_fat: cod_fat as string | undefined,
         search: search as string | undefined,
+      },
+      {
+        codcli: codcli as string | undefined,
+        cod_conta: cod_conta as string | undefined,
+        classe_pgto: classe_pgto as string | undefined,
+        tx_juros: tx_juros as string | undefined,
       },
     );
 
@@ -716,6 +595,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         rows,
         layout,
         titulo,
+        colunasSel,
         data_inicio as string | undefined,
         data_fim as string | undefined,
       );
@@ -732,6 +612,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       rows,
       layout,
       titulo,
+      colunasSel,
       data_inicio as string | undefined,
       data_fim as string | undefined,
     );

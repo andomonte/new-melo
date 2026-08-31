@@ -392,6 +392,10 @@ export async function executarRecebimento(
     'UPDATE dbreceb SET valor_rec=$1, rec=$2, dt_pgto=$3, cod_conta=$4 WHERE cod_receb=$5',
     [novoValorRec, rec, p.dataPgto, p.cod_conta, p.cod_receb],
   );
+  // Consome a liberação de juros (FIN_LIBERA_JUROS): a taxa liberada valia para este recebimento.
+  await c
+    .query('UPDATE fin_libera_juros SET lij_utilizada=1 WHERE lij_cod_receb=$1 AND lij_utilizada=0', [p.cod_receb])
+    .catch(() => {});
   resultado.baixa = {
     valor_rec: novoValorRec,
     rec,

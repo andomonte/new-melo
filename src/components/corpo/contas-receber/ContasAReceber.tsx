@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch } from 'lucide-react';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
@@ -25,6 +25,8 @@ import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/n
 import { nomeBancoPorInterno } from '@/lib/faturamento/bancoCobranca';
 import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
 import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
+import ModalConciliacao from '@/components/corpo/contas-receber/ModalConciliacao';
+import ModalAIdentificar from '@/components/corpo/contas-receber/ModalAIdentificar';
 import { formatarBRL } from '@/utils/monetario';
 
 // Data local yyyy-MM-dd (sem shift de timezone).
@@ -163,6 +165,74 @@ export default function ContasAReceber() {
     { value: 'recebimento_clientes', label: 'Recebimento de Clientes', desc: 'O que foi recebido no período (por pagamento)' },
     { value: 'geral', label: 'Geral (lista)', desc: 'Todos os títulos do período' },
   ];
+  // Quais parâmetros cada relatório mostra (fiel ao TFrmRelContasR do Delphi).
+  const CAMPOS_RELATORIO: Record<TipoRelatorio, { datas: boolean; cliente: boolean; conta: boolean; classe: boolean; juros: boolean }> = {
+    receber_periodo:      { datas: true, cliente: false, conta: true,  classe: true,  juros: true },
+    por_cliente:          { datas: true, cliente: true,  conta: false, classe: false, juros: true },
+    em_atraso:            { datas: true, cliente: false, conta: false, classe: false, juros: true },
+    diario_avista:        { datas: true, cliente: false, conta: false, classe: false, juros: false },
+    recebimento_clientes: { datas: true, cliente: true,  conta: true,  classe: false, juros: false },
+    geral:                { datas: true, cliente: false, conta: false, classe: false, juros: false },
+  };
+  const hojeStr = () => new Date().toISOString().split('T')[0];
+  const [relatParams, setRelatParams] = useState({
+    data_inicio: '',
+    data_fim: '',
+    codcli: '' as string | null,
+    cod_conta: '',
+    classe_pgto: 'T',
+    tx_juros: '8,00',
+  });
+  // Colunas do relatório (selecionáveis + reordenáveis, persistidas em localStorage).
+  const COLS_RELATORIO_DEF: { key: string; label: string }[] = [
+    { key: 'nro_doc', label: 'NRO_DOC' }, { key: 'dias', label: 'DIAS' }, { key: 'cliente', label: 'CLIENTE' },
+    { key: 'cod_conta', label: 'COD_CONTA' }, { key: 'valor_pgto', label: 'VALOR_PGTO' }, { key: 'valor_juros', label: 'VALOR_JUROS' },
+    { key: 'valor_rec', label: 'VALOR_REC' }, { key: 'valor_aberto', label: 'VALOR_ABERTO' }, { key: 'dt_emissao', label: 'DT_EMISSAO' },
+    { key: 'dt_venc', label: 'DT_VENC' }, { key: 'parcela', label: 'PARCELA' }, { key: 'tarifa', label: 'TARIFA' }, { key: 'dt_pgto', label: 'DT_PGTO' },
+  ];
+  const [relatColunas, setRelatColunas] = useState<{ key: string; label: string; visivel: boolean }[]>(
+    COLS_RELATORIO_DEF.map((c) => ({ ...c, visivel: true })),
+  );
+  const [dragColIdx, setDragColIdx] = useState<number | null>(null);
+  const relatColStorageKey = () => `relatColunas_${user?.usuario || 'anon'}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(relatColStorageKey());
+      if (!raw) return;
+      const salvo: { key: string; visivel: boolean }[] = JSON.parse(raw);
+      // Reconstrói na ordem salva, garantindo que toda coluna conhecida exista.
+      const mapaLabel = new Map(COLS_RELATORIO_DEF.map((c) => [c.key, c.label]));
+      const ordenadas = salvo.filter((s) => mapaLabel.has(s.key)).map((s) => ({ key: s.key, label: mapaLabel.get(s.key)!, visivel: s.visivel }));
+      for (const c of COLS_RELATORIO_DEF) if (!ordenadas.find((o) => o.key === c.key)) ordenadas.push({ ...c, visivel: true });
+      if (ordenadas.length) setRelatColunas(ordenadas);
+    } catch {
+      /* ignora config inválida */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.usuario]);
+  const persistirColunas = (cols: { key: string; label: string; visivel: boolean }[]) => {
+    try {
+      localStorage.setItem(relatColStorageKey(), JSON.stringify(cols.map((c) => ({ key: c.key, visivel: c.visivel }))));
+    } catch {
+      /* ignora */
+    }
+  };
+  const moverColuna = (from: number, to: number) => {
+    setRelatColunas((prev) => {
+      const arr = [...prev];
+      const [it] = arr.splice(from, 1);
+      arr.splice(to, 0, it);
+      persistirColunas(arr);
+      return arr;
+    });
+  };
+  const toggleColunaVisivel = (idx: number) => {
+    setRelatColunas((prev) => {
+      const arr = prev.map((c, i) => (i === idx ? { ...c, visivel: !c.visivel } : c));
+      persistirColunas(arr);
+      return arr;
+    });
+  };
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [modalImportacaoCartao, setModalImportacaoCartao] = useState(false);
   const [contaSelecionada, setContaSelecionada] = useState<ContaReceber | null>(null);
@@ -209,6 +279,8 @@ export default function ContasAReceber() {
   const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
   const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
   const [modalComprovantesAberto, setModalComprovantesAberto] = useState(false);
+  const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
+  const [modalAIdentificarAberto, setModalAIdentificarAberto] = useState(false);
 
   // Bancos do Novo Título: vêm da dbbanco_cobranca filtrada por ATIVO (mesma fonte do
   // cadastro do cliente). Fallback = lista fixa se a busca falhar.
@@ -512,7 +584,6 @@ export default function ContasAReceber() {
           key={`acoes-${conta.cod_receb}`}
           conta={conta}
           onVisualizarClick={() => abrirModalDetalhes(conta)}
-          onDarBaixaClick={() => abrirModalRecebido(conta)}
           onRetirarBaixaClick={() => handleRetirarBaixa(conta)}
           onEditarClick={() => abrirModalEditar(conta)}
           onCancelarClick={() => abrirModalCancelar(conta)}
@@ -886,20 +957,28 @@ export default function ContasAReceber() {
       params.append('formato', formato);
       params.append('tipo', tipoRelatorio);
 
-      // Usa os filtros de data da tela (se não for "todos")
-      if (rangeDataAtivo !== 'todos') {
-        if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
-        if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+      // Parâmetros PRÓPRIOS do relatório (fiel ao TFrmRelContasR do Delphi).
+      const campos = CAMPOS_RELATORIO[tipoRelatorio];
+      if (campos.datas) {
+        if (relatParams.data_inicio) params.append('data_inicio', relatParams.data_inicio);
+        if (relatParams.data_fim) params.append('data_fim', relatParams.data_fim);
       }
-      if (filtros.status && filtros.status !== 'todos') params.append('status', filtros.status as string);
+      if (campos.cliente && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
+      if (campos.conta && relatParams.cod_conta.trim()) params.append('cod_conta', relatParams.cod_conta.trim());
+      if (campos.classe && relatParams.classe_pgto && relatParams.classe_pgto !== 'T') {
+        params.append('classe_pgto', relatParams.classe_pgto);
+      }
+      if (campos.juros && relatParams.tx_juros.trim()) params.append('tx_juros', relatParams.tx_juros.trim());
+      // Obs.: "Receber por Cliente" sem cliente selecionado = todos os clientes (agrupado).
 
-      // Filtros de coluna/busca ativos (agora server-side) — refletem exatamente a tela
-      const f = filtros as any;
-      if (f.cod_receb) params.set('cod_receb', f.cod_receb);
-      if (f.cliente) params.set('cliente', f.cliente);
-      if (f.nro_doc) params.set('nro_doc', f.nro_doc);
-      if (f.cod_fat) params.set('cod_fat', f.cod_fat);
-      if (f.search) params.set('search', f.search);
+      // Colunas selecionadas (na ordem escolhida).
+      const colunasSel = relatColunas.filter((c) => c.visivel).map((c) => c.key);
+      if (colunasSel.length === 0) {
+        toast.error('Selecione ao menos uma coluna.');
+        setGerandoRelatorio(false);
+        return;
+      }
+      params.append('colunas', colunasSel.join(','));
 
       const response = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);
       if (!response.ok) {
@@ -1401,7 +1480,7 @@ export default function ContasAReceber() {
             </p>
           </div>
 
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center justify-end">
             {/* Botões de filtro por período */}
             <div className="flex gap-1 border border-gray-300 dark:border-gray-600 rounded-md p-1">
               <button
@@ -1464,41 +1543,66 @@ export default function ContasAReceber() {
               </div>
             )}
 
-            <DefaultButton
-              variant="primary"
-              size="default"
+            {/* Toolbar de ações — botões compactos com ícone; quebram linha p/ nunca cortar */}
+            <button
+              type="button"
               onClick={handlePesquisar}
-              icon={<Search className="w-4 h-4" />}
-              text="Pesquisar"
-            />
-            <AuxButton
-              variant="secondary"
-              size="default"
-              onClick={() => setModalRelatorioAberto(true)}
-              icon={<FileBarChart className="w-4 h-4" />}
-              text="Relatório"
-            />
-            <AuxButton
-              variant="secondary"
-              size="default"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-[#347AB6] dark:bg-[#1f517c] hover:bg-blue-600 text-white transition"
+            >
+              <Search className="w-4 h-4" /> Pesquisar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const hoje = new Date();
+                const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+                setRelatParams((p) => ({
+                  ...p,
+                  data_inicio: p.data_inicio || ini.toISOString().split('T')[0],
+                  data_fim: p.data_fim || fim.toISOString().split('T')[0],
+                }));
+                setModalRelatorioAberto(true);
+              }}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              <FileBarChart className="w-4 h-4" /> Relatório
+            </button>
+            <button
+              type="button"
               onClick={() => setModalImportacaoCartao(true)}
-              icon={<CreditCard className="w-4 h-4" />}
-              text="Importar Cartão"
-            />
-            <AuxButton
-              variant="secondary"
-              size="default"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              <CreditCard className="w-4 h-4" /> Importar Cartão
+            </button>
+            <button
+              type="button"
               onClick={() => setModalComprovantesAberto(true)}
-              icon={<FileText className="w-4 h-4" />}
-              text="Comprovantes"
-            />
-            <DefaultButton
-              variant="primary"
-              size="default"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              <FileText className="w-4 h-4" /> Comprovantes
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalConciliacaoAberto(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              <Upload className="w-4 h-4" /> Conciliação
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalAIdentificarAberto(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              <FileSearch className="w-4 h-4" /> A Identificar
+            </button>
+            <button
+              type="button"
               onClick={() => setModalNovaContaAberto(true)}
-              icon={<Plus className="w-4 h-4" />}
-              text="Novo"
-            />
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-[#347AB6] dark:bg-[#1f517c] hover:bg-blue-600 text-white transition"
+            >
+              <Plus className="w-4 h-4" /> Novo
+            </button>
           </div>
         </div>
 
@@ -2675,6 +2779,23 @@ export default function ContasAReceber() {
         username={user?.usuario || ''}
       />
 
+      {/* Modal de Conciliação Bancária */}
+      <ModalConciliacao
+        isOpen={modalConciliacaoAberto}
+        onClose={() => setModalConciliacaoAberto(false)}
+        usuario={user?.usuario || ''}
+        filial={(user as any)?.filial ? String((user as any).filial) : ''}
+        codContaPadrao={(user as any)?.cod_conta ? String((user as any).cod_conta) : ''}
+      />
+
+      <ModalAIdentificar
+        isOpen={modalAIdentificarAberto}
+        onClose={() => setModalAIdentificarAberto(false)}
+        usuario={user?.usuario || ''}
+        filial={(user as any)?.filial ? String((user as any).filial) : ''}
+        codContaPadrao={(user as any)?.cod_conta ? String((user as any).cod_conta) : ''}
+      />
+
       {/* Modal de Importação de Cartão */}
       <Modal
         isOpen={modalImportacaoCartao}
@@ -3000,13 +3121,7 @@ export default function ContasAReceber() {
       >
         <div className="form-compact space-y-4 p-4">
           <p className="text-xs text-gray-600 dark:text-gray-400">
-            O relatório será gerado com os filtros de período atualmente aplicados na tela
-            {rangeDataAtivo === 'semana' && ' (semana atual)'}
-            {rangeDataAtivo === 'mes' && ' (mês atual)'}
-            {rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada &&
-              ` (${dataInicioPersonalizada} a ${dataFimPersonalizada})`}
-            {rangeDataAtivo === 'todos' && ' (todos os períodos)'}
-            .
+            Escolha o relatório e informe os <b>parâmetros próprios</b> dele (período, cliente, conta, classe e taxa de juros), como na tela de relatórios do Delphi.
           </p>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
@@ -3033,21 +3148,120 @@ export default function ContasAReceber() {
           </div>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
-            Colunas do Relatório
+            Parâmetros
           </div>
-          <div className="grid grid-cols-4 gap-1 text-[11px] text-gray-600 dark:text-gray-400">
-            <span>• NRO_DOC</span>
-            <span>• DIAS</span>
-            <span>• CLIENTE</span>
-            <span>• COD_CONTA</span>
-            <span>• VALOR_PGTO</span>
-            <span>• VALOR_JUROS</span>
-            <span>• VALOR_REC</span>
-            <span>• VALOR_ABERTO</span>
-            <span>• DT_EMISSAO</span>
-            <span>• DT_VENC</span>
-            <span>• TARIFA</span>
-            <span>• DT_PGTO</span>
+          <div className="grid grid-cols-2 gap-3">
+            {CAMPOS_RELATORIO[tipoRelatorio].datas && (
+              <>
+                <div>
+                  <Label>Data início</Label>
+                  <Input
+                    type="date"
+                    value={relatParams.data_inicio}
+                    onChange={(e) => setRelatParams((p) => ({ ...p, data_inicio: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Data fim</Label>
+                  <Input
+                    type="date"
+                    value={relatParams.data_fim}
+                    onChange={(e) => setRelatParams((p) => ({ ...p, data_fim: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].cliente && (
+              <div className="col-span-2">
+                <Label>Cliente {tipoRelatorio === 'por_cliente' ? '(vazio = todos)' : '(opcional)'}</Label>
+                <Autocomplete
+                  placeholder="Buscar cliente..."
+                  apiUrl="/api/contas-receber/clientes"
+                  value={relatParams.codcli}
+                  onChange={(value) => setRelatParams((p) => ({ ...p, codcli: value }))}
+                  mapResponse={(data) => data.clientes || []}
+                />
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].conta && (
+              <div>
+                <Label>Conta (opcional)</Label>
+                <Autocomplete
+                  placeholder="Buscar conta (código ou nome)..."
+                  apiUrl="/api/contas-receber/dbcontas"
+                  value={relatParams.cod_conta}
+                  onChange={(value) => setRelatParams((p) => ({ ...p, cod_conta: value }))}
+                  mapResponse={(data) => data.contas || []}
+                />
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].classe && (
+              <div>
+                <Label>Classe de pagamento</Label>
+                <Select
+                  value={relatParams.classe_pgto}
+                  onValueChange={(v) => setRelatParams((p) => ({ ...p, classe_pgto: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="T">Todos</SelectItem>
+                    <SelectItem value="V">À vista</SelectItem>
+                    <SelectItem value="I">Inadimplente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].juros && (
+              <div>
+                <Label>Taxa de juros (% mês)</Label>
+                <Input
+                  placeholder="8,00"
+                  value={relatParams.tx_juros}
+                  onChange={(e) => setRelatParams((p) => ({ ...p, tx_juros: e.target.value }))}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Projeta o juros dos títulos em atraso (dias × valor × taxa).</p>
+              </div>
+            )}
+          </div>
+
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 flex items-center justify-between">
+            <span>Colunas do Relatório</span>
+            <span className="text-[10px] normal-case font-normal text-gray-400">marque para exibir · arraste para reordenar</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+            {relatColunas.map((c, i) => (
+              <div
+                key={c.key}
+                draggable
+                onDragStart={() => setDragColIdx(i)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragColIdx !== null && dragColIdx !== i) {
+                    moverColuna(dragColIdx, i);
+                    setDragColIdx(i);
+                  }
+                }}
+                onDragEnd={() => setDragColIdx(null)}
+                className={`flex items-center gap-2 px-2 py-1 rounded border text-[11px] cursor-move select-none ${
+                  dragColIdx === i
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
+                    : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800'
+                }`}
+                title="Arraste para reordenar"
+              >
+                <span className="text-gray-400">⠿</span>
+                <input
+                  type="checkbox"
+                  checked={c.visivel}
+                  onChange={() => toggleColunaVisivel(i)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-3.5 w-3.5"
+                />
+                <span className={c.visivel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 line-through'}>{c.label}</span>
+              </div>
+            ))}
           </div>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">

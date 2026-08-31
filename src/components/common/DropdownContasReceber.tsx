@@ -20,7 +20,8 @@ import { useState } from 'react';
 interface Props {
   conta: ContaReceber;
   onVisualizarClick: () => void;
-  onDarBaixaClick: () => void;
+  /** Opcional: quando ausente, o item "Dar Baixa" não aparece (Contas a Receber usa a seleção de títulos). */
+  onDarBaixaClick?: () => void;
   onRetirarBaixaClick: () => void;
   onEditarClick: () => void;
   onCancelarClick: () => void;
@@ -99,14 +100,16 @@ export default function DropdownContasReceber({
           Editar
         </DropdownMenuItem>
 
-        <DropdownMenuItem
-          onClick={onDarBaixaClick}
-          disabled={!podeDarBaixa}
-          className="group flex items-center gap-2 px-2 py-2 hover:bg-green-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
-        >
-          <DollarSign className="size-4 text-green-600 group-hover:text-white transition group-disabled:text-gray-400" />
-          Dar Baixa
-        </DropdownMenuItem>
+        {onDarBaixaClick && (
+          <DropdownMenuItem
+            onClick={onDarBaixaClick}
+            disabled={!podeDarBaixa}
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-green-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <DollarSign className="size-4 text-green-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Dar Baixa
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           onClick={onRetirarBaixaClick}
