@@ -836,11 +836,14 @@ export default function Caixa() {
     );
   };
 
+  // Data-only (DATE) sem shift de fuso: 'YYYY-MM-DD'|ISO -> 'DD/MM/YYYY'.
+  // new Date(iso) interpreta como UTC e recua 1 dia em America/Manaus (UTC-4) — venc aparecia -1.
   const fmtData = (d: string | null) => {
     if (!d) return '-';
+    const [y, m, dd] = String(d).slice(0, 10).split('-');
+    if (y && m && dd) return `${dd}/${m}/${y}`;
     const dt = new Date(d);
-    if (isNaN(dt.getTime())) return d;
-    return dt.toLocaleDateString('pt-BR');
+    return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('pt-BR');
   };
 
   // ================= RENDER =================
