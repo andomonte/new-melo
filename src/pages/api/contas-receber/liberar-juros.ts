@@ -12,7 +12,7 @@ import { getPgPool } from '@/lib/pg';
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido. Use POST.' });
-  const { cod_receb, taxa, motivo, usuario } = req.body || {};
+  const { cod_receb, taxa, motivo, usuario, codusr: codusrBody } = req.body || {};
   const ids: string[] = Array.isArray(cod_receb) ? cod_receb.map(String).filter(Boolean) : cod_receb ? [String(cod_receb)] : [];
   if (ids.length === 0) return res.status(400).json({ erro: 'Informe cod_receb.' });
 
@@ -25,13 +25,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const pool = getPgPool();
   const client = await pool.connect();
   try {
-    // Usuário → codusr (lij_cod_usuario); cai para o próprio login se não resolver.
-    let codusr = String(usuario ?? '').substring(0, 15);
-    try {
-      const u = await client.query('SELECT codusr FROM dbusuario WHERE nomeusr=$1 LIMIT 1', [usuario]);
-      if (u.rows[0]?.codusr) codusr = String(u.rows[0].codusr);
-    } catch {
-      /* mantém login */
+    // lij_cod_usuario é varchar(4): precisa do CÓDIGO do operador (dbusuario.codusr), não do login.
+    // Prioridade: codusr da sessão (front) → resolve por nomeusr → vazio (erro). Sempre capado em 4.
+    let codusr = String(codusrBody ?? '').trim();
+    if (!codusr) {
+      try {
+        const u = await client.query('SELECT codusr FROM dbusuario WHERE nomeusr=$1 LIMIT 1', [usuario]);
+        if (u.rows[0]?.codusr) codusr = String(u.rows[0].codusr).trim();
+      } catch {
+        /* segue vazio */
+      }
+    }
+    codusr = codusr.substring(0, 4);
+    if (!codusr) {
+      return res.status(400).json({ erro: 'Não foi possível identificar o código do operador (codusr). Refaça o login.' });
     }
 
     await client.query('BEGIN');

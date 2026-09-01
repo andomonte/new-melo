@@ -67,7 +67,7 @@ interface Props {
   /** Conta do operador (tb_user_perfil.cod_conta da filial). Se vazia, o modal tenta buscar. */
   codContaInicial?: string;
   /** Dados do usuário logado para fallback da conta do operador. */
-  user?: { usuario?: string; filial?: string; cod_conta?: string | number } | null;
+  user?: { usuario?: string; filial?: string; cod_conta?: string | number; codusr?: string | number } | null;
   onClose: () => void;
   /** Chamado após confirmar o recebimento (real) — o pai recarrega o grid. */
   onSuccess: () => void;
@@ -266,7 +266,7 @@ export default function ModalRecebimentoTitulos({
       const r = await fetch('/api/contas-receber/liberar-juros', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cod_receb: titulos.map((t) => t.cod_receb), taxa, motivo: liberarMotivo.trim(), usuario: username }),
+        body: JSON.stringify({ cod_receb: titulos.map((t) => t.cod_receb), taxa, motivo: liberarMotivo.trim(), usuario: username, codusr: user?.codusr ?? null }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro || 'Erro ao liberar juros');
