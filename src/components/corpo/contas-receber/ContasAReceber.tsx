@@ -483,9 +483,13 @@ export default function ContasAReceber() {
     }).format(valor);
   };
 
+  // Formata data-only (DATE) sem shift de fuso: 'YYYY-MM-DD'|ISO -> 'DD/MM/YYYY'.
+  // NÃO usar new Date(iso), que interpreta como UTC e recua 1 dia em America/Manaus (UTC-4).
   const formatarData = (data: string | null) => {
     if (!data) return '-';
-    return new Date(data).toLocaleDateString('pt-BR');
+    const s = String(data).slice(0, 10);
+    const [y, m, d] = s.split('-');
+    return y && m && d ? `${d}/${m}/${y}` : new Date(data).toLocaleDateString('pt-BR');
   };
 
   const getStatusBadge = (status: string) => {
@@ -558,7 +562,10 @@ export default function ContasAReceber() {
         nome_banco: nomeBancoPorInterno(conta.banco)
       };
 
-      const vencido = contaComNomeBanco.dt_venc && new Date(contaComNomeBanco.dt_venc) < new Date() && contaComNomeBanco.status !== 'recebido' && contaComNomeBanco.status !== 'cancelado';
+      // Vencido = venc ESTRITAMENTE antes de hoje (comparação de datas-only, sem shift de fuso).
+      // Título que vence HOJE não é vencido (paridade com o status da API: dt_venc < CURRENT_DATE).
+      const vencStr = contaComNomeBanco.dt_venc ? String(contaComNomeBanco.dt_venc).slice(0, 10) : '';
+      const vencido = !!vencStr && vencStr < fmtLocalData(new Date()) && contaComNomeBanco.status !== 'recebido' && contaComNomeBanco.status !== 'cancelado';
 
       // Retornar array na ordem dos headers (☑️, Ações, Status, ...)
       return [

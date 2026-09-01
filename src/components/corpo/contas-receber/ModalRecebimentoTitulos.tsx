@@ -103,6 +103,12 @@ export default function ModalRecebimentoTitulos({
   onSuccess,
 }: Props) {
   const hojeISO = new Date().toISOString().slice(0, 10);
+  // Data-only (DATE) sem shift de fuso: 'YYYY-MM-DD' -> 'DD/MM/YYYY' (evita -1 dia em UTC-4).
+  const fmtDataBR = (v?: string | null) => {
+    if (!v) return '-';
+    const [y, m, d] = String(v).slice(0, 10).split('-');
+    return y && m && d ? `${d}/${m}/${y}` : '-';
+  };
 
   const [contasFin, setContasFin] = useState<ContaFin[]>([]);
   const [cofId, setCofId] = useState('');
@@ -508,7 +514,7 @@ export default function ModalRecebimentoTitulos({
                         <td className="px-2 py-1 font-mono">{t.cod_receb}</td>
                         <td className="px-2 py-1">{t.nro_doc || '-'}</td>
                         <td className="px-2 py-1">
-                          {t.dt_venc ? new Date(t.dt_venc).toLocaleDateString('pt-BR') : '-'}
+                          {fmtDataBR(t.dt_venc)}
                         </td>
                         <td className="px-2 py-1 text-right font-mono tabular-nums">{formatarBRL(principal)}</td>
                         <td className="px-2 py-1 text-right font-mono tabular-nums text-amber-600">
@@ -851,7 +857,7 @@ export default function ModalRecebimentoTitulos({
                     {liberarPreview ? (
                       liberarPreview.dias > 0 ? (
                         <>
-                          Nessa taxa, pagando em {new Date(liberarData).toLocaleDateString('pt-BR')}:{' '}
+                          Nessa taxa, pagando em {fmtDataBR(liberarData)}:{' '}
                           <b>{liberarPreview.dias}</b> dia(s) de atraso → juros{' '}
                           <b className="text-amber-600">{formatarBRL(liberarPreview.juros)}</b> · total{' '}
                           <b>{formatarBRL(liberarPreview.total)}</b>
