@@ -230,7 +230,10 @@ export default function ModalRecebimentoTitulos({
     () => titulos.reduce((s, t) => s + Number(dadosMap[t.cod_receb]?.tarifa || 0), 0),
     [titulos, dadosMap],
   );
-  const totalReceber = principalPend + jurosVal + tarifaVal;
+  // Quitação = principal + juros (fiel ao Delphi edtTotal). A TARIFA é OPCIONAL: não entra na
+  // base de quitação nem no "falta"; é um recebimento à parte. Só o juros é obrigatório.
+  const totalTitulo = principalPend + jurosVal;
+  const totalReceber = totalTitulo + tarifaVal; // grand total exibido (com tarifa opcional)
 
   const recTitulos = useMemo(
     () => passadas.filter((p) => bucketDaForma(p.codfpgt) === 'principal').reduce((s, p) => s + p.valor, 0),
@@ -245,10 +248,11 @@ export default function ModalRecebimentoTitulos({
     [passadas],
   );
   const recebidoTotal = recTitulos + recTarifa + recJuros;
-  const falta = Math.max(0, totalReceber - recebidoTotal);
+  const recebidoTitulo = recTitulos + recJuros; // conta p/ quitação (tarifa é opcional)
+  const falta = Math.max(0, totalTitulo - recebidoTitulo);
   const faltaTarifa = Math.max(0, tarifaVal - recTarifa);
   const faltaJuros = Math.max(0, jurosVal - recJuros);
-  const quitado = totalReceber > 0 && recebidoTotal >= totalReceber - 0.005;
+  const quitado = totalTitulo > 0 && recebidoTitulo >= totalTitulo - 0.005;
   const parcial = recTitulos > 0 && recTitulos < principalPend - 0.005;
 
   // Abre o painel "Baixar Juros" já com a taxa aplicada atual e a data de pagamento do recebimento.
@@ -796,16 +800,14 @@ export default function ModalRecebimentoTitulos({
                 {formatarBRL(falta)}
               </span>
             </div>
-            {(faltaTarifa > 0.005 || faltaJuros > 0.005) && (
+            {faltaJuros > 0.005 && (
+              <div className="text-[11px] text-amber-600 mt-1">
+                Falta amortizar o <b>juros</b> ({formatarBRL(faltaJuros)}) — <b>obrigatório</b> (escolha a forma de juros no combo).
+              </div>
+            )}
+            {faltaTarifa > 0.005 && (
               <div className="text-[11px] text-gray-500 mt-1">
-                Ainda falta lançar:{' '}
-                {[
-                  faltaTarifa > 0.005 ? `tarifa ${formatarBRL(faltaTarifa)}` : '',
-                  faltaJuros > 0.005 ? `juros ${formatarBRL(faltaJuros)}` : '',
-                ]
-                  .filter(Boolean)
-                  .join(' e ')}{' '}
-                (escolha a forma de tarifa/juros no combo).
+                Tarifa bancária {formatarBRL(faltaTarifa)} — <b>opcional</b>: não impede a quitação; lance no combo só se for cobrar.
               </div>
             )}
             {parcial && (

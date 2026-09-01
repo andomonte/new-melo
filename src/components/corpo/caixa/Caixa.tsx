@@ -333,7 +333,10 @@ export default function Caixa() {
     () => selecionados.reduce((s, t) => s + Number(dadosMap[t.cod_receb]?.tarifa || 0), 0),
     [selecionados, dadosMap],
   );
-  const totalReceber = principalPend + jurosVal + tarifaVal; // "A receber" (Total = principal + juros + tarifa)
+  // Quitação = principal + juros (fiel ao Delphi edtTotal). A TARIFA é OPCIONAL: fora da base de
+  // quitação e do "falta"; recebimento à parte. Só o juros é obrigatório amortizar.
+  const totalTitulo = principalPend + jurosVal;
+  const totalReceber = totalTitulo + tarifaVal; // "A receber" exibido (com tarifa opcional)
 
   // Rateio do SysCaixa: cada forma cai num balde (principal / tarifa / juros).
   // A Falta conta a partir do Total a Receber (título + juros + tarifa).
@@ -351,10 +354,11 @@ export default function Caixa() {
   );
   const recebido = recTitulos; // principal recebido (base da baixa/guard)
   const recebidoTotal = recTitulos + recTarifa + recJuros;
-  const falta = Math.max(0, totalReceber - recebidoTotal);
+  const recebidoTitulo = recTitulos + recJuros; // conta p/ quitação (tarifa é opcional)
+  const falta = Math.max(0, totalTitulo - recebidoTitulo);
   const faltaTarifa = Math.max(0, tarifaVal - recTarifa);
   const faltaJuros = Math.max(0, jurosVal - recJuros);
-  const quitado = totalReceber > 0 && recebidoTotal >= totalReceber - 0.005;
+  const quitado = totalTitulo > 0 && recebidoTitulo >= totalTitulo - 0.005;
   const parcial = recTitulos > 0 && recTitulos < principalPend - 0.005;
   const podeReceber = recebidoTotal > 0;
 
@@ -1462,16 +1466,14 @@ export default function Caixa() {
                       {formatarBRL(falta)}
                     </span>
                   </div>
-                  {selecionados.length > 0 && (faltaTarifa > 0.005 || faltaJuros > 0.005) && (
+                  {selecionados.length > 0 && faltaJuros > 0.005 && (
+                    <div className="text-[11px] text-amber-600 mt-1">
+                      Falta amortizar o <b>juros</b> ({formatarBRL(faltaJuros)}) — <b>obrigatório</b> (escolha a forma de juros no combo).
+                    </div>
+                  )}
+                  {selecionados.length > 0 && faltaTarifa > 0.005 && (
                     <div className="text-[11px] text-gray-500 mt-1">
-                      Ainda falta lançar:{' '}
-                      {[
-                        faltaTarifa > 0.005 ? `tarifa ${formatarBRL(faltaTarifa)}` : '',
-                        faltaJuros > 0.005 ? `juros ${formatarBRL(faltaJuros)}` : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' e ')}
-                      {' '}(escolha a forma de tarifa/juros no combo).
+                      Tarifa bancária {formatarBRL(faltaTarifa)} — <b>opcional</b>: não impede a quitação; lance no combo só se for cobrar.
                     </div>
                   )}
                   {parcial && (
