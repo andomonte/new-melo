@@ -129,6 +129,8 @@ export default function ModalRecebimentoTitulos({
   const [liberarTaxa, setLiberarTaxa] = useState('');
   const [liberarMotivo, setLiberarMotivo] = useState('');
   const [liberando, setLiberando] = useState(false);
+  const [liberarData, setLiberarData] = useState(hojeISO); // data prevista de pagamento (prévia)
+  const [liberarPreview, setLiberarPreview] = useState<{ juros: number; total: number; dias: number } | null>(null);
 
   const ehCartao = forma === 'credito' || forma === 'debito';
   const formaBucket = bucketDaForma(codFpgt);
@@ -243,13 +245,42 @@ export default function ModalRecebimentoTitulos({
   const quitado = totalReceber > 0 && recebidoTotal >= totalReceber - 0.005;
   const parcial = recTitulos > 0 && recTitulos < principalPend - 0.005;
 
-  // Abre o painel "Baixar Juros" já com a taxa aplicada atual como padrão.
+  // Abre o painel "Baixar Juros" já com a taxa aplicada atual e a data de pagamento do recebimento.
   const abrirLiberarJuros = () => {
     const taxaAtual = titulos.map((t) => dadosMap[t.cod_receb]?.taxa).find((x) => x != null);
     setLiberarTaxa(taxaAtual != null ? String(taxaAtual) : '');
     setLiberarMotivo('');
+    setLiberarData(dataPgto || hojeISO);
+    setLiberarPreview(null);
     setLiberarAberto(true);
   };
+
+  // Prévia ao vivo (fiel ao Delphi CalculaValorFinal): juros/total à taxa e data prevista informadas.
+  useEffect(() => {
+    if (!liberarAberto || titulos.length === 0) return;
+    const taxa = Number(String(liberarTaxa).replace(',', '.'));
+    if (!Number.isFinite(taxa) || taxa < 0 || !liberarData) {
+      setLiberarPreview(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const tmr = setTimeout(() => {
+      fetch('/api/caixa/dados-recebimento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cod_receb: titulos.map((t) => t.cod_receb), dataPgto: liberarData, taxaOverride: taxa }),
+        signal: ctrl.signal,
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d?.totais) { setLiberarPreview(null); return; }
+          const dias = (d.titulos || []).reduce((m: number, t: any) => Math.max(m, Number(t.diasAtraso || 0)), 0);
+          setLiberarPreview({ juros: Number(d.totais.juros || 0), total: Number(d.totais.aReceber || 0), dias });
+        })
+        .catch(() => {});
+    }, 300);
+    return () => { clearTimeout(tmr); ctrl.abort(); };
+  }, [liberarAberto, liberarTaxa, liberarData, titulos]);
 
   const confirmarLiberarJuros = async () => {
     const taxa = Number(String(liberarTaxa).replace(',', '.'));
@@ -805,6 +836,34 @@ export default function ModalRecebimentoTitulos({
                         className="font-mono h-9"
                       />
                     </div>
+                    <div>
+                      <Label className="text-[11px]">Data prevista de pagamento</Label>
+                      <Input
+                        type="date"
+                        value={liberarData}
+                        onChange={(e) => setLiberarData(e.target.value)}
+                        className="font-mono h-9"
+                      />
+                    </div>
+                  </div>
+                  {/* Prévia: juros só incide sobre ATRASO até a data prevista (fiel ao Delphi) */}
+                  <div className="text-[11px] rounded bg-white/70 dark:bg-slate-900/50 border border-blue-200 dark:border-blue-900 px-2 py-1.5">
+                    {liberarPreview ? (
+                      liberarPreview.dias > 0 ? (
+                        <>
+                          Nessa taxa, pagando em {new Date(liberarData).toLocaleDateString('pt-BR')}:{' '}
+                          <b>{liberarPreview.dias}</b> dia(s) de atraso → juros{' '}
+                          <b className="text-amber-600">{formatarBRL(liberarPreview.juros)}</b> · total{' '}
+                          <b>{formatarBRL(liberarPreview.total)}</b>
+                        </>
+                      ) : (
+                        <span className="text-gray-500">
+                          Título <b>em dia</b> nessa data (0 dia de atraso) → <b>sem juros</b>. O juros só incide após o vencimento.
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-gray-400">Informe taxa e data para ver a prévia do juros.</span>
+                    )}
                   </div>
                   <div>
                     <Label className="text-[11px]">Motivo (mín. 15 caracteres)</Label>

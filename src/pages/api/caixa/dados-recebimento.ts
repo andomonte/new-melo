@@ -49,7 +49,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use POST.' });
   }
 
-  const { cod_receb, dataPgto } = req.body || {};
+  const { cod_receb, dataPgto, taxaOverride } = req.body || {};
+  // Prévia da liberação de juros (Delphi CalculaValorFinal): calcula o juros a uma taxa
+  // arbitrária (e data prevista = dataPgto), ignorando a liberação/txcart. Não grava nada.
+  const txOv = Number(taxaOverride);
+  const usarOverride = taxaOverride != null && Number.isFinite(txOv) && txOv >= 0;
   const ids: string[] = Array.isArray(cod_receb)
     ? cod_receb.map(String)
     : cod_receb
@@ -125,8 +129,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // 4) Taxa + feriados
-    const taxa = await getTaxaJuros(client);
+    // 4) Taxa + feriados (override força a taxa da prévia)
+    const taxa = usarOverride ? txOv : await getTaxaJuros(client);
     const feriados = await getFeriados(client);
 
     // 5) Calcula por título
@@ -139,7 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         formaFat: r.forma_fat,
         jurosPago: jurosPagoMap.get(r.cod_receb) ?? 0,
         jurosAberto: jurosAbertoMap.get(r.cod_receb) ?? 0,
-        jurosLiberado: jurosLiberadoMap.get(r.cod_receb) ?? -1,
+        jurosLiberado: usarOverride ? -1 : jurosLiberadoMap.get(r.cod_receb) ?? -1,
         vendaAVista: r.cod_fat ? fatsRecentes.has(String(r.cod_fat)) : false,
       };
       const calc = calcularJurosCaixa(input, dpg, taxa, feriados);
