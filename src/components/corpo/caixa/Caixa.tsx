@@ -376,7 +376,9 @@ export default function Caixa() {
       // O front filtra os já recebidos/cancelados (cancel/rec) logo abaixo.
       const params = new URLSearchParams({
         search: termo,
-        limit: '30',
+        // Limite alto: a API ordena pendentes antes de vencidos; com 30 os VENCIDOS ficavam
+        // de fora. O Caixa precisa dos vencidos (reordenados abaixo, vencido primeiro).
+        limit: '300',
       });
       const resp = await fetch(`/api/contas-receber?${params.toString()}`);
       if (!resp.ok) {
@@ -387,12 +389,17 @@ export default function Caixa() {
       const lista: Titulo[] = (data.contas_receber || []).filter(
         (t: Titulo) => t.cancel !== 'S' && t.rec !== 'S'
       );
-      // Ordenar por vencimento e depois por título (nro_doc)
+      // Caixa: VENCIDOS primeiro (mais antigos no topo), depois a vencer — ambos por data.
+      // Vencido = dt_venc < hoje (data local, sem shift de fuso).
+      const hoje = new Date();
+      const hojeLocal = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+      const vencStr = (t: Titulo) => String(t.dt_venc || '').slice(0, 10);
       lista.sort((a, b) => {
-        const dv = String(a.dt_venc || '').localeCompare(String(b.dt_venc || ''));
-        return dv !== 0
-          ? dv
-          : String(a.nro_doc || a.cod_receb || '').localeCompare(String(b.nro_doc || b.cod_receb || ''));
+        const oa = vencStr(a) && vencStr(a) < hojeLocal ? 0 : 1;
+        const ob = vencStr(b) && vencStr(b) < hojeLocal ? 0 : 1;
+        if (oa !== ob) return oa - ob; // vencidos primeiro
+        const dv = vencStr(a).localeCompare(vencStr(b)); // por vencimento asc
+        return dv !== 0 ? dv : String(a.nro_doc || a.cod_receb || '').localeCompare(String(b.nro_doc || b.cod_receb || ''));
       });
       // Derivar parcela "i/N": agrupa por fatura (cod_fat) ou prefixo do nro_doc (sem letra final)
       const grupoKey = (t: Titulo) =>
@@ -846,6 +853,20 @@ export default function Caixa() {
     return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('pt-BR');
   };
 
+  // Badge de status igual à Contas a Receber (vencido vermelho, pendente âmbar, parcial azul).
+  const statusChip = (s?: string | null): { t: string; c: string } | null => {
+    switch (s) {
+      case 'vencido':
+        return { t: 'Vencido', c: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' };
+      case 'pendente':
+        return { t: 'Pendente', c: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+      case 'recebido_parcial':
+        return { t: 'Parcial', c: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' };
+      default:
+        return null;
+    }
+  };
+
   // ================= RENDER =================
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900 dark:border-slate-700">
@@ -974,7 +995,17 @@ export default function Caixa() {
                                 <span className="ml-1 text-[10px] text-blue-600 font-bold">{t.parcelaLabel}</span>
                               )}
                             </span>
-                            <span className="text-[11px] text-gray-400">venc {fmtData(t.dt_venc)}</span>
+                            <span className="flex items-center gap-1.5">
+                              <span className={`text-[11px] ${t.status === 'vencido' ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+                                venc {fmtData(t.dt_venc)}
+                              </span>
+                              {(() => {
+                                const chip = statusChip(t.status);
+                                return chip ? (
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${chip.c}`}>{chip.t}</span>
+                                ) : null;
+                              })()}
+                            </span>
                           </span>
                           <span className="truncate flex-1 text-gray-500">
                             {t.nome_cliente}
