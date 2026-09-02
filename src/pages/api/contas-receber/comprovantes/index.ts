@@ -111,8 +111,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                                     OR CAST(r2.codcli AS TEXT) LIKE $${params.length})))`;
     }
 
+    // DISTINCT ON (aut_id): o dado antigo (2012) tem aut_id repetido em fin_autenticacao;
+    // sem isso o mesmo comprovante aparecia várias vezes na lista.
     const r = await client.query(
-      `SELECT a.aut_id, a.aut_data, a.aut_codusr, a.aut_codconta, a.aut_autenticacao,
+      `SELECT * FROM (
+        SELECT DISTINCT ON (a.aut_id)
+              a.aut_id, a.aut_data, a.aut_codusr, a.aut_codconta, a.aut_autenticacao,
               COALESCE(a.aut_cancel,0) AS aut_cancel,
               u.nomeusr,
               (SELECT COALESCE(SUM(ita_valor_total),0) FROM fin_item_autenticacao WHERE ita_id = a.aut_id) AS valor_total,
@@ -129,8 +133,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             LIMIT 1
          ) cli ON true
          ${where}
-        ORDER BY a.aut_data DESC, a.aut_id DESC
-        LIMIT 300`,
+        ORDER BY a.aut_id, a.aut_data DESC
+      ) t
+      ORDER BY t.aut_data DESC, t.aut_id DESC
+      LIMIT 300`,
       params,
     );
     return res.status(200).json({ comprovantes: r.rows });
