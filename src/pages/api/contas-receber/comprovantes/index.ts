@@ -30,7 +30,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const itens = await client.query(
         `SELECT it.ita_cod_receb, it.ita_nro_doc, it.ita_valor, it.ita_valo_areceber,
                 it.ita_valor_juros, it.ita_valor_total,
-                r.codcli, c.nome AS nome_cliente
+                r.codcli, c.nome AS nome_cliente,
+                r.valor_pgto AS valor_original,
+                -- Taxa Admin. = taxa da operadora de cartão (dbfreceb.tx_cartao); 0 p/ dinheiro/depósito.
+                COALESCE((
+                  SELECT SUM(fr.valor * COALESCE(fr.tx_cartao,0) / 100)
+                    FROM dbfreceb fr
+                   WHERE fr.id_autenticacao = $1::bigint
+                     AND fr.cod_receb = it.ita_cod_receb
+                     AND fr.tx_cartao IS NOT NULL
+                ), 0) AS taxa_admin
            FROM fin_item_autenticacao it
            LEFT JOIN dbreceb r ON r.cod_receb = it.ita_cod_receb
            LEFT JOIN dbclien c ON c.codcli = r.codcli
@@ -38,7 +47,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ORDER BY it.ita_cod_receb`,
         [autId],
       );
-      return res.status(200).json({ comprovante: cab.rows[0], itens: itens.rows });
+      // FORMAS DE PAGAMENTO: movimentos de dbfreceb ligados a este comprovante (id_autenticacao).
+      const formas = await client.query(
+        `SELECT nome, SUM(valor) AS valor,
+                MIN(coddocumento) AS coddocumento, MIN(codautorizacao) AS codautorizacao
+           FROM dbfreceb
+          WHERE id_autenticacao = $1::bigint
+          GROUP BY nome
+          ORDER BY nome`,
+        [autId],
+      );
+      return res.status(200).json({ comprovante: cab.rows[0], itens: itens.rows, formas: formas.rows });
     }
 
     // ---- Listagem ----

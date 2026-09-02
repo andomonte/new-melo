@@ -82,5 +82,16 @@ export async function gerarComprovante(
     );
   }
 
+  // Liga os movimentos de pagamento (dbfreceb) a este comprovante — como o Delphi, que grava
+  // id_autenticacao no dbfreceb. Assim o comprovante consegue listar as FORMAS DE PAGAMENTO.
+  // Só carimba os movimentos ainda sem autenticação (os desta baixa; web-gerados vêm NULL).
+  await client
+    .query(
+      `UPDATE dbfreceb SET id_autenticacao = $1::bigint
+        WHERE cod_receb = ANY($2) AND id_autenticacao IS NULL`,
+      [autId, itens.map((i) => String(i.cod_receb))],
+    )
+    .catch(() => {});
+
   return { aut_id: autId, autenticacao };
 }

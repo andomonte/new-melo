@@ -30,8 +30,16 @@ interface ItemComprovante {
   ita_valo_areceber: number;
   ita_valor_juros: number;
   ita_valor_total: number;
+  valor_original: number | null;
+  taxa_admin: number | null;
   codcli: number | null;
   nome_cliente: string | null;
+}
+interface FormaPgto {
+  nome: string | null;
+  valor: number;
+  coddocumento: string | null;
+  codautorizacao: string | null;
 }
 
 interface Props {
@@ -51,6 +59,7 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
   const [status, setStatus] = useState<'ativo' | 'cancelado' | 'todos'>('todos');
   const [sel, setSel] = useState<Comprovante | null>(null);
   const [itens, setItens] = useState<ItemComprovante[]>([]);
+  const [formas, setFormas] = useState<FormaPgto[]>([]);
   const [loadingDet, setLoadingDet] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
@@ -90,10 +99,12 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
     setSel(c);
     setLoadingDet(true);
     setItens([]);
+    setFormas([]);
     try {
       const r = await fetch(`/api/contas-receber/comprovantes?aut_id=${encodeURIComponent(c.aut_id)}`);
       const d = await r.json();
       setItens(Array.isArray(d?.itens) ? d.itens : []);
+      setFormas(Array.isArray(d?.formas) ? d.formas : []);
     } catch {
       toast.error('Erro ao carregar o detalhe do comprovante.');
     } finally {
@@ -103,33 +114,110 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
 
   const imprimir = () => {
     if (!sel) return;
+    // Número 2 casas no padrão do comprovante Delphi (sem "R$", separador BR).
+    const num = (n: any) => Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const totalRecebido = itens.reduce((s, i) => s + Number(i.ita_valor || 0), 0);
+
+    // Linhas dos títulos — "Título" = número do documento (nro_doc), não o cód. interno.
     const linhas = itens
-      .map(
-        (i) =>
-          `<tr><td>${i.ita_cod_receb}</td><td>${i.ita_nro_doc || '-'}</td><td style="text-align:right">${fmtBRL(
-            i.ita_valo_areceber,
-          )}</td><td style="text-align:right">${fmtBRL(i.ita_valor_juros)}</td><td style="text-align:right">${fmtBRL(
-            i.ita_valor_total,
-          )}</td></tr>`,
-      )
+      .map((i, idx) => {
+        const original = i.valor_original != null ? i.valor_original : i.ita_valo_areceber;
+        return `<tr>
+          <td style="text-align:center">${idx + 1}</td>
+          <td>${i.ita_nro_doc || '-'}</td>
+          <td class="r">${num(original)}</td>
+          <td class="r">${num(i.ita_valor_juros)}</td>
+          <td class="r">${num(i.taxa_admin)}</td>
+          <td class="r">${num(i.ita_valor_total)}</td>
+          <td class="r">${num(i.ita_valor_total)}</td>
+          <td class="r">${num(i.ita_valor)}</td>
+        </tr>`;
+      })
       .join('');
+
+    // FORMAS DE PAGAMENTO (movimentos ligados ao comprovante).
+    const linhasFormas = formas.length
+      ? formas
+          .map(
+            (f) =>
+              `<tr><td>${(f.nome || '-').toUpperCase()}</td><td class="r">${num(f.valor)}</td></tr>`,
+          )
+          .join('')
+      : `<tr><td colspan="2" style="color:#888">—</td></tr>`;
+
+    const impressoEm = new Date().toLocaleString('pt-BR');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Comprovante ${sel.aut_id}</title>
-      <style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px}h2{margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ccc;padding:4px 6px}th{background:#eee;text-align:left}</style></head>
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;padding:18px}
+        .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+        .logo{font-weight:bold;font-size:20px;letter-spacing:1px}
+        .logo small{display:block;font-size:8px;font-weight:normal;letter-spacing:2px}
+        .cli{border:1px solid #000;padding:4px 8px;font-size:11px;min-width:280px}
+        .aut{text-align:right;font-family:monospace;font-size:10px}
+        .barcode{font-family:monospace;font-size:22px;letter-spacing:1px;border:1px solid #000;padding:2px 8px;display:inline-block}
+        h3{text-align:center;margin:14px 0 6px;font-size:13px;letter-spacing:1px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #000;padding:3px 6px}
+        th{background:#f0f0f0;font-size:10px;text-align:left}
+        td.r,th.r{text-align:right}
+        .sec{margin-top:10px;font-weight:bold;font-size:11px}
+        .formas{width:60%;margin-top:2px}
+        .stamp{height:150px}
+        .totrec{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px;font-size:13px}
+        .totrec b{border:1px solid #000;padding:2px 20px;min-width:120px;text-align:right}
+        .notas{margin-top:18px;font-size:9px;color:#333;display:flex;justify-content:space-between;align-items:flex-end}
+        .cancel{color:#c00;font-weight:bold}
+      </style></head>
       <body>
-        <h2>Comprovante de Pagamento</h2>
-        <div>Nº: <b>${sel.aut_id}</b> ${sel.aut_cancel === 1 ? '<b style="color:#c00">(CANCELADO)</b>' : ''}</div>
-        <div>Data: ${fmtData(sel.aut_data)}</div>
-        <div>Cliente: ${sel.codcli || ''} - ${sel.nome_cliente || ''}</div>
-        <div>Operador: ${sel.nomeusr || sel.aut_codusr || ''} · Conta: ${sel.aut_codconta || ''}</div>
-        <div>Autenticação: ${sel.aut_autenticacao || ''}</div>
-        <table><thead><tr><th>Título</th><th>Documento</th><th>A receber</th><th>Juros</th><th>Total</th></tr></thead>
+        <div class="top">
+          <div>
+            <div class="logo">MELO<small>DISTRIBUIDORA DE PEÇAS LTDA</small></div>
+          </div>
+          <div class="cli">
+            <div><b>Cliente</b></div>
+            <div>${sel.codcli || ''} - ${sel.nome_cliente || ''}</div>
+            <div><b>Data:</b> ${fmtData(sel.aut_data)}</div>
+          </div>
+          <div class="aut">
+            <div class="barcode">${sel.aut_id}</div>
+            <div>${sel.aut_autenticacao || ''}</div>
+          </div>
+        </div>
+
+        <h3>COMPROVANTE DE PAGAMENTO ${sel.aut_cancel === 1 ? '<span class="cancel">(CANCELADO)</span>' : ''}</h3>
+
+        <table>
+          <thead><tr>
+            <th style="text-align:center">#</th>
+            <th>Título</th>
+            <th class="r">Valor Original</th>
+            <th class="r">Valor do Juros</th>
+            <th class="r">Taxa Admin.</th>
+            <th class="r">Valor Total<sup>1</sup></th>
+            <th class="r">Valor Total a Pagar<sup>1</sup></th>
+            <th class="r">Valor Pago</th>
+          </tr></thead>
           <tbody>${linhas}</tbody>
-          <tfoot><tr><td colspan="4" style="text-align:right"><b>Total</b></td><td style="text-align:right"><b>${fmtBRL(
-            sel.valor_total,
-          )}</b></td></tr></tfoot>
         </table>
+
+        <div class="sec">FORMAS DE PAGAMENTO</div>
+        <table class="formas"><tbody>${linhasFormas}</tbody></table>
+
+        <div class="stamp"></div>
+
+        <div class="totrec"><span><b style="border:none;padding:0">Total Recebido:</b></span><b>${num(totalRecebido)}</b></div>
+
+        <div class="notas">
+          <div>
+            <div><sup>1</sup> Valor atualizado até o dia ${fmtData(sel.aut_data)}.</div>
+            <div><sup>2</sup> Pagamento efetuado com cheque ou cheque-pré está sujeito a compensação.</div>
+            <div>(*) Pagamento realizado parcialmente.</div>
+          </div>
+          <div>Impresso em ${impressoEm}</div>
+        </div>
       </body></html>`;
-    const w = window.open('', '_blank', 'width=720,height=600');
+    const w = window.open('', '_blank', 'width=900,height=700');
     if (!w) {
       toast.error('Permita pop-ups para imprimir.');
       return;
@@ -269,29 +357,44 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
                     <thead className="sticky top-0 bg-gray-100 dark:bg-slate-800">
                       <tr>
                         <th className="px-2 py-1 text-left">Título</th>
-                        <th className="px-2 py-1 text-left">Doc</th>
-                        <th className="px-2 py-1 text-right">A receber</th>
+                        <th className="px-2 py-1 text-right">Valor Original</th>
                         <th className="px-2 py-1 text-right">Juros</th>
+                        <th className="px-2 py-1 text-right">Taxa Admin.</th>
                         <th className="px-2 py-1 text-right">Total</th>
+                        <th className="px-2 py-1 text-right">Pago</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loadingDet ? (
-                        <tr><td colSpan={5} className="px-2 py-4 text-center text-gray-400"><Loader2 className="h-4 w-4 animate-spin inline" /></td></tr>
+                        <tr><td colSpan={6} className="px-2 py-4 text-center text-gray-400"><Loader2 className="h-4 w-4 animate-spin inline" /></td></tr>
                       ) : (
                         itens.map((i) => (
                           <tr key={i.ita_cod_receb} className="border-t border-gray-100 dark:border-slate-800">
-                            <td className="px-2 py-1 font-mono">{i.ita_cod_receb}</td>
-                            <td className="px-2 py-1">{i.ita_nro_doc || '-'}</td>
-                            <td className="px-2 py-1 text-right tabular-nums">{fmtBRL(i.ita_valo_areceber)}</td>
+                            {/* "Título" para o usuário = número do documento (nro_doc), não o cód. interno */}
+                            <td className="px-2 py-1 font-mono">{i.ita_nro_doc || i.ita_cod_receb}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{fmtBRL(i.valor_original ?? i.ita_valo_areceber)}</td>
                             <td className="px-2 py-1 text-right tabular-nums text-amber-600">{fmtBRL(i.ita_valor_juros)}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{fmtBRL(i.taxa_admin)}</td>
                             <td className="px-2 py-1 text-right tabular-nums font-semibold">{fmtBRL(i.ita_valor_total)}</td>
+                            <td className="px-2 py-1 text-right tabular-nums">{fmtBRL(i.ita_valor)}</td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
                 </div>
+                {formas.length > 0 && (
+                  <div className="mt-2 text-[11px]">
+                    <div className="font-semibold text-gray-600 dark:text-gray-300">Formas de Pagamento</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5">
+                      {formas.map((f, idx) => (
+                        <span key={idx} className="text-gray-700 dark:text-gray-300">
+                          {(f.nome || '-').toUpperCase()}: <b className="tabular-nums">{fmtBRL(f.valor)}</b>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between items-center mt-3">
                   <span className="text-sm">Total: <b className="font-mono">{fmtBRL(sel.valor_total)}</b></span>
                   <div className="flex gap-2">
