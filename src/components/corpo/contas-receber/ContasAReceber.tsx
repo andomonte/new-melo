@@ -335,7 +335,6 @@ export default function ContasAReceber() {
     '☑️',                    // seleção múltipla (Dar Baixa em lote)
     'Ações',                 // ações (dropdown / botões)
     'Status',                // status (badge)
-    'Número Título',         // cod_receb
     'Cliente',               // nome_cliente
     'Emissão',               // dt_emissao
     'Vencimento',            // dt_venc
@@ -601,10 +600,7 @@ export default function ContasAReceber() {
         // Status
         <div key={`status-${conta.cod_receb}`} className="flex items-center">{getStatusBadge(conta.status)}</div>,
 
-        // Número Título
-        <span key={`titulo-${conta.cod_receb}`} className="font-mono text-xs">
-          {conta.cod_receb}
-        </span>,
+        // (coluna "Número Título" / cód. interno removida — o usuário usa o Nº Documento)
 
         // Cliente
         <div key={`cliente-${conta.cod_receb}`} className="min-w-[180px]">
@@ -1037,15 +1033,15 @@ export default function ContasAReceber() {
 
       // Definir colunas com cabeçalhos
       worksheet.columns = [
-        { header: 'Número Título', key: 'cod_receb', width: 15 },
+        { header: 'Nº Documento', key: 'nro_doc', width: 20 },
         { header: 'Cliente', key: 'nome_cliente', width: 30 },
         { header: 'Conta Financeira', key: 'descricao_conta', width: 25 },
+        // (coluna interna 'Número Título'/cod_receb removida)
         { header: 'Data Vencimento', key: 'dt_venc', width: 15 },
         { header: 'Data Pagamento', key: 'dt_pgto', width: 15 },
         { header: 'Data Emissão', key: 'dt_emissao', width: 15 },
         { header: 'Valor Original', key: 'valor_original', width: 15 },
         { header: 'Valor Recebido', key: 'valor_recebido', width: 15 },
-        { header: 'Nº Documento', key: 'nro_doc', width: 20 },
         { header: 'Fatura', key: 'cod_fat', width: 15 },
         { header: 'Status', key: 'status', width: 12 },
         { header: 'Dias Atraso', key: 'dias_atraso', width: 12 },
