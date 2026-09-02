@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import Modal from '@/components/common/Modal';
 import { Input } from '@/components/ui/input';
@@ -63,10 +63,15 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
   const [loadingDet, setLoadingDet] = useState(false);
   const [cancelando, setCancelando] = useState(false);
 
-  const carregar = async () => {
+  // Busca SERVER-SIDE (igual ao Delphi): por Nº do comprovante, código ou nome do cliente.
+  // Sem busca → o endpoint devolve só os comprovantes de HOJE (evita listar o histórico todo).
+  const carregar = async (termo?: string) => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/contas-receber/comprovantes?status=${status}`);
+      const qs = new URLSearchParams({ status });
+      const t = (termo ?? busca).trim();
+      if (t) qs.set('search', t);
+      const r = await fetch(`/api/contas-receber/comprovantes?${qs.toString()}`);
       const d = await r.json();
       setLista(Array.isArray(d?.comprovantes) ? d.comprovantes : []);
     } catch {
@@ -77,23 +82,15 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
   };
 
   useEffect(() => {
-    if (isOpen) {
-      setSel(null);
-      carregar();
-    }
+    if (!isOpen) return;
+    setSel(null);
+    const t = setTimeout(() => carregar(), 300); // debounce da busca
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, status]);
+  }, [isOpen, status, busca]);
 
-  const filtradas = useMemo(() => {
-    const t = busca.trim().toLowerCase();
-    if (!t) return lista;
-    return lista.filter(
-      (c) =>
-        String(c.aut_id).includes(t) ||
-        (c.nome_cliente || '').toLowerCase().includes(t) ||
-        String(c.codcli || '').includes(t),
-    );
-  }, [lista, busca]);
+  // Server já filtra; a lista renderizada é a que veio.
+  const filtradas = lista;
 
   const abrirDetalhe = async (c: Comprovante) => {
     setSel(c);
@@ -260,7 +257,7 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
             <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar nº, cliente ou código..."
+                placeholder="Nº do comprovante, código ou nome do cliente…"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 className="pl-8"
@@ -299,7 +296,9 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
                 ) : filtradas.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-2 py-6 text-center text-gray-400">
-                      Nenhum comprovante.
+                      {busca.trim()
+                        ? 'Nenhum comprovante para a busca.'
+                        : 'Nenhum comprovante hoje. Busque por nº ou cliente para ver outros.'}
                     </td>
                   </tr>
                 ) : (

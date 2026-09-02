@@ -87,6 +87,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (status === 'ativo') where += ' AND COALESCE(a.aut_cancel,0) = 0';
     else if (status === 'cancelado') where += ' AND COALESCE(a.aut_cancel,0) = 1';
+    // Padrão (igual ao Delphi): sem busca e sem período → só os comprovantes de HOJE.
+    if (!search && !dataInicio && !dataFim) {
+      where += ' AND a.aut_data >= CURRENT_DATE';
+    }
     if (dataInicio) {
       params.push(dataInicio);
       where += ` AND a.aut_data >= $${params.length}`;
