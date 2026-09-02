@@ -146,13 +146,13 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
       : `<tr><td colspan="2" style="color:#888">—</td></tr>`;
 
     const impressoEm = new Date().toLocaleString('pt-BR');
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Comprovante ${sel.aut_id}</title>
       <style>
         *{box-sizing:border-box}
         body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;padding:18px}
         .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-        .logo{font-weight:bold;font-size:20px;letter-spacing:1px}
-        .logo small{display:block;font-size:8px;font-weight:normal;letter-spacing:2px}
+        .logo img{height:46px;width:auto}
         .cli{border:1px solid #000;padding:4px 8px;font-size:11px;min-width:280px}
         .aut{text-align:right;font-family:monospace;font-size:10px}
         .barcode{font-family:monospace;font-size:22px;letter-spacing:1px;border:1px solid #000;padding:2px 8px;display:inline-block}
@@ -163,16 +163,17 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
         td.r,th.r{text-align:right}
         .sec{margin-top:10px;font-weight:bold;font-size:11px}
         .formas{width:60%;margin-top:2px}
-        .stamp{height:150px}
-        .totrec{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px;font-size:13px}
+        /* Rodapé fixo no fim da página (igual ao Delphi) */
+        .rodape{position:fixed;left:18px;right:18px;bottom:14px}
+        .totrec{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-size:13px}
         .totrec b{border:1px solid #000;padding:2px 20px;min-width:120px;text-align:right}
-        .notas{margin-top:18px;font-size:9px;color:#333;display:flex;justify-content:space-between;align-items:flex-end}
+        .notas{margin-top:10px;font-size:9px;color:#333;display:flex;justify-content:space-between;align-items:flex-end}
         .cancel{color:#c00;font-weight:bold}
       </style></head>
       <body>
         <div class="top">
-          <div>
-            <div class="logo">MELO<small>DISTRIBUIDORA DE PEÇAS LTDA</small></div>
+          <div class="logo">
+            <img src="${origin}/images/logoPdf.png" alt="MELO" />
           </div>
           <div class="cli">
             <div><b>Cliente</b></div>
@@ -204,17 +205,16 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
         <div class="sec">FORMAS DE PAGAMENTO</div>
         <table class="formas"><tbody>${linhasFormas}</tbody></table>
 
-        <div class="stamp"></div>
-
-        <div class="totrec"><span><b style="border:none;padding:0">Total Recebido:</b></span><b>${num(totalRecebido)}</b></div>
-
-        <div class="notas">
-          <div>
-            <div><sup>1</sup> Valor atualizado até o dia ${fmtData(sel.aut_data)}.</div>
-            <div><sup>2</sup> Pagamento efetuado com cheque ou cheque-pré está sujeito a compensação.</div>
-            <div>(*) Pagamento realizado parcialmente.</div>
+        <div class="rodape">
+          <div class="totrec"><span><b style="border:none;padding:0">Total Recebido:</b></span><b>${num(totalRecebido)}</b></div>
+          <div class="notas">
+            <div>
+              <div><sup>1</sup> Valor atualizado até o dia ${fmtData(sel.aut_data)}.</div>
+              <div><sup>2</sup> Pagamento efetuado com cheque ou cheque-pré está sujeito a compensação.</div>
+              <div>(*) Pagamento realizado parcialmente.</div>
+            </div>
+            <div>Impresso em ${impressoEm}</div>
           </div>
-          <div>Impresso em ${impressoEm}</div>
         </div>
       </body></html>`;
     const w = window.open('', '_blank', 'width=900,height=700');

@@ -57,7 +57,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ORDER BY nome`,
         [autId],
       );
-      return res.status(200).json({ comprovante: cab.rows[0], itens: itens.rows, formas: formas.rows });
+      // Fallback p/ comprovantes antigos (sem id_autenticacao gravado): usa os movimentos dos
+      // títulos do comprovante (aproximado — pode somar recebimentos de outros eventos).
+      let formasRows = formas.rows;
+      if (formasRows.length === 0) {
+        const codRecebs = itens.rows.map((r: any) => String(r.ita_cod_receb));
+        if (codRecebs.length) {
+          const fb = await client.query(
+            `SELECT nome, SUM(valor) AS valor,
+                    MIN(coddocumento) AS coddocumento, MIN(codautorizacao) AS codautorizacao
+               FROM dbfreceb
+              WHERE cod_receb = ANY($1) AND (tipo IS DISTINCT FROM 'E') AND COALESCE(valor,0) > 0
+              GROUP BY nome ORDER BY nome`,
+            [codRecebs],
+          );
+          formasRows = fb.rows;
+        }
+      }
+      return res.status(200).json({ comprovante: cab.rows[0], itens: itens.rows, formas: formasRows });
     }
 
     // ---- Listagem ----
