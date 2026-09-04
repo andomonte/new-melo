@@ -38,11 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       parcelas = [],
     } = req.body;
 
-    // Validações básicas
+    // Validações básicas (Delphi UniContasR.BtnCad_SalvarClick exige documento).
     if (!codcli) return res.status(400).json({ erro: 'Cliente é obrigatório' });
     if (!rec_cof_id) return res.status(400).json({ erro: 'Conta financeira é obrigatória' });
     if (!dt_venc) return res.status(400).json({ erro: 'Data de vencimento é obrigatória' });
     if (!valor_pgto || Number(valor_pgto) <= 0) return res.status(400).json({ erro: 'Valor inválido' });
+    if (!nro_doc || !String(nro_doc).trim()) return res.status(400).json({ erro: 'Número do documento é obrigatório' });
 
     // --- Regra banco ↔ forma (fiel ao Delphi/GP) ---------------------------------
     // `banco` chega como código do dropdown dbbanco_cobranca ('1'..'9') ou vazio.
@@ -70,12 +71,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const valorParcela = Math.floor((valorTotal / totalParcelas) * 100) / 100;
     const restoCentavos = valorTotal - (valorParcela * totalParcelas);
 
-    // Gerar base do nro_doc se não fornecido
-    let baseDoc = nro_doc || '';
-    if (!baseDoc && parcelado && totalParcelas > 1) {
-      // Gerar um ID único baseado em timestamp
-      baseDoc = `REC${Date.now().toString().slice(-8)}`;
-    }
+    // Documento base (obrigatório, validado acima) — o Delphi acrescenta LETRA por parcela.
+    const baseDoc = String(nro_doc).trim();
+    // Letras por parcela (fiel ao Delphi: A..J, L..P — pula o 'K'). Mesmo com 1 parcela vira 'A'.
+    const LETRA = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'L', 'M', 'N', 'O', 'P'];
 
     const created: string[] = [];
     const dataEmissao = dt_emissao || new Date().toISOString().split('T')[0];
@@ -90,6 +89,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `);
     let proximoCod = parseInt(maxCodResult.rows[0]?.max_cod || '0') + 1;
 
+    // cod_fat COMPARTILHADO pelas parcelas (o "Cod_Avulso" do Delphi) — é o que agrupa as
+    // parcelas para o cálculo Parcela X/N. Gerado como MAX(numérico)+1, 9 dígitos.
+    const maxFatResult = await client.query(
+      `SELECT COALESCE(MAX(CAST(cod_fat AS bigint)), 0) AS mx FROM dbreceb WHERE cod_fat ~ '^[0-9]+$'`,
+    );
+    const codFatCompartilhado = String(Number(maxFatResult.rows[0]?.mx || 0) + 1).padStart(9, '0');
+
     // Criar cada parcela
     for (let i = 0; i < totalParcelas; i++) {
       // Calcular data de vencimento desta parcela
@@ -103,19 +109,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? valorParcela + restoCentavos
         : valorParcela;
 
-      // Gerar nro_doc para esta parcela (formato: base/X ou X/Y)
-      const nroDocParcela = totalParcelas > 1 
-        ? `${baseDoc}/${String(i + 1).padStart(2, '0')}` 
-        : (baseDoc || null);
+      // nro_doc = documento digitado + LETRA da parcela (Delphi: 030484 → 030484A/B/C).
+      const letra = LETRA[i] ?? String(i + 1);
+      const nroDocParcela = `${baseDoc}${letra}`;
 
       // Gerar cod_receb para esta parcela
       const codReceb = String(proximoCod + i);
 
       const insertQuery = `
         INSERT INTO dbreceb (
-          cod_receb, codcli, rec_cof_id, dt_venc, dt_emissao, valor_pgto, nro_doc, tipo, forma_fat, banco, rec, cancel, valor_rec, bradesco
+          cod_receb, codcli, rec_cof_id, dt_venc, dt_emissao, valor_pgto, nro_doc, cod_fat, tipo, forma_fat, banco, rec, cancel, valor_rec, bradesco
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'N', 'N', 0, 'N'
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'N', 'N', 0, 'N'
         ) RETURNING cod_receb
       `;
 
@@ -127,6 +132,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         dataEmissao,
         valorDestaParcela.toFixed(2),
         nroDocParcela,
+        codFatCompartilhado, // cod_fat compartilhado → Parcela X/N funciona
         tipo || 'R',
         formaCod, // forma coagida pela regra banco↔forma (fonte única)
         bancoInterno, // código interno do Oracle (dbreceb.banco), 1 dígito

@@ -14,6 +14,7 @@ import {
   CreditCard,
   CircleChevronDown,
   History,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -27,6 +28,8 @@ interface Props {
   onCancelarClick: () => void;
   onHistoricoClick: () => void;
   onVerCartaoClick?: () => void;
+  /** Abre a tela de Comprovantes filtrada pelo cliente deste título. */
+  onComprovantesClick?: () => void;
 }
 
 export default function DropdownContasReceber({
@@ -38,6 +41,7 @@ export default function DropdownContasReceber({
   onCancelarClick,
   onHistoricoClick,
   onVerCartaoClick,
+  onComprovantesClick,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -128,6 +132,18 @@ export default function DropdownContasReceber({
           <XCircle className="size-4 text-red-600 group-hover:text-white transition group-disabled:text-gray-400" />
           Cancelar Título
         </DropdownMenuItem>
+
+        {onComprovantesClick && (
+          <DropdownMenuItem
+            onClick={onComprovantesClick}
+            disabled={!(estaRecebido || estaRecebidoParcial)}
+            title={estaRecebido || estaRecebidoParcial ? '' : 'Só há comprovante para título recebido'}
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-teal-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <FileText className="size-4 text-teal-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Comprovantes
+          </DropdownMenuItem>
+        )}
 
         {conta.tem_cartao && onVerCartaoClick && (
           <DropdownMenuItem

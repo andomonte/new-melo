@@ -7,14 +7,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 interface Props {
   open: boolean;
   onClose: () => void;
-  codfat: string;
+  codfat?: string;
   codcli?: string;
   nomeCliente?: string;
   numeroNota?: string;
-  /** 'danfe' anexa a DANFE; 'cobranca' anexa o boleto (futuro). */
-  tipo?: 'danfe' | 'cobranca';
+  /** 'danfe' anexa a DANFE; 'cobranca' o boleto; 'comprovante' o PDF do comprovante. */
+  tipo?: 'danfe' | 'cobranca' | 'comprovante';
   /** Código do grupo de pagamento — quando presente, anexa o "Resumo GP" à cobrança. */
   codgp?: string | number | null;
+  /** aut_id do comprovante (quando tipo='comprovante'). */
+  autId?: string;
 }
 
 /**
@@ -31,8 +33,9 @@ export default function ModalEnviarEmail({
   numeroNota,
   tipo = 'danfe',
   codgp,
+  autId,
 }: Props) {
-  const tituloDoc = tipo === 'cobranca' ? 'Cobrança' : 'DANFE';
+  const tituloDoc = tipo === 'cobranca' ? 'Cobrança' : tipo === 'comprovante' ? 'Comprovante' : 'DANFE';
   const ehGrupo = codgp != null && String(codgp).trim() !== '';
   const [destinatarios, setDestinatarios] = useState<string[]>([]);
   const [novoEmail, setNovoEmail] = useState('');
@@ -53,7 +56,7 @@ export default function ModalEnviarEmail({
     );
     setDestinatarios([]);
     setCarregando(true);
-    const q = codcli ? `codcli=${encodeURIComponent(codcli)}` : `codfat=${encodeURIComponent(codfat)}`;
+    const q = codcli ? `codcli=${encodeURIComponent(codcli)}` : `codfat=${encodeURIComponent(codfat || '')}`;
     fetch(`/api/faturamento/emails-cliente?${q}`)
       .then((r) => r.json())
       .then((d) => setDestinatarios(Array.isArray(d?.emails) ? d.emails : []))
@@ -81,6 +84,19 @@ export default function ModalEnviarEmail({
     if (destinatarios.length === 0) return toast.error('Adicione ao menos um destinatário.');
     setEnviando(true);
     try {
+      if (tipo === 'comprovante') {
+        const resp = await fetch('/api/contas-receber/comprovantes/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aut_id: autId, destinatarios, assunto, mensagem }),
+        });
+        const d = await resp.json();
+        if (!resp.ok) throw new Error(d.detalhes || d.erro || 'Falha ao enviar.');
+        toast.success(d.mensagem || 'Comprovante enviado.');
+        onClose();
+        return;
+      }
+
       if (tipo === 'cobranca') {
         // 1) gera o boleto (PDF) 2) envia com o boleto anexo
         const gb = await fetch('/api/faturamento/gerar-boleto', {
@@ -210,7 +226,12 @@ export default function ModalEnviarEmail({
 
           {/* Anexos */}
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {tipo === 'cobranca' ? (
+            {tipo === 'comprovante' ? (
+              <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
+                <Paperclip size={14} className="text-gray-500" />
+                Comprovante-{autId}.pdf
+              </span>
+            ) : tipo === 'cobranca' ? (
               <>
                 <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
                   <Paperclip size={14} className="text-gray-500" />

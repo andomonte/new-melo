@@ -279,6 +279,14 @@ export default function ContasAReceber() {
   const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
   const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
   const [modalComprovantesAberto, setModalComprovantesAberto] = useState(false);
+  const [comprovanteBuscaInicial, setComprovanteBuscaInicial] = useState('');
+
+  // Abre a tela de Comprovantes já filtrada pelo cliente do título selecionado (se houver).
+  const abrirComprovantes = (codcli?: string) => {
+    const cod = codcli || (selecionadosBaixa[0]?.codcli ? String(selecionadosBaixa[0].codcli) : '');
+    setComprovanteBuscaInicial(cod);
+    setModalComprovantesAberto(true);
+  };
   const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
   const [modalAIdentificarAberto, setModalAIdentificarAberto] = useState(false);
 
@@ -335,6 +343,7 @@ export default function ContasAReceber() {
     '☑️',                    // seleção múltipla (Dar Baixa em lote)
     'Ações',                 // ações (dropdown / botões)
     'Status',                // status (badge)
+    'Número Título',         // cod_receb (interno) — coluna disponível/ocultável
     'Cliente',               // nome_cliente
     'Emissão',               // dt_emissao
     'Vencimento',            // dt_venc
@@ -595,12 +604,16 @@ export default function ContasAReceber() {
           onCancelarClick={() => abrirModalCancelar(conta)}
           onHistoricoClick={() => abrirModalHistorico(conta)}
           onVerCartaoClick={conta.tem_cartao ? () => visualizarDetalhesCartao(conta) : undefined}
+          onComprovantesClick={() => abrirComprovantes(conta.nro_doc || (conta.codcli ? String(conta.codcli) : ''))}
         />,
 
         // Status
         <div key={`status-${conta.cod_receb}`} className="flex items-center">{getStatusBadge(conta.status)}</div>,
 
-        // (coluna "Número Título" / cód. interno removida — o usuário usa o Nº Documento)
+        // Número Título (cód. interno) — coluna disponível; o usuário pode ocultar em "Colunas"
+        <span key={`titulo-${conta.cod_receb}`} className="font-mono text-xs text-gray-500">
+          {conta.cod_receb}
+        </span>,
 
         // Cliente
         <div key={`cliente-${conta.cod_receb}`} className="min-w-[180px]">
@@ -1033,10 +1046,10 @@ export default function ContasAReceber() {
 
       // Definir colunas com cabeçalhos
       worksheet.columns = [
+        { header: 'Número Título', key: 'cod_receb', width: 15 },
         { header: 'Nº Documento', key: 'nro_doc', width: 20 },
         { header: 'Cliente', key: 'nome_cliente', width: 30 },
         { header: 'Conta Financeira', key: 'descricao_conta', width: 25 },
-        // (coluna interna 'Número Título'/cod_receb removida)
         { header: 'Data Vencimento', key: 'dt_venc', width: 15 },
         { header: 'Data Pagamento', key: 'dt_pgto', width: 15 },
         { header: 'Data Emissão', key: 'dt_emissao', width: 15 },
@@ -1360,6 +1373,10 @@ export default function ContasAReceber() {
         toast.error('Informe um valor válido');
         return;
       }
+      if (!novaContaDados.nro_doc || !String(novaContaDados.nro_doc).trim()) {
+        toast.error('Informe o número do documento');
+        return;
+      }
       // Regra banco↔forma (fiel Delphi/GP): RURAL/SAFRA/CITIBANK têm boleto suspenso.
       if (BANCOS_BOLETO_SUSPENSO.has(novaContaDados.banco)) {
         toast.error('Emissão de boleto suspensa para este banco. Escolha outro banco.');
@@ -1580,7 +1597,8 @@ export default function ContasAReceber() {
             </button>
             <button
               type="button"
-              onClick={() => setModalComprovantesAberto(true)}
+              onClick={() => abrirComprovantes()}
+              title={selecionadosBaixa.length > 0 ? 'Abre já filtrado pelo cliente selecionado' : 'Comprovantes de hoje'}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
             >
               <FileText className="w-4 h-4" /> Comprovantes
@@ -2780,6 +2798,7 @@ export default function ContasAReceber() {
         isOpen={modalComprovantesAberto}
         onClose={() => setModalComprovantesAberto(false)}
         username={user?.usuario || ''}
+        buscaInicial={comprovanteBuscaInicial}
       />
 
       {/* Modal de Conciliação Bancária */}

@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import SelectPadrao from '@/components/common/SelectPadrao';
-import { Search, Loader2, Printer, Ban, FileText } from 'lucide-react';
+import { Search, Loader2, Printer, Ban, FileText, Send } from 'lucide-react';
+import ModalEnviarEmail from '@/components/corpo/faturamento/ConsultaFatura/ModalEnviarEmail';
 
 interface Comprovante {
   aut_id: string;
@@ -20,6 +21,7 @@ interface Comprovante {
   nomeusr: string | null;
   valor_total: number;
   qtd_titulos: number;
+  primeiro_doc: string | null;
   codcli: number | null;
   nome_cliente: string | null;
 }
@@ -46,22 +48,28 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   username: string;
+  buscaInicial?: string; // pré-preenche a busca ao abrir (ex.: código do cliente selecionado)
 }
 
 const fmtBRL = (n: any) =>
   Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtData = (d: string) => (d ? new Date(d).toLocaleString('pt-BR') : '-');
 
-export default function ModalComprovantes({ isOpen, onClose, username }: Props) {
+export default function ModalComprovantes({ isOpen, onClose, username, buscaInicial }: Props) {
   const [lista, setLista] = useState<Comprovante[]>([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
+  // Ao abrir, pré-preenche a busca (ex.: código do cliente do título selecionado).
+  useEffect(() => {
+    if (isOpen) setBusca(buscaInicial || '');
+  }, [isOpen, buscaInicial]);
   const [status, setStatus] = useState<'ativo' | 'cancelado' | 'todos'>('todos');
   const [sel, setSel] = useState<Comprovante | null>(null);
   const [itens, setItens] = useState<ItemComprovante[]>([]);
   const [formas, setFormas] = useState<FormaPgto[]>([]);
   const [loadingDet, setLoadingDet] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [enviarAberto, setEnviarAberto] = useState(false);
 
   // Busca SERVER-SIDE (igual ao Delphi): por Nº do comprovante, código ou nome do cliente.
   // Sem busca → o endpoint devolve só os comprovantes de HOJE (evita listar o histórico todo).
@@ -73,7 +81,10 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
       if (t) qs.set('search', t);
       const r = await fetch(`/api/contas-receber/comprovantes?${qs.toString()}`);
       const d = await r.json();
-      setLista(Array.isArray(d?.comprovantes) ? d.comprovantes : []);
+      const lst: Comprovante[] = Array.isArray(d?.comprovantes) ? d.comprovantes : [];
+      setLista(lst);
+      // Busca retornou exatamente 1 → já abre o detalhe (ex.: vindo de Ações → Comprovantes).
+      if (t && lst.length === 1) abrirDetalhe(lst[0]);
     } catch {
       toast.error('Erro ao carregar comprovantes.');
     } finally {
@@ -280,6 +291,7 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
               <thead className="sticky top-0 bg-gray-100 dark:bg-slate-800">
                 <tr>
                   <th className="px-2 py-1 text-left">Nº</th>
+                  <th className="px-2 py-1 text-left">Documento</th>
                   <th className="px-2 py-1 text-left">Data</th>
                   <th className="px-2 py-1 text-left">Cliente</th>
                   <th className="px-2 py-1 text-right">Valor</th>
@@ -289,13 +301,13 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-2 py-6 text-center text-gray-400">
+                    <td colSpan={6} className="px-2 py-6 text-center text-gray-400">
                       <Loader2 className="h-4 w-4 animate-spin inline" /> Carregando...
                     </td>
                   </tr>
                 ) : filtradas.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-2 py-6 text-center text-gray-400">
+                    <td colSpan={6} className="px-2 py-6 text-center text-gray-400">
                       {busca.trim()
                         ? 'Nenhum comprovante para a busca.'
                         : 'Nenhum comprovante hoje. Busque por nº ou cliente para ver outros.'}
@@ -310,7 +322,13 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
                         sel?.aut_id === c.aut_id ? 'bg-blue-50 dark:bg-blue-950/30' : ''
                       }`}
                     >
-                      <td className="px-2 py-1 font-mono">{c.aut_id}</td>
+                      <td className="px-2 py-1 font-mono text-gray-500">{c.aut_id}</td>
+                      <td className="px-2 py-1 font-mono">
+                        {c.primeiro_doc || '-'}
+                        {Number(c.qtd_titulos) > 1 && (
+                          <span className="text-[10px] text-blue-600 ml-1">+{Number(c.qtd_titulos) - 1}</span>
+                        )}
+                      </td>
                       <td className="px-2 py-1">{fmtData(c.aut_data)}</td>
                       <td className="px-2 py-1">
                         {c.codcli ? `${c.codcli} - ` : ''}
@@ -400,6 +418,10 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
                     <Button type="button" variant="outline" size="sm" onClick={imprimir}>
                       <Printer size={14} className="mr-1" /> Imprimir
                     </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setEnviarAberto(true)}
+                      className="text-blue-600 border-blue-300 hover:bg-blue-50">
+                      <Send size={14} className="mr-1" /> Enviar
+                    </Button>
                     {sel.aut_cancel !== 1 && (
                       <Button type="button" variant="outline" size="sm" onClick={cancelar} disabled={cancelando}
                         className="text-red-600 border-red-300 hover:bg-red-50">
@@ -414,6 +436,19 @@ export default function ModalComprovantes({ isOpen, onClose, username }: Props) 
           </div>
         </section>
       </div>
+
+      {/* Enviar comprovante por email (mesma tela do "enviar cobrança") */}
+      {sel && (
+        <ModalEnviarEmail
+          open={enviarAberto}
+          onClose={() => setEnviarAberto(false)}
+          tipo="comprovante"
+          autId={sel.aut_id}
+          codcli={sel.codcli ? String(sel.codcli) : undefined}
+          nomeCliente={sel.nome_cliente || undefined}
+          numeroNota={sel.aut_id}
+        />
+      )}
     </Modal>
   );
 }

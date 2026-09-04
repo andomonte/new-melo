@@ -820,7 +820,7 @@ export default function DataTableContasPagar({
                       return (
                         <td
                           key={cellIndex}
-                          className={`px-2 py-1 text-xs text-gray-900 dark:text-gray-100 ${
+                          className={`px-2 py-1 text-xs text-gray-900 dark:text-gray-100 select-text ${
                             isLastColumn ? 'text-center' : 'text-center'
                           }`}
                         >

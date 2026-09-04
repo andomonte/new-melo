@@ -47,28 +47,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ORDER BY it.ita_cod_receb`,
         [autId],
       );
-      // FORMAS DE PAGAMENTO: movimentos de dbfreceb ligados a este comprovante (id_autenticacao).
+      // FORMAS DE PAGAMENTO: movimentos de dbfreceb ligados ao comprovante (id_autenticacao).
+      // O nome da forma vem do CÓDIGO (dbfreceb.tipo → dbforma_pagto.descricao), não do campo
+      // 'nome' (que no Oracle guarda o sacado do cheque, quase sempre nulo).
       const formas = await client.query(
-        `SELECT nome, SUM(valor) AS valor,
-                MIN(coddocumento) AS coddocumento, MIN(codautorizacao) AS codautorizacao
-           FROM dbfreceb
-          WHERE id_autenticacao = $1::bigint
-          GROUP BY nome
-          ORDER BY nome`,
+        `SELECT COALESCE(fp.descricao, 'FORMA ' || fr.tipo) AS nome,
+                SUM(fr.valor) AS valor,
+                MIN(fr.coddocumento) AS coddocumento, MIN(fr.codautorizacao) AS codautorizacao
+           FROM dbfreceb fr
+           LEFT JOIN dbforma_pagto fp ON fp.codfpgt = fr.tipo
+          WHERE fr.id_autenticacao = $1::bigint
+          GROUP BY COALESCE(fp.descricao, 'FORMA ' || fr.tipo)
+          ORDER BY 1`,
         [autId],
       );
-      // Fallback p/ comprovantes antigos (sem id_autenticacao gravado): usa os movimentos dos
-      // títulos do comprovante (aproximado — pode somar recebimentos de outros eventos).
+      // Fallback p/ comprovantes sem id_autenticacao gravado: usa os movimentos dos títulos
+      // do comprovante (aproximado — pode somar recebimentos de outros eventos).
       let formasRows = formas.rows;
       if (formasRows.length === 0) {
         const codRecebs = itens.rows.map((r: any) => String(r.ita_cod_receb));
         if (codRecebs.length) {
           const fb = await client.query(
-            `SELECT nome, SUM(valor) AS valor,
-                    MIN(coddocumento) AS coddocumento, MIN(codautorizacao) AS codautorizacao
-               FROM dbfreceb
-              WHERE cod_receb = ANY($1) AND (tipo IS DISTINCT FROM 'E') AND COALESCE(valor,0) > 0
-              GROUP BY nome ORDER BY nome`,
+            `SELECT COALESCE(fp.descricao, 'FORMA ' || fr.tipo) AS nome,
+                    SUM(fr.valor) AS valor,
+                    MIN(fr.coddocumento) AS coddocumento, MIN(fr.codautorizacao) AS codautorizacao
+               FROM dbfreceb fr
+               LEFT JOIN dbforma_pagto fp ON fp.codfpgt = fr.tipo
+              WHERE fr.cod_receb = ANY($1) AND (fr.tipo IS DISTINCT FROM 'E') AND COALESCE(fr.valor,0) > 0
+              GROUP BY COALESCE(fp.descricao, 'FORMA ' || fr.tipo) ORDER BY 1`,
             [codRecebs],
           );
           formasRows = fb.rows;
@@ -121,6 +127,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               u.nomeusr,
               (SELECT COALESCE(SUM(ita_valor_total),0) FROM fin_item_autenticacao WHERE ita_id = a.aut_id) AS valor_total,
               (SELECT COUNT(*) FROM fin_item_autenticacao WHERE ita_id = a.aut_id) AS qtd_titulos,
+              (SELECT ita_nro_doc FROM fin_item_autenticacao WHERE ita_id = a.aut_id ORDER BY ita_cod_receb LIMIT 1) AS primeiro_doc,
               cli.codcli, cli.nome AS nome_cliente
          FROM fin_autenticacao a
          LEFT JOIN dbusuario u ON CAST(u.codusr AS TEXT) = CAST(a.aut_codusr AS TEXT)
