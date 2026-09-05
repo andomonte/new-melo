@@ -5,7 +5,7 @@
 // inclusão (aba Cadastro + Produtos) e o modal de detalhe (aba Alteração).
 
 import React, { useCallback, useContext, useEffect, useState } from 'react';
-import { PlusIcon, Eye } from 'lucide-react';
+import { PlusIcon, Eye, Filter } from 'lucide-react';
 import { useDebouncedCallback } from 'use-debounce';
 import DataTablePadrao from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
@@ -62,6 +62,10 @@ export default function GarantiasPage() {
   const [perPage, setPerPage] = useState(25);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  // "Após a data": o campo abre em hoje (como o Delphi), mas só entra na
+  // busca quando o usuário aplica — lá o filtro também não roda na abertura.
+  const [dataApos, setDataApos] = useState(() => new Date().toISOString().slice(0, 10));
+  const [de, setDe] = useState('');
   const [limiteColunas, setLimiteColunas] = useState(8);
 
   const [novaAberta, setNovaAberta] = useState(false);
@@ -70,7 +74,7 @@ export default function GarantiasPage() {
   const buscar = useCallback(async () => {
     setCarregando(true);
     try {
-      const r = await listarGarantias({ page, perPage, search, status });
+      const r = await listarGarantias({ page, perPage, search, status, de });
       setDados(r.data || []);
       setMeta(r.meta || {});
     } catch (erro) {
@@ -79,7 +83,7 @@ export default function GarantiasPage() {
     } finally {
       setCarregando(false);
     }
-  }, [page, perPage, search, status]);
+  }, [page, perPage, search, status, de]);
 
   useEffect(() => {
     buscar();
@@ -155,22 +159,61 @@ export default function GarantiasPage() {
           onSearch={(e) => buscaComDebounce(e.target.value)}
           searchInputPlaceholder="Buscar por garantia, documento ou cliente..."
           searchRightSlot={
-            <div className="w-52 shrink-0">
-              <SelectPadrao
-                placeholder="Todas as situações"
-                value={status || 'todas'}
-                onValueChange={(v) => {
-                  setStatus(v === 'todas' ? '' : v);
-                  setPage(1);
-                }}
-                options={[
-                  { value: 'todas', label: 'Todas as situações' },
-                  ...Object.entries(STATUS_GARANTIA).map(([v, l]) => ({
-                    value: v,
-                    label: l,
-                  })),
-                ]}
-              />
+            <div className="flex items-center gap-2 shrink-0">
+              {/* "Após a data" do Delphi (BtDataClick, filtro dt_gar >= data).
+                  Lá o campo abre com hoje mas NÃO filtra até você acionar —
+                  por isso o valor fica no campo e só entra na busca ao aplicar. */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-gray-500 whitespace-nowrap">Após a data:</span>
+                <input
+                  type="date"
+                  value={dataApos}
+                  onChange={(e) => setDataApos(e.target.value)}
+                  className="h-8 px-2 text-xs rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-gray-700 dark:text-gray-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDe(dataApos);
+                    setPage(1);
+                  }}
+                  className="h-8 px-2 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-gray-600 dark:text-gray-200 hover:border-gray-400"
+                  title="Filtrar garantias a partir desta data"
+                >
+                  <Filter size={14} />
+                </button>
+                {de && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDe('');
+                      setPage(1);
+                    }}
+                    className="h-8 px-2 rounded-md text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    title="Remover o filtro de data"
+                  >
+                    limpar
+                  </button>
+                )}
+              </div>
+
+              <div className="w-52 shrink-0">
+                <SelectPadrao
+                  placeholder="Todas as situações"
+                  value={status || 'todas'}
+                  onValueChange={(v) => {
+                    setStatus(v === 'todas' ? '' : v);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: 'todas', label: 'Todas as situações' },
+                    ...Object.entries(STATUS_GARANTIA).map(([v, l]) => ({
+                      value: v,
+                      label: l,
+                    })),
+                  ]}
+                />
+              </div>
             </div>
           }
         />
