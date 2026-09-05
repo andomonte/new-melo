@@ -121,32 +121,33 @@ export async function buscarClientes(
   return data?.data ?? [];
 }
 
-export async function buscarArmazens(): Promise<
-  { arm_id: number; arm_descricao: string }[]
-> {
-  const { data } = await api.get('/api/armazens/listar');
-  return data?.armazens ?? [];
-}
-
-export interface EstoqueArmazem {
+export interface ArmazemDoProduto {
   armId: number;
   armDescricao: string;
-  qtestDisponivel: number;
-  bloqueado: boolean;
+  qtest: number;
+  reservada: number;
+  disponivel: number;
+}
+
+export interface ProdutoGarantia {
+  codprod: string;
+  ref: string;
+  descr: string;
+  marca: string;
+  armazens: ArmazemDoProduto[];
 }
 
 /**
- * Estoque disponível do produto por armazém (arp_qtest - arp_qtest_reservada),
- * a mesma conta do QTEST_DISPONIVEL que o Delphi usa para barrar a quantidade.
+ * Busca do item da garantia — por REFERÊNCIA, como o Delphi
+ * (MeRefKeyPress: vFILTRO = " P.REF LIKE 'texto%' "). Cada produto já volta
+ * com os armazéns liberados e a quantidade disponível
+ * (arp_qtest - arp_qtest_reservada), que é o combo do Delphi.
  */
-export async function estoqueDoProduto(
-  codprod: string,
-): Promise<EstoqueArmazem[]> {
-  const { data } = await api.get('/api/armazem/estoque-produto', {
-    params: { codprods: codprod },
+export async function buscarProdutosGarantia(
+  search: string,
+): Promise<ProdutoGarantia[]> {
+  const { data } = await api.get('/api/vendas/garantias/produtos', {
+    params: { search },
   });
-  const produto = (data?.data ?? []).find(
-    (p: any) => String(p.codprod) === String(codprod),
-  );
-  return produto?.armazens ?? [];
+  return data?.data ?? [];
 }

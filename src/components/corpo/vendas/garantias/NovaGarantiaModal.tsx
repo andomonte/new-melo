@@ -16,14 +16,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import FormSelect from '@/components/common/FormSelect';
-import ProdutoSearchInput from '@/components/common/ProdutoSearchInput';
 import {
-  EstoqueArmazem,
+  ArmazemDoProduto,
+  ProdutoGarantia,
   STATUS_INCLUSAO,
-  buscarArmazens,
   buscarClientes,
+  buscarProdutosGarantia,
   criarGarantia,
-  estoqueDoProduto,
 } from '@/data/vendas/garantias';
 
 interface ItemNovo {
@@ -62,17 +61,17 @@ export const NovaGarantiaModal: React.FC<Props> = ({
   const [obs, setObs] = useState('');
   const [status, setStatus] = useState('P');
 
-  // Item em edição
+  // Item em edição — a busca é por REFERÊNCIA, como no Delphi.
   const [itens, setItens] = useState<ItemNovo[]>([]);
-  const [prodCod, setProdCod] = useState('');
-  const [prodRef, setProdRef] = useState('');
-  const [prodDescr, setProdDescr] = useState('');
-  const [estoques, setEstoques] = useState<EstoqueArmazem[]>([]);
+  const [buscaRef, setBuscaRef] = useState('');
+  const [resultados, setResultados] = useState<ProdutoGarantia[]>([]);
+  const [buscandoProd, setBuscandoProd] = useState(false);
+  const [buscouProd, setBuscouProd] = useState(false);
+  const [produto, setProduto] = useState<ProdutoGarantia | null>(null);
   const [armId, setArmId] = useState('');
   const [qtde, setQtde] = useState('');
   const [prunit, setPrunit] = useState('');
 
-  const [armazens, setArmazens] = useState<{ arm_id: number; arm_descricao: string }[]>([]);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
 
@@ -81,13 +80,12 @@ export const NovaGarantiaModal: React.FC<Props> = ({
     setNrodoc(''); setCodcli(''); setClienteNome(''); setBuscaCliente('');
     setClientes([]); setDtGar(hoje()); setObs(''); setStatus('P');
     setItens([]); limparItem(); setErro('');
-    buscarArmazens().then(setArmazens).catch(() => setArmazens([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const limparItem = () => {
-    setProdCod(''); setProdRef(''); setProdDescr('');
-    setEstoques([]); setArmId(''); setQtde(''); setPrunit('');
+    setBuscaRef(''); setResultados([]); setBuscouProd(false);
+    setProduto(null); setArmId(''); setQtde(''); setPrunit('');
   };
 
   const procurarCliente = async () => {
@@ -99,54 +97,81 @@ export const NovaGarantiaModal: React.FC<Props> = ({
     }
   };
 
-  const selecionarProduto = async (codigo: string, produto?: any) => {
-    setProdCod(codigo);
-    setProdRef(produto?.ref || '');
-    setProdDescr(produto?.descr || '');
-    setArmId('');
-    if (!codigo) return setEstoques([]);
+  // MeRefKeyPress do Delphi: Enter na referência abre a lista de produtos.
+  const procurarProduto = async () => {
+    const termo = buscaRef.trim();
+    if (termo.length < 2) return;
+    setBuscandoProd(true);
+    setErro('');
     try {
-      setEstoques(await estoqueDoProduto(codigo));
+      const achados = await buscarProdutosGarantia(termo);
+      setResultados(achados);
+      setBuscouProd(true);
+      // Um único resultado já entra direto, como quem escolhe a linha do grid.
+      if (achados.length === 1) escolherProduto(achados[0]);
     } catch {
-      setEstoques([]);
+      setResultados([]);
+      setBuscouProd(true);
+      setErro('Não foi possível buscar o produto.');
+    } finally {
+      setBuscandoProd(false);
     }
   };
 
-  const disponivelNoArmazem = (id: string) =>
-    Number(estoques.find((e) => String(e.armId) === String(id))?.qtestDisponivel ?? 0);
+  const escolherProduto = (p: ProdutoGarantia) => {
+    setProduto(p);
+    setResultados([]);
+    setBuscouProd(false);
+    setBuscaRef(p.ref || '');
+    // Um armazém só (o caso normal desta base): já vem escolhido.
+    const liberados = p.armazens;
+    setArmId(liberados.length === 1 ? String(liberados[0].armId) : '');
+  };
 
+  const armazensDoProduto: ArmazemDoProduto[] = produto?.armazens ?? [];
+
+  const disponivelNoArmazem = (id: string) =>
+    Number(
+      armazensDoProduto.find((a) => String(a.armId) === String(id))?.disponivel ?? 0,
+    );
+
+  // Ordem de recusas do BtOkClick do Delphi: quantidade, preço, quantidade > 0
+  // e, por último, estoque disponível no armazém.
   const adicionarItem = () => {
     setErro('');
-    if (!prodCod) return setErro('Selecione o produto.');
-    if (itens.some((i) => i.codprod === prodCod)) {
+    if (!produto) return setErro('Informe a referência e escolha o produto.');
+    if (itens.some((i) => i.codprod === produto.codprod)) {
+      // EXISTE_ITAUXGAR: o Delphi recusa o mesmo produto duas vezes.
       return setErro('Este produto já está na garantia.');
     }
+    if (String(qtde).trim() === '') return setErro('Quantidade inválida.');
     const q = Number(qtde);
-    if (!Number.isFinite(q) || q <= 0) {
+    if (!Number.isInteger(q) || q <= 0) {
       return setErro('A quantidade requisitada deve ser maior que zero.');
     }
+    if (String(prunit).trim() === '') return setErro('Preço inválido.');
     const p = Number(String(prunit).replace(',', '.'));
     if (!Number.isFinite(p) || p < 0) return setErro('Preço inválido.');
     if (!armId) return setErro('Selecione o armazém.');
 
-    // Mesma recusa do BtOkClick do Delphi.
     const disp = disponivelNoArmazem(armId);
     if (q > disp) {
       return setErro(
-        `Quantidade solicitada superior à quantidade em estoque. Disponível: ${disp}.`,
+        `QUANTIDADE SOLICITADA SUPERIOR À QUANTIDADE EM ESTOQUE. Disponível: ${disp}.`,
       );
     }
 
     setItens((atual) => [
       ...atual,
       {
-        codprod: prodCod,
-        ref: prodRef,
-        descr: prodDescr,
+        codprod: produto.codprod,
+        ref: produto.ref,
+        descr: produto.descr,
         qtde: q,
         prunit: p,
         arm_id: Number(armId),
-        armazem: estoques.find((e) => String(e.armId) === armId)?.armDescricao || '',
+        armazem:
+          armazensDoProduto.find((a) => String(a.armId) === armId)?.armDescricao || '',
         disponivel: disp,
       },
     ]);
@@ -274,49 +299,152 @@ export const NovaGarantiaModal: React.FC<Props> = ({
             <h4 className="text-sm font-semibold mb-3 text-gray-900 dark:text-white">
               Itens da Garantia
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-              <div className="md:col-span-2">
-                <ProdutoSearchInput
-                  name="produto"
-                  label="Produto"
-                  value={prodCod}
-                  onChange={selecionarProduto}
+            {/* Busca por REFERÊNCIA — é o que o Delphi faz (MeRefKeyPress:
+                vFILTRO = " P.REF LIKE 'texto%' "), e o combo de armazém sai do
+                próprio produto (ARMAZEM.NAV_PRODUTO_ARMAZEM), com o disponível
+                já calculado. */}
+            <div className="flex flex-col space-y-1 mb-3">
+              <Label htmlFor="ref-produto">Referência do produto</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="ref-produto"
+                  value={buscaRef}
+                  onChange={(e) => {
+                    setBuscaRef(e.target.value.toUpperCase());
+                    setProduto(null);
+                    setArmId('');
+                    setBuscouProd(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      procurarProduto();
+                    }
+                  }}
+                  placeholder="Digite a referência e tecle Enter (ex.: IK500)"
                 />
+                <Button
+                  variant="outline"
+                  onClick={procurarProduto}
+                  disabled={buscandoProd || buscaRef.trim().length < 2}
+                  title="Procurar produto pela referência"
+                >
+                  {buscandoProd ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Search size={16} />
+                  )}
+                </Button>
               </div>
-              <FormSelect
-                name="armazem"
-                label="Armazém"
-                value={armId}
-                onChange={(e) => setArmId(e.target.value)}
-                options={[
-                  { value: '', label: 'Selecione...' },
-                  ...(estoques.length
-                    ? estoques.map((e) => ({
-                        value: String(e.armId),
-                        label: `${e.armDescricao} (disp. ${e.qtestDisponivel})`,
-                      }))
-                    : armazens.map((a) => ({
-                        value: String(a.arm_id),
-                        label: a.arm_descricao,
-                      }))),
-                ]}
-              />
-              <div>
+
+              {produto && (
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  <span className="font-mono">{produto.ref}</span> · {produto.descr}
+                  {produto.marca ? ` · ${produto.marca}` : ''}
+                  {armazensDoProduto.length === 0 && (
+                    <span className="text-red-600">
+                      {' '}— sem armazém liberado para este produto.
+                    </span>
+                  )}
+                </p>
+              )}
+
+              {buscouProd && resultados.length === 0 && (
+                <p className="text-xs text-red-600">
+                  Nenhum produto encontrado para essa referência.
+                </p>
+              )}
+            </div>
+
+            {/* Resultado da busca — o grid DbG_Produto do Delphi
+                (Referência, Marca, Descrição). */}
+            {resultados.length > 0 && (
+              <div className="mb-3 max-h-48 overflow-y-auto border border-gray-200 dark:border-zinc-700 rounded">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-gray-50 dark:bg-zinc-700 text-left">
+                    <tr>
+                      <th className="p-2">Referência</th>
+                      <th className="p-2">Marca</th>
+                      <th className="p-2">Descrição</th>
+                      <th className="p-2 text-right">Disponível</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultados.map((r) => {
+                      const disp = r.armazens.reduce((t, a) => t + a.disponivel, 0);
+                      return (
+                        <tr
+                          key={r.codprod}
+                          onClick={() => escolherProduto(r)}
+                          className="border-t dark:border-zinc-700 cursor-pointer hover:bg-blue-50 dark:hover:bg-zinc-700/60"
+                        >
+                          <td className="p-2 font-mono">{r.ref}</td>
+                          <td className="p-2">{r.marca}</td>
+                          <td className="p-2">{r.descr}</td>
+                          <td
+                            className={`p-2 text-right ${disp > 0 ? '' : 'text-red-600'}`}
+                          >
+                            {disp}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+              {/* Select nativo (e não o FormSelect) para o campo ficar na mesma
+                  linha de base dos demais: o FormSelect traz um wrapper com
+                  mb-4 e altura própria, o que desalinhava a caixa. */}
+              <div className="flex flex-col space-y-1">
+                <Label htmlFor="armazem">Armazém</Label>
+                <select
+                  id="armazem"
+                  name="armazem"
+                  value={armId}
+                  onChange={(e) => setArmId(e.target.value)}
+                  disabled={!produto}
+                  className="flex h-10 w-full rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400/50 focus-visible:border-blue-400 disabled:opacity-50"
+                >
+                  <option value="">
+                    {produto ? 'Selecione...' : 'Escolha o produto primeiro'}
+                  </option>
+                  {armazensDoProduto.map((a) => (
+                    <option key={a.armId} value={String(a.armId)}>
+                      {a.armDescricao} (disp. {a.disponivel})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col space-y-1">
                 <Label>Quantidade</Label>
                 <Input
                   type="number"
                   min={1}
+                  step={1}
                   value={qtde}
                   onChange={(e) => setQtde(e.target.value)}
+                  disabled={!produto}
                 />
               </div>
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <Label>Preço Unit.</Label>
-                  <Input value={prunit} onChange={(e) => setPrunit(e.target.value)} placeholder="0,00" />
-                </div>
-                <Button onClick={adicionarItem} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus size={16} />
+              <div className="flex flex-col space-y-1">
+                <Label>Preço Unit.</Label>
+                <Input
+                  value={prunit}
+                  onChange={(e) => setPrunit(e.target.value)}
+                  placeholder="0,00"
+                  disabled={!produto}
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={adicionarItem}
+                  disabled={!produto}
+                  className="bg-blue-600 hover:bg-blue-700 h-10"
+                >
+                  <Plus size={16} className="mr-1" /> Incluir item
                 </Button>
               </div>
             </div>
