@@ -101,6 +101,8 @@ const Promocoes = lazy(() => import('@/components/corpo/vendas/promocoes'));
 const VendasDashboard = lazy(() => import('../corpo/vendas/dashboard'));
 const VendasBloqueadasPage = lazy(() => import('../corpo/vendas/bloqueadas'));
 const LocaisPecasPage = lazy(() => import('../corpo/vendas/locaisPecas'));
+// Garantias de Produtos — porte do TFrmGarantiaProd do Delphi
+const GarantiasPage = lazy(() => import('../corpo/vendas/garantias'));
 const SeparacaoPage = lazy(() => import('../corpo/separacao'));
 const ConferenciaPage = lazy(() => import('../corpo/conferencia'));
 const TelaFinalizarPage = lazy(() => import('../corpo/conferencia/TelaFinalizar'));
@@ -474,6 +476,13 @@ export const menus = [
             href: '/vendas/promocoes',
             icon: ShoppingBag,
             corpo: Promocoes,
+          },
+          {
+            // No Delphi: Operação de venda > Garantias de Produtos
+            name: 'Garantias de Produtos',
+            href: '/vendas/garantias',
+            icon: ShieldIcon,
+            corpo: GarantiasPage,
           },
           {
             name: 'Locais',
