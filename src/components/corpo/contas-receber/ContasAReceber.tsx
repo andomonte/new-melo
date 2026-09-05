@@ -1199,53 +1199,27 @@ export default function ContasAReceber() {
   // O DataTable envia o nome da coluna em minúsculas (ex.: "número título", "nº documento").
   // Aqui traduzimos esses nomes para os campos aceitos pela API (FiltrosContasReceber).
   const handleFiltroAvancado = (filtrosDinamicos: { campo: string; tipo: string; valor: string }[]) => {
-    // Campos controlados pelo filtro rápido — recalculados a cada chamada
-    const camposGerenciados: (keyof FiltrosContasReceber)[] = [
-      'cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'status',
-    ];
-
-    // Parte dos filtros atuais (mantém período/data) e zera os campos gerenciados,
-    // para que valores apagados sejam removidos corretamente.
+    // Parte dos filtros atuais (mantém período/data) e zera os campos gerenciados pelo filtro
+    // avançado, para que valores apagados sejam removidos corretamente.
     const filtrosMesclados = { ...filtros };
-    camposGerenciados.forEach((c) => { delete filtrosMesclados[c]; });
+    (['status', 'cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'filtros_avancados'] as (keyof FiltrosContasReceber)[])
+      .forEach((c) => { delete filtrosMesclados[c]; });
 
-    filtrosDinamicos.forEach(({ campo, valor }) => {
+    // status é um CASE calculado → vai pelo statusFilter (param 'status'). As demais colunas vão
+    // para o filtro genérico server-side (campo + operador + valor), montado pela API.
+    const avancados: { campo: string; tipo: string; valor: string }[] = [];
+    filtrosDinamicos.forEach(({ campo, tipo, valor }) => {
+      const campoLc = String(campo).toLowerCase().trim();
       const v = (valor ?? '').trim();
-      if (!v) return; // vazio = filtro removido (já apagado acima)
-
-      switch (campo) {
-        case 'número título':
-        case 'cod_receb':
-          filtrosMesclados.cod_receb = v;
-          break;
-        case 'cliente':
-        case 'codcli':
-        case 'nome_cliente':
-          filtrosMesclados.cliente = v;
-          break;
-        case 'nº documento':
-        case 'nro_doc':
-          filtrosMesclados.nro_doc = v;
-          break;
-        case 'fatura':
-        case 'cod_fat':
-          filtrosMesclados.cod_fat = v;
-          break;
-        case 'banco':
-          filtrosMesclados.banco = v;
-          break;
-        case 'status':
-          filtrosMesclados.status = v as any;
-          break;
-        case 'rec':
-          if (v === 'S') filtrosMesclados.status = 'recebido';
-          else if (v === 'N') filtrosMesclados.status = 'pendente';
-          break;
-        case 'cancel':
-          if (v === 'S') filtrosMesclados.status = 'cancelado';
-          break;
+      if (campoLc === 'status') { if (v) filtrosMesclados.status = v as any; return; }
+      if (campoLc === 'rec') { if (v === 'S') filtrosMesclados.status = 'recebido'; else if (v === 'N') filtrosMesclados.status = 'pendente'; return; }
+      if (campoLc === 'cancel') { if (v === 'S') filtrosMesclados.status = 'cancelado'; return; }
+      // 'nulo'/'nao_nulo' não exigem valor; os demais operadores exigem.
+      if (v || tipo === 'nulo' || tipo === 'nao_nulo') {
+        avancados.push({ campo: campoLc, tipo: tipo || 'contém', valor: v });
       }
     });
+    if (avancados.length) filtrosMesclados.filtros_avancados = JSON.stringify(avancados);
 
     setFiltros(filtrosMesclados);
     setPaginaAtual(1);
@@ -1679,16 +1653,36 @@ export default function ContasAReceber() {
             onFiltroChange={handleFiltroAvancado}
             onExportarExcel={handleExportarDireto}
             nonsortableColumns={['☑️', 'Ações']}
+            // Todas as colunas filtráveis server-side (obs não existe em dbreceb; parcela/juros são
+            // calculadas → ficam fora). Os rótulos espelham os headers do datatable.
             colunasFiltro={[
               'cod_receb',
               'nome_cliente',
+              'dt_emissao',
               'dt_venc',
               'dt_pgto',
               'valor_original',
-              'status',
+              'valor_recebido',
               'nro_doc',
               'cod_fat',
+              'banco',
+              'descricao_conta',
+              'status',
             ]}
+            rotulosFiltro={{
+              cod_receb: 'Número Título',
+              nome_cliente: 'Cliente',
+              dt_emissao: 'Emissão',
+              dt_venc: 'Vencimento',
+              dt_pgto: 'Pagamento',
+              valor_original: 'Valor Original',
+              valor_recebido: 'Valor Recebido',
+              nro_doc: 'Nº Documento',
+              cod_fat: 'Fatura',
+              banco: 'Banco',
+              descricao_conta: 'Conta Financeira',
+              status: 'Status',
+            }}
           />
         </div>
       </main>

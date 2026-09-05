@@ -17,19 +17,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const client = await pool.connect();
   try {
     const like = `%${termo}%`;
+    // saldo aberto = valor_pgto - (valor_rec - juros_recebido): valor_rec inclui o juros (fiel ao
+    // Oracle CAIXA), então descontamos o juros p/ o título parcial-com-juros não sumir da busca.
     const r = await client.query(
       `SELECT r.cod_receb, r.codcli, c.nome AS nome_cliente, r.nro_doc,
-              ROUND((COALESCE(r.valor_pgto,0)-COALESCE(r.valor_rec,0))*100)::bigint AS saldo_cent,
+              ROUND((COALESCE(r.valor_pgto,0)-COALESCE(r.valor_rec,0)+jr.juros_rec)*100)::bigint AS saldo_cent,
               to_char(r.dt_venc,'YYYY-MM-DD') AS dt_venc
          FROM dbreceb r
          LEFT JOIN dbclien c ON c.codcli = r.codcli
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(fr.valor),0) AS juros_rec FROM dbfreceb fr
+            WHERE fr.cod_receb = r.cod_receb
+              AND fr.tipo IN ('18','20','21','22','23','25','26','43') AND fr.sf <> 'C'
+         ) jr ON TRUE
         WHERE r.rec IS DISTINCT FROM 'S' AND (r.cancel IS NULL OR r.cancel<>'S')
-          AND (COALESCE(r.valor_pgto,0)-COALESCE(r.valor_rec,0)) > 0
+          AND (COALESCE(r.valor_pgto,0)-COALESCE(r.valor_rec,0)+jr.juros_rec) > 0
           AND (CAST(r.cod_receb AS TEXT) LIKE $1
                OR r.nro_doc ILIKE $1
                OR CAST(r.codcli AS TEXT) LIKE $1
                OR UPPER(c.nome) LIKE UPPER($1))
-        ORDER BY (ROUND((COALESCE(r.valor_pgto,0)-COALESCE(r.valor_rec,0))*100) = $2) DESC, r.dt_venc
+        ORDER BY (ROUND((COALESCE(r.valor_pgto,0)-COALESCE(r.valor_rec,0)+jr.juros_rec)*100) = $2) DESC, r.dt_venc
         LIMIT 30`,
       [like, valorCent || -1],
     );

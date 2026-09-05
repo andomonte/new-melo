@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { Loader2, Upload, CheckCircle2, HelpCircle, Search } from 'lucide-react';
+import ModalBaixaConciliacao, { type TituloBaixa } from '@/components/corpo/contas-receber/ModalBaixaConciliacao';
 
 interface TituloDetalhe {
   cod_receb: string;
@@ -34,7 +35,7 @@ interface Linha {
   historico: string;
   valorCentavos: number;
   tipo: string;
-  categoria: 'recebimento' | 'descarte' | 'a_identificar';
+  categoria: 'recebimento' | 'boleto' | 'descarte' | 'a_identificar';
   pagador: { documento: string | null; tipo: string | null; nome: string | null };
   codcli: string | null;
   cliVia: string | null;
@@ -77,7 +78,7 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
   const [confirmando, setConfirmando] = useState<number | null>(null);
   const [estornando, setEstornando] = useState<number | null>(null);
   // Filtro da lista por status/categoria (badges clicáveis).
-  const [filtro, setFiltro] = useState<'todos' | 'pendente' | 'a_identificar' | 'conciliado' | 'descarte'>('todos');
+  const [filtro, setFiltro] = useState<'todos' | 'pendente' | 'a_identificar' | 'conciliado' | 'descarte' | 'boleto'>('todos');
   // Busca manual de título (por linha).
   const [buscaLinha, setBuscaLinha] = useState<number | null>(null);
   const [buscaTermo, setBuscaTermo] = useState('');
@@ -119,6 +120,28 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
     } finally {
       setImportando(false);
     }
+  };
+
+  // Fluxo "Dar Baixa": abre o ModalRecebimentoTitulos (a tela de baixa que já existe) com os
+  // títulos sugeridos/buscados. Ao confirmar, o /api/caixa/receber marca a conc_linha (concLinId).
+  const [baixaLinha, setBaixaLinha] = useState<Linha | null>(null);
+  const [baixaTitulos, setBaixaTitulos] = useState<TituloBaixa[]>([]);
+  const abrirBaixa = (
+    l: Linha,
+    titulos: { cod_receb: string; codcli?: string | null; nome_cliente?: string | null; nro_doc?: string | null; dt_venc?: string | null; saldoCentavos?: number | null }[],
+  ) => {
+    // Pode abrir sem sugestão (títulos=[]) — o operador busca dentro do modal.
+    setBaixaTitulos(
+      titulos.map((t) => ({
+        cod_receb: String(t.cod_receb),
+        codcli: String(t.codcli ?? l.codcli ?? ''),
+        nome_cliente: t.nome_cliente ?? null,
+        nro_doc: t.nro_doc ?? null,
+        dt_venc: t.dt_venc ?? null,
+        saldoCentavos: Number(t.saldoCentavos ?? 0),
+      })),
+    );
+    setBaixaLinha(l);
   };
 
   const confirmar = async (l: Linha, titulos: string[], memorizar = false) => {
@@ -210,6 +233,8 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
 
   const recebimentos = useMemo(() => linhas.filter((l) => l.categoria === 'recebimento'), [linhas]);
   const descartadas = useMemo(() => linhas.filter((l) => l.categoria === 'descarte'), [linhas]);
+  // Boletos: liquidação de cobrança — baixados na tela de boletos, fora desta conciliação manual.
+  const boletos = useMemo(() => linhas.filter((l) => l.categoria === 'boleto'), [linhas]);
   // Status DENTRO dos recebimentos (é isso que interessa ao operador).
   const recPendentes = useMemo(() => recebimentos.filter((l) => l.status === 'pendente'), [recebimentos]);
   const recAIdent = useMemo(() => recebimentos.filter((l) => l.status === 'a_identificar'), [recebimentos]);
@@ -217,11 +242,12 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
 
   const listaExibida = useMemo(() => {
     if (filtro === 'descarte') return descartadas;
+    if (filtro === 'boleto') return boletos;
     if (filtro === 'pendente') return recPendentes;
     if (filtro === 'a_identificar') return recAIdent;
     if (filtro === 'conciliado') return recConciliados;
     return recebimentos;
-  }, [filtro, recebimentos, descartadas, recPendentes, recAIdent, recConciliados]);
+  }, [filtro, recebimentos, descartadas, boletos, recPendentes, recAIdent, recConciliados]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Conciliação Bancária — Contas a Receber" width="w-[97%] max-w-7xl">
@@ -229,10 +255,10 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
         {/* Upload — o extrato é só lido/classificado. As contas de baixa vêm depois (ao confirmar). */}
         <div className="flex flex-wrap items-end gap-3 border-b pb-3">
           <div>
-            <Label>Arquivo do extrato (CSV)</Label>
+            <Label>Arquivo do extrato (CSV ou OFX)</Label>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.ofx,text/csv,application/x-ofx,application/ofx,text/plain"
               onChange={(e) => setArquivo(e.target.files?.[0] || null)}
               className="block text-sm"
             />
@@ -254,6 +280,7 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
               { k: 'pendente', label: `Com sugestão: ${recPendentes.length}`, cor: 'bg-emerald-600', ring: 'ring-emerald-600' },
               { k: 'a_identificar', label: `A identificar: ${recAIdent.length}`, cor: 'bg-amber-500', ring: 'ring-amber-500' },
               { k: 'conciliado', label: `Conciliados: ${recConciliados.length}`, cor: 'bg-teal-600', ring: 'ring-teal-600' },
+              { k: 'boleto', label: `Boletos: ${boletos.length}`, cor: 'bg-indigo-500', ring: 'ring-indigo-500' },
               { k: 'descarte', label: `Descartadas: ${descartadas.length}`, cor: 'bg-gray-400', ring: 'ring-gray-400' },
             ] as const).map((b) => (
               <button
@@ -409,8 +436,23 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
                               </button>
                             </div>
                           ) : top ? (
-                            <Button size="sm" onClick={() => confirmar(l, top.titulos)} disabled={confirmando === l.lin_id} className="h-7 text-[11px]">
-                              {confirmando === l.lin_id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirmar'}
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                abrirBaixa(
+                                  l,
+                                  (top.detalhes && top.detalhes.length
+                                    ? top.detalhes
+                                    : top.titulos.map((cr) => ({ cod_receb: cr }))) as any,
+                                )
+                              }
+                              className="h-7 text-[11px]"
+                            >
+                              Dar Baixa
+                            </Button>
+                          ) : !isDescarte ? (
+                            <Button size="sm" variant="outline" onClick={() => abrirBaixa(l, [])} className="h-7 text-[11px]">
+                              Dar Baixa
                             </Button>
                           ) : (
                             <span className="text-gray-400 text-[10px]">—</span>
@@ -460,11 +502,32 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
 
         {linhas.length > 0 && (
           <p className="text-[11px] text-gray-500">
-            Alta confiança = CPF/CNPJ confere + valor. Nada é gravado sem clicar em <b>Confirmar</b>. Os
-            "a identificar" ficam pendentes (na próxima fase, vão para a conta transitória).
+            Alta confiança = CPF/CNPJ confere + valor. <b>Dar Baixa</b> abre a tela de recebimento com o(s)
+            título(s) sugerido(s) — lá você ajusta valor/forma e confirma. Os "a identificar" ficam pendentes.
           </p>
         )}
       </div>
+
+      {/* Tela dedicada de baixa da conciliação — valor do Pix fixo, seleção/busca de títulos. */}
+      <ModalBaixaConciliacao
+        isOpen={baixaLinha !== null}
+        linId={baixaLinha?.lin_id ?? null}
+        valorCentavos={baixaLinha?.valorCentavos ?? 0}
+        dataPgto={baixaLinha?.data ?? new Date().toISOString().slice(0, 10)}
+        pagador={baixaLinha?.pagador ?? { documento: null, nome: null }}
+        historico={baixaLinha?.historico}
+        titulosIniciais={baixaTitulos}
+        usuario={usuario}
+        filial={filial}
+        codConta={codConta}
+        cofIdInicial={cofId}
+        onClose={() => setBaixaLinha(null)}
+        onSuccess={() => {
+          const id = baixaLinha?.lin_id;
+          setLinhas((prev) => prev.map((x) => (x.lin_id === id ? { ...x, status: 'conciliado' } : x)));
+          setBaixaLinha(null);
+        }}
+      />
     </Modal>
   );
 }

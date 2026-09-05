@@ -91,6 +91,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Comprovante de pagamento (fin_autenticacao) — fiel ao Delphi. Não bloqueia o recebimento.
+    let autIdComp: string | null = null;
+    let codRecebsComp: string[] = [];
     try {
       let codusrComp: string | null = null;
       if (body.username) {
@@ -100,6 +102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const codRecebs: string[] = ehMulti
         ? (body.titulos as any[]).map((t) => String(t.cod_receb))
         : [String(body.cod_receb)];
+      codRecebsComp = codRecebs;
       const docs = await client.query(`SELECT cod_receb, nro_doc FROM dbreceb WHERE cod_receb = ANY($1)`, [codRecebs]);
       const nroMap = new Map(docs.rows.map((r: any) => [String(r.cod_receb), r.nro_doc]));
       const itens = ehMulti
@@ -120,14 +123,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ];
       const compItens = itens.filter((i: any) => i.cod_receb);
       if (compItens.length > 0) {
-        await gerarComprovante(client, { codusr: codusrComp, cod_conta: body.cod_conta, itens: compItens });
+        const comp = await gerarComprovante(client, { codusr: codusrComp, cod_conta: body.cod_conta, itens: compItens });
+        autIdComp = comp?.aut_id ?? null;
       }
     } catch (e) {
       console.warn('Falha ao gerar comprovante (não bloqueia o recebimento):', e);
     }
 
+    // Conciliação bancária: se este recebimento veio de uma linha de extrato, marca a linha
+    // como conciliada (com os títulos baixados e o comprovante gerado) na MESMA transação.
+    if (body.conc_lin_id) {
+      await client
+        .query(
+          `UPDATE conc_linha SET lin_status='conciliado', lin_titulo=$2, lin_aut_id=$3::numeric WHERE lin_id=$1`,
+          [body.conc_lin_id, codRecebsComp.join(','), autIdComp],
+        )
+        .catch((e: any) => console.warn('Falha ao vincular conc_linha (não bloqueia):', e.message));
+    }
+
     await client.query('COMMIT');
-    return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', ...resultado });
+    return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', aut_id: autIdComp, ...resultado });
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error('Erro no recebimento do caixa:', error);

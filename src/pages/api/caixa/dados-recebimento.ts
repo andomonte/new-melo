@@ -13,8 +13,9 @@ import { calcularJurosCaixa, type TituloJurosInput, type Feriados } from '@/lib/
 // dbcalc.TXCART ainda não foi migrado para o Postgres — valor validado no Oracle.
 const TXCART_FALLBACK = 8;
 
-// tipos de juros em dbfreceb (JUROS_RECEBIDO)
-const TIPOS_JUROS = ['18', '20', '21', '22', '23', '25', '26'];
+// tipos de juros em dbfreceb (JUROS_RECEBIDO). Inclui 43 = JUROS PIX (o Oracle CAIXA.JUROS_RECEBIDO
+// esqueceu o 43 quando criaram o PIX; aqui contamos p/ não recalcular juros já pago em recebimento pix).
+const TIPOS_JUROS = ['18', '20', '21', '22', '23', '25', '26', '43'];
 
 async function getTaxaJuros(client: any): Promise<number> {
   try {

@@ -73,6 +73,8 @@ export interface FiltrosContasReceber {
   cod_venda?: string;
   banco?: string;
   search?: string; // busca geral (cod_receb / cliente / nro_doc)
+  /** Filtros avançados por coluna (JSON [{campo,tipo,valor}]) — filtro server-side com operadores. */
+  filtros_avancados?: string;
 }
 
 export interface Paginacao {

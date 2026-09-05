@@ -71,6 +71,8 @@ interface Props {
   onClose: () => void;
   /** Chamado após confirmar o recebimento (real) — o pai recarrega o grid. */
   onSuccess: () => void;
+  /** Quando vem da conciliação bancária: id da linha do extrato a marcar como conciliada. */
+  concLinId?: string | number | null;
 }
 
 // Combo de forma de pagamento → comportamento interno.
@@ -101,6 +103,7 @@ export default function ModalRecebimentoTitulos({
   user,
   onClose,
   onSuccess,
+  concLinId,
 }: Props) {
   const hojeISO = new Date().toISOString().slice(0, 10);
   // Data-only (DATE) sem shift de fuso: 'YYYY-MM-DD' -> 'DD/MM/YYYY' (evita -1 dia em UTC-4).
@@ -457,6 +460,7 @@ export default function ModalRecebimentoTitulos({
           username,
           dryRun: simular,
           pagamentos: pagamentosPrincipal,
+          conc_lin_id: concLinId ?? undefined, // conciliação: marca a linha do extrato ao baixar
         }),
       });
       const data = await resp.json();

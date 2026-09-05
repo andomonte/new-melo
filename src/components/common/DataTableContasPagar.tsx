@@ -49,6 +49,9 @@ interface DataTableContasPagarProps {
   noDataMessage?: string;
   onFiltroChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
   colunasFiltro?: string[];
+  /** Rótulos amigáveis por chave de coluna p/ o filtro avançado (ex.: { cod_receb: 'Número Título' })
+   *  — deixa o "Selecionar campo" igual aos cabeçalhos do datatable. */
+  rotulosFiltro?: Record<string, string>;
   onExportarExcel?: () => void;
   onDashboardGeral?: () => void;
   columnWidths?: string[];
@@ -86,6 +89,7 @@ export default function DataTableContasPagar({
   noDataMessage = 'Nenhum dado encontrado.',
   onFiltroChange,
   colunasFiltro = [],
+  rotulosFiltro,
   onExportarExcel,
   onDashboardGeral,
   columnWidths,
@@ -455,6 +459,7 @@ export default function DataTableContasPagar({
                 </DialogHeader>
                 <FiltroDinamicoDeClientes
                   colunas={colunasFiltro}
+                  rotulos={rotulosFiltro}
                   onChange={handleFiltroAvancado}
                 />
               </DialogContent>

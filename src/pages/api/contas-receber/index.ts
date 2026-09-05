@@ -156,6 +156,76 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paramIndex += 4;
     }
 
+    // ---- Filtros avançados por coluna (server-side, com operadores) ----
+    // Recebe JSON [{campo, tipo, valor}] do FiltroDinamico. Whitelist campo→SQL (chave crua OU
+    // rótulo do datatable em minúsculas) evita SQL injection; os valores são sempre parametrizados.
+    // 'status' NÃO entra aqui — vai pelo statusFilter (é um CASE calculado). obs/parcela/juros não
+    // são colunas filtráveis (obs não existe em dbreceb; parcela/juros são calculadas).
+    const FILTRO_COLS: Record<string, { sql: string; tipo: 'texto' | 'numero' | 'data' }> = {
+      cod_receb: { sql: 'CAST(r.cod_receb AS TEXT)', tipo: 'texto' },
+      'número título': { sql: 'CAST(r.cod_receb AS TEXT)', tipo: 'texto' },
+      nome_cliente: { sql: 'c.nome', tipo: 'texto' },
+      cliente: { sql: 'c.nome', tipo: 'texto' },
+      dt_emissao: { sql: 'r.dt_emissao', tipo: 'data' },
+      'emissão': { sql: 'r.dt_emissao', tipo: 'data' },
+      dt_venc: { sql: 'r.dt_venc', tipo: 'data' },
+      vencimento: { sql: 'r.dt_venc', tipo: 'data' },
+      dt_pgto: { sql: 'r.dt_pgto', tipo: 'data' },
+      pagamento: { sql: 'r.dt_pgto', tipo: 'data' },
+      valor_original: { sql: 'COALESCE(r.valor_pgto,0)', tipo: 'numero' },
+      'valor original': { sql: 'COALESCE(r.valor_pgto,0)', tipo: 'numero' },
+      valor_recebido: { sql: 'COALESCE(r.valor_rec,0)', tipo: 'numero' },
+      'valor recebido': { sql: 'COALESCE(r.valor_rec,0)', tipo: 'numero' },
+      nro_doc: { sql: 'r.nro_doc', tipo: 'texto' },
+      'nº documento': { sql: 'r.nro_doc', tipo: 'texto' },
+      cod_fat: { sql: 'CAST(r.cod_fat AS TEXT)', tipo: 'texto' },
+      fatura: { sql: 'CAST(r.cod_fat AS TEXT)', tipo: 'texto' },
+      banco: { sql: 'r.banco', tipo: 'texto' },
+      descricao_conta: { sql: 'cf.cof_descricao', tipo: 'texto' },
+      'conta financeira': { sql: 'cf.cof_descricao', tipo: 'texto' },
+    };
+    const opComparador = (op: string) =>
+      op === 'maior' ? '>' : op === 'maior_igual' ? '>=' : op === 'menor' ? '<'
+      : op === 'menor_igual' ? '<=' : op === 'diferente' ? '<>' : '=';
+    const normalizarData = (v: string) => {
+      const m = v.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); // DD/MM/YYYY → YYYY-MM-DD
+      return m ? `${m[3]}-${m[2]}-${m[1]}` : v.trim();
+    };
+    if (req.query.filtros_avancados) {
+      let lista: { campo: string; tipo: string; valor: string }[] = [];
+      try { lista = JSON.parse(String(req.query.filtros_avancados)); } catch { lista = []; }
+      for (const f of Array.isArray(lista) ? lista : []) {
+        const col = FILTRO_COLS[String(f?.campo || '').toLowerCase().trim()];
+        if (!col) continue;
+        const op = String(f?.tipo || 'contém');
+        if (op === 'nulo') { whereClause += ` AND ${col.sql} IS NULL`; continue; }
+        if (op === 'nao_nulo') { whereClause += ` AND ${col.sql} IS NOT NULL`; continue; }
+        const valor = String(f?.valor ?? '').trim();
+        if (!valor) continue;
+
+        if (col.tipo === 'texto') {
+          const ph = `$${paramIndex}`;
+          if (op === 'igual') { whereClause += ` AND UPPER(${col.sql}) = UPPER(${ph})`; params.push(valor); }
+          else if (op === 'diferente') { whereClause += ` AND (${col.sql} IS NULL OR UPPER(${col.sql}) <> UPPER(${ph}))`; params.push(valor); }
+          else if (op === 'começa') { whereClause += ` AND ${col.sql} ILIKE ${ph}`; params.push(`${valor}%`); }
+          else if (op === 'termina') { whereClause += ` AND ${col.sql} ILIKE ${ph}`; params.push(`%${valor}`); }
+          else { whereClause += ` AND ${col.sql} ILIKE ${ph}`; params.push(`%${valor}%`); } // contém (default)
+          paramIndex++;
+        } else if (col.tipo === 'numero') {
+          const num = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
+          const ph = `$${paramIndex}`;
+          if (!Number.isFinite(num)) { whereClause += ` AND CAST(${col.sql} AS TEXT) ILIKE ${ph}`; params.push(`%${valor}%`); }
+          else { whereClause += ` AND ${col.sql} ${opComparador(op)} ${ph}`; params.push(num); }
+          paramIndex++;
+        } else { // data
+          const ph = `$${paramIndex}`;
+          if (op === 'contém') { whereClause += ` AND to_char(${col.sql},'DD/MM/YYYY') ILIKE ${ph}`; params.push(`%${valor}%`); }
+          else { whereClause += ` AND ${col.sql}::date ${opComparador(op)} ${ph}::date`; params.push(normalizarData(valor)); }
+          paramIndex++;
+        }
+      }
+    }
+
     // Query principal com cálculo de status baseado nos campos do PostgreSQL
     const query = `
       WITH contas_com_status AS (
@@ -170,6 +240,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           r.dt_emissao,
           r.valor_pgto as valor_original,
           COALESCE(r.valor_rec, 0) as valor_recebido,
+          -- Saldo aberto do PRINCIPAL = valor_pgto - (valor_rec - juros_recebido). valor_rec inclui
+          -- o juros (fiel ao Oracle); no parcial-com-juros o juros abatido primeiro deixa este residual.
+          GREATEST(COALESCE(r.valor_pgto,0) - (COALESCE(r.valor_rec,0) - jr.juros_rec), 0) as valor_aberto,
+          jr.juros_rec as juros_recebido,
           r.nro_doc,
           r.tipo,
           r.rec,
@@ -184,8 +258,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           r.grupo_pagamento_id,
           CASE
             WHEN r.cancel = 'S' THEN 'cancelado'
-            -- Quitado: flag rec='S' OU o recebido já cobre o valor do título.
-            WHEN r.rec = 'S' OR (COALESCE(r.valor_rec, 0) > 0 AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0)) THEN 'recebido'
+            -- Quitado: rec='S' OU o PRINCIPAL recebido (valor_rec - juros) já cobre o título.
+            -- valor_rec inclui o juros (fiel ao Oracle CAIXA); sem descontar, o parcial-com-juros vira 'recebido'.
+            WHEN r.rec = 'S' OR (COALESCE(r.valor_rec, 0) > 0 AND (COALESCE(r.valor_rec, 0) - jr.juros_rec) >= COALESCE(r.valor_pgto, 0)) THEN 'recebido'
             -- Parcial: recebeu algo mas ainda não cobriu o total (baixa em cascata deixa rec='N').
             WHEN COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
             WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
@@ -209,6 +284,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         FROM dbreceb r
         LEFT JOIN dbclien c ON c.codcli = r.codcli
         LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(fr.valor), 0) AS juros_rec FROM dbfreceb fr
+           WHERE fr.cod_receb = r.cod_receb
+             AND fr.tipo IN ('18','20','21','22','23','25','26','43') AND fr.sf <> 'C'
+        ) jr ON TRUE
         WHERE 1=1 ${whereClause}
       )
       SELECT * FROM contas_com_status
@@ -239,8 +319,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           r.cod_receb,
           CASE
             WHEN r.cancel = 'S' THEN 'cancelado'
-            -- Quitado: flag rec='S' OU o recebido já cobre o valor do título.
-            WHEN r.rec = 'S' OR (COALESCE(r.valor_rec, 0) > 0 AND COALESCE(r.valor_rec, 0) >= COALESCE(r.valor_pgto, 0)) THEN 'recebido'
+            -- Quitado: rec='S' OU o PRINCIPAL recebido (valor_rec - juros) já cobre o título.
+            -- valor_rec inclui o juros (fiel ao Oracle CAIXA); sem descontar, o parcial-com-juros vira 'recebido'.
+            WHEN r.rec = 'S' OR (COALESCE(r.valor_rec, 0) > 0 AND (COALESCE(r.valor_rec, 0) - jr.juros_rec) >= COALESCE(r.valor_pgto, 0)) THEN 'recebido'
             -- Parcial: recebeu algo mas ainda não cobriu o total (baixa em cascata deixa rec='N').
             WHEN COALESCE(r.valor_rec, 0) > 0 THEN 'recebido_parcial'
             WHEN r.dt_venc < CURRENT_DATE THEN 'vencido'
@@ -254,6 +335,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         FROM dbreceb r
         LEFT JOIN dbclien c ON c.codcli = r.codcli
         LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(fr.valor), 0) AS juros_rec FROM dbfreceb fr
+           WHERE fr.cod_receb = r.cod_receb
+             AND fr.tipo IN ('18','20','21','22','23','25','26','43') AND fr.sf <> 'C'
+        ) jr ON TRUE
         WHERE 1=1 ${whereClause}
       )
       SELECT COUNT(*) as total
