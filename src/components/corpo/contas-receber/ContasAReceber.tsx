@@ -26,6 +26,7 @@ import { nomeBancoPorInterno } from '@/lib/faturamento/bancoCobranca';
 import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
 import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
 import ModalConciliacao from '@/components/corpo/contas-receber/ModalConciliacao';
+import ModalConsultaAvancadaReceb from '@/components/corpo/contas-receber/ModalConsultaAvancadaReceb';
 import ModalAIdentificar from '@/components/corpo/contas-receber/ModalAIdentificar';
 import { formatarBRL } from '@/utils/monetario';
 
@@ -289,6 +290,7 @@ export default function ContasAReceber() {
   };
   const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
   const [modalAIdentificarAberto, setModalAIdentificarAberto] = useState(false);
+  const [modalConsultaAvancadaAberto, setModalConsultaAvancadaAberto] = useState(false);
 
   // Bancos do Novo Título: vêm da dbbanco_cobranca filtrada por ATIVO (mesma fonte do
   // cadastro do cliente). Fallback = lista fixa se a busca falhar.
@@ -1593,6 +1595,14 @@ export default function ContasAReceber() {
             </button>
             <button
               type="button"
+              onClick={() => setModalConsultaAvancadaAberto(true)}
+              title="Consulta Avançada do Financeiro — Recebimentos (por conta financeira, mês a mês)"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              <FileBarChart className="w-4 h-4" /> Consulta Avançada
+            </button>
+            <button
+              type="button"
               onClick={() => setModalNovaContaAberto(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-[#347AB6] dark:bg-[#1f517c] hover:bg-blue-600 text-white transition"
             >
@@ -2802,6 +2812,14 @@ export default function ContasAReceber() {
         usuario={user?.usuario || ''}
         filial={(user as any)?.filial ? String((user as any).filial) : ''}
         codContaPadrao={(user as any)?.cod_conta ? String((user as any).cod_conta) : ''}
+      />
+
+      {/* Consulta Avançada do Financeiro — Recebimentos (dados de db_manaus = unidade MAO) */}
+      <ModalConsultaAvancadaReceb
+        isOpen={modalConsultaAvancadaAberto}
+        onClose={() => setModalConsultaAvancadaAberto(false)}
+        usuario={user?.usuario || ''}
+        filial="MAO"
       />
 
       <ModalAIdentificar

@@ -164,8 +164,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const FILTRO_COLS: Record<string, { sql: string; tipo: 'texto' | 'numero' | 'data' }> = {
       cod_receb: { sql: 'CAST(r.cod_receb AS TEXT)', tipo: 'texto' },
       'número título': { sql: 'CAST(r.cod_receb AS TEXT)', tipo: 'texto' },
-      nome_cliente: { sql: 'c.nome', tipo: 'texto' },
-      cliente: { sql: 'c.nome', tipo: 'texto' },
+      // Cliente busca por CÓDIGO + NOME (igual ao texto exibido "00056 - NOME"); codcli é varchar
+      // com zeros à esquerda ("00056"), então digitar o código acha o cliente certo.
+      nome_cliente: { sql: "(CAST(r.codcli AS TEXT) || ' - ' || COALESCE(c.nome, ''))", tipo: 'texto' },
+      cliente: { sql: "(CAST(r.codcli AS TEXT) || ' - ' || COALESCE(c.nome, ''))", tipo: 'texto' },
       dt_emissao: { sql: 'r.dt_emissao', tipo: 'data' },
       'emissão': { sql: 'r.dt_emissao', tipo: 'data' },
       dt_venc: { sql: 'r.dt_venc', tipo: 'data' },

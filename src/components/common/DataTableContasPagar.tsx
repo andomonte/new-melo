@@ -109,13 +109,15 @@ export default function DataTableContasPagar({
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});
+  // Rascunho do que está sendo digitado nos filtros de coluna. Só vira filtro APLICADO no Enter/blur
+  // (padrão de todos os datatables: a busca acontece ao dar Enter, não a cada tecla).
+  const [rascunhoColuna, setRascunhoColuna] = useState<Record<string, string>>({});
   const [termoBuscaGlobal, setTermoBuscaGlobal] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [larguraTabela, setLarguraTabela] = useState(0);
   // Largura customizada por coluna (arrastar) — persistida junto às demais preferências.
   const [customColWidths, setCustomColWidths] = useState<Record<string, number>>({});
   const resizingRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [colunasVisiveis, setColunasVisiveis] = useState<string[]>(headers);
   const [mostrarSeletorColunas, setMostrarSeletorColunas] = useState(false);
   const [ordemColunas, setOrdemColunas] = useState<string[]>(headers);
@@ -242,37 +244,25 @@ export default function DataTableContasPagar({
     setMostrarModalFiltroAvancado(false);
   };
 
+  // Digitar só atualiza o rascunho — NÃO busca (nem local, nem servidor). A busca é no Enter/blur.
   const handleInputChange = (key: string, value: string) => {
-    const novoMapa = {
-      ...filtrosColuna,
-      [key]: { tipo: filtrosColuna[key]?.tipo || 'contém', valor: value },
-    };
-    setFiltrosColuna(novoMapa);
-
-    if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
-
-    // Modo local: o filtro é aplicado na renderização, sem consultar o servidor.
-    if (filtroLocal) {
-      notificarFiltrosLocais(novoMapa);
-      return;
-    }
-
-    // Debounce the filter application
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
-      aplicarFiltro();
-    }, 300);
+    setRascunhoColuna((prev) => ({ ...prev, [key]: value }));
   };
 
-  const aplicarFiltro = () => {
-    // Enviar TODOS os filtros, incluindo os vazios (para remover filtros anteriores)
-    const filtrosAtualizados = Object.entries(filtrosColuna)
-      .map(([campo, { tipo, valor }]) => ({ campo, tipo, valor }));
-    
-    console.log('🔍 Aplicando filtros rápidos (incluindo vazios):', filtrosAtualizados);
-    onFiltroChange?.(filtrosAtualizados);
+  // Aplica o filtro de UMA coluna (no Enter ou ao sair do campo): promove o rascunho a filtro e busca.
+  const commitFiltroColuna = (key: string) => {
+    const valor = rascunhoColuna[key] ?? filtrosColuna[key]?.valor ?? '';
+    const novoMapa = {
+      ...filtrosColuna,
+      [key]: { tipo: filtrosColuna[key]?.tipo || 'contém', valor },
+    };
+    setFiltrosColuna(novoMapa);
+    if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
+    if (filtroLocal) {
+      notificarFiltrosLocais(novoMapa); // a tabela re-filtra pela mudança de filtrosColuna
+    } else {
+      onFiltroChange?.(Object.entries(novoMapa).map(([campo, { tipo, valor }]) => ({ campo, tipo, valor })));
+    }
   };
 
   // Página visual — muda IMEDIATO ao clicar, busca no banco com debounce
@@ -416,6 +406,7 @@ export default function DataTableContasPagar({
               if (valor.trim() !== '' && Object.keys(filtrosColuna).length > 0) {
                 console.log('🔍 Limpando filtros de coluna para busca global');
                 setFiltrosColuna({});
+                setRascunhoColuna({});
                 onFiltroChange?.([]);
                 onFiltrosLocaisChange?.([]);
               }
@@ -431,6 +422,7 @@ export default function DataTableContasPagar({
               <button
                 onClick={() => {
                   setFiltrosColuna({});
+                  setRascunhoColuna({});
                   setTermoBuscaGlobal('');
                   onFiltrosLocaisChange?.([]);
                   if (onLimparFiltros) onLimparFiltros();
@@ -482,6 +474,7 @@ export default function DataTableContasPagar({
                       if (!novoEstado) {
                         console.log('🔍 Limpando todos os filtros rápidos');
                         setFiltrosColuna({});
+                        setRascunhoColuna({});
                         onFiltroChange?.([]);
                         onFiltrosLocaisChange?.([]);
                       }
@@ -712,21 +705,14 @@ export default function DataTableContasPagar({
                       ) : header !== 'Ações' ? (
                         <input
                           type="text"
-                          placeholder={`Filtrar ${obterNomeAmigavel(header)}...`}
-                          value={filtrosColuna[header.toLowerCase()]?.valor || ''}
+                          placeholder={`Filtrar ${obterNomeAmigavel(header)} (Enter)...`}
+                          value={rascunhoColuna[header.toLowerCase()] ?? filtrosColuna[header.toLowerCase()]?.valor ?? ''}
                           onChange={(e) => handleInputChange(header.toLowerCase(), e.target.value)}
-                          onBlur={() => {
-                            if (debounceRef.current) {
-                              clearTimeout(debounceRef.current);
-                            }
-                            aplicarFiltro();
-                          }}
+                          onBlur={() => commitFiltroColuna(header.toLowerCase())}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              if (debounceRef.current) {
-                                clearTimeout(debounceRef.current);
-                              }
-                              aplicarFiltro();
+                              e.preventDefault();
+                              commitFiltroColuna(header.toLowerCase());
                             }
                           }}
                           className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { Loader2, Upload, CheckCircle2, HelpCircle, Search } from 'lucide-react';
 import ModalBaixaConciliacao, { type TituloBaixa } from '@/components/corpo/contas-receber/ModalBaixaConciliacao';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 interface TituloDetalhe {
   cod_receb: string;
@@ -173,8 +174,10 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
     }
   };
 
-  const estornar = async (l: Linha) => {
-    if (!window.confirm('Estornar esta conciliação? Isso reverte a baixa e cancela o comprovante.')) return;
+  // Confirmação estilizada padrão (modal central) — substitui window.confirm.
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+
+  const executarEstorno = async (l: Linha) => {
     setEstornando(l.lin_id);
     try {
       const r = await fetch('/api/conciliacao/estornar', {
@@ -192,11 +195,19 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
       setEstornando(null);
     }
   };
+  const estornar = (l: Linha) => {
+    pedirConfirmacao(() => executarEstorno(l), {
+      title: 'Estornar conciliação',
+      message: 'Estornar esta conciliação? Isso reverte a baixa e cancela o comprovante.',
+      type: 'danger',
+      confirmText: 'Estornar',
+      cancelText: 'Cancelar',
+    });
+  };
 
   const [estornandoLote, setEstornandoLote] = useState(false);
-  const estornarLote = async () => {
+  const executarEstornoLote = async () => {
     if (!loteId) return;
-    if (!window.confirm('Estornar TODAS as baixas conciliadas deste lote? Reverte as baixas e cancela os comprovantes.')) return;
     setEstornandoLote(true);
     try {
       const r = await fetch('/api/conciliacao/estornar-lote', {
@@ -214,6 +225,16 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
     } finally {
       setEstornandoLote(false);
     }
+  };
+  const estornarLote = () => {
+    if (!loteId) return;
+    pedirConfirmacao(() => executarEstornoLote(), {
+      title: 'Estornar lote',
+      message: 'Estornar TODAS as baixas conciliadas deste lote? Reverte as baixas e cancela os comprovantes.',
+      type: 'danger',
+      confirmText: 'Estornar tudo',
+      cancelText: 'Cancelar',
+    });
   };
 
   const buscarTitulosManual = async (l: Linha, termo: string) => {
@@ -528,6 +549,9 @@ export default function ModalConciliacao({ isOpen, onClose, usuario, filial, cod
           setBaixaLinha(null);
         }}
       />
+
+      {/* Confirmação estilizada (estornar / estornar lote) — padrão MELO */}
+      {ConfirmacaoSalvarModal}
     </Modal>
   );
 }
