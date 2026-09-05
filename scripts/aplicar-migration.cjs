@@ -30,9 +30,11 @@ let sql = fs.readFileSync(arquivo, 'utf8');
 
 if (schema) {
   const original = sql;
+  // Restringe o loop de schemas independente da tabela usada como âncora
+  // (umas migrations varrem tb_telas, outras dbclien, etc.).
   sql = sql.replace(
-    "WHERE table_name = 'tb_telas' AND table_schema LIKE 'db\\_%'",
-    `WHERE table_name = 'tb_telas' AND table_schema = '${schema}'`,
+    /AND table_schema LIKE 'db\\_%'/g,
+    `AND table_schema = '${schema}'`,
   );
   if (sql === original) {
     console.error(
