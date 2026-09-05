@@ -289,12 +289,14 @@ export default function DataTablePadrao({
     }, 1000);
   };
 
-  // Salvar quando mudar colunas visíveis, ordem ou ordenação
+  // Salvar quando mudar colunas visíveis, ordem, ordenação ou LARGURA.
+  // customColWidths precisa estar aqui: o handle de resize altera só esse
+  // estado, e sem a dependência a nova largura nunca era gravada.
   useEffect(() => {
     if (prefsCarregadas) {
       salvarPreferencias();
     }
-  }, [colunasVisiveis, ordemColunas, sortColumn, sortDirection, mostrarFiltros]);
+  }, [colunasVisiveis, ordemColunas, sortColumn, sortDirection, mostrarFiltros, customColWidths]);
 
   /** Colunas utilitárias (não são dados: seleção/ações). */
   const EH_UTILITARIA = (h: string) =>
@@ -876,7 +878,11 @@ export default function DataTablePadrao({
                               resizingRef.current = null;
                               window.removeEventListener('mousemove', onMove);
                               window.removeEventListener('mouseup', onUp);
-                              salvarPreferencias();
+                              // Não salva aqui: este closure foi criado no
+                              // mousedown e enxerga a largura ANTERIOR ao
+                              // arraste — chamar aqui sobrescrevia o save
+                              // correto com o valor velho. Quem grava é o
+                              // efeito que observa customColWidths.
                             };
                             window.addEventListener('mousemove', onMove);
                             window.addEventListener('mouseup', onUp);

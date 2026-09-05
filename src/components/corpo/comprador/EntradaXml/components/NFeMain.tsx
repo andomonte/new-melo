@@ -27,6 +27,49 @@ import { colunasDbNFe } from '../colunasDbNFe';
 import { NFeDTO } from '../types';
 import { toast } from 'sonner';
 
+// ---------------------------------------------------------------------------
+// POSSE / cor da linha — porte do dxDBGNFesCustomDrawCell do Delphi
+// (Formularios/XML ENTRADA/UniExecEntrada.pas), onde o status NÃO é uma coluna:
+// ele pinta a linha inteira.
+//
+// O Delphi tem um 5º caso (CODENT <> '' → clGray "Entrada Gerada"), mas aquele
+// rótulo nasce com Visible = False e só aparece com o checkbox "Incluir
+// entradas geradas" marcado — por padrão essas notas nem são listadas lá. Aqui
+// elas aparecem sempre e o "Entrada Gerada" já é mostrado na COLUNA de status,
+// então a cor da linha fica reservada à posse: quem iniciou continua visível
+// mesmo depois da entrada gerada.
+// ---------------------------------------------------------------------------
+type Posse = 'voce' | 'outro' | 'livre' | 'nao_iniciado';
+
+const calcularPosse = (nfe: any, codusr?: string): Posse => {
+  if (nfe.processandoPor) {
+    return nfe.processandoPor === codusr ? 'voce' : 'outro';
+  }
+  // Sem dono: o Delphi separa por SITUACAO (0 = nada iniciado). Aqui o
+  // equivalente é o exec — status RECEBIDA é 'N'/'R', ou seja, nada iniciado.
+  return nfe.status && nfe.status !== 'RECEBIDA' ? 'livre' : 'nao_iniciado';
+};
+
+// Cores do Delphi (clBlue / clGreen / clMaroon / clWindowText), mantidas no tom
+// original no tema claro e clareadas no escuro para não sumir no fundo. Listra
+// lateral por box-shadow inset (funciona com border-collapse) + texto das
+// células tonalizado, como no ConsultaFatura.
+const MAPA_COR_LINHA: Record<Posse, string> = {
+  voce: 'shadow-[inset_4px_0_0_0_#0000ff] [&_td]:text-[#0000ff] dark:[&_td]:text-[#8ab4ff]',
+  livre: 'shadow-[inset_4px_0_0_0_#008000] [&_td]:text-[#008000] dark:[&_td]:text-[#5fd35f]',
+  outro: 'shadow-[inset_4px_0_0_0_#800000] [&_td]:text-[#800000] dark:[&_td]:text-[#e59a9a]',
+  // clWindowText: a cor padrão do tema, sem listra — igual ao Delphi.
+  nao_iniciado: '',
+};
+
+// Rótulos exatos da legenda do Delphi (labels #... no rodapé do grid).
+const LEGENDA_POSSE: { chave: Posse; rotulo: string; ponto: string }[] = [
+  { chave: 'voce', rotulo: 'Iniciado por você', ponto: 'bg-[#0000ff]' },
+  { chave: 'livre', rotulo: 'Iniciado e livre', ponto: 'bg-[#008000]' },
+  { chave: 'outro', rotulo: 'Iniciado por outro usuário', ponto: 'bg-[#800000]' },
+  { chave: 'nao_iniciado', rotulo: 'Procedimento não iniciado', ponto: 'bg-gray-400' },
+];
+
 // Versão atualizada sem coluna selecionar e com dropdown 3 pontos
 export const NFeMain: React.FC = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -87,7 +130,6 @@ export const NFeMain: React.FC = () => {
     search,
     page,
     perPage,
-    headers,
     filtros,
     limiteColunas,
     handleSearchChange,
@@ -106,15 +148,35 @@ export const NFeMain: React.FC = () => {
 
   // Filtro rápido por status (dropdown, estilo Requisições). Injeta um filtro
   // 'status' (igual) no array enviado à busca — n.exec no backend.
+  // Todas as colunas vão para o DataTablePadrao — é ele quem gerencia
+  // visibilidade, ordem e largura, persistindo por usuário/tela (screenKey) no
+  // servidor, como nas telas de cadastro. Antes ia só o subconjunto de 8 do
+  // useNFeTableImproved, que brigava com essa preferência (a escolha não
+  // sobrevivia a sair e voltar) e deixava CNPJ e Natureza fora até da lista.
+  const headersTabela = useMemo(
+    () => [
+      'acoes',
+      ...colunasDbNFe.filter((c) => c.campo !== 'acoes').map((c) => c.campo),
+    ],
+    [],
+  );
+
   const [statusFiltro, setStatusFiltro] = useState('');
+  // Filtro por posse, acionado pelos chips da legenda (campo sintético
+  // resolvido no buscaNFes). '' = todas.
+  const [posseFiltro, setPosseFiltro] = useState<Posse | ''>('');
+  const [legendaAberta, setLegendaAberta] = useState(false);
   // Ordenação server-side por cabeçalho (todas as páginas).
   const [ordenacao, setOrdenacao] = useState<{ campo: string; direcao: 'asc' | 'desc' } | null>(null);
   const filtrosCombinados = useMemo(() => {
-    const semStatus = filtros.filter((f) => f.campo !== 'status');
-    return statusFiltro
-      ? [...semStatus, { campo: 'status', tipo: 'igual', valor: statusFiltro }]
-      : semStatus;
-  }, [filtros, statusFiltro]);
+    const base = filtros.filter((f) => f.campo !== 'status' && f.campo !== 'posse');
+    const comStatus = statusFiltro
+      ? [...base, { campo: 'status', tipo: 'igual', valor: statusFiltro }]
+      : base;
+    return posseFiltro
+      ? [...comStatus, { campo: 'posse', tipo: 'igual', valor: posseFiltro }]
+      : comStatus;
+  }, [filtros, statusFiltro, posseFiltro]);
 
   const { data, meta, loading, refetch, updateNFeStatus } = useNFes({
     page,
@@ -123,6 +185,7 @@ export const NFeMain: React.FC = () => {
     filters: filtrosCombinados,
     advancedFilters,
     ordenacao,
+    codusr: user?.codusr,
   });
 
   const {
@@ -1095,11 +1158,80 @@ export const NFeMain: React.FC = () => {
     );
   };
 
+  // Legenda das cores de linha (rodapé, ao lado de "Colunas"). Cada chip
+  // alterna o filtro de posse — as categorias são mutuamente exclusivas, então
+  // clicar em uma troca a anterior e clicar na ativa limpa o filtro.
+  const legendaPosse = (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setLegendaAberta((v) => !v)}
+        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-xs text-gray-700 dark:text-gray-200 hover:border-gray-400 transition-colors"
+        title="Legenda das cores das linhas"
+      >
+        <span className="flex items-center gap-0.5">
+          {LEGENDA_POSSE.map((item) => (
+            <span key={item.chave} className={`w-2 h-2 rounded-full ${item.ponto}`} />
+          ))}
+        </span>
+        <span className="hidden lg:inline">Legenda</span>
+        {posseFiltro && (
+          <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-blue-600 text-white text-[10px] leading-none">
+            1
+          </span>
+        )}
+      </button>
+
+      {legendaAberta && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setLegendaAberta(false)} />
+          <div className="absolute bottom-full left-0 mb-2 z-50 w-64 rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-2 shadow-xl">
+            {LEGENDA_POSSE.map((item) => {
+              const ativo = posseFiltro === item.chave;
+              return (
+                <button
+                  key={item.chave}
+                  type="button"
+                  onClick={() => {
+                    setPosseFiltro(ativo ? '' : item.chave);
+                    handlePageChange(1);
+                  }}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                    ativo
+                      ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold'
+                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.ponto}`} />
+                  <span className="text-left">{item.rotulo}</span>
+                </button>
+              );
+            })}
+            {posseFiltro && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPosseFiltro('');
+                  handlePageChange(1);
+                }}
+                className="mt-1 w-full rounded-md border border-gray-200 dark:border-zinc-600 px-2 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700"
+              >
+                Limpar filtro
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   // Função para formatar os dados para o DataTableFiltroV3
   const formatTableData = () => {
     return data.map((nfe, index) => ({
       ...nfe,
       __index: index,
+      // Categoria de posse que colore a linha (ver MAPA_COR_LINHA).
+      __posse: calcularPosse(nfe, user?.codusr),
       numeroNF: nfe.numeroNF || '',
       serie: nfe.serie || '',
       chaveNFe: nfe.chaveNFe ? nfe.chaveNFe.substring(0, 20) + '...' : '',
@@ -1137,41 +1269,9 @@ export const NFeMain: React.FC = () => {
              nfe.status === 'ERRO' ? 'Erro' :
              nfe.status || 'N/A'}
           </span>
-          {/* Badge de controle de usuario */}
-          {nfe.status !== 'PROCESSADA' && (
-            <span
-              className={`px-2 py-0.5 text-[10px] rounded-full whitespace-nowrap ${
-                // Iniciado por voce (verde)
-                nfe.processandoPor && nfe.processandoPor === user?.codusr
-                  ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/50'
-                  // Iniciado por outro usuario (vermelho)
-                  : nfe.processandoPor && nfe.processandoPor !== user?.codusr
-                  ? 'text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/50'
-                  // Iniciado e livre (amarelo) - tem progresso mas ninguem processando
-                  : nfe.status !== 'RECEBIDA'
-                  ? 'text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-900/50'
-                  // Procedimento nao iniciado (cinza)
-                  : 'text-gray-500 bg-gray-100 dark:text-gray-400 dark:bg-gray-700'
-              }`}
-              title={
-                nfe.processandoPor && nfe.processandoPor === user?.codusr
-                  ? 'Voce esta processando esta NFe'
-                  : nfe.processandoPor && nfe.processandoPor !== user?.codusr
-                  ? `${nfe.processandoNome || 'Outro usuario'} esta processando`
-                  : nfe.status !== 'RECEBIDA'
-                  ? 'NFe iniciada e livre para continuar'
-                  : 'Processamento nao iniciado'
-              }
-            >
-              {nfe.processandoPor && nfe.processandoPor === user?.codusr
-                ? 'Iniciado por voce'
-                : nfe.processandoPor && nfe.processandoPor !== user?.codusr
-                ? `Iniciado por ${nfe.processandoNome || 'outro'}`
-                : nfe.status !== 'RECEBIDA'
-                ? 'Iniciado e livre'
-                : 'Nao iniciado'}
-            </span>
-          )}
+          {/* A posse (iniciado por você / por outro / livre / não iniciado) não
+              é mais badge: virou a COR DA LINHA, como no Delphi. A legenda no
+              rodapé explica as cores. */}
           {/* Badge de Pagamento Configurado */}
           {nfe.pagamentoConfigurado && (
             <span
@@ -1253,7 +1353,7 @@ export const NFeMain: React.FC = () => {
         <DataTablePadrao
           screenKey="entrada-xml-nfe"
           userName={user?.usuario}
-          headers={headers}
+          headers={headersTabela}
           rows={formatTableData()}
           meta={meta}
           carregando={loading}
@@ -1285,11 +1385,15 @@ export const NFeMain: React.FC = () => {
             },
             { acoes: 'Ações', AÇÕES: 'Ações' } as Record<string, string>,
           )}
-          rowClassName={(row) =>
-            (row as any).__index === linhaSelecionada
-              ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
-              : ''
-          }
+          footerLeftSlot={legendaPosse}
+          rowClassName={(row) => {
+            const cor = MAPA_COR_LINHA[(row as any).__posse as Posse] ?? '';
+            const sel =
+              (row as any).__index === linhaSelecionada
+                ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
+                : '';
+            return `${cor} ${sel}`.trim();
+          }}
           onRowClick={(row) => setLinhaSelecionada((row as any).__index ?? -1)}
           searchRightSlot={
             <div className="w-44 shrink-0">

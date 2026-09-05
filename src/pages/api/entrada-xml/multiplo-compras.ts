@@ -1,6 +1,17 @@
+// Múltiplo de Compras — ajusta a quantidade do item da Ordem de Compra para
+// casar com a quantidade que veio na NFe.
+//
+// Porte do btnMultiploCompra do Delphi (Formularios/XML ENTRADA/UniExecEntrada.pas:4974):
+// o comprador seleciona o item da OC, informa usuário + senha de alguém
+// autorizado, confirma, e o sistema grava na OC a quantidade da NOTA
+// (stoCarregaMultCompras), registrando a auditoria (stoAudMultiploCompras).
+// Serve para produtos que o fornecedor entrega fragmentados — a OC pediu 2 e a
+// nota veio com 20.
+
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { compare } from 'bcryptjs';
 import { pool } from '@/lib/db';
-import { parseCookies } from 'nookies';
+import { registrarHistoricoOrdem } from '@/lib/compras/ordemHistoricoHelper';
 
 interface MultiploComprasRequest {
   ordemId: string;
@@ -8,11 +19,14 @@ interface MultiploComprasRequest {
   novaQuantidade: number;
   usuario: string;
   senha: string;
+  motivo?: string;
 }
 
 interface MultiploComprasResponse {
   success: boolean;
   message: string;
+  quantidadeAnterior?: number;
+  quantidadeNova?: number;
 }
 
 export default async function handler(
@@ -24,179 +38,179 @@ export default async function handler(
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   }
 
-  const { ordemId, produtoId, novaQuantidade, usuario, senha }: MultiploComprasRequest = req.body;
+  const {
+    ordemId,
+    produtoId,
+    novaQuantidade,
+    usuario,
+    senha,
+    motivo,
+  }: MultiploComprasRequest = req.body;
 
   if (!ordemId || !produtoId || !novaQuantidade || !usuario || !senha) {
-    return res.status(400).json({
-      error: 'Todos os campos são obrigatórios'
-    });
+    return res
+      .status(400)
+      .json({ error: 'Todos os campos obrigatórios devem ser preenchidos' });
   }
 
-  if (novaQuantidade <= 0) {
-    return res.status(400).json({
-      error: 'Nova quantidade deve ser maior que zero'
-    });
-  }
-
-  const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo;
-
-  if (!filial) {
-    return res.status(400).json({ error: 'Filial não informada no cookie' });
+  if (Number(novaQuantidade) <= 0) {
+    return res.status(400).json({ error: 'Quantidade inválida.' });
   }
 
   let client;
 
   try {
     client = await pool.connect();
-
-    // Iniciar transação
     await client.query('BEGIN');
 
-    // 1. Autenticar usuário usando tabela do sistema atual
-    const authResult = await client.query(`
-      SELECT
-        u.login_user_login as usuario_id,
-        u.login_user_name as nome,
-        CASE
-          WHEN g.login_group_is_admin = true THEN 1
-          ELSE 2
-        END as nivel_acesso
-      FROM tb_login_user u
-      INNER JOIN tb_login_group g ON u.login_group_name = g.login_group_name
-      WHERE u.login_user_login = $1
-        AND u.login_user_password = $2
-    `, [usuario, senha]);
+    // --- 1. Autorização ---------------------------------------------------
+    // O Delphi exige ADM_ENTRADA = 'S' (dbusuario, tabela legada). A maior
+    // parte dos logins web não existe lá, então os perfis administrativos do
+    // cadastro web também autorizam.
+    const auth = await client.query(
+      `SELECT u.login_user_login, u.login_user_name, u.login_user_password,
+              u.login_perfil_name, d.adm_entrada
+       FROM tb_login_user u
+       LEFT JOIN dbusuario d
+         ON TRIM(d.codusr) = LPAD(u.codusr::text, 4, '0')
+       WHERE UPPER(u.login_user_login) = UPPER($1)
+       LIMIT 1`,
+      [usuario],
+    );
 
-    if (authResult.rows.length === 0) {
+    if (auth.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(401).json({
-        error: 'Usuário ou senha inválidos'
-      });
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
     }
 
-    const usuarioData = authResult.rows[0];
+    const autorizador = auth.rows[0];
 
-    // 2. Verificar se o usuário tem permissão para múltiplo de compras
-    // (assumindo que apenas admins ou gerentes podem fazer múltiplo)
-    if (usuarioData.nivel_acesso > 2) {
+    // As senhas são bcrypt (ver /api/postgresql/verUser). A comparação em
+    // texto puro que existia aqui nunca casava — o recurso não funcionava.
+    const senhaOk = await compare(
+      String(senha),
+      autorizador.login_user_password || '',
+    );
+    if (!senhaOk) {
       await client.query('ROLLBACK');
-      return res.status(403).json({
-        error: 'Usuário sem permissão para múltiplo de compras'
-      });
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
     }
 
-    // 3. Buscar informações da ordem de compra atual
-    const ordemResult = await client.query(`
-      SELECT
-        o.orc_id,
-        r.req_id_composto,
-        ri.itr_codprod as codprod,
-        ri.itr_quantidade as quantidade_atual,
-        COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
-        p.descr as produto_descricao,
-        ri.itr_pr_unitario as preco_unitario
-      FROM cmp_ordem_compra o
-      INNER JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
-      INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
-      INNER JOIN dbprod p ON ri.itr_codprod = p.codprod
-      WHERE o.orc_id = $1 AND ri.itr_codprod = $2
-        AND o.orc_status = 'A'
-    `, [ordemId, produtoId]);
+    // Autoriza pela flag do Delphi ou pelos perfis administrativos do cadastro
+    // web. A lista aceita a forma acentuada e a sem acento porque o perfil vem
+    // como "ADMINISTRAÇÃO" no banco.
+    const PERFIS_AUTORIZADOS = ['ADMINISTRAÇÃO', 'ADMINISTRACAO', 'DIRETOR'];
+    const perfil = String(autorizador.login_perfil_name || '').trim().toUpperCase();
+
+    const autorizado =
+      autorizador.adm_entrada === 'S' || PERFIS_AUTORIZADOS.includes(perfil);
+
+    if (!autorizado) {
+      await client.query('ROLLBACK');
+      return res
+        .status(403)
+        .json({ error: 'Usuário sem permissão para múltiplo de compras' });
+    }
+
+    // --- 2. Item da OC ----------------------------------------------------
+    const ordemResult = await client.query(
+      `SELECT o.orc_id, o.orc_status, r.req_id, r.req_versao,
+              ri.itr_quantidade AS quantidade_atual,
+              COALESCE(ri.itr_quantidade_atendida, 0) AS quantidade_atendida,
+              p.descr AS produto_descricao
+       FROM cmp_ordem_compra o
+       INNER JOIN cmp_requisicao r
+         ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
+       INNER JOIN cmp_it_requisicao ri
+         ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
+        AND ri.itr_codprod = $2
+       LEFT JOIN dbprod p ON p.codprod = ri.itr_codprod
+       WHERE o.orc_id = $1 AND o.orc_status = 'A'`,
+      [ordemId, produtoId],
+    );
 
     if (ordemResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({
-        error: 'Ordem de compra não encontrada ou inativa'
-      });
+      return res
+        .status(404)
+        .json({ error: 'Ordem de compra não encontrada ou inativa' });
     }
 
     const ordem = ordemResult.rows[0];
+    const quantidadeAtual = Number(ordem.quantidade_atual);
+    const atendida = Number(ordem.quantidade_atendida);
 
-    // 4. Verificar se já tem quantidade atendida (não permitir alterar se já foi usado)
-    if (parseInt(ordem.quantidade_atendida) > 0) {
+    // Mesma recusa do Delphi: "Impossível fazer multiplo de compras pois a
+    // quantidade do PEDIDO é igual a quantidade da NOTA!".
+    if (Number(novaQuantidade) === quantidadeAtual) {
       await client.query('ROLLBACK');
       return res.status(400).json({
-        error: 'Não é possível alterar ordem já parcialmente atendida'
+        error: 'A quantidade do pedido já é igual à quantidade da nota.',
       });
     }
 
-    // 5. Atualizar a quantidade na requisição
-    const updateResult = await client.query(`
-      UPDATE cmp_it_requisicao
-      SET itr_quantidade = $1
-      FROM cmp_ordem_compra o, cmp_requisicao r
-      WHERE o.orc_id = $2
-        AND r.req_id = o.orc_req_id
-        AND r.req_versao = o.orc_req_versao
-        AND cmp_it_requisicao.itr_req_id = r.req_id
-        AND cmp_it_requisicao.itr_req_versao = r.req_versao
-        AND cmp_it_requisicao.itr_codprod = $3
-    `, [novaQuantidade, ordemId, produtoId]);
+    // O Delphi grava a quantidade da nota, para mais ou para menos. O único
+    // limite que faz sentido é não descer abaixo do que já foi atendido.
+    if (Number(novaQuantidade) < atendida) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `A nova quantidade (${novaQuantidade}) é menor que a já atendida (${atendida}).`,
+      });
+    }
+
+    // --- 3. Ajuste --------------------------------------------------------
+    const updateResult = await client.query(
+      `UPDATE cmp_it_requisicao
+       SET itr_quantidade = $1
+       WHERE itr_req_id = $2 AND itr_req_versao = $3 AND itr_codprod = $4`,
+      [novaQuantidade, ordem.req_id, ordem.req_versao, produtoId],
+    );
 
     if (updateResult.rowCount === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({
-        error: 'Não foi possível atualizar a quantidade da ordem'
-      });
+      return res
+        .status(404)
+        .json({ error: 'Não foi possível atualizar a quantidade da ordem' });
     }
 
-    // 6. Criar tabela de log se não existir (apenas para desenvolvimento)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS multiplo_compras_log (
-        id SERIAL PRIMARY KEY,
-        ordem_id VARCHAR(20) NOT NULL,
-        produto_id VARCHAR(6) NOT NULL,
-        quantidade_anterior INTEGER NOT NULL,
-        quantidade_nova INTEGER NOT NULL,
-        usuario_id VARCHAR(40),
-        usuario_nome VARCHAR(100) NOT NULL,
-        motivo VARCHAR(255),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // 7. Registrar o log da alteração
-    await client.query(`
-      INSERT INTO multiplo_compras_log (
-        ordem_id,
-        produto_id,
-        quantidade_anterior,
-        quantidade_nova,
-        usuario_id,
-        usuario_nome,
-        motivo,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
-    `, [
-      ordemId,
-      produtoId,
-      parseInt(ordem.quantidade_atual),
-      novaQuantidade,
-      usuarioData.usuario_id,
-      usuarioData.nome,
-      'Alteração via múltiplo de compras - NFe'
-    ]);
-
-    console.log(`Múltiplo de compras executado: Ordem ${ordemId}, Produto ${produtoId}, ${ordem.quantidade_atual} -> ${novaQuantidade} por ${usuarioData.nome}`);
-
-    // Commit da transação
-    await client.query('COMMIT');
-
-    res.status(200).json({
-      success: true,
-      message: `Quantidade alterada de ${ordem.quantidade_atual} para ${novaQuantidade} com sucesso!`
+    // --- 4. Auditoria -----------------------------------------------------
+    // Mesma trilha de FECHAR_ITEM / BAIXAR_PENDENCIA: o histórico da OC fica
+    // todo em cmp_ordem_historico.
+    await registrarHistoricoOrdem(client, {
+      orcId: ordem.orc_id,
+      previousStatus: ordem.orc_status,
+      newStatus: ordem.orc_status,
+      userId: autorizador.login_user_login,
+      userName: autorizador.login_user_name || autorizador.login_user_login,
+      reason: `Múltiplo de compras no item ${produtoId} - ${quantidadeAtual} para ${novaQuantidade}`,
+      comments: {
+        tipo: 'MULTIPLO_COMPRA',
+        codprod: produtoId,
+        descricao: ordem.produto_descricao || null,
+        quantidade_anterior: quantidadeAtual,
+        quantidade_ajustada: Number(novaQuantidade),
+        quantidade_atendida: atendida,
+        autorizado_por: autorizador.login_user_login,
+        motivo: motivo || 'Ajuste por múltiplo de compra',
+      },
     });
 
-  } catch (err) {
-    // Rollback da transação em caso de erro
-    if (client) {
-      await client.query('ROLLBACK');
-    }
+    await client.query('COMMIT');
 
-    console.error('Erro no múltiplo de compras:', err);
-    res.status(500).json({
-      error: 'Falha na alteração da quantidade.'
+    return res.status(200).json({
+      success: true,
+      message: `Múltiplo de compras aplicado. Quantidade alterada de ${quantidadeAtual} para ${novaQuantidade}.`,
+      quantidadeAnterior: quantidadeAtual,
+      quantidadeNova: Number(novaQuantidade),
+    });
+  } catch (err) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    console.error('Erro ao aplicar múltiplo de compras:', err);
+    return res.status(500).json({
+      error:
+        err instanceof Error ? err.message : 'Falha ao aplicar múltiplo de compras.',
     });
   } finally {
     if (client) {

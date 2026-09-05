@@ -54,15 +54,16 @@ export default async function handler(
         r.req_status,
         r.req_data,
         r.req_cod_credor,
-        f.for_nome as fornecedor_nome,
+        f.nome as fornecedor_nome,
         ri.itr_quantidade,
         ri.itr_pr_unitario,
         COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
         (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel
       FROM buscar_sugestoes_associacao($1, $2, $3) s
       INNER JOIN cmp_requisicao r ON s.req_id_sugerido = r.req_id
-      LEFT JOIN cad_fornecedor f ON r.req_cod_credor = f.for_id
-      INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id
+      LEFT JOIN dbcredor f ON f.cod_credor = r.req_cod_credor
+      INNER JOIN cmp_it_requisicao ri
+        ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
       WHERE ri.itr_codprod = $1
       ORDER BY s.confianca DESC, s.req_id_sugerido DESC
     `, [produtoCod, fornecedorCod, limite]);
@@ -82,14 +83,15 @@ export default async function handler(
           r.req_status,
           r.req_data,
           r.req_cod_credor,
-          f.for_nome as fornecedor_nome,
+          f.nome as fornecedor_nome,
           ri.itr_quantidade,
           ri.itr_pr_unitario,
           COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
           (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel
         FROM cmp_requisicao r
-        INNER JOIN cmp_it_requisicao ri ON r.req_id = ri.itr_req_id
-        LEFT JOIN cad_fornecedor f ON r.req_cod_credor = f.for_id
+        INNER JOIN cmp_it_requisicao ri
+          ON r.req_id = ri.itr_req_id AND r.req_versao = ri.itr_req_versao
+        LEFT JOIN dbcredor f ON f.cod_credor = r.req_cod_credor
         WHERE ri.itr_codprod = $1
           AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
           AND r.req_status IN ('P', 'A')

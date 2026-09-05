@@ -9,6 +9,8 @@ interface OrdemCompraDisponivel {
   codCredor: string;
   fornecedor: string;
   quantidadeDisponivel: number;
+  /** itr_quantidade: total pedido na OC (o Múltiplo de Compras sobrescreve este). */
+  quantidadePedida: number;
   valorUnitario: number;
   dataPrevisao: string;
   multiplo: number;
@@ -156,6 +158,7 @@ export default async function handler(
       codCredor: row.cod_credor || '',
       fornecedor: row.fornecedor || 'FORNECEDOR NÃO INFORMADO',
       quantidadeDisponivel: Number(row.quantidade_disponivel || 0),
+      quantidadePedida: Number(row.quantidade_pedida || 0),
       valorUnitario: Number(row.valor_unitario || 0),
       dataPrevisao: row.data_previsao ? new Date(row.data_previsao).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       multiplo: 1,
@@ -188,6 +191,7 @@ export default async function handler(
         codCredor: '00001',
         fornecedor: 'ERRO - FALLBACK',
         quantidadeDisponivel: 10,
+        quantidadePedida: 10,
         valorUnitario: 1.00,
         dataPrevisao: new Date().toISOString().split('T')[0],
         multiplo: 1,

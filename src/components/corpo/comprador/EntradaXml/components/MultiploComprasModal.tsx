@@ -21,17 +21,26 @@ interface MultiploComprasModalProps {
   onClose: () => void;
   ordem: OrdemCompraDisponivel;
   onConfirm: () => void;
+  /**
+   * Quantidade já sugerida no campo (no Delphi o painel abre com a "Qtd
+   * Ajustada" preenchida com a quantidade da NOTA). Sem isso, cai na
+   * quantidade atual do pedido.
+   */
+  quantidadeSugerida?: number;
 }
 
 export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
   isOpen,
   onClose,
   ordem,
-  onConfirm
+  onConfirm,
+  quantidadeSugerida
 }) => {
   const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
-  const [novaQuantidade, setNovaQuantidade] = useState<number>(ordem.quantidade_pedida);
+  const [novaQuantidade, setNovaQuantidade] = useState<number>(
+    quantidadeSugerida ?? ordem.quantidade_pedida
+  );
   const [erro, setErro] = useState('');
 
   const { alterarQuantidadeOrdem, loading, validarAlteracao } = useMultiploCompras();
@@ -41,10 +50,10 @@ export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
     if (isOpen) {
       setUsuario('');
       setSenha('');
-      setNovaQuantidade(ordem.quantidade_pedida);
+      setNovaQuantidade(quantidadeSugerida ?? ordem.quantidade_pedida);
       setErro('');
     }
-  }, [isOpen, ordem]);
+  }, [isOpen, ordem, quantidadeSugerida]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,9 +109,13 @@ export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
             <h3 className="text-lg font-medium text-gray-900 dark:text-white">
               Múltiplo de Compras
             </h3>
+            {/* Mesma identificação do painel do Delphi: a referência do item
+                (lblMultReferencia) e, abaixo, a OC sendo ajustada. */}
             <p className="text-sm text-gray-500 mt-1">
-              Ordem: {ordem.codigo_requisicao} - {ordem.produto_descricao}
+              Referência: {ordem.codigo_requisicao}
+              {ordem.produto_descricao ? ` - ${ordem.produto_descricao}` : ''}
             </p>
+            <p className="text-xs text-gray-400">Ordem de compra: {ordem.id}</p>
           </div>
           <Button variant="ghost" onClick={onClose}>
             <X size={20} />
@@ -114,14 +127,6 @@ export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Informações da Ordem */}
             <div className="bg-gray-50 dark:bg-zinc-700 p-4 rounded-lg space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Quantidade Atual:</span>
-                <span className="font-medium">{ordem.quantidade_pedida}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600 dark:text-gray-400">Quantidade Disponível:</span>
-                <span className="font-medium">{ordem.quantidade_disponivel}</span>
-              </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600 dark:text-gray-400">Valor Unitário:</span>
                 <span className="font-medium">
@@ -136,26 +141,27 @@ export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
               </div>
             </div>
 
-            {/* Nova Quantidade */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Nova Quantidade
-              </label>
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={novaQuantidade}
-                onChange={(e) => setNovaQuantidade(parseInt(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-zinc-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-                disabled={loading}
-              />
-              {novaQuantidade !== ordem.quantidade_pedida && (
-                <p className="text-xs mt-1 text-blue-600">
-                  Alteração: {ordem.quantidade_pedida} → {novaQuantidade}
-                  ({novaQuantidade > ordem.quantidade_pedida ? '+' : ''}{novaQuantidade - ordem.quantidade_pedida})
-                </p>
+            {/* Quantidades — como no Delphi, são apenas exibidas (lá são os
+                TLabels lblMultQtdAnterior e lblMultQtdAjustada). O usuário não
+                digita a quantidade: ela vem do pedido e da nota. */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-lg space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Quantidade anterior:</span>
+                <span className="font-medium">{ordem.quantidade_pedida}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">Quantidade ajustada:</span>
+                <span className="font-semibold text-blue-700 dark:text-blue-300">
+                  {novaQuantidade}
+                </span>
+              </div>
+              {/* Só aparece quando parte do pedido já foi recebida: aí o total
+                  e o saldo divergem, e reduzir mexe no que ainda está pendente. */}
+              {ordem.quantidade_disponivel !== ordem.quantidade_pedida && (
+                <div className="flex justify-between text-xs pt-1 border-t border-blue-200 dark:border-blue-800">
+                  <span className="text-gray-500">Saldo ainda pendente na OC:</span>
+                  <span className="font-medium">{ordem.quantidade_disponivel}</span>
+                </div>
               )}
             </div>
 
@@ -205,6 +211,15 @@ export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
               </div>
             )}
 
+            {/* Mesma recusa do Delphi: "Impossível fazer multiplo de compras
+                pois a quantidade do PEDIDO é igual a quantidade da NOTA!".
+                Como as quantidades não são digitáveis, avisamos de saída. */}
+            {novaQuantidade === ordem.quantidade_pedida && (
+              <div className="bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 p-3 rounded-md text-sm">
+                A quantidade do pedido já é igual à da nota — não há múltiplo a ajustar.
+              </div>
+            )}
+
             {/* Informações importantes */}
             <div className="bg-yellow-50 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300 p-3 rounded-md text-sm">
               <p className="font-medium mb-1">⚠️ Atenção:</p>
@@ -222,7 +237,13 @@ export const MultiploComprasModal: React.FC<MultiploComprasModalProps> = ({
 
           <Button
             onClick={handleSubmit}
-            disabled={loading || !usuario.trim() || !senha.trim() || novaQuantidade <= 0}
+            disabled={
+              loading ||
+              !usuario.trim() ||
+              !senha.trim() ||
+              novaQuantidade <= 0 ||
+              novaQuantidade === ordem.quantidade_pedida
+            }
             className="bg-orange-600 hover:bg-orange-700 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {loading && <Loader2 size={16} className="mr-2 animate-spin" />}

@@ -67,6 +67,26 @@ const STATUS_DERIVADO: Record<string, string> = {
   erro: `(COALESCE(n.exec,'') NOT IN ('N','R','A','C','S') AND n.nprot IS NULL)`,
 };
 
+/**
+ * POSSE (cor da linha) → condição SQL. Espelha o dxDBGNFesCustomDrawCell do
+ * Delphi (UniExecEntrada.pas), que pinta a linha inteira por USUARIO/SITUACAO.
+ * SITUACAO aqui vira n.exec: 'N'/'R' = nada iniciado, 'A'/'C'/'S' = tem
+ * progresso salvo.
+ *
+ * O caso "entrada gerada" (clGray) do Delphi fica de fora de propósito: lá o
+ * rótulo só aparece com "Incluir entradas geradas" marcado, e aqui essa
+ * informação já vem na coluna de status — a cor guarda só a posse, então quem
+ * iniciou continua visível depois da entrada gerada.
+ *
+ * `$USR` é trocado pelo placeholder do usuário logado.
+ */
+const POSSE_DERIVADA: Record<string, string> = {
+  voce: `n.processando_por = $USR`,
+  outro: `(n.processando_por IS NOT NULL AND n.processando_por <> $USR)`,
+  livre: `(n.processando_por IS NULL AND n.exec IN ('A','C','S'))`,
+  nao_iniciado: `(n.processando_por IS NULL AND (n.exec IS NULL OR n.exec IN ('N','R')))`,
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -75,7 +95,7 @@ export default async function handler(
     return res.status(405).json({ error: 'Metodo nao permitido' });
   }
 
-  const { page = 1, perPage = 10, filtros = [], search = '', sortCampo = '', sortDirecao = '' } = req.body;
+  const { page = 1, perPage = 10, filtros = [], search = '', sortCampo = '', sortDirecao = '', codusr = '' } = req.body;
   const offset = (Number(page) - 1) * Number(perPage);
   const limit = Number(perPage);
 
@@ -111,6 +131,25 @@ export default async function handler(
 
   // Para cada campo agrupado
   Object.entries(filtrosAgrupados).forEach(([campo, filtrosDoCampo]) => {
+    // Posse: campo sintético da legenda (não existe coluna correspondente).
+    if (campo === 'posse') {
+      const condicoes: string[] = [];
+      filtrosDoCampo.forEach((filtro) => {
+        const cond = POSSE_DERIVADA[String(filtro.valor).toLowerCase().trim()];
+        if (!cond) return;
+        if (cond.includes('$USR')) {
+          // "Iniciado por você/por outro" dependem de quem está logado.
+          if (!codusr) return;
+          params.push(codusr);
+          condicoes.push(cond.replace(/\$USR/g, `$${params.length}`));
+        } else {
+          condicoes.push(cond);
+        }
+      });
+      if (condicoes.length > 0) whereGroups.push(`(${condicoes.join(' OR ')})`);
+      return;
+    }
+
     const coluna = filtroParaColunaSQL[campo];
     if (!coluna) {
       console.log(`Campo ${campo} nao mapeado para SQL, ignorando`);

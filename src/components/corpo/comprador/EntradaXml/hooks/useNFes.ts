@@ -23,6 +23,9 @@ interface UseNFesParams {
   filters?: { campo: string; tipo: string; valor: string }[];
   advancedFilters?: NFeFiltersAdvanced;
   ordenacao?: { campo: string; direcao: 'asc' | 'desc' } | null;
+  /** Código do usuário logado — o filtro de posse da legenda precisa dele
+   *  para resolver "iniciado por você" x "por outro usuário". */
+  codusr?: string;
 }
 
 interface UseNFesReturn {
@@ -34,7 +37,7 @@ interface UseNFesReturn {
   updateNFeStatus: (nfeId: string | number, newStatus: string) => void;
 }
 
-export const useNFes = ({ page, perPage, search, filters, advancedFilters, ordenacao }: UseNFesParams): UseNFesReturn => {
+export const useNFes = ({ page, perPage, search, filters, advancedFilters, ordenacao, codusr }: UseNFesParams): UseNFesReturn => {
   const [data, setData] = useState<NFeDTO[]>([]);
   const [meta, setMeta] = useState<NFesMeta>({
     total: 0,
@@ -53,7 +56,8 @@ export const useNFes = ({ page, perPage, search, filters, advancedFilters, orden
     search: search || '',
     filters: filters || [],
     ordenacao: ordenacao || null,
-  }), [page, perPage, search, JSON.stringify(filters || []), JSON.stringify(ordenacao || null)]);
+    codusr: codusr || '',
+  }), [page, perPage, search, JSON.stringify(filters || []), JSON.stringify(ordenacao || null), codusr]);
 
   const fetchNFes = useCallback(async () => {
     setLoading(true);
@@ -83,6 +87,7 @@ export const useNFes = ({ page, perPage, search, filters, advancedFilters, orden
             filtros: filtrosCorrigidos,
             sortCampo: memoizedParams.ordenacao?.campo,
             sortDirecao: memoizedParams.ordenacao?.direcao,
+            codusr: memoizedParams.codusr,
           }),
         });
 

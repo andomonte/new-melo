@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, ChevronUp, ChevronLeft, Loader2, Wand2, Trash2 } from 'lucide-react';
+import { X, Package2, Search, CheckCircle, AlertCircle, Settings, Plus, Minus, Lightbulb, Zap, FileText, Save, ChevronDown, ChevronUp, ChevronLeft, Loader2, Wand2, Trash2, Calculator } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import InputMoeda from '@/components/common/InputMoeda';
@@ -10,6 +10,7 @@ import { NFeDTO } from '../types';
 import { formatCurrency } from '../utils/formatters';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import MessageModal from '@/components/common/MessageModal';
+import { MultiploComprasModal } from './MultiploComprasModal';
 import DecisionModal from '@/components/common/DecisionModal';
 import { SugestoesOCModal } from '../../Entradas/components/SugestoesOCModal';
 import { useSugestoesOC, ItemNFe as ItemNFeAPI } from '../../Entradas/hooks/useSugestoesOC';
@@ -73,6 +74,8 @@ interface OrdemCompra {
   codCredor: string;
   fornecedor: string;
   quantidadeDisponivel: number;
+  /** itr_quantidade: total pedido na OC (é o que o Múltiplo de Compras sobrescreve). */
+  quantidadePedida?: number;
   quantidadeAssociar: number;
   valorUnitario: number;
   dataPrevisao: string;
@@ -904,8 +907,14 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao salvar associações');
+        // O endpoint devolve `error` genérico ("Falha ao associar itens da
+        // NFe.") e `message` com o motivo real — OC inativa, fornecedor
+        // divergente, quantidade insuficiente, divergência de preço etc.
+        // Mostrar só o genérico deixava o usuário sem saber o que corrigir.
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.message || errorData.error || 'Erro ao salvar associações',
+        );
       }
 
       // Marcar que as associações foram salvas
@@ -2129,7 +2138,11 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
             <SugestoesAutomaticas
               produtoCod={produtoSugestaoSelecionado}
-              fornecedorCod={nfe?.fornecedor?.cnpj}
+              // Sem filtro de fornecedor: o endpoint compara com
+              // cmp_requisicao.req_cod_credor (o CÓDIGO do credor, ex.: 07427)
+              // e o que existe na NFe é o CNPJ do emitente — a comparação
+              // nunca casaria. Não há coluna de CNPJ confiável em dbcredor
+              // (cod_ident vem nulo) para fazer a ponte.
               quantidadeNecessaria={selectedItem?.quantidade}
               onSelectSugestao={(sugestao) => {
                 // Aplicar sugestão selecionada
@@ -2442,6 +2455,12 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
   const [pedidos, setPedidos] = useState<OrdemCompra[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Múltiplo de Compras (btnMultiploCompra do Delphi): ajusta a quantidade do
+  // item na OC para a quantidade da nota, com senha de quem pode autorizar.
+  // Usado quando o fornecedor entrega o produto fragmentado.
+  const [ordemMultiplo, setOrdemMultiplo] = useState<OrdemCompra | null>(null);
+  const [recargaPedidos, setRecargaPedidos] = useState(0);
+
   // ⭐ MEIA NOTA (estilo Delphi): quando marcado, o preço unitário informado
   // (real) passa a valer para o cálculo do custo, no lugar do preço do XML.
   const precoNfXml = Number(item?.valorUnitario) || 0;
@@ -2499,6 +2518,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                 codCredor: ordem.codCredor,
                 fornecedor: ordem.fornecedor,
                 quantidadeDisponivel: ordem.quantidadeDisponivel,
+                quantidadePedida: ordem.quantidadePedida,
                 quantidadeAssociar: 0,
                 valorUnitario: ordem.valorUnitario,
                 dataPrevisao: ordem.dataPrevisao,
@@ -2595,7 +2615,9 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
       
       carregarPedidos();
     }
-  }, [isOpen, item, fornecedorCnpj, ordemIdSelecionada]);
+    // recargaPedidos: recarrega a lista depois de um Múltiplo de Compras, para
+    // a nova quantidade da OC aparecer na hora.
+  }, [isOpen, item, fornecedorCnpj, ordemIdSelecionada, recargaPedidos]);
 
   const [associacoes, setAssociacoes] = useState<ItemAssociation[]>([]);
 
@@ -2709,7 +2731,7 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
 
               {/* Tabela estilo VM legada */}
               <div className="border border-gray-200 dark:border-zinc-700 rounded-lg overflow-hidden">
-                <div className="bg-blue-600 text-white text-xs font-semibold grid grid-cols-9 gap-2 p-2">
+                <div className="bg-blue-600 text-white text-xs font-semibold grid grid-cols-10 gap-2 p-2">
                   <div>Ordem Compra</div>
                   <div>Filial</div>
                   <div>Cód Forn.</div>
@@ -2719,12 +2741,13 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                   <div>Quantidade</div>
                   <div>Múltiplo</div>
                   <div>Qtde Assoc.</div>
+                  <div>Ajustar</div>
                 </div>
 
                 {pedidos.map((ordem, index) => {
                   const sugerida = ordemIdSelecionada && String(ordem.id) === String(ordemIdSelecionada);
                   return (
-                  <div key={ordem.id} className={`grid grid-cols-9 gap-2 p-2 text-xs border-b border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 ${sugerida ? 'bg-green-50 dark:bg-green-900/20 ring-1 ring-green-400' : index % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-gray-50 dark:bg-zinc-800'} hover:bg-gray-100 dark:hover:bg-zinc-700`}>
+                  <div key={ordem.id} className={`grid grid-cols-10 gap-2 p-2 text-xs border-b border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100 ${sugerida ? 'bg-green-50 dark:bg-green-900/20 ring-1 ring-green-400' : index % 2 === 0 ? 'bg-white dark:bg-zinc-900' : 'bg-gray-50 dark:bg-zinc-800'} hover:bg-gray-100 dark:hover:bg-zinc-700`}>
                     <div className="font-medium text-blue-600 flex items-center gap-1">
                       {ordem.id}
                       {sugerida && <span className="text-[0.6rem] px-1 rounded bg-green-600 text-white">sugerida</span>}
@@ -2769,6 +2792,21 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
                         className="h-7 w-7 p-0"
                       >
                         <Plus size={12} />
+                      </Button>
+                    </div>
+                    <div className="flex items-center">
+                      {/* Múltiplo de Compras: ajusta a quantidade da OC para a
+                          da nota (produto entregue fragmentado). Pede senha. */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        tabIndex={-1}
+                        onClick={() => setOrdemMultiplo(ordem)}
+                        title={`Ajustar a quantidade da OC (${ordem.quantidadeDisponivel}) para a quantidade da nota (${item.quantidade})`}
+                        className="h-7 px-2 text-orange-600 hover:text-orange-700"
+                      >
+                        <Calculator size={12} className="mr-1" />
+                        Múltiplo
                       </Button>
                     </div>
                   </div>
@@ -2875,6 +2913,40 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
           </div>
         </div>
       </div>
+
+      {/* Múltiplo de Compras — porte do btnMultiploCompra do Delphi. Abre já
+          sugerindo a quantidade da nota, como o painel de lá. */}
+      {ordemMultiplo && (
+        <MultiploComprasModal
+          isOpen={!!ordemMultiplo}
+          onClose={() => setOrdemMultiplo(null)}
+          quantidadeSugerida={Number(item?.quantidade) || undefined}
+          ordem={{
+            id: ordemMultiplo.id,
+            // O Delphi identifica pela REFERÊNCIA do item na nota
+            // (lblMultReferencia), não pelo número interno da requisição.
+            codigo_requisicao: item?.referencia || ordemMultiplo.id,
+            filial: ordemMultiplo.filial,
+            fornecedor: ordemMultiplo.fornecedor,
+            produto_id:
+              item?.codprod || item?.produtoId || item?.produtoAssociado?.id || '',
+            produto_descricao:
+              item?.produtoAssociado?.descricao || item?.descricao || '',
+            // O Delphi mostra QUANT (o total pedido), nao o saldo — e e esse
+            // valor que a procedure sobrescreve.
+            quantidade_pedida:
+              ordemMultiplo.quantidadePedida ?? ordemMultiplo.quantidadeDisponivel,
+            quantidade_disponivel: ordemMultiplo.quantidadeDisponivel,
+            valor_unitario: ordemMultiplo.valorUnitario,
+            data_previsao: ordemMultiplo.dataPrevisao,
+          }}
+          onConfirm={() => {
+            setOrdemMultiplo(null);
+            // Recarrega as OCs para a nova quantidade aparecer na lista.
+            setRecargaPedidos((n) => n + 1);
+          }}
+        />
+      )}
     </div>
   );
 };

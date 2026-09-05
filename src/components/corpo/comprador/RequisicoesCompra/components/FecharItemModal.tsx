@@ -286,7 +286,7 @@ export function FecharItemModal({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b bg-gray-50 dark:bg-gray-700">
-                      <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Código</th>
+                      <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Referência</th>
                       <th className="text-left p-3 font-semibold text-gray-700 dark:text-gray-300">Descrição</th>
                       <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">Quantidade</th>
                       <th className="text-right p-3 font-semibold text-gray-700 dark:text-gray-300">Atendida</th>
@@ -301,15 +301,10 @@ export function FecharItemModal({
                         className="border-b hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                       >
                         <td className="p-3 text-gray-900 dark:text-gray-100 font-mono text-sm">
-                          {item.codprod}
+                          {item.ref || '-'}
                         </td>
                         <td className="p-3 text-gray-900 dark:text-gray-100">
-                          <div>{item.descr}</div>
-                          {item.ref && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              Ref: {item.ref}
-                            </div>
-                          )}
+                          {item.descr}
                         </td>
                         <td className="p-3 text-right text-gray-900 dark:text-gray-100">
                           {item.quantidade}

@@ -388,7 +388,8 @@ export default function ViewRequisitionModal({
                       <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
                         <thead>
                           <tr className="bg-gray-100 dark:bg-zinc-700">
-                            <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Código</th>
+                            {/* O comprador trabalha pela REFERÊNCIA; o codprod
+                                é chave interna e saiu da grade. */}
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Referência</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Descrição</th>
                             <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">Aplicação</th>
@@ -413,9 +414,6 @@ export default function ViewRequisitionModal({
                               }`}
                             >
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-mono">
-                                {item.codprod}
-                              </td>
-                              <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
                                 {item.produto_ref || '-'}
                               </td>
                               <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
@@ -452,14 +450,14 @@ export default function ViewRequisitionModal({
                           ))}
                           {items.length === 0 && (
                             <tr>
-                              <td colSpan={12} className="border border-gray-300 dark:border-gray-600 px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                              <td colSpan={11} className="border border-gray-300 dark:border-gray-600 px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                                 Nenhum item nesta requisição.
                               </td>
                             </tr>
                           )}
                           {items.length > 0 && (
                           <tr className="bg-gray-100 dark:bg-zinc-700 font-semibold">
-                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2" colSpan={11}>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2" colSpan={10}>
                               Total Geral:
                             </td>
                             <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">

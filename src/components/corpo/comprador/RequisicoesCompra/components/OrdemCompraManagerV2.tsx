@@ -1423,7 +1423,9 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b bg-gray-50 dark:bg-gray-700">
-                      <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Código</th>
+                      {/* O comprador trabalha pela REFERÊNCIA (é o que ele vê,
+                          busca e associa); o codprod é chave interna. */}
+                      <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Referência</th>
                       <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Descrição</th>
                       <th className="text-left p-2 font-semibold text-gray-700 dark:text-gray-300">Marca</th>
                       <th className="text-right p-2 font-semibold text-gray-700 dark:text-gray-300">Qtd</th>
@@ -1450,12 +1452,11 @@ function VerItensModal({ ordem, onClose, onRefresh }: { ordem: OrdemCompraDTO; o
                             index === linhaItem ? 'bg-blue-100 dark:bg-blue-900/40' : ''
                           }`}
                         >
-                          <td className="p-2 text-gray-900 dark:text-gray-100 font-mono text-sm">{item.codprod}</td>
+                          <td className="p-2 text-gray-900 dark:text-gray-100 font-mono text-sm">
+                            {item.produto?.ref || item.produto_ref || item.ref || '-'}
+                          </td>
                           <td className="p-2 text-gray-900 dark:text-gray-100">
-                            <div>{item.produto?.descr || item.produto_descr || item.descricao || 'Produto não encontrado'}</div>
-                            {item.produto?.ref && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400">Ref: {item.produto.ref}</div>
-                            )}
+                            {item.produto?.descr || item.produto_descr || item.descricao || 'Produto não encontrado'}
                           </td>
                           <td className="p-2 text-gray-900 dark:text-gray-100">{item.produto?.marca || item.produto_marca_nome || '-'}</td>
                           <td className="p-2 text-right text-gray-900 dark:text-gray-100">{formatarQtd(item.quantidade)}</td>
@@ -1634,7 +1635,7 @@ function SubstituirItemModalV2({
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b bg-gray-50 dark:bg-gray-700">
-                      <th className="text-left p-3">Código</th>
+                      <th className="text-left p-3">Referência</th>
                       <th className="text-left p-3">Descrição</th>
                       <th className="text-left p-3">Quantidade</th>
                       <th className="text-left p-3">Preço Unit.</th>
@@ -1645,7 +1646,7 @@ function SubstituirItemModalV2({
                   <tbody>
                     {itensOriginais.map((item, index) => (
                       <tr key={index} className="border-b hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <td className="p-3">{item.codprod}</td>
+                        <td className="p-3 font-mono text-sm">{item.produto?.ref || item.produto_ref || item.ref || '-'}</td>
                         <td className="p-3">{item.produto?.descr || item.produto_descr || item.descricao || 'Produto não encontrado'}</td>
                         <td className="p-3">{item.quantidade}</td>
                         <td className="p-3">R$ {Number(item.preco_unitario || 0).toFixed(2)}</td>
@@ -2015,7 +2016,7 @@ function SubstituirItemModalV3({
                         className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500"
                       />
                     </th>
-                    <th className="text-left p-3">Código</th>
+                    <th className="text-left p-3">Referência</th>
                     <th className="text-left p-3">Descrição</th>
                     <th className="text-left p-3">Quantidade</th>
                     <th className="text-left p-3">Preço Unit.</th>
@@ -2039,7 +2040,7 @@ function SubstituirItemModalV3({
                           className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500"
                         />
                       </td>
-                      <td className="p-3">{item.codprod}</td>
+                      <td className="p-3 font-mono text-sm">{item.produto?.ref || item.produto_ref || item.ref || '-'}</td>
                       <td className="p-3">{item.produto?.descr || item.produto_descr || item.descricao || 'Produto não encontrado'}</td>
                       <td className="p-3">{item.quantidade}</td>
                       <td className="p-3">R$ {Number(item.preco_unitario || 0).toFixed(2)}</td>

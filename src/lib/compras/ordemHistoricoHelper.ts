@@ -47,7 +47,10 @@ export type TipoAcaoOrdem =
   | 'EDICAO'
   | 'SUBSTITUIR_ITEM'
   | 'FECHAR_ITEM'
-  | 'BAIXAR_PENDENCIA';
+  | 'BAIXAR_PENDENCIA'
+  // Ajuste da quantidade do item da OC para casar com a quantidade da NFe,
+  // autorizado por senha — o "Múltiplo de Compras" do Delphi.
+  | 'MULTIPLO_COMPRA';
 
 export interface HistoricoOrdemParams {
   orcId: number;
