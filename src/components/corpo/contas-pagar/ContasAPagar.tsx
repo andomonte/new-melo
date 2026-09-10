@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { toast } from 'sonner';
-import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2, Search } from 'lucide-react';
+import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2, Search, Landmark, MoreHorizontal, ChevronDown } from 'lucide-react';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import DropdownContasPagar from '@/components/common/DropdownContasPagar';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
@@ -27,6 +27,10 @@ import { useModaisContasPagar } from './useModaisContasPagar';
 import ModaisDashboard from './ModaisDashboard';
 import BotoesAcaoHeader from './BotoesAcaoHeader';
 import ModalRelatoriosContasP from './ModalRelatoriosContasP';
+import ModalConciliacaoPagar from './ModalConciliacaoPagar';
+import ModalImportarDDA from './ModalImportarDDA';
+import ModalConsultaAvancadaPag from './ModalConsultaAvancadaPag';
+import ModalCadastrarFornecedor from '@/components/corpo/admin/cadastro/fornecedores/modalCadastrar';
 import { formatarMoeda, formatarData, formatarDataHora, calcularDiasAtraso, obterCorStatus, obterTextoStatus } from './utils';
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
 
@@ -199,6 +203,13 @@ export function ContasAPagar() {
   });
   const [exportando, setExportando] = useState(false);
   const [modalRelatorioAberto, setModalRelatorioAberto] = useState(false);
+  const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
+  const [modalDDAAberto, setModalDDAAberto] = useState(false);
+  const [ddaFornecedorAberto, setDdaFornecedorAberto] = useState(false);
+  const [ddaFornecedorInicial, setDdaFornecedorInicial] = useState<any>(null);
+  const [ddaReprocessar, setDdaReprocessar] = useState(0);
+  const [menuAcoesAberto, setMenuAcoesAberto] = useState(false);
+  const [modalConsultaAvancadaPagAberto, setModalConsultaAvancadaPagAberto] = useState(false);
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [dadosParaExportar, setDadosParaExportar] = useState<ContaPagar[]>([]);
   const [colunasParaExportar, setColunasParaExportar] = useState<string[]>([]);
@@ -494,6 +505,64 @@ export function ContasAPagar() {
   };
 
   const removerParcelaNT = (idx: number) => setParcelas((prev) => prev.filter((_, i) => i !== idx));
+
+  // Lançar um título NOVO do DDA como conta a pagar: pré-preenche o form Nova Conta
+  // (credor, valor, emissão, duplicata, Tem Cobrança=boleto) + a parcela do vencimento.
+  // O usuário completa Conta Financeira / Comprador / Conta e salva.
+  const handleLancarDda = (t: any) => {
+    const dataHoje = new Date().toISOString().split('T')[0];
+    const emissao = t.dtEmissao || dataHoje;
+    setNovaContaDados({
+      tipo: 'F',
+      cod_credor: t.cod_credor || null,
+      cod_transp: null,
+      cod_conta: null,
+      pag_cof_id: null,
+      cod_ccusto: null,
+      cod_comprador: null,
+      dt_emissao: emissao,
+      dt_venc: t.dtVenc || emissao,
+      valor_pgto: Number(t.valor) || 0,
+      nro_nf: '',
+      tem_nota: false,
+      obs: `Lançado do DDA (${t.cnpjFmt || ''} - ${t.nome || ''})`.slice(0, 200),
+      tem_cobr: true, // boleto DDA = tem cobrança
+      nro_dup: t.documento || '',
+      parcelado: true,
+      num_parcelas: 1,
+      intervalo_dias: 30,
+      banco: null,
+      eh_internacional: false,
+      moeda: '',
+      taxa_conversao: 0,
+      valor_moeda: 0,
+      nro_invoice: '',
+      nro_contrato: '',
+    });
+    setValorPgtoInput((Number(t.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    // parcela única com o vencimento do DDA
+    if (t.dtVenc) {
+      const base = new Date(emissao + 'T00:00:00');
+      const venc = new Date(t.dtVenc + 'T00:00:00');
+      const dias = Math.max(1, Math.ceil((venc.getTime() - base.getTime()) / (1000 * 60 * 60 * 24)));
+      setParcelas([{ dias, vencimento: t.dtVenc }]);
+    } else {
+      setParcelas([]);
+    }
+    setPrazoSelecionado('1');
+    setModalKey(Math.random()); // re-renderiza os Autocomplete com o novo credor
+    setModalDDAAberto(false);
+    modais.setModalNovaContaAberto(true);
+    toast.info('Complete Conta Financeira, Comprador e Conta, e salve.');
+  };
+
+  // Cadastrar fornecedor a partir do cedente do DDA: abre o modal de cadastro de fornecedor
+  // PRÉ-PREENCHIDO (tipo/CNPJ/nome); o usuário completa os obrigatórios e salva. Ao salvar,
+  // re-processa o DDA para atualizar "Cadastrado?" e liberar o "Lançar".
+  const handlePedirCadastroDda = (cedente: { nome: string; cnpjFmt: string; tipo: 'F' | 'J' }) => {
+    setDdaFornecedorInicial({ tipo: cedente.tipo, cpf_cgc: cedente.cnpjFmt, nome: cedente.nome });
+    setDdaFornecedorAberto(true);
+  };
 
   // Headers da tabela (adicionar mais colunas conforme dbpgto)
   const headers = [
@@ -2765,13 +2834,47 @@ export function ContasAPagar() {
               icon={<Search className="w-4 h-4" />}
               text="Pesquisar"
             />
-            <DefaultButton
-              variant="secondary"
-              size="default"
-              onClick={() => setModalRelatorioAberto(true)}
-              icon={<FileBarChart className="w-4 h-4" />}
-              text="Relatório"
-            />
+            {/* Ações secundárias agrupadas num menu (espelha o Contas a Receber) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuAcoesAberto((v) => !v)}
+                aria-expanded={menuAcoesAberto}
+                aria-haspopup="true"
+                className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium transition ${
+                  menuAcoesAberto
+                    ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <MoreHorizontal className="w-4 h-4" /> Ações <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              </button>
+              {menuAcoesAberto && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuAcoesAberto(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[240px] rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-1.5">
+                    <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      Ações do Contas a Pagar
+                    </div>
+                    {[
+                      { icon: <FileBarChart className="w-4 h-4" />, label: 'Relatório', onClick: () => setModalRelatorioAberto(true) },
+                      { icon: <FileBarChart className="w-4 h-4" />, label: 'Consulta Avançada', onClick: () => setModalConsultaAvancadaPagAberto(true) },
+                      { icon: <Landmark className="w-4 h-4" />, label: 'Conciliação', onClick: () => setModalConciliacaoAberto(true) },
+                      { icon: <FileText className="w-4 h-4" />, label: 'Importar DDA', onClick: () => setModalDDAAberto(true) },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => { setMenuAcoesAberto(false); item.onClick(); }}
+                        className="flex w-full items-center gap-2.5 px-2 py-2 rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/40 dark:hover:text-blue-300 transition"
+                      >
+                        <span className="text-gray-400 dark:text-gray-500">{item.icon}</span> {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <DefaultButton
               variant="primary"
               size="default"
@@ -4896,6 +4999,43 @@ export function ContasAPagar() {
         onClose={() => setModalRelatorioAberto(false)}
         userName={user?.usuario}
       />
+
+      {/* Conciliação bancária — lê o extrato (saídas) e casa com títulos a pagar em aberto */}
+      <ModalConciliacaoPagar
+        isOpen={modalConciliacaoAberto}
+        onClose={() => setModalConciliacaoAberto(false)}
+        usuario={user?.usuario}
+        onBaixaConcluida={() => consultarContasPagar(paginaAtual, limite, filtros)}
+      />
+
+      {/* Consulta Avançada do Financeiro — Pagamentos (pivô por conta financeira × mês) */}
+      <ModalConsultaAvancadaPag
+        isOpen={modalConsultaAvancadaPagAberto}
+        onClose={() => setModalConsultaAvancadaPagAberto(false)}
+        usuario={user?.usuario}
+      />
+
+      {/* Importar Arquivo DDA (CNAB240) — lê os títulos registrados no banco e checa cedentes */}
+      <ModalImportarDDA
+        isOpen={modalDDAAberto}
+        onClose={() => setModalDDAAberto(false)}
+        onLancarConta={handleLancarDda}
+        onPedirCadastro={handlePedirCadastroDda}
+        reprocessarSignal={ddaReprocessar}
+      />
+
+      {/* Cadastro de fornecedor a partir do DDA (pré-preenchido) */}
+      {ddaFornecedorAberto && (
+        <ModalCadastrarFornecedor
+          isOpen={ddaFornecedorAberto}
+          onClose={() => setDdaFornecedorAberto(false)}
+          dadosIniciais={ddaFornecedorInicial}
+          onSuccess={() => {
+            setDdaFornecedorAberto(false);
+            setDdaReprocessar((n) => n + 1); // re-processa o DDA e atualiza "Cadastrado?"
+          }}
+        />
+      )}
     </div>
   );
 }
