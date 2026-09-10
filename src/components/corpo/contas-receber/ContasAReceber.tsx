@@ -15,7 +15,19 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch, ChevronDown, MoreHorizontal, X } from 'lucide-react';
+
+// Rótulos dos chips de "filtros ativos" (espelham os campos/operadores do filtro avançado).
+const ROTULO_CAMPO_FILTRO: Record<string, string> = {
+  cod_receb: 'Número Título', codcli: 'Cód. Cliente', nome_cliente: 'Cliente', cliente: 'Cliente',
+  dt_emissao: 'Emissão', dt_venc: 'Vencimento', dt_pgto: 'Pagamento',
+  valor_original: 'Valor Original', valor_recebido: 'Valor Recebido',
+  nro_doc: 'Nº Documento', cod_fat: 'Fatura', banco: 'Banco', descricao_conta: 'Conta Financeira',
+};
+const ROTULO_OP_FILTRO: Record<string, string> = {
+  'contém': 'contém', igual: '=', diferente: '≠', 'começa': 'começa com', termina: 'termina com',
+  maior: '>', maior_igual: '≥', menor: '<', menor_igual: '≤', nulo: 'é nulo', nao_nulo: 'não nulo',
+};
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
@@ -27,6 +39,7 @@ import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRece
 import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
 import ModalConciliacao from '@/components/corpo/contas-receber/ModalConciliacao';
 import ModalConsultaAvancadaReceb from '@/components/corpo/contas-receber/ModalConsultaAvancadaReceb';
+import { CreditoTemporarioModal } from '@/components/corpo/admin/cadastro/clientes/creditoTemporario/CreditoTemporarioModal';
 import ModalAIdentificar from '@/components/corpo/contas-receber/ModalAIdentificar';
 import { formatarBRL } from '@/utils/monetario';
 
@@ -291,6 +304,8 @@ export default function ContasAReceber() {
   const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
   const [modalAIdentificarAberto, setModalAIdentificarAberto] = useState(false);
   const [modalConsultaAvancadaAberto, setModalConsultaAvancadaAberto] = useState(false);
+  const [menuAcoesAberto, setMenuAcoesAberto] = useState(false); // dropdown "Ações" da barra
+  const [modalCreditoTempAberto, setModalCreditoTempAberto] = useState(false);
 
   // Bancos do Novo Título: vêm da dbbanco_cobranca filtrada por ATIVO (mesma fonte do
   // cadastro do cliente). Fallback = lista fixa se a busca falhar.
@@ -1190,9 +1205,40 @@ export default function ContasAReceber() {
     setFiltros(prev => {
       const novos = { ...prev } as any;
       ['cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'search', 'status',
-       'vendedor', 'operadora', 'conta', 'tipo', 'com_atraso'
+       'vendedor', 'operadora', 'conta', 'tipo', 'com_atraso', 'filtros_avancados'
       ].forEach(k => delete novos[k]);
       return novos; // mantém data_inicio/data_fim (período)
+    });
+    setPaginaAtual(1);
+  };
+
+  // Chips dos filtros ativos (avançados + status) — visíveis na tela, com ✕ para remover.
+  const chipsFiltros: { chave: string; label: string }[] = (() => {
+    const out: { chave: string; label: string }[] = [];
+    if (filtros.status) out.push({ chave: '__status', label: `Status: ${filtros.status}` });
+    try {
+      const av = (filtros as any).filtros_avancados ? JSON.parse((filtros as any).filtros_avancados) : [];
+      for (const f of Array.isArray(av) ? av : []) {
+        const camp = ROTULO_CAMPO_FILTRO[String(f.campo).toLowerCase()] || String(f.campo);
+        const opl = ROTULO_OP_FILTRO[f.tipo] || f.tipo;
+        const val = f.tipo === 'nulo' || f.tipo === 'nao_nulo' ? '' : ` ${f.valor}`;
+        out.push({ chave: String(f.campo), label: `${camp} ${opl}${val}` });
+      }
+    } catch { /* json inválido — ignora */ }
+    return out;
+  })();
+
+  const removerChip = (chave: string) => {
+    setFiltros((prev) => {
+      const novos = { ...prev } as any;
+      if (chave === '__status') { delete novos.status; return novos; }
+      try {
+        const av = novos.filtros_avancados ? JSON.parse(novos.filtros_avancados) : [];
+        const rest = (Array.isArray(av) ? av : []).filter((f: any) => String(f.campo) !== chave);
+        if (rest.length) novos.filtros_avancados = JSON.stringify(rest);
+        else delete novos.filtros_avancados;
+      } catch { delete novos.filtros_avancados; }
+      return novos;
     });
     setPaginaAtual(1);
   };
@@ -1547,60 +1593,63 @@ export default function ContasAReceber() {
             >
               <Search className="w-4 h-4" /> Pesquisar
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                const hoje = new Date();
-                const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-                setRelatParams((p) => ({
-                  ...p,
-                  data_inicio: p.data_inicio || ini.toISOString().split('T')[0],
-                  data_fim: p.data_fim || fim.toISOString().split('T')[0],
-                }));
-                setModalRelatorioAberto(true);
-              }}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileBarChart className="w-4 h-4" /> Relatório
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalImportacaoCartao(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <CreditCard className="w-4 h-4" /> Importar Cartão
-            </button>
-            <button
-              type="button"
-              onClick={() => abrirComprovantes()}
-              title={selecionadosBaixa.length > 0 ? 'Abre já filtrado pelo cliente selecionado' : 'Comprovantes de hoje'}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileText className="w-4 h-4" /> Comprovantes
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalConciliacaoAberto(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <Upload className="w-4 h-4" /> Conciliação
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalAIdentificarAberto(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileSearch className="w-4 h-4" /> A Identificar
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalConsultaAvancadaAberto(true)}
-              title="Consulta Avançada do Financeiro — Recebimentos (por conta financeira, mês a mês)"
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileBarChart className="w-4 h-4" /> Consulta Avançada
-            </button>
+            {/* Ações secundárias agrupadas num menu (mantém a barra em 1 linha) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuAcoesAberto((v) => !v)}
+                aria-expanded={menuAcoesAberto}
+                aria-haspopup="true"
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition ${
+                  menuAcoesAberto
+                    ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <MoreHorizontal className="w-4 h-4" /> Ações <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              </button>
+              {menuAcoesAberto && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuAcoesAberto(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[240px] rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-1.5">
+                    <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      Ações do Contas a Receber
+                    </div>
+                    {[
+                      {
+                        icon: <FileBarChart className="w-4 h-4" />, label: 'Relatório',
+                        onClick: () => {
+                          const hoje = new Date();
+                          const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                          const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+                          setRelatParams((p) => ({
+                            ...p,
+                            data_inicio: p.data_inicio || ini.toISOString().split('T')[0],
+                            data_fim: p.data_fim || fim.toISOString().split('T')[0],
+                          }));
+                          setModalRelatorioAberto(true);
+                        },
+                      },
+                      { icon: <CreditCard className="w-4 h-4" />, label: 'Importar Cartão', onClick: () => setModalImportacaoCartao(true) },
+                      { icon: <FileText className="w-4 h-4" />, label: 'Comprovantes', onClick: () => abrirComprovantes() },
+                      { icon: <Upload className="w-4 h-4" />, label: 'Conciliação', onClick: () => setModalConciliacaoAberto(true) },
+                      { icon: <FileSearch className="w-4 h-4" />, label: 'A Identificar', onClick: () => setModalAIdentificarAberto(true) },
+                      { icon: <FileBarChart className="w-4 h-4" />, label: 'Consulta Avançada', onClick: () => setModalConsultaAvancadaAberto(true) },
+                      { icon: <DollarSign className="w-4 h-4" />, label: 'Crédito Temporário', onClick: () => setModalCreditoTempAberto(true) },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => { setMenuAcoesAberto(false); item.onClick(); }}
+                        className="flex w-full items-center gap-2.5 px-2 py-2 rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/40 dark:hover:text-blue-300 transition"
+                      >
+                        <span className="text-gray-400 dark:text-gray-500">{item.icon}</span> {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setModalNovaContaAberto(true)}
@@ -1636,6 +1685,27 @@ export default function ContasAReceber() {
           </div>
         )}
 
+        {/* Filtros ativos — visíveis e removíveis (inclui os do "Filtro avançado") */}
+        {chipsFiltros.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Filtros ativos:</span>
+            {chipsFiltros.map((ch) => (
+              <span
+                key={ch.chave}
+                className="inline-flex items-center gap-1.5 text-[11px] rounded-full px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              >
+                {ch.label}
+                <button type="button" onClick={() => removerChip(ch.chave)} title="Remover este filtro" className="hover:text-blue-900 dark:hover:text-blue-100">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            <button type="button" onClick={handleLimparFiltros} className="text-[11px] text-red-600 hover:underline ml-1">
+              Limpar tudo
+            </button>
+          </div>
+        )}
+
         {/* Container da tabela com altura calculada */}
         <div className="flex-1 min-h-20 flex flex-col">
           <DataTableContasPagar
@@ -1667,6 +1737,7 @@ export default function ContasAReceber() {
             // calculadas → ficam fora). Os rótulos espelham os headers do datatable.
             colunasFiltro={[
               'cod_receb',
+              'codcli',
               'nome_cliente',
               'dt_emissao',
               'dt_venc',
@@ -1681,6 +1752,7 @@ export default function ContasAReceber() {
             ]}
             rotulosFiltro={{
               cod_receb: 'Número Título',
+              codcli: 'Cód. Cliente',
               nome_cliente: 'Cliente',
               dt_emissao: 'Emissão',
               dt_venc: 'Vencimento',
@@ -2822,6 +2894,12 @@ export default function ContasAReceber() {
         filial="MAO"
       />
 
+      {/* Crédito Temporário (Financeiro › Contas a Receber › Crédito Temporário no Delphi) */}
+      <CreditoTemporarioModal
+        isOpen={modalCreditoTempAberto}
+        onClose={() => setModalCreditoTempAberto(false)}
+      />
+
       <ModalAIdentificar
         isOpen={modalAIdentificarAberto}
         onClose={() => setModalAIdentificarAberto(false)}
@@ -3158,27 +3236,22 @@ export default function ContasAReceber() {
             Escolha o relatório e informe os <b>parâmetros próprios</b> dele (período, cliente, conta, classe e taxa de juros), como na tela de relatórios do Delphi.
           </p>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
-            Tipo de Relatório
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {OPCOES_RELATORIO.map((op) => (
-              <button
-                key={op.value}
-                type="button"
-                onClick={() => setTipoRelatorio(op.value)}
-                className={`text-left px-3 py-2 rounded-md border transition ${
-                  tipoRelatorio === op.value
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
-                }`}
-              >
-                <div className="text-xs font-semibold">{op.label}</div>
-                <div className={`text-[10px] ${tipoRelatorio === op.value ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {op.desc}
-                </div>
-              </button>
-            ))}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 block mb-1">
+              Tipo de Relatório
+            </label>
+            <select
+              value={tipoRelatorio}
+              onChange={(e) => setTipoRelatorio(e.target.value as TipoRelatorio)}
+              className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-500"
+            >
+              {OPCOES_RELATORIO.map((op) => (
+                <option key={op.value} value={op.value}>{op.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+              {OPCOES_RELATORIO.find((o) => o.value === tipoRelatorio)?.desc}
+            </p>
           </div>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">

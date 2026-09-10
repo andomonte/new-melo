@@ -80,8 +80,10 @@ export default async function handler(
       }
     }
 
-    if (!dt_venc) {
-      return res.status(400).json({ erro: 'Data de vencimento é obrigatória' });
+    // Vencimento só é obrigatório quando há cobrança (fiel ao MELOSYS: sem cobrança,
+    // vDt_venc := NULL e o título é gravado em aberto, sem vencimento).
+    if (tem_cobr && !dt_venc) {
+      return res.status(400).json({ erro: 'Data de vencimento é obrigatória quando há cobrança' });
     }
 
     if (!valor_pgto || parseFloat(valor_pgto) <= 0) {
@@ -89,10 +91,10 @@ export default async function handler(
     }
 
     // Validações
-    if (!tipo || !dt_venc || !valor_pgto) {
+    if (!tipo || !valor_pgto) {
       return res.status(400).json({
         erro: 'Campos obrigatórios não preenchidos',
-        detalhes: 'tipo, dt_venc e valor_pgto são obrigatórios'
+        detalhes: 'tipo e valor_pgto são obrigatórios'
       });
     }
 
@@ -126,10 +128,12 @@ export default async function handler(
     const valorParcelaFormatado = Math.floor(valorParcela * 100) / 100;
     const restocentavos = parseFloat(valor_pgto) - (valorParcelaFormatado * totalParcelas);
     
-    // Gerar base do nro_dup se não fornecido
-    let baseDup = nro_dup || nro_nf || '';
-    if (!baseDup && parcelado && totalParcelas > 1) {
-      // Gerar um ID único baseado em timestamp
+    // Nro. da duplicata só é gravado quando há cobrança (tem_cobr), fiel ao Delphi
+    // (UniContasP: Check4 desmarcado → vNro_Dup := NULL). Sem cobrança, nro_dup fica NULL.
+    const temCobr = !!tem_cobr;
+    let baseDup = temCobr ? (nro_dup || '') : '';
+    if (temCobr && !baseDup && totalParcelas > 1) {
+      // Gerar um ID único baseado em timestamp (só quando há cobrança e múltiplas parcelas)
       baseDup = `DUP${Date.now().toString().slice(-8)}`;
     }
 
@@ -165,14 +169,17 @@ export default async function handler(
         ? parcelas[i].vencimento 
         : dt_venc;
 
-      // Calcular valor desta parcela (última parcela recebe os centavos restantes)
-      const valorDestaParcela = i === totalParcelas - 1 
+      // Calcular valor desta parcela (a PRIMEIRA parcela recebe os centavos restantes,
+      // igual ao Contas a Receber / criar.ts do CR)
+      const valorDestaParcela = i === 0
         ? valorParcelaFormatado + restocentavos
         : valorParcelaFormatado;
 
-      // Gerar nro_dup para esta parcela (formato: base/X ou X/Y)
-      const nroDupParcela = totalParcelas > 1 
-        ? `${baseDup}/${String(i + 1).padStart(2, '0')}` 
+      // Gerar nro_dup para esta parcela (formato: base/X ou X/Y). Sem cobrança → NULL.
+      const nroDupParcela = !temCobr
+        ? null
+        : totalParcelas > 1
+        ? `${baseDup}/${String(i + 1).padStart(2, '0')}`
         : (baseDup || null);
 
       // Inserir a parcela

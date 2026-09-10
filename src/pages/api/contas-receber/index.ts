@@ -161,13 +161,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // rótulo do datatable em minúsculas) evita SQL injection; os valores são sempre parametrizados.
     // 'status' NÃO entra aqui — vai pelo statusFilter (é um CASE calculado). obs/parcela/juros não
     // são colunas filtráveis (obs não existe em dbreceb; parcela/juros são calculadas).
-    const FILTRO_COLS: Record<string, { sql: string; tipo: 'texto' | 'numero' | 'data' }> = {
+    const FILTRO_COLS: Record<string, { sql?: string; orCols?: string[]; tipo: 'texto' | 'numero' | 'data' }> = {
       cod_receb: { sql: 'CAST(r.cod_receb AS TEXT)', tipo: 'texto' },
       'número título': { sql: 'CAST(r.cod_receb AS TEXT)', tipo: 'texto' },
-      // Cliente busca por CÓDIGO + NOME (igual ao texto exibido "00056 - NOME"); codcli é varchar
-      // com zeros à esquerda ("00056"), então digitar o código acha o cliente certo.
-      nome_cliente: { sql: "(CAST(r.codcli AS TEXT) || ' - ' || COALESCE(c.nome, ''))", tipo: 'texto' },
-      cliente: { sql: "(CAST(r.codcli AS TEXT) || ' - ' || COALESCE(c.nome, ''))", tipo: 'texto' },
+      // Cliente busca por CÓDIGO ou NOME em qualquer operador (OR das duas colunas) — assim
+      // "igual 35454" acha pelo código e "contém MELO" acha pelo nome. codcli é varchar c/ zeros à esq.
+      nome_cliente: { orCols: ['CAST(r.codcli AS TEXT)', 'c.nome'], tipo: 'texto' },
+      cliente: { orCols: ['CAST(r.codcli AS TEXT)', 'c.nome'], tipo: 'texto' },
+      // Código do cliente (só o codcli) — filtro explícito por código.
+      codcli: { sql: 'CAST(r.codcli AS TEXT)', tipo: 'texto' },
+      'cód. cliente': { sql: 'CAST(r.codcli AS TEXT)', tipo: 'texto' },
       dt_emissao: { sql: 'r.dt_emissao', tipo: 'data' },
       'emissão': { sql: 'r.dt_emissao', tipo: 'data' },
       dt_venc: { sql: 'r.dt_venc', tipo: 'data' },
@@ -200,29 +203,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const col = FILTRO_COLS[String(f?.campo || '').toLowerCase().trim()];
         if (!col) continue;
         const op = String(f?.tipo || 'contém');
-        if (op === 'nulo') { whereClause += ` AND ${col.sql} IS NULL`; continue; }
-        if (op === 'nao_nulo') { whereClause += ` AND ${col.sql} IS NOT NULL`; continue; }
+        const baseSql = col.sql ?? (col.orCols ? col.orCols[0] : '');
+        if (op === 'nulo') { whereClause += ` AND ${baseSql} IS NULL`; continue; }
+        if (op === 'nao_nulo') { whereClause += ` AND ${baseSql} IS NOT NULL`; continue; }
         const valor = String(f?.valor ?? '').trim();
         if (!valor) continue;
 
         if (col.tipo === 'texto') {
+          const cols = col.orCols ?? [col.sql!]; // 1+ colunas (cliente = código OU nome)
           const ph = `$${paramIndex}`;
-          if (op === 'igual') { whereClause += ` AND UPPER(${col.sql}) = UPPER(${ph})`; params.push(valor); }
-          else if (op === 'diferente') { whereClause += ` AND (${col.sql} IS NULL OR UPPER(${col.sql}) <> UPPER(${ph}))`; params.push(valor); }
-          else if (op === 'começa') { whereClause += ` AND ${col.sql} ILIKE ${ph}`; params.push(`${valor}%`); }
-          else if (op === 'termina') { whereClause += ` AND ${col.sql} ILIKE ${ph}`; params.push(`%${valor}`); }
-          else { whereClause += ` AND ${col.sql} ILIKE ${ph}`; params.push(`%${valor}%`); } // contém (default)
+          let paramVal = valor;
+          let clauseFor: (c: string) => string;
+          if (op === 'igual') clauseFor = (c) => `UPPER(${c}) = UPPER(${ph})`;
+          else if (op === 'diferente') clauseFor = (c) => `(${c} IS NULL OR UPPER(${c}) <> UPPER(${ph}))`;
+          else if (op === 'começa') { paramVal = `${valor}%`; clauseFor = (c) => `${c} ILIKE ${ph}`; }
+          else if (op === 'termina') { paramVal = `%${valor}`; clauseFor = (c) => `${c} ILIKE ${ph}`; }
+          else { paramVal = `%${valor}%`; clauseFor = (c) => `${c} ILIKE ${ph}`; } // contém (default)
+          // "diferente" exige que NENHUMA coluna case (AND); os demais casam em QUALQUER (OR).
+          const inner = cols.map(clauseFor).join(op === 'diferente' ? ' AND ' : ' OR ');
+          whereClause += ` AND (${inner})`;
+          params.push(paramVal);
           paramIndex++;
         } else if (col.tipo === 'numero') {
           const num = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
           const ph = `$${paramIndex}`;
-          if (!Number.isFinite(num)) { whereClause += ` AND CAST(${col.sql} AS TEXT) ILIKE ${ph}`; params.push(`%${valor}%`); }
-          else { whereClause += ` AND ${col.sql} ${opComparador(op)} ${ph}`; params.push(num); }
+          if (!Number.isFinite(num)) { whereClause += ` AND CAST(${col.sql!} AS TEXT) ILIKE ${ph}`; params.push(`%${valor}%`); }
+          else { whereClause += ` AND ${col.sql!} ${opComparador(op)} ${ph}`; params.push(num); }
           paramIndex++;
         } else { // data
           const ph = `$${paramIndex}`;
-          if (op === 'contém') { whereClause += ` AND to_char(${col.sql},'DD/MM/YYYY') ILIKE ${ph}`; params.push(`%${valor}%`); }
-          else { whereClause += ` AND ${col.sql}::date ${opComparador(op)} ${ph}::date`; params.push(normalizarData(valor)); }
+          if (op === 'contém') { whereClause += ` AND to_char(${col.sql!},'DD/MM/YYYY') ILIKE ${ph}`; params.push(`%${valor}%`); }
+          else { whereClause += ` AND ${col.sql!}::date ${opComparador(op)} ${ph}::date`; params.push(normalizarData(valor)); }
           paramIndex++;
         }
       }

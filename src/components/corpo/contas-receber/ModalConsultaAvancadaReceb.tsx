@@ -398,6 +398,19 @@ export default function ModalConsultaAvancadaReceb({ isOpen, onClose, filial }: 
                   )}
                 </table>
               )}
+              {/* Resumo (fiel ao Delphi): Total Geral, Total Pago e Total Não Pago */}
+              {!carregandoDet && detalhe.titulos.length > 0 && (() => {
+                const tGeral = detalhe.titulos.reduce((s, t) => s + t.valor_pgto, 0);
+                const tPago = detalhe.titulos.reduce((s, t) => s + t.valor_pago, 0);
+                const tNao = tGeral - tPago;
+                return (
+                  <div className="mt-3 border-t border-gray-200 dark:border-slate-700 pt-2 flex flex-wrap justify-end gap-x-8 gap-y-1 text-xs">
+                    <span className="text-gray-600 dark:text-gray-300">Total Geral: <b className="tabular-nums">{brl(tGeral)}</b></span>
+                    <span className="text-emerald-700 dark:text-emerald-400">Total Pago: <b className="tabular-nums">{brl(tPago)}</b></span>
+                    <span className={tNao > 0.005 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}>Total Não Pago: <b className="tabular-nums">{brl(tNao)}</b></span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

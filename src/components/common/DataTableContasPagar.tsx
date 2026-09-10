@@ -137,11 +137,17 @@ export default function DataTableContasPagar({
       .then((data) => {
         if (data.preferences) {
           const p = data.preferences;
-          if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
-            setColunasVisiveis(p.colunasVisiveis);
-          }
+          // Mescla headers novos (adicionados após o usuário salvar prefs) para que
+          // colunas recém-criadas apareçam automaticamente em vez de ficarem ocultas.
           if (Array.isArray(p.ordemColunas) && p.ordemColunas.length > 0) {
-            setOrdemColunas(p.ordemColunas);
+            const salvos: string[] = p.ordemColunas.filter((h: string) => headers.includes(h));
+            const novos = headers.filter((h) => !salvos.includes(h));
+            setOrdemColunas([...salvos, ...novos]);
+            if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
+              setColunasVisiveis([...p.colunasVisiveis.filter((h: string) => headers.includes(h)), ...novos]);
+            }
+          } else if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
+            setColunasVisiveis(p.colunasVisiveis.filter((h: string) => headers.includes(h)));
           }
           if (p.sortColumn) setSortColumn(p.sortColumn);
           if (p.sortDirection) setSortDirection(p.sortDirection);
