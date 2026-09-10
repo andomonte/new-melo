@@ -190,6 +190,7 @@ const TelasPage = () => {
     try {
       const data = await getTelas({ page, perPage, search });
       setTelas(data);
+      setCarregou(true);
     } catch (error) {
       console.error('Erro ao buscar telas:', error);
       toast({
@@ -349,7 +350,9 @@ const TelasPage = () => {
       document.removeEventListener('mouseup', handleClickOutside);
     };
   }, [dropdownStates]);
-  const [newRows, setNewRows]: any = useState('inicial');
+  // Flag de "já carregou" — evita o loop de re-render do antigo newRows (que travava
+  // a navegação ao sair desta tela).
+  const [carregou, setCarregou] = useState(false);
   const rows = telas.data?.map((tela) => ({
     NOME_TELA: tela.NOME_TELA,
     PATH_TELA: tela.PATH_TELA,
@@ -437,9 +440,6 @@ const TelasPage = () => {
       </div>
     ),
   }));
-  useEffect(() => {
-    if (rows.length) setNewRows(rows);
-  }, [rows]);
   return (
     <div className="h-full flex flex-col flex-grow bg-white dark:bg-slate-900">
       <main className="p-4 w-full">
@@ -464,7 +464,7 @@ const TelasPage = () => {
 
         <DataTable
           headers={headers}
-          rows={newRows}
+          rows={carregou ? rows : (undefined as any)}
           meta={telas.meta}
           onPageChange={handlePageChange}
           onPerPageChange={handlePerPageChange}

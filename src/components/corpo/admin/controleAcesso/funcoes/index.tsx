@@ -181,7 +181,10 @@ const FuncaosPage = () => {
   const [iconRotations, setIconRotations] = useState<{
     [key: number]: boolean;
   }>({});
-  const [newRows, setNewRows]: any = useState('inicial');
+  // Flag de "já carregou ao menos uma vez" — antes disso o DataTable mostra o loader.
+  // (Substitui o antigo estado newRows, que era realimentado a cada render e causava
+  //  um loop de re-render, travando a saída desta tela na navegação.)
+  const [carregou, setCarregou] = useState(false);
   const handlePageChange = (page: number) => setPage(page);
   const handlePerPageChange = (perPage: number) => setPerPage(perPage);
 
@@ -193,6 +196,7 @@ const FuncaosPage = () => {
     try {
       const data = await getFuncoes({ page, perPage, search });
       setFuncoes(data);
+      setCarregou(true);
     } catch (error) {
       console.error('Erro ao buscar funções:', error);
       toast({
@@ -439,9 +443,6 @@ const FuncaosPage = () => {
       </div>
     ),
   }));
-  useEffect(() => {
-    if (rows.length) setNewRows(rows);
-  }, [rows]);
   return (
     <div className="h-full flex flex-col flex-grow bg-white dark:bg-slate-900">
       <main className="p-4 w-full">
@@ -466,7 +467,7 @@ const FuncaosPage = () => {
 
         <DataTable
           headers={headers}
-          rows={newRows}
+          rows={carregou ? rows : (undefined as any)}
           meta={funcoes.meta}
           onPageChange={handlePageChange}
           onPerPageChange={handlePerPageChange}
