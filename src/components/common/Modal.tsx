@@ -4,6 +4,9 @@ interface ModalProps {
   children: React.ReactNode;
   title?: string;
   width?: string;
+  /** Classe do corpo do modal. Default rola o conteúdo (overflow-y-auto).
+   *  Use "overflow-visible" quando houver combobox/dropdown que precisa transbordar. */
+  bodyClassName?: string;
 }
 
 export default function Modal({
@@ -12,6 +15,7 @@ export default function Modal({
   children,
   title,
   width = 'w-[94%] max-w-7xl',
+  bodyClassName = 'overflow-y-auto max-h-[85vh]',
 }: ModalProps) {
   if (!isOpen) return null;
 
@@ -31,7 +35,7 @@ export default function Modal({
             ✕
           </button>
         </div>
-        <div className="space-y-3 overflow-y-auto max-h-[85vh]">{children}</div>
+        <div className={`space-y-3 ${bodyClassName}`}>{children}</div>
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch, ChevronDown, MoreHorizontal, X } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch, ChevronDown, MoreHorizontal, X, Columns3, Printer } from 'lucide-react';
 
 // Rótulos dos chips de "filtros ativos" (espelham os campos/operadores do filtro avançado).
 const ROTULO_CAMPO_FILTRO: Record<string, string> = {
@@ -247,6 +247,9 @@ export default function ContasAReceber() {
       return arr;
     });
   };
+  // Preview do relatório na tela + toggle do gerenciador de colunas (fluxo do Contas a Pagar).
+  const [relatResultado, setRelatResultado] = useState<{ titulo: string; layout: string; rows: any[] } | null>(null);
+  const [mostrarColunasRelat, setMostrarColunasRelat] = useState(false);
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [modalImportacaoCartao, setModalImportacaoCartao] = useState(false);
   const [contaSelecionada, setContaSelecionada] = useState<ContaReceber | null>(null);
@@ -1031,13 +1034,112 @@ export default function ContasAReceber() {
       window.URL.revokeObjectURL(url);
 
       toast.success(`Relatório ${formato.toUpperCase()} gerado com sucesso!`);
-      setModalRelatorioAberto(false);
     } catch (error: any) {
       console.error('Erro ao gerar relatório:', error);
       toast.error(error.message || 'Erro ao gerar relatório');
     } finally {
       setGerandoRelatorio(false);
     }
+  };
+
+  // ── Preview na tela + Imprimir (fluxo igual ao Contas a Pagar) ──
+  const TIPO_COL_REL: Record<string, 'text' | 'num' | 'money' | 'date'> = {
+    nro_doc: 'text', dias: 'num', cliente: 'text', cod_conta: 'text', valor_pgto: 'money',
+    valor_juros: 'money', valor_rec: 'money', valor_aberto: 'money', dt_emissao: 'date',
+    dt_venc: 'date', parcela: 'text', tarifa: 'money', dt_pgto: 'date',
+  };
+  const MONEY_KEYS_REL = ['valor_pgto', 'valor_juros', 'valor_rec', 'valor_aberto', 'tarifa'];
+  const brlRel = (v: any) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDataRel = (d: any) => { if (!d) return '—'; const dt = new Date(d); return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR'); };
+  const valorColRel = (key: string, row: any) => {
+    const t = TIPO_COL_REL[key]; const v = row[key];
+    if (t === 'money') return brlRel(v);
+    if (t === 'date') return fmtDataRel(v);
+    return v == null ? '' : String(v);
+  };
+  const colunasVisiveisRel = () => relatColunas.filter((c) => c.visivel);
+  // Agrupa por cliente quando layout='por_cliente'; senão um grupo único (lista).
+  const agruparRelat = (rows: any[], layout: string) => {
+    const somaGrupo = () => Object.fromEntries(MONEY_KEYS_REL.map((k) => [k, 0])) as Record<string, number>;
+    if (layout !== 'por_cliente') {
+      const sub = somaGrupo();
+      rows.forEach((r) => MONEY_KEYS_REL.forEach((k) => (sub[k] += Number(r[k] || 0))));
+      return { grupos: [{ rotulo: null as string | null, linhas: rows, sub }], total: sub, qtd: rows.length };
+    }
+    const mapa = new Map<string, { rotulo: string; linhas: any[]; sub: Record<string, number> }>();
+    const total = somaGrupo();
+    for (const r of rows) {
+      const chave = String(r.cliente || '—');
+      if (!mapa.has(chave)) mapa.set(chave, { rotulo: chave, linhas: [], sub: somaGrupo() });
+      const g = mapa.get(chave)!;
+      g.linhas.push(r);
+      MONEY_KEYS_REL.forEach((k) => { g.sub[k] += Number(r[k] || 0); total[k] += Number(r[k] || 0); });
+    }
+    return { grupos: Array.from(mapa.values()), total, qtd: rows.length };
+  };
+
+  const gerarPreviewRelatorio = async () => {
+    try {
+      setGerandoRelatorio(true);
+      setRelatResultado(null);
+      const params = new URLSearchParams();
+      params.append('formato', 'json');
+      params.append('tipo', tipoRelatorio);
+      const campos = CAMPOS_RELATORIO[tipoRelatorio];
+      if (campos.datas) {
+        if (relatParams.data_inicio) params.append('data_inicio', relatParams.data_inicio);
+        if (relatParams.data_fim) params.append('data_fim', relatParams.data_fim);
+      }
+      if (campos.cliente && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
+      if (campos.conta && relatParams.cod_conta.trim()) params.append('cod_conta', relatParams.cod_conta.trim());
+      if (campos.classe && relatParams.classe_pgto && relatParams.classe_pgto !== 'T') params.append('classe_pgto', relatParams.classe_pgto);
+      if (campos.juros && relatParams.tx_juros.trim()) params.append('tx_juros', relatParams.tx_juros.trim());
+      const colunasSel = relatColunas.filter((c) => c.visivel).map((c) => c.key);
+      if (colunasSel.length === 0) { toast.error('Selecione ao menos uma coluna.'); setGerandoRelatorio(false); return; }
+      params.append('colunas', colunasSel.join(','));
+      const r = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || data.erro || 'Erro ao gerar relatório');
+      setRelatResultado(data);
+      if (!data.rows?.length) toast.info('Nenhum registro para os filtros informados.');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao gerar relatório');
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
+  const imprimirRelatorio = () => {
+    if (!relatResultado) return;
+    const cols = colunasVisiveisRel();
+    const { grupos, total, qtd } = agruparRelat(relatResultado.rows, relatResultado.layout);
+    const w = window.open('', '_blank', 'width=1200,height=800');
+    if (!w) { toast.error('Permita pop-ups para imprimir.'); return; }
+    const th = cols.map((c) => `<th class="${TIPO_COL_REL[c.key] === 'money' || TIPO_COL_REL[c.key] === 'num' ? 'n' : ''}">${c.label}</th>`).join('');
+    const tdLinha = (row: any) => `<tr>${cols.map((c) => `<td class="${TIPO_COL_REL[c.key] === 'money' || TIPO_COL_REL[c.key] === 'num' ? 'n' : ''}">${valorColRel(c.key, row)}</td>`).join('')}</tr>`;
+    const linhaResumo = (sub: Record<string, number>, label: string, cls: string) => {
+      let feito = false;
+      return `<tr class="${cls}">${cols.map((c, i) => {
+        if (MONEY_KEYS_REL.includes(c.key)) return `<td class="n">${brlRel(sub[c.key])}</td>`;
+        if (i === 0 && !feito) { feito = true; return `<td>${label}</td>`; }
+        return '<td></td>';
+      }).join('')}</tr>`;
+    };
+    const corpo = grupos.map((g) => `
+      ${g.rotulo ? `<tr class="grp"><td colspan="${cols.length}">${g.rotulo} — ${g.linhas.length} título(s)</td></tr>` : ''}
+      ${g.linhas.map(tdLinha).join('')}
+      ${g.rotulo ? linhaResumo(g.sub, 'SUBTOTAL', 'sub') : ''}`).join('');
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${relatResultado.titulo}</title>
+      <style>body{font-family:Arial,Helvetica,sans-serif;font-size:11px;margin:20px;color:#111}
+      h1{font-size:14px;margin:0}.sub-h{font-size:11px;color:#444;margin:2px 0 12px}
+      table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:3px 5px;text-align:left;white-space:nowrap}
+      th{background:#eee}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+      tr.grp td{background:#dbe5f1;font-weight:bold}tr.sub td{background:#f2f2f2;font-weight:bold}tr.tot td{background:#c9d8ea;font-weight:bold}</style></head><body>
+      <h1>MELO DISTRIBUIDORA DE PECAS LTDA.</h1>
+      <div class="sub-h">${relatResultado.titulo} — emitido em ${new Date().toLocaleString('pt-BR')}</div>
+      <table><thead><tr>${th}</tr></thead><tbody>${corpo}${linhaResumo(total, `TOTAL GERAL (${qtd})`, 'tot')}</tbody></table></body></html>`);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 300);
   };
 
   // Função de exportação para Excel
@@ -3228,8 +3330,10 @@ export default function ContasAReceber() {
       {/* Modal Relatório */}
       <Modal
         isOpen={modalRelatorioAberto}
-        onClose={() => setModalRelatorioAberto(false)}
+        onClose={() => { setModalRelatorioAberto(false); setRelatResultado(null); }}
         title="Gerar Relatório - Contas a Receber"
+        width="w-[97%] max-w-7xl"
+        bodyClassName="overflow-visible"
       >
         <div className="form-compact space-y-4 p-4">
           <p className="text-xs text-gray-600 dark:text-gray-400">
@@ -3242,7 +3346,7 @@ export default function ContasAReceber() {
             </label>
             <select
               value={tipoRelatorio}
-              onChange={(e) => setTipoRelatorio(e.target.value as TipoRelatorio)}
+              onChange={(e) => { setTipoRelatorio(e.target.value as TipoRelatorio); setRelatResultado(null); }}
               className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-500"
             >
               {OPCOES_RELATORIO.map((op) => (
@@ -3333,69 +3437,139 @@ export default function ContasAReceber() {
             )}
           </div>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 flex items-center justify-between">
-            <span>Colunas do Relatório</span>
-            <span className="text-[10px] normal-case font-normal text-gray-400">marque para exibir · arraste para reordenar</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-            {relatColunas.map((c, i) => (
-              <div
-                key={c.key}
-                draggable
-                onDragStart={() => setDragColIdx(i)}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (dragColIdx !== null && dragColIdx !== i) {
-                    moverColuna(dragColIdx, i);
-                    setDragColIdx(i);
-                  }
-                }}
-                onDragEnd={() => setDragColIdx(null)}
-                className={`flex items-center gap-2 px-2 py-1 rounded border text-[11px] cursor-move select-none ${
-                  dragColIdx === i
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                    : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800'
-                }`}
-                title="Arraste para reordenar"
-              >
-                <span className="text-gray-400">⠿</span>
-                <input
-                  type="checkbox"
-                  checked={c.visivel}
-                  onChange={() => toggleColunaVisivel(i)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-3.5 w-3.5"
-                />
-                <span className={c.visivel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 line-through'}>{c.label}</span>
+          {/* Barra de ações: Gerar (preview) + Colunas (toggle) + Imprimir/PDF/Excel */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={gerandoRelatorio}
+              onClick={gerarPreviewRelatorio}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-md transition-colors text-sm font-medium"
+            >
+              {gerandoRelatorio ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Gerar
+            </button>
+            <button
+              type="button"
+              onClick={() => setMostrarColunasRelat((v) => !v)}
+              className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800"
+            >
+              <Columns3 className="w-4 h-4" />
+              Colunas ({relatColunas.filter((c) => c.visivel).length}/{relatColunas.length})
+            </button>
+            {relatResultado && relatResultado.rows.length > 0 && (
+              <div className="flex gap-2 ml-auto">
+                <button type="button" onClick={imprimirRelatorio} className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <Printer className="w-4 h-4" /> Imprimir
+                </button>
+                <button type="button" disabled={gerandoRelatorio} onClick={() => handleGerarRelatorio('pdf')} className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <FileText className="w-4 h-4" /> PDF
+                </button>
+                <button type="button" disabled={gerandoRelatorio} onClick={() => handleGerarRelatorio('excel')} className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <Download className="w-4 h-4" /> Excel
+                </button>
               </div>
-            ))}
+            )}
           </div>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">
-            Formato de Saída
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('pdf')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-              Gerar PDF
-            </button>
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('excel')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              Gerar Excel
-            </button>
-          </div>
+          {/* Gerenciador de colunas (colapsável) */}
+          {mostrarColunasRelat && (
+            <div className="border rounded-md p-3 bg-gray-50 dark:bg-zinc-900/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Colunas do Relatório (marque para exibir · arraste para reordenar)</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                {relatColunas.map((c, i) => (
+                  <div
+                    key={c.key}
+                    draggable
+                    onDragStart={() => setDragColIdx(i)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragColIdx !== null && dragColIdx !== i) { moverColuna(dragColIdx, i); setDragColIdx(i); }
+                    }}
+                    onDragEnd={() => setDragColIdx(null)}
+                    className={`flex items-center gap-2 px-2 py-1 rounded border text-[11px] cursor-move select-none ${
+                      dragColIdx === i ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800'
+                    }`}
+                    title="Arraste para reordenar"
+                  >
+                    <span className="text-gray-400">⠿</span>
+                    <input type="checkbox" checked={c.visivel} onChange={() => toggleColunaVisivel(i)} onClick={(e) => e.stopPropagation()} className="h-3.5 w-3.5" />
+                    <span className={c.visivel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 line-through'}>{c.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview do relatório */}
+          {relatResultado && relatResultado.rows.length > 0 && (() => {
+            const cols = colunasVisiveisRel();
+            const { grupos, total, qtd } = agruparRelat(relatResultado.rows, relatResultado.layout);
+            const ehNum = (k: string) => TIPO_COL_REL[k] === 'money' || TIPO_COL_REL[k] === 'num';
+            return (
+              <div className="border rounded-md overflow-auto max-h-[45vh]">
+                <table className="w-full text-xs whitespace-nowrap">
+                  <thead className="sticky top-0 bg-gray-100 dark:bg-zinc-800">
+                    <tr>{cols.map((c) => <th key={c.key} className={`px-2 py-1 border-b text-left ${ehNum(c.key) ? 'text-right' : ''}`}>{c.label}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {grupos.map((g, gi) => (
+                      <FragmentRelGrupo key={gi} rotulo={g.rotulo} linhas={g.linhas} sub={g.sub} cols={cols} valorColRel={valorColRel} brlRel={brlRel} moneyKeys={MONEY_KEYS_REL} ehNum={ehNum} />
+                    ))}
+                    <tr className="bg-blue-100 dark:bg-blue-900/40 font-bold">
+                      {cols.map((c, i) => (
+                        <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>
+                          {MONEY_KEYS_REL.includes(c.key) ? brlRel(total[c.key]) : i === 0 ? `TOTAL GERAL (${qtd})` : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+          {relatResultado && relatResultado.rows.length === 0 && (
+            <p className="text-sm text-muted-foreground py-6 text-center">Nenhum registro encontrado para os filtros informados.</p>
+          )}
         </div>
       </Modal>
     </div>
+  );
+}
+
+// Bloco de grupo do preview do relatório (cabeçalho opcional + linhas + subtotal).
+function FragmentRelGrupo({ rotulo, linhas, sub, cols, valorColRel, brlRel, moneyKeys, ehNum }: {
+  rotulo: string | null;
+  linhas: any[];
+  sub: Record<string, number>;
+  cols: { key: string; label: string }[];
+  valorColRel: (key: string, row: any) => string;
+  brlRel: (v: any) => string;
+  moneyKeys: string[];
+  ehNum: (k: string) => boolean;
+}) {
+  return (
+    <>
+      {rotulo && (
+        <tr className="bg-slate-200 dark:bg-slate-700 font-semibold">
+          <td className="px-2 py-1" colSpan={cols.length}>{rotulo} — {linhas.length} título(s)</td>
+        </tr>
+      )}
+      {linhas.map((row, i) => (
+        <tr key={i} className="border-b hover:bg-gray-50 dark:hover:bg-zinc-800/50">
+          {cols.map((c) => <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>{valorColRel(c.key, row)}</td>)}
+        </tr>
+      ))}
+      {rotulo && (
+        <tr className="bg-gray-100 dark:bg-zinc-800 font-semibold">
+          {cols.map((c, i) => (
+            <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>
+              {moneyKeys.includes(c.key) ? brlRel(sub[c.key]) : i === 0 ? 'SUBTOTAL' : ''}
+            </td>
+          ))}
+        </tr>
+      )}
+    </>
   );
 }

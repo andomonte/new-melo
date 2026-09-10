@@ -520,9 +520,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, colunas } = req.query;
   const colunasSel = parseColunas(colunas as string | undefined);
 
-  if (!formato || (formato !== 'pdf' && formato !== 'excel')) {
+  if (!formato || (formato !== 'pdf' && formato !== 'excel' && formato !== 'json')) {
     return res.status(400).json({
-      erro: 'Parâmetro "formato" é obrigatório e deve ser "pdf" ou "excel".',
+      erro: 'Parâmetro "formato" é obrigatório e deve ser "pdf", "excel" ou "json".',
     });
   }
 
@@ -581,6 +581,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     console.log(`📊 Registros encontrados: ${rows.length}`);
+
+    // Preview na tela (fluxo igual ao Contas a Pagar): retorna as linhas em JSON.
+    if (formato === 'json') {
+      return res.status(200).json({ titulo, layout, rows });
+    }
 
     if (rows.length === 0) {
       return res.status(400).json({ error: 'Nenhum registro encontrado para o período/filtros selecionados.' });

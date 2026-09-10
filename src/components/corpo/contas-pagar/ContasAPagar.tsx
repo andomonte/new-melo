@@ -26,6 +26,7 @@ import ModalSelecionarParcelas from '@/components/common/ModalSelecionarParcelas
 import { useModaisContasPagar } from './useModaisContasPagar';
 import ModaisDashboard from './ModaisDashboard';
 import BotoesAcaoHeader from './BotoesAcaoHeader';
+import ModalRelatoriosContasP from './ModalRelatoriosContasP';
 import { formatarMoeda, formatarData, formatarDataHora, calcularDiasAtraso, obterCorStatus, obterTextoStatus } from './utils';
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
 
@@ -4888,69 +4889,13 @@ export function ContasAPagar() {
         carregando={carregandoNotas}
       />
 
-      {/* Modal Relatório */}
-      <Modal
+      {/* Modal Relatórios — 7 tipos fiéis ao Delphi (Por Período, Conta Financeira,
+          Pagas sem NF, Comprador, Filtro da Tela, Centro de Custo, Grupo de Centros) */}
+      <ModalRelatoriosContasP
         isOpen={modalRelatorioAberto}
         onClose={() => setModalRelatorioAberto(false)}
-        title="Gerar Relatório - Contas a Pagar"
-      >
-        <div className="form-compact space-y-4 p-4">
-          <p className="text-xs text-gray-600 dark:text-gray-400">
-            O relatório será gerado com os filtros atualmente aplicados na tela
-            {rangeDataAtivo === 'semana' && ' (período: semana atual)'}
-            {rangeDataAtivo === 'mes' && ' (período: mês atual)'}
-            {rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada &&
-              ` (período: ${dataInicioPersonalizada} a ${dataFimPersonalizada})`}
-            {rangeDataAtivo === 'todos' && ' (todos os períodos)'}
-            {filtros.status && filtros.status !== 'todos' && ` — Status: ${filtros.status}`}
-            .
-          </p>
-
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
-            Colunas do Relatório
-          </div>
-          <div className="grid grid-cols-4 gap-1 text-[11px] text-gray-600 dark:text-gray-400">
-            <span>• COD</span>
-            <span>• NRO_DUP</span>
-            <span>• NOME</span>
-            <span>• VALOR</span>
-            <span>• PAGO</span>
-            <span>• ABERTO</span>
-            <span>• NRO_NF</span>
-            <span>• DT_VENC</span>
-            <span>• CONTA FINANCEIRA</span>
-            <span>• DT_PGTO</span>
-            <span>• DT_EMISSAO</span>
-            <span>• COD_CONTA</span>
-            <span>• OBS</span>
-            <span>• PAGA</span>
-          </div>
-
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">
-            Formato de Saída
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('pdf')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-              Gerar PDF
-            </button>
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('excel')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              Gerar Excel
-            </button>
-          </div>
-        </div>
-      </Modal>
+        userName={user?.usuario}
+      />
     </div>
   );
 }
