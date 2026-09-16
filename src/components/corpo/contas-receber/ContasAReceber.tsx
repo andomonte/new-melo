@@ -663,8 +663,14 @@ export default function ContasAReceber() {
         // Juros (se houver)
         <span key={`juros-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{(conta as any).valor_juros ? formatarMoeda((conta as any).valor_juros) : '-'}</span>,
 
-        // Nº Documento
-        <span key={`doc-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.nro_doc || '-'}</span>,
+        // Nº Documento — troca o sufixo de parcela em letra (A/B/C…) pela fração ("1/3")
+        <span key={`doc-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">
+          {conta.nro_doc
+            ? (conta.eh_parcelada && conta.parcela_atual
+                ? conta.nro_doc.replace(/[A-Za-z]$/, '') + '/' + conta.parcela_atual
+                : conta.nro_doc)
+            : '-'}
+        </span>,
 
         // Fatura
         <span key={`fat-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.cod_fat || '-'}</span>,

@@ -32,7 +32,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       nro_invoice,
       nro_contrato,
       search, // Busca geral
-      origem // 'cte' para notas de conhecimento, 'manual' para cadastro manual
+      origem, // 'cte' para notas de conhecimento, 'manual' para cadastro manual
+      origem_compras, // 'antecipado' | 'xml' | 'compras' — títulos gerados pelo Compras
+      entrada_status: entradaStatusFiltro // 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso'
     } = req.query;
 
     const offset = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -77,6 +79,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       whereClause += ` AND p.titulo_importado = true`;
     } else if (origem === 'manual') {
       whereClause += ` AND (p.titulo_importado IS NULL OR p.titulo_importado = false)`;
+    }
+
+    // Filtro por origem no Compras (antecipado / XML / todos do Compras).
+    // Obs.: xml_nf pode não estar preenchido na base de teste — o sinal confiável do
+    // pagamento gerado pela NFe é a obs "Pagamento ref. NFe ..." (o antecipado usa
+    // "Pagamento ref. Ordem de Compra ... - Pagamento Antecipado"), além da parcela 0.
+    if (origem_compras === 'antecipado') {
+      whereClause += ` AND EXISTS (SELECT 1 FROM ordem_pagamento_conta opc WHERE opc.cod_pgto = p.cod_pgto AND opc.numero_parcela = 0)`;
+    } else if (origem_compras === 'xml') {
+      whereClause += ` AND (p.xml_nf IS NOT NULL OR p.obs ILIKE 'Pagamento ref. NFe%')`;
+    } else if (origem_compras === 'compras') {
+      whereClause += ` AND ((p.ordem_compra IS NOT NULL AND p.ordem_compra NOT IN ('[]', '')) OR p.obs ILIKE 'Pagamento ref.%')`;
     }
 
     // Filtro por tipo (Fornecedor ou Transporte)
@@ -212,6 +226,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       whereClause += ` AND p.cancel != 'S'`;
     }
 
+    // Status da ENTRADA (fonte da verdade: dbnfe_ent.exec + codent / dbent), derivado
+    // sem usar o campo morto possui_entrada. Significado do exec (ver buscaNFes.ts):
+    //   N/R=Recebida, A=Em Andamento, C=Associada, S+codent=Entrada Gerada.
+    //   (NÃO existe estado "Cancelada" no exec da NFe de entrada.)
+    // Estados retornados:
+    //   gerada     → NFe da ordem com exec='S' E codent preenchido (dbent gerado) OU avulso c/ NF que casa dbent (verde)
+    //   nao_gerada → origem Compras sem entrada gerada ainda: Recebida/Em Andamento/Associada, ou antecipado sem NFe (amarelo)
+    //   avulso     → título avulso com NF sem entrada encontrada (preto)
+    //   null       → sem NF e sem Compras (neutro)
+    const entradaStatusExpr = `
+      CASE
+        WHEN p.ordem_compra IS NOT NULL AND p.ordem_compra NOT IN ('[]', '') THEN
+          CASE
+            WHEN (SELECT bool_or(ne.exec = 'S' AND ne.codent IS NOT NULL) FROM ordem_pagamento_conta opc
+                    JOIN nfe_item_pedido_associacao nipa ON nipa.req_id = opc.orc_id
+                    JOIN dbnfe_ent ne ON ne.codnfe_ent = nipa.nfe_id
+                   WHERE opc.cod_pgto = p.cod_pgto) THEN 'gerada'
+            ELSE 'nao_gerada'
+          END
+        WHEN p.nro_nf IS NOT NULL AND p.nro_nf <> '' THEN
+          CASE WHEN EXISTS (
+            SELECT 1 FROM dbent d
+             WHERE d.cod_credor = p.cod_credor
+               AND ltrim(substring(d.chave FROM 26 FOR 9), '0') = ltrim(p.nro_nf, '0')
+          ) THEN 'gerada' ELSE 'avulso' END
+        ELSE NULL
+      END`;
+
+    // Filtro opcional por entrada_status (whitelist p/ evitar injeção)
+    const esf = ['gerada', 'nao_gerada', 'cancelada', 'avulso'].includes(entradaStatusFiltro as string)
+      ? (entradaStatusFiltro as string) : null;
+
     // Query principal com cálculo de status baseado no histórico
     const query = `
       WITH contas_com_status AS (
@@ -255,7 +301,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           p.nro_contrato,
           p.xml_nf,
           p.titulo_importado,
-         
+          ${entradaStatusExpr} as entrada_status,
+
           COALESCE(
             (SELECT SUM(f.valor_pgto) 
              FROM dbfpgto f 
@@ -299,12 +346,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       )
       SELECT * FROM contas_com_status
       WHERE 1=1
-      ${statusFilter 
-        ? statusFilter === 'pendente_parcial' 
-          ? `AND status IN ('pendente', 'pago_parcial')` 
+      ${statusFilter
+        ? statusFilter === 'pendente_parcial'
+          ? `AND status IN ('pendente', 'pago_parcial')`
           : `AND status = '${statusFilter}'`
         : ''
       }
+      ${esf ? `AND entrada_status = '${esf}'` : ''}
       ORDER BY id DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -318,6 +366,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WITH contas_com_status AS (
         SELECT
           p.cod_pgto,
+          ${esf ? `${entradaStatusExpr} as entrada_status,` : ''}
           CASE
             WHEN p.cancel = 'S' THEN 'cancelado'
             WHEN COALESCE(
@@ -348,12 +397,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       SELECT COUNT(*) as total
       FROM contas_com_status
       WHERE 1=1
-      ${statusFilter 
-        ? statusFilter === 'pendente_parcial' 
-          ? `AND status IN ('pendente', 'pago_parcial')` 
+      ${statusFilter
+        ? statusFilter === 'pendente_parcial'
+          ? `AND status IN ('pendente', 'pago_parcial')`
           : `AND status = '${statusFilter}'`
         : ''
       }
+      ${esf ? `AND entrada_status = '${esf}'` : ''}
     `;
 
     const countParams = params.slice(0, -2); // Remove limit e offset

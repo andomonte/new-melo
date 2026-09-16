@@ -580,6 +580,7 @@ export function ContasAPagar() {
     'Juros',
     'Nº NF',
     'Nº Duplicata',
+    'Parcela',
     'Tem Nota',
     'Tem Cobrança',
     'Banco',
@@ -1235,7 +1236,7 @@ export function ContasAPagar() {
       };
       
       // Retornar array na mesma ordem dos headers
-      return [
+      const _linha: any[] = [
         // Ações
         (
           <DropdownContasPagar
@@ -1289,11 +1290,12 @@ export function ContasAPagar() {
                 {" - "}
                 {conta.nome_exibicao || conta.nome_credor}
               </span>
-              {conta.parcela_atual && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0 font-normal">
-                  Parcela {conta.parcela_atual}
-                </Badge>
-              )}
+              <span
+                className="ml-1 px-1.5 rounded bg-gray-200 dark:bg-zinc-700 text-[9px] font-bold"
+                title={conta.tipo === 'T' ? 'Transportadora' : 'Fornecedor'}
+              >
+                {conta.tipo === 'T' ? 'T' : 'F'}
+              </span>
             </div>
           </div>
         ),
@@ -1332,9 +1334,21 @@ export function ContasAPagar() {
         ),
         // Nº NF
         <span className="text-xs">{conta.nro_nf || '-'}</span>,
-        // Nº Duplicata
+        // Nº Duplicata — troca o sufixo "/NN" pela fração da parcela ("1/3")
         (
-          <span className="text-xs font-mono">{conta.nro_dup || '-'}</span>
+          <span className="text-xs font-mono">
+            {conta.nro_dup
+              ? (conta.parcela_atual
+                  ? conta.nro_dup.replace(/\/\d+$/, '/' + conta.parcela_atual.replace(' de ', '/'))
+                  : conta.nro_dup)
+              : '-'}
+          </span>
+        ),
+        // Parcela (formato "1/2")
+        (
+          <span className="text-xs font-mono">
+            {conta.parcela_atual ? conta.parcela_atual.replace(' de ', '/') : '-'}
+          </span>
         ),
         // Tem Nota
         (
@@ -1449,6 +1463,9 @@ export function ContasAPagar() {
         //   </Badge>
         // ),
       ];
+      // Anexa o status da entrada à linha (sobrevive a filtro/ordenação local do DataTable)
+      (_linha as any).entradaStatus = conta.entrada_status ?? null;
+      return _linha;
     });
   };
 
@@ -2884,6 +2901,50 @@ export function ContasAPagar() {
               icon={<Plus className="w-4 h-4" />}
               text="Novo"
             />
+          </div>
+        </div>
+
+        {/* Barra: filtros de origem do Compras + legenda de cores da entrada */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1 px-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-gray-600 dark:text-gray-300">Origem Compras:</label>
+            <select
+              value={filtros.origem_compras || ''}
+              onChange={(e) => {
+                const v = e.target.value as any;
+                setFiltros(prev => { const n = { ...prev }; if (v) n.origem_compras = v; else delete n.origem_compras; return n; });
+                setPaginaAtual(1);
+              }}
+              className="border rounded px-2 py-1 text-xs bg-white dark:bg-zinc-800 dark:border-zinc-600"
+            >
+              <option value="">Todos</option>
+              <option value="antecipado">Pagamento Antecipado</option>
+              <option value="xml">Gerado por XML/NFe</option>
+              <option value="compras">Todos do Compras</option>
+            </select>
+            <label className="text-xs text-gray-600 dark:text-gray-300 ml-1">Entrada:</label>
+            <select
+              value={filtros.entrada_status || ''}
+              onChange={(e) => {
+                const v = e.target.value as any;
+                setFiltros(prev => { const n = { ...prev }; if (v) n.entrada_status = v; else delete n.entrada_status; return n; });
+                setPaginaAtual(1);
+              }}
+              className="border rounded px-2 py-1 text-xs bg-white dark:bg-zinc-800 dark:border-zinc-600"
+            >
+              <option value="">Todas</option>
+              <option value="gerada">Entrada Gerada</option>
+              <option value="nao_gerada">Entrada não Gerada</option>
+              <option value="cancelada">NFe Cancelada</option>
+              <option value="avulso">Avulso (com NF)</option>
+            </select>
+          </div>
+          {/* Legenda de cores (fonte da linha) */}
+          <div className="flex flex-wrap items-center gap-3 text-[11px]">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Entrada Gerada</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Entrada não Gerada</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block" /> NFe Cancelada</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-black dark:bg-white inline-block" /> Avulso (c/ NF)</span>
           </div>
         </div>
 

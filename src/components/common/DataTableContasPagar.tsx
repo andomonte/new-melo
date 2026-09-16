@@ -22,6 +22,17 @@ import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 import Carregamento from '@/utils/carregamento';
 
+// Cor da fonte da linha por status de ENTRADA (Contas a Pagar). Vazio = sem cor (neutro).
+const corEntradaStatus = (status: any): string => {
+  switch (status) {
+    case 'gerada': return 'text-green-700 dark:text-green-400';       // Entrada gerada
+    case 'nao_gerada': return 'text-yellow-600 dark:text-yellow-400'; // Entrada não gerada
+    case 'cancelada': return 'text-red-600 dark:text-red-400';        // NFe cancelada
+    case 'avulso': return 'text-black dark:text-white font-medium';   // Avulso com NF, sem entrada
+    default: return '';
+  }
+};
+
 const tiposDeFiltro = [
   { label: 'Começa com', value: 'começa' },
   { label: 'Contém', value: 'contém' },
@@ -568,7 +579,7 @@ export default function DataTableContasPagar({
             </colgroup>
             
             {/* Cabeçalho da tabela - fixo */}
-            <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700">
+            <thead className="sticky top-0 z-30 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700">
               <tr>
                 {ordemColunas.map((header, index) => {
                   if (!colunasVisiveis.includes(header)) return null;
@@ -772,7 +783,8 @@ export default function DataTableContasPagar({
 
                         // Tenta comparar como data BR (DD/MM/YYYY)
                         const parseDataBR = (s: string) => {
-                          const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                          // Não ancorar: a célula pode ter texto extra (ex.: "02/12/2025 Vencido").
+                          const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
                           if (!m) return null;
                           return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
                         };
@@ -804,7 +816,11 @@ export default function DataTableContasPagar({
                     }
                   }
                   return sortedRows;
-                })().map((row, rowIndex) => (
+                })().map((row, rowIndex) => {
+                  // Cor da fonte da linha conforme o status da ENTRADA (Contas a Pagar):
+                  // verde=entrada gerada, amarelo=não gerada, vermelho=NFe cancelada, preto=avulso c/ NF.
+                  const corLinha = corEntradaStatus((row as any).entradaStatus);
+                  return (
                   <tr
                     key={rowIndex}
                     className="hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
@@ -814,12 +830,13 @@ export default function DataTableContasPagar({
                       if (!colunasVisiveis.includes(header) || cellIndex === -1) return null;
                       const value = row[cellIndex];
                       const isLastColumn = cellIndex === headers.length - 1;
+                      // Preserva os badges (Status/Tipo/Ações/☑️) com a cor original; colore o resto da linha.
+                      const preservarCor = ['Ações', 'Status', 'Tipo', '☑️'].includes(header);
+                      const corCel = (corLinha && !preservarCor) ? `${corLinha} [&_*]:!text-inherit` : 'text-gray-900 dark:text-gray-100';
                       return (
                         <td
                           key={cellIndex}
-                          className={`px-2 py-1 text-xs text-gray-900 dark:text-gray-100 select-text ${
-                            isLastColumn ? 'text-center' : 'text-center'
-                          }`}
+                          className={`px-2 py-1 text-xs select-text text-center ${corCel}`}
                         >
                           <div className={isLastColumn ? 'flex justify-center items-center' : ''}>
                             {value}
@@ -828,7 +845,8 @@ export default function DataTableContasPagar({
                       );
                     })}
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
