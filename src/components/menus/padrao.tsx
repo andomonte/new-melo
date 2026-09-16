@@ -47,6 +47,7 @@ import {
   FileTextIcon,
   Calculator,
   RotateCcw,
+  TrendingUpIcon,
 } from 'lucide-react';
 import {
   LiaFileInvoiceSolid,
@@ -86,6 +87,8 @@ import ContasAReceber from '@/components/corpo/admin/financeiro/contasAReceber';
 import Caixa from '@/components/corpo/admin/financeiro/caixa';
 import Faturar from '@/components/corpo/admin/financeiro/faturar';
 import Transferencia from '@/components/corpo/admin/financeiro/transferencia';
+import FluxoCaixa from '@/components/corpo/admin/financeiro/fluxoCaixa';
+import CaixaDiario from '@/components/corpo/admin/financeiro/caixaDiario';
 import DashboardFinanceiro from '@/components/common/DashboardFinanceiro';
 import HistoricoNF from '@/components/corpo/faturamento/historicoNF';
 import NovoFaturamento from '@/components/corpo/faturamento/novoFaturamento';
@@ -405,6 +408,18 @@ export const menus = [
             href: '/admin/financeiro/dashboard',
             icon: ChartLineIcon,
             corpo: DashboardFinanceiro,
+          },
+          {
+            name: 'Fluxo de Caixa',
+            href: '/admin/fluxoCaixa',
+            icon: TrendingUpIcon,
+            corpo: FluxoCaixa,
+          },
+          {
+            name: 'Movimento Diário do Caixa',
+            href: '/admin/caixaDiario',
+            icon: WalletIcon,
+            corpo: CaixaDiario,
           },
           {
             name: 'Contas a Pagar',
