@@ -6,6 +6,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ptBR } from 'date-fns/locale';
 import api from '@/components/services/api';
+import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 
 interface PagamentoAntecipadoModalProps {
   isOpen: boolean;
@@ -42,7 +43,8 @@ export const PagamentoAntecipadoModal: React.FC<
       // Limpar campos ao abrir
       setTipoDocumento('BOLETO');
       setDataVencimento(null);
-      setValorEntrada(ordem.orc_valor_total?.toString() || '0');
+      // Pré-preenche já com máscara de moeda (centavos → "3.542,00").
+      setValorEntrada(ordem.orc_valor_total ? mascaraInputBRL(String(Math.round(ordem.orc_valor_total * 100))) : '');
     }
   }, [isOpen, cobrancaJaGerada, ordem.orc_valor_total]);
 
@@ -77,7 +79,7 @@ export const PagamentoAntecipadoModal: React.FC<
       return;
     }
 
-    const valorNum = parseFloat(valorEntrada) || 0;
+    const valorNum = desmascarar(valorEntrada) || 0;
     if (valorNum <= 0) {
       toast.error('Valor de entrada deve ser maior que zero');
       return;
@@ -265,13 +267,12 @@ export const PagamentoAntecipadoModal: React.FC<
                 Valor do Pagamento Antecipado (R$) *
               </label>
               <input
-                type="number"
-                step="0.01"
-                min="0"
-                max={ordem.orc_valor_total}
+                type="text"
+                inputMode="numeric"
                 value={valorEntrada}
-                onChange={(e) => setValorEntrada(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setValorEntrada(mascaraInputBRL(e.target.value))}
+                placeholder="0,00"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-right tabular-nums focus:ring-2 focus:ring-blue-500"
                 disabled={cobrancaJaGerada}
                 readOnly={cobrancaJaGerada}
               />
@@ -307,7 +308,7 @@ export const PagamentoAntecipadoModal: React.FC<
           </div>
 
           {/* Resumo */}
-          {dataVencimento && parseFloat(valorEntrada) > 0 && (
+          {dataVencimento && desmascarar(valorEntrada) > 0 && (
             <div className="p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
                 Resumo do Pagamento Antecipado
@@ -319,7 +320,7 @@ export const PagamentoAntecipadoModal: React.FC<
                   </span>
                   <div className="font-bold text-green-600 dark:text-green-400">
                     R${' '}
-                    {parseFloat(valorEntrada).toLocaleString('pt-BR', {
+                    {desmascarar(valorEntrada).toLocaleString('pt-BR', {
                       minimumFractionDigits: 2,
                     })}
                   </div>
