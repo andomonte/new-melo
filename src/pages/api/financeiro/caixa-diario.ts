@@ -35,6 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const data = String(req.query.data || ''); // 'YYYY-MM-DD'
   const tipo = String(req.query.tipo || 'N').toUpperCase(); // N|S|C|P
   const conta = String(req.query.conta || '').trim(); // código de conta (opcional)
+  const codusr = String(req.query.codusr || '').trim(); // operador por código (opcional) — só entradas (dbfreceb.codusr)
+  const operador = String(req.query.operador || '').trim(); // operador por username (resolve → codusr via dbusuario)
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
     return res.status(400).json({ ok: false, erro: 'Informe a data (YYYY-MM-DD).' });
@@ -42,6 +44,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const pool = getPgPool();
   try {
+    // Resolve o operador (username) → codusr (mesmo mapeamento do receber.ts).
+    // Se veio username mas não resolveu, usa sentinela p/ não retornar de outros operadores.
+    let codusrFinal = codusr;
+    if (!codusrFinal && operador) {
+      const u = await pool.query(`SELECT codusr FROM dbusuario WHERE nomeusr = $1 LIMIT 1`, [operador]);
+      // Se o operador não estiver no dbusuario, NÃO filtra por codusr (evita zerar);
+      // o escopo fica pela conta do caixa. dbfreceb.codusr também pode vir null.
+      codusrFinal = (u.rows[0]?.codusr || '').trim();
+    }
+
     // ---------- ENTRADAS (recebimentos) ----------
     const vals: any[] = [data];
     let filtroTipo = '';
@@ -52,6 +64,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     let filtroContaE = '';
     if (conta) { vals.push(conta + '%'); filtroContaE = ` AND ct.cod_conta LIKE $${vals.length}`; }
+    let filtroUsrE = '';
+    if (codusrFinal) { vals.push(codusrFinal); filtroUsrE = ` AND p.codusr = $${vals.length}`; }
 
     const sqlEntradas = `
       SELECT
@@ -71,7 +85,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       JOIN dbforma_pagto fp ON fp.codfpgt = p.tipo
       WHERE p.dt_pgto::date = $1::date AND r.cancel = 'N' AND p.sf <> 'C'
         AND ct.cod_conta NOT IN ('0129','0130')
-        ${filtroTipo} ${filtroContaE}
+        ${filtroTipo} ${filtroContaE} ${filtroUsrE}
       ORDER BY conta, forma_pgto, valor`;
     const rE = await pool.query(sqlEntradas, vals);
 

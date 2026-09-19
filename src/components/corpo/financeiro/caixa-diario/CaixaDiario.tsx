@@ -144,6 +144,23 @@ export default function CaixaDiario() {
       if (aba === 'geral') {
         addAba('Entradas', dados.geralEntradas, 'ENTRADA');
         addAba('Saídas', dados.geralSaidas, 'SAIDA');
+        // Aba Geral (consolidado): resumo do dia + as duas listas
+        const ws = wb.addWorksheet('Geral');
+        ws.addRow([`Movimento Diário do Caixa — ${dataBR(dados.data)}`]).font = { bold: true, size: 12 };
+        ws.addRow([]);
+        [['Entradas do Dia', dados.totalEntrada], ['Saídas do Dia', dados.totalSaida], ['Saldo do Dia', dados.saldo]]
+          .forEach(([lbl, v]) => { const row = ws.addRow([lbl, v]); row.font = { bold: true }; row.getCell(2).numFmt = '#,##0.00'; });
+        ws.addRow([]);
+        const secao = (titulo: string, linhas: Linha[], col: string) => {
+          ws.addRow([titulo]).font = { bold: true };
+          ws.addRow(['HISTÓRICO', 'CONTA', 'FORMA_PGTO', col, 'CX_GERAL', 'OFICIAL']).font = { bold: true };
+          linhas.forEach((l) => ws.addRow([l.historico, l.conta, l.forma_pgto, l.valor, l.cx_geral, l.oficial]));
+          ws.addRow(['Total', '', '', linhas.reduce((a, x) => a + x.valor, 0), '', '']).font = { bold: true };
+          ws.addRow([]);
+        };
+        secao('ENTRADAS', dados.geralEntradas, 'ENTRADA');
+        secao('SAÍDAS', dados.geralSaidas, 'SAIDA');
+        ws.getColumn(1).width = 45; ws.getColumn(2).width = 22; ws.getColumn(4).numFmt = '#,##0.00';
       } else {
         addAba(ABAS.find((a) => a.key === aba)!.label, abaAtual(dados), colAba);
       }
