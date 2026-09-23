@@ -36,6 +36,7 @@ import { OPCOES_FORMA_FATURA, labelFormaFatura } from '@/lib/faturamento/formaFa
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
 import { nomeBancoPorInterno } from '@/lib/faturamento/bancoCobranca';
 import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
+import ModalBaixarJuros from '@/components/corpo/contas-receber/ModalBaixarJuros';
 import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
 import ModalConciliacao from '@/components/corpo/contas-receber/ModalConciliacao';
 import ModalConsultaAvancadaReceb from '@/components/corpo/contas-receber/ModalConsultaAvancadaReceb';
@@ -295,6 +296,13 @@ export default function ContasAReceber() {
   // Seleção múltipla para Dar Baixa em lote (mesmo cliente).
   const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
   const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
+  // Baixar Juros (liberar taxa) por linha — 1 título.
+  const [modalBaixarJurosAberto, setModalBaixarJurosAberto] = useState(false);
+  const [contaBaixarJuros, setContaBaixarJuros] = useState<ContaReceber | null>(null);
+  const abrirBaixarJuros = (conta: ContaReceber) => {
+    setContaBaixarJuros(conta);
+    setModalBaixarJurosAberto(true);
+  };
   const [modalComprovantesAberto, setModalComprovantesAberto] = useState(false);
   const [comprovanteBuscaInicial, setComprovanteBuscaInicial] = useState('');
 
@@ -625,6 +633,7 @@ export default function ContasAReceber() {
           onHistoricoClick={() => abrirModalHistorico(conta)}
           onVerCartaoClick={conta.tem_cartao ? () => visualizarDetalhesCartao(conta) : undefined}
           onComprovantesClick={() => abrirComprovantes(conta.nro_doc || (conta.codcli ? String(conta.codcli) : ''))}
+          onBaixarJurosClick={() => abrirBaixarJuros(conta)}
         />,
 
         // Status
@@ -2973,6 +2982,20 @@ export default function ContasAReceber() {
         onSuccess={() => {
           setModalRecebLoteAberto(false);
           setSelecionadosBaixa([]);
+          consultarContasReceber(paginaAtual, itensPorPagina, filtros);
+        }}
+      />
+
+      {/* Baixar Juros (liberar taxa) por linha */}
+      <ModalBaixarJuros
+        isOpen={modalBaixarJurosAberto}
+        conta={contaBaixarJuros}
+        username={user?.usuario || ''}
+        user={user as any}
+        onClose={() => setModalBaixarJurosAberto(false)}
+        onSuccess={() => {
+          setModalBaixarJurosAberto(false);
+          setContaBaixarJuros(null);
           consultarContasReceber(paginaAtual, itensPorPagina, filtros);
         }}
       />
