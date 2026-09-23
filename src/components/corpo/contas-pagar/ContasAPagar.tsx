@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useRef, ChangeEvent } from 'react';
 import { AuthContext } from '@/contexts/authContexts';
 import Carregamento from '@/utils/carregamento';
-import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
+import { mascaraInputBRL, desmascarar, formatarDecimalBR } from '@/utils/monetario';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
@@ -444,9 +444,11 @@ export function ContasAPagar() {
   const valorParcelaNT = (i: number, n: number) => {
     const total = Number(novaContaDados.valor_pgto) || 0;
     if (n <= 0) return 0;
+    const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
     const base = Math.floor((total / n) * 100) / 100;
-    const resto = total - base * n;
-    return i === 0 ? base + resto : base;
+    const resto = r2(total - base * n);
+    // 1ª parcela leva o resto de centavos; arredonda p/ evitar dízima (ex.: 1666,6799999).
+    return i === 0 ? r2(base + resto) : base;
   };
 
   const gerarParcelasNT = () => {
@@ -4897,11 +4899,10 @@ export function ContasAPagar() {
                           <div className="flex items-center gap-1">
                             <span className="text-gray-500 text-xs">R$</span>
                             <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={p.valor}
-                              onChange={(e) => atualizarValorNT(i, parseFloat(e.target.value))}
+                              type="text"
+                              inputMode="decimal"
+                              value={formatarDecimalBR(p.valor)}
+                              onChange={(e) => atualizarValorNT(i, desmascarar(mascaraInputBRL(e.target.value)))}
                               className="w-28 text-xs text-right"
                               title="Valor da parcela — a diferença é redistribuída nas parcelas seguintes"
                             />
