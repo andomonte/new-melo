@@ -10,7 +10,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
-import { montarFeriados, retornaDiaFluxoPgto, dataFluxoISO, type Feriado } from '@/lib/fluxo-caixa/diaFluxo';
+import { montarFeriados, retornaDiaFluxo, retornaDiaFluxoPgto, dataFluxoISO, type Feriado } from '@/lib/fluxo-caixa/diaFluxo';
 
 const FILTRO_COF = `NOT (cof.cof_cec_id IN (12) OR cof.cof_id IN (237,238))`;
 const FILTRO_GCC = `gcc.gcc_id <> 19`;
@@ -68,10 +68,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (i != null) g.valores[i] += v;
     };
 
-    // ===== ENTRADAS (dbreceb aberto, por mês da previsão) =====
+    // Feriados (p/ RETORNA_DIA_FLUXO das entradas e RETORNA_DIA_FLUXO_PGTO das saídas)
+    const ferRows = await pool.query<Feriado>(`SELECT to_char(data,'YYYY-MM-DD') AS data, tipo, fixo FROM dbferiado`);
+    const feriados = montarFeriados(ferRows.rows);
+
+    // ===== ENTRADAS (dbreceb aberto). Data de fluxo = RETORNA_DIA_FLUXO(base) → mês. =====
     const ent = await pool.query(`
       SELECT ${MODELO} AS modelo, ${CC_RECEBER} AS cc,
-             to_char(COALESCE(r.dtvenc_previsao, r.dt_venc),'YYYY-MM') AS mes,
+             to_char(COALESCE(r.dtvenc_previsao, r.dt_venc),'YYYY-MM-DD') AS base,
              SUM(r.valor_pgto) AS valor
       FROM dbreceb r
       JOIN dbclien cli ON cli.codcli = r.codcli
@@ -79,14 +83,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       JOIN cad_centro_custo       cec ON cof.cof_cec_id = cec.cec_id
       JOIN cad_grupo_centro_custo gcc ON cec.cec_gcc_id = gcc.gcc_id AND ${FILTRO_GCC}
       WHERE r.cancel = 'N' AND r.rec = 'N'
-        AND COALESCE(r.dtvenc_previsao, r.dt_venc) >= $1::date
+        AND COALESCE(r.dtvenc_previsao, r.dt_venc) >= ($1::date - INTERVAL '4 days')
         AND COALESCE(r.dtvenc_previsao, r.dt_venc) <= $2::date
       GROUP BY 1,2,3`, [primeiroDia, ultimoDia]);
-    for (const r of ent.rows) addMes(grupoDe('E', r.modelo, r.cc), String(r.mes).slice(0, 7), num(r.valor));
+    for (const r of ent.rows) {
+      const mesKey = dataFluxoISO(retornaDiaFluxo(String(r.base).slice(0, 10), feriados)).slice(0, 7);
+      if (idxMes.has(mesKey)) addMes(grupoDe('E', r.modelo, r.cc), mesKey, num(r.valor));
+    }
 
     // ===== SAÍDAS (dbpgto aberto, por mês da previsão; dia útil calculado em JS) =====
-    const ferRows = await pool.query<Feriado>(`SELECT to_char(data,'YYYY-MM-DD') AS data, tipo, fixo FROM dbferiado`);
-    const feriados = montarFeriados(ferRows.rows);
     const sai = await pool.query(`
       SELECT ${MODELO} AS modelo, gcc.gcc_descricao AS cc,
              to_char(p.dt_venc,'YYYY-MM-DD') AS dtvenc,

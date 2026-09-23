@@ -7,7 +7,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
-import { montarFeriados, retornaDiaFluxoPgto, dataFluxoISO, type Feriado } from '@/lib/fluxo-caixa/diaFluxo';
+import { montarFeriados, retornaDiaFluxo, retornaDiaFluxoPgto, dataFluxoISO, type Feriado } from '@/lib/fluxo-caixa/diaFluxo';
 import { calcularJanela, bucketAberto, baterAlvo } from '@/lib/fluxo-caixa/cenario';
 
 const FILTRO_COF = `NOT (cof.cof_cec_id IN (12) OR cof.cof_id IN (237,238))`;
@@ -51,8 +51,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const vistos = new Set<string>();
     const push = (t: Titulo) => { if (!vistos.has(t.codigo)) { vistos.add(t.codigo); titulos.push(t); } };
 
+    // Feriados p/ a data de fluxo (mesma regra do endpoint mensal).
+    const ferRows = await pool.query<Feriado>(`SELECT to_char(data,'YYYY-MM-DD') AS data, tipo, fixo FROM dbferiado`);
+    const feriados = montarFeriados(ferRows.rows);
+
     if (tipo_op === 'E') {
-      // ---- Abertos (rec='N') ----
+      // ---- Abertos (rec='N'): data de fluxo = RETORNA_DIA_FLUXO(base) ----
       const ab = await pool.query(`
         SELECT r.cod_receb AS codigo, cli.nome, r.nro_doc,
                r.valor_pgto, r.valor_rec,
@@ -61,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                to_char(r.dt_pgto,'YYYY-MM-DD') AS dt_pgto,
                to_char(r.dt_venc,'YYYY-MM-DD') AS dt_venc,
                r.rec AS pago,
-               to_char(COALESCE(r.dtvenc_previsao, r.dt_venc),'YYYY-MM-DD') AS flow
+               to_char(COALESCE(r.dtvenc_previsao, r.dt_venc),'YYYY-MM-DD') AS base
         FROM dbreceb r
         JOIN dbclien cli ON cli.codcli = r.codcli
         JOIN cad_conta_financeira   cof ON r.rec_cof_id = cof.cof_id AND ${FILTRO_COF}
@@ -71,12 +75,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           AND (${MODELO}) = $1 AND (${CC_RECEBER}) = $2
           AND COALESCE(r.dtvenc_previsao, r.dt_venc) IS NOT NULL`, [tipo_mov, cc]);
       for (const r of ab.rows) {
-        const bkt = bucketAberto(String(r.flow).slice(0, 10), janela);
+        const flow = dataFluxoISO(retornaDiaFluxo(String(r.base).slice(0, 10), feriados));
+        const bkt = bucketAberto(flow, janela);
         if (baterAlvo(bkt, alvo)) push({ ...linhaReceb(r), src: 'ABERTO' });
       }
 
-      // ---- Realizado (baixas no dia) ----
-      if (!ehAtrasados && janela.cenario !== 'FUTURO') {
+      // ---- Realizado (data de fluxo = df.data_fluxo OU RETORNA_DIA_FLUXO(base)) ----
+      if (!ehAtrasados && janela.cenario !== 'FUTURO' && diaISO) {
         const rz = await pool.query(`
           SELECT DISTINCT r.cod_receb AS codigo, cli.nome, r.nro_doc,
                  r.valor_pgto, r.valor_rec,
@@ -84,7 +89,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                  to_char(r.dt_emissao,'YYYY-MM-DD') AS dt_emissao,
                  to_char(r.dt_pgto,'YYYY-MM-DD') AS dt_pgto,
                  to_char(r.dt_venc,'YYYY-MM-DD') AS dt_venc,
-                 r.rec AS pago
+                 r.rec AS pago,
+                 fr.sf AS sf,
+                 to_char(df.data_fluxo,'YYYY-MM-DD') AS data_fluxo,
+                 to_char(fr.dt_emissao,'YYYY-MM-DD') AS fr_emissao,
+                 to_char(fr.dt_pgto,'YYYY-MM-DD') AS fr_pgto
           FROM dbfreceb fr
           JOIN dbreceb r ON r.cod_receb = fr.cod_receb
           LEFT JOIN dbfrecebdatafluxo df ON df.cod_receb = fr.cod_receb AND df.cod_freceb = fr.cod_freceb
@@ -94,13 +103,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           JOIN cad_grupo_centro_custo gcc ON cec.cec_gcc_id = gcc.gcc_id AND ${FILTRO_GCC}
           WHERE r.cancel = 'N' AND fr.sf <> 'C'
             AND (${MODELO}) = $1 AND (${CC_RECEBER}) = $2
-            AND COALESCE(df.data_fluxo, fr.dt_pgto)::date = $3::date`, [tipo_mov, cc, diaISO]);
-        for (const r of rz.rows) push({ ...linhaReceb(r), src: 'REALIZADO' });
+            AND COALESCE(df.data_fluxo, fr.dt_pgto) >= ($3::date - INTERVAL '6 days')
+            AND COALESCE(df.data_fluxo, fr.dt_pgto) <= $3::date`, [tipo_mov, cc, diaISO]);
+        for (const r of rz.rows) {
+          const base = (r.sf === 'N' ? (r.fr_emissao || r.fr_pgto) : r.fr_pgto);
+          const flow = r.data_fluxo
+            ? String(r.data_fluxo).slice(0, 10)
+            : dataFluxoISO(retornaDiaFluxo(String(base).slice(0, 10), feriados));
+          if (flow === diaISO) push({ ...linhaReceb(r), src: 'REALIZADO' });
+        }
       }
     } else {
       // ================= SAÍDAS =================
-      const ferRows = await pool.query<Feriado>(`SELECT to_char(data,'YYYY-MM-DD') AS data, tipo, fixo FROM dbferiado`);
-      const feriados = montarFeriados(ferRows.rows);
 
       // ---- Abertos (paga='N') ----
       const ab = await pool.query(`

@@ -20,6 +20,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import {
   montarFeriados,
+  retornaDiaFluxo,
   retornaDiaFluxoPgto,
   dataFluxoISO,
   type Feriado,
@@ -96,10 +97,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ENTRADAS — Realizado (baixas de recebimento no mês)
     // =========================================================================
     if (querRealizado) {
+      // Data de fluxo do recebimento realizado = dbfrecebdatafluxo.data_fluxo (precomputada
+      // no Oracle); quando falta no PG, calcula RETORNA_DIA_FLUXO da data-base em JS — igual à
+      // trigger TRG_DTPREVISAO_DBFRECEB: SF='N' → dt_emissao, senão → dt_pgto (D+1 dia útil).
+      // Janela alargada 4 dias antes (um recebimento de fim de mês anterior pode compensar aqui).
       const sql = `
         SELECT ${modelo} AS modelo,
                ${ccReceber} AS cc,
-               to_char(COALESCE(df.data_fluxo, fr.dt_pgto),'YYYY-MM-DD') AS d,
+               to_char(df.data_fluxo,'YYYY-MM-DD') AS data_fluxo,
+               fr.sf AS sf,
+               to_char(fr.dt_emissao,'YYYY-MM-DD') AS dt_emissao,
+               to_char(fr.dt_pgto,'YYYY-MM-DD')    AS dt_pgto,
                SUM(fr.valor) AS valor
         FROM dbfreceb fr
         JOIN dbreceb r  ON r.cod_receb = fr.cod_receb
@@ -109,13 +117,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         JOIN cad_centro_custo       cec ON cof.cof_cec_id = cec.cec_id
         JOIN cad_grupo_centro_custo gcc ON cec.cec_gcc_id = gcc.gcc_id AND ${FILTRO_GCC}
         WHERE r.cancel = 'N' AND fr.sf <> 'C'
-          AND COALESCE(df.data_fluxo, fr.dt_pgto) >= $1::date
+          AND COALESCE(df.data_fluxo, fr.dt_pgto) >= ($1::date - INTERVAL '4 days')
           AND COALESCE(df.data_fluxo, fr.dt_pgto) <= $2::date
-        GROUP BY 1,2,3`;
+        GROUP BY 1,2,3,4,5,6`;
       const { rows } = await pool.query(sql, [primeiroDia, ultimoDia]);
       for (const r of rows) {
-        const dia = parseInt(String(r.d).slice(8, 10), 10);
-        addDia(linhaDe('E', r.modelo, r.cc), dia, num(r.valor));
+        const base = (r.sf === 'N' ? (r.dt_emissao || r.dt_pgto) : r.dt_pgto);
+        const fluxoISO = r.data_fluxo
+          ? String(r.data_fluxo).slice(0, 10)
+          : dataFluxoISO(retornaDiaFluxo(String(base).slice(0, 10), feriados));
+        // Realizado nunca é "atrasado": só entra se a data de fluxo cair num dia do mês.
+        const bkt = bucketAberto(fluxoISO, janela);
+        if (typeof bkt === 'number') addDia(linhaDe('E', r.modelo, r.cc), bkt, num(r.valor));
       }
     }
 
@@ -147,10 +160,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // flow = dtvenc_previsao (já ajustada pelo MELOSYS) ou dt_venc
     // =========================================================================
     if (querAbertos) {
+      // Data-base = dtvenc_previsao (vencimento renegociado) ou dt_venc. A data de FLUXO é
+      // RETORNA_DIA_FLUXO(base) — D+1 dia útil — igual à trigger TRG_DTPREVISAO_DBRECEB
+      // (o `dtvenc_previsao` NÃO é a data de fluxo, é só o vencimento).
       const sql = `
         SELECT ${modelo} AS modelo,
                ${ccReceber} AS cc,
-               to_char(COALESCE(r.dtvenc_previsao, r.dt_venc),'YYYY-MM-DD') AS flow,
+               to_char(COALESCE(r.dtvenc_previsao, r.dt_venc),'YYYY-MM-DD') AS base,
                SUM(CASE WHEN (r.valor_pgto - r.valor_rec) < 0 THEN r.valor_rec
                         ELSE (r.valor_pgto - r.valor_rec) END) AS valor
         FROM dbreceb r
@@ -163,8 +179,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         GROUP BY 1,2,3`;
       const { rows } = await pool.query(sql);
       for (const r of rows) {
-        const flow = String(r.flow).slice(0, 10);
-        addBucket(linhaDe('E', r.modelo, r.cc), flow, num(r.valor));
+        const fluxoISO = dataFluxoISO(retornaDiaFluxo(String(r.base).slice(0, 10), feriados));
+        addBucket(linhaDe('E', r.modelo, r.cc), fluxoISO, num(r.valor));
       }
     }
 
