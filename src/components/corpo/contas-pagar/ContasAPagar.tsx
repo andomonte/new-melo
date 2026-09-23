@@ -378,7 +378,7 @@ export function ContasAPagar() {
     // possui_entrada: false,
   });
 
-  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string }[]>([]);
+  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string; valor: number }[]>([]);
   // Quantidade de parcelas do Novo Título (default 1 = conta não parcelada, vencimento em dias).
   const [prazoSelecionado, setPrazoSelecionado] = useState('1');
 
@@ -461,17 +461,48 @@ export function ContasAPagar() {
       return;
     }
     const base = baseEmissaoNT();
-    const novas: { dias: number; vencimento: string }[] = [];
+    const novas: { dias: number; vencimento: string; valor: number }[] = [];
     let acum = 0;
     for (let i = 0; i < num; i++) {
       acum += intervalo;
       const venc = new Date(base.getTime());
       venc.setDate(venc.getDate() + acum);
       const util = getProximoDiaUtil(venc);
-      novas.push({ dias: acum, vencimento: fmtLocalData(util) });
+      novas.push({ dias: acum, vencimento: fmtLocalData(util), valor: valorParcelaNT(i, num) });
     }
     setParcelas(novas);
     setNovaContaDados((prev) => ({ ...prev, dt_venc: novas[0].vencimento }));
+  };
+
+  const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+
+  // Redistribui igualmente o `total` pelas parcelas a partir do índice `from` (inclusive);
+  // a 1ª redistribuída leva o resto de centavos. Mantém as parcelas anteriores fixas.
+  const redistribuir = (arr: { dias: number; vencimento: string; valor: number }[], from: number, total: number) => {
+    const n = arr.length - from;
+    if (n <= 0) return;
+    const base = Math.floor((total / n) * 100) / 100;
+    const resto = round2(total - base * n);
+    for (let j = from; j < arr.length; j++) arr[j].valor = j === from ? round2(base + resto) : base;
+  };
+
+  // Edita o VALOR de uma parcela: fixa as anteriores + a editada, e divide a sobra nas
+  // seguintes. A soma NUNCA passa do valor do título (cap na parcela editada).
+  const atualizarValorNT = (idx: number, valorNum: number) => {
+    const total = round2(Number(novaContaDados.valor_pgto) || 0);
+    setParcelas((prev) => {
+      const arr = prev.map((p) => ({ ...p }));
+      if (idx < 0 || idx >= arr.length) return prev;
+      const somaAntes = round2(arr.slice(0, idx).reduce((a, p) => a + (p.valor || 0), 0));
+      const restante = round2(total - somaAntes);            // teto para esta parcela + as seguintes
+      let novo = round2(Number(valorNum) || 0);
+      if (novo < 0) novo = 0;
+      if (novo > restante) novo = restante;                  // soma nunca > total
+      arr[idx].valor = novo;
+      const seguintes = arr.length - (idx + 1);
+      if (seguintes > 0) redistribuir(arr, idx + 1, round2(restante - novo));
+      return arr;
+    });
   };
 
   // Edita pela quantidade de DIAS → vencimento = emissão + dias (dia útil).
@@ -493,18 +524,34 @@ export function ContasAPagar() {
     const d = new Date(isoDate + 'T00:00:00');
     if (isNaN(d.getTime())) return;
     const emis = baseEmissaoNT();
-    if (d <= emis) {
-      toast.error('O vencimento deve ser maior que a data de emissão.');
+    if (d < emis) {
+      toast.error('O vencimento não pode ser anterior à data de emissão.');
       return;
     }
     const util = getProximoDiaUtil(d);
-    const novosDias = Math.ceil((util.getTime() - emis.getTime()) / (1000 * 60 * 60 * 24));
+    const novosDias = Math.max(0, Math.ceil((util.getTime() - emis.getTime()) / (1000 * 60 * 60 * 24)));
     setParcelas((prev) =>
       prev.map((p, i) => (i === idx ? { ...p, vencimento: fmtLocalData(util), dias: novosDias } : p)),
     );
   };
 
-  const removerParcelaNT = (idx: number) => setParcelas((prev) => prev.filter((_, i) => i !== idx));
+  const removerParcelaNT = (idx: number) => setParcelas((prev) => {
+    const arr = prev.filter((_, i) => i !== idx).map((p) => ({ ...p }));
+    // ao remover, redistribui igualmente o total pelas parcelas restantes
+    if (arr.length > 0) redistribuir(arr, 0, round2(Number(novaContaDados.valor_pgto) || 0));
+    return arr;
+  });
+
+  // Ao mudar o VALOR TOTAL com parcelas já geradas, redistribui igualmente (a 1ª leva o resto).
+  useEffect(() => {
+    setParcelas((prev) => {
+      if (prev.length === 0) return prev;
+      const arr = prev.map((p) => ({ ...p }));
+      redistribuir(arr, 0, round2(Number(novaContaDados.valor_pgto) || 0));
+      return arr;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novaContaDados.valor_pgto]);
 
   // Lançar um título NOVO do DDA como conta a pagar: pré-preenche o form Nova Conta
   // (credor, valor, emissão, duplicata, Tem Cobrança=boleto) + a parcela do vencimento.
@@ -545,7 +592,7 @@ export function ContasAPagar() {
       const base = new Date(emissao + 'T00:00:00');
       const venc = new Date(t.dtVenc + 'T00:00:00');
       const dias = Math.max(1, Math.ceil((venc.getTime() - base.getTime()) / (1000 * 60 * 60 * 24)));
-      setParcelas([{ dias, vencimento: t.dtVenc }]);
+      setParcelas([{ dias, vencimento: t.dtVenc, valor: round2(Number(t.valor) || 0) }]);
     } else {
       setParcelas([]);
     }
@@ -767,7 +814,7 @@ export function ContasAPagar() {
   useEffect(() => {
     async function carregarContasDbconta() {
       try {
-        const response = await fetch('/api/contas-pagar/contas-dbconta');
+        const response = await fetch('/api/contas-pagar/contas-dbconta?limit=2000');
         if (response.ok) {
           const data = await response.json();
           const contas = (data.contas || []).map((conta: any) => ({
@@ -1512,6 +1559,10 @@ export function ContasAPagar() {
     setCentroCustoSelecionado(conta.cod_ccusto?.toString() || '');
     setObsPagamento(conta.obs || '');
     setNroCheque('');
+
+    // Pré-preencher o combobox "Conta" com a conta cadastrada no título (dbpgto.cod_conta),
+    // quando houver — assim o operador não precisa reselecionar a cada pagamento.
+    setContaSelecionadaPgto(conta.cod_conta ? conta.cod_conta.toString() : '');
     
     // ✅ OTIMIZAÇÃO 5: Buscar conta bancária e banco preferencial do credor
     const codCredor = conta.cod_credor || (conta as any).cod_transp;
@@ -2259,34 +2310,34 @@ export function ContasAPagar() {
         return;
       }
 
-      // Fiel ao MELOSYS: "Tem Cobrança" é o gate do vencimento/parcelamento.
-      // - Com cobrança → vencimento pelas parcelas (Qtd 1 = não parcelado) + duplicata obrigatória.
-      // - Sem cobrança → título em aberto, sem vencimento (dt_venc NULL), sem parcela.
+      // "Tem Cobrança" governa o parcelamento:
+      // - COM cobrança → parcela(s) por emissão + dias (Qtd 1 = não parcelado) + duplicata obrigatória;
+      //   a soma das parcelas (valores editáveis) precisa fechar com o valor do título.
+      // - SEM cobrança → 1 parcela única, vencimento = data de EMISSÃO, valor total.
       const temCobr = !!novaContaDados.tem_cobr;
       if (temCobr) {
         if (parcelas.length === 0) {
-          toast.error('Com cobrança: gere ao menos uma parcela (informe a quantidade e clique em "Gerar Parcelas").', {
-            position: 'top-right',
-          });
+          toast.error('Com cobrança: gere ao menos uma parcela (informe a quantidade e clique em "Gerar Parcelas").', { position: 'top-right' });
           return;
         }
         if (!String(novaContaDados.nro_dup || '').trim()) {
-          toast.error('Tem Cobrança marcado: informe o número da duplicata.', {
-            position: 'top-right',
-          });
+          toast.error('Parcelar Título marcado: informe o número da duplicata.', { position: 'top-right' });
+          return;
+        }
+        const somaParc = round2(parcelas.reduce((a, p) => a + (p.valor || 0), 0));
+        if (Math.abs(somaParc - round2(Number(novaContaDados.valor_pgto) || 0)) > 0.01) {
+          toast.error(`A soma das parcelas (R$ ${somaParc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) deve ser igual ao valor do título (R$ ${Number(novaContaDados.valor_pgto).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`, { position: 'top-right' });
           return;
         }
       }
 
       const response = await fetch('/api/contas-pagar/criar', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...novaContaDados,
-          // Com cobrança: vencimento = 1ª parcela e envia as parcelas. Sem cobrança: dt_venc NULL.
-          dt_venc: temCobr ? parcelas[0].vencimento : null,
+          // Com cobrança: vencimento = 1ª parcela + parcelas (com valor editado). Sem cobrança: 1 parcela na EMISSÃO.
+          dt_venc: temCobr ? parcelas[0].vencimento : novaContaDados.dt_emissao,
           parcelado: temCobr,
           parcelas: temCobr ? parcelas : [],
         }),
@@ -4537,10 +4588,10 @@ export function ContasAPagar() {
                 }}
               />
               <span style={{ fontSize: '14px', fontWeight: 600, lineHeight: '20px' }}>
-                Tem Cobrança
+                Parcelar Título
               </span>
               <span style={{ fontSize: '13px', fontWeight: 400 }} className="text-muted-foreground">
-                — informe a duplicata e defina o vencimento em parcelas
+                — define o vencimento, as parcelas e a duplicata
               </span>
             </label>
 
@@ -4594,7 +4645,7 @@ export function ContasAPagar() {
                       ? 'Ex: CONT-2025-001'
                       : novaContaDados.tem_cobr
                       ? 'Nº da duplicata (ex: 001)'
-                      : 'Marque "Tem Cobrança" para habilitar'
+                      : 'Marque "Parcelar Título" para habilitar'
                   }
                   className={
                     !novaContaDados.eh_internacional && !novaContaDados.tem_cobr
@@ -4604,7 +4655,7 @@ export function ContasAPagar() {
                 />
                 {!novaContaDados.eh_internacional && !novaContaDados.tem_cobr && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Disponível quando “Tem Cobrança” estiver marcado.
+                    Disponível quando “Parcelar Título” estiver marcado.
                   </p>
                 )}
               </div>
@@ -4749,9 +4800,9 @@ export function ContasAPagar() {
 
             {!novaContaDados.tem_cobr && (
               <p className="text-sm text-muted-foreground pl-6 border-l-2 border-gray-200">
-                Sem cobrança: o título é gravado <strong>em aberto, sem vencimento</strong>.
-                Marque <strong>“Tem Cobrança”</strong> (em Documentos Fiscais) para definir o
-                vencimento e as parcelas.
+                Sem cobrança: o título é gravado como <strong>1 parcela única</strong>, com
+                vencimento na <strong>data de emissão</strong> e o valor total. Marque
+                <strong> “Parcelar Título”</strong> (em Documentos Fiscais) para <strong>parcelar</strong>.
               </p>
             )}
 
@@ -4843,11 +4894,18 @@ export function ContasAPagar() {
                             onChange={(e) => atualizarVencimentoNT(i, e.target.value)}
                             className="w-36 text-xs"
                           />
-                          {novaContaDados.valor_pgto > 0 && (
-                            <span className="text-green-600 dark:text-green-400 font-medium min-w-[100px] text-right">
-                              R$ {valorParcelaNT(i, parcelas.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            <span className="text-gray-500 text-xs">R$</span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={p.valor}
+                              onChange={(e) => atualizarValorNT(i, parseFloat(e.target.value))}
+                              className="w-28 text-xs text-right"
+                              title="Valor da parcela — a diferença é redistribuída nas parcelas seguintes"
+                            />
+                          </div>
                           <button
                             type="button"
                             onClick={() => removerParcelaNT(i)}
@@ -4863,26 +4921,31 @@ export function ContasAPagar() {
                 )}
 
                 {/* Resumo */}
-                {parcelas.length > 0 && novaContaDados.valor_pgto > 0 && (
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
-                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                      Resumo do Parcelamento:
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                      • {parcelas.length}x — 1ª de R$ {valorParcelaNT(0, parcelas.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      {parcelas.length > 1 && ` + ${parcelas.length - 1}x de R$ ${valorParcelaNT(1, parcelas.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      • Total: R$ {novaContaDados.valor_pgto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      • Primeira parcela: {parcelas[0]?.vencimento ? new Date(parcelas[0].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      • Última parcela: {parcelas[parcelas.length - 1]?.vencimento ? new Date(parcelas[parcelas.length - 1].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
-                    </p>
-                  </div>
-                )}
+                {parcelas.length > 0 && novaContaDados.valor_pgto > 0 && (() => {
+                  const somaParc = round2(parcelas.reduce((a, p) => a + (p.valor || 0), 0));
+                  const totalT = round2(Number(novaContaDados.valor_pgto) || 0);
+                  const dif = round2(totalT - somaParc);
+                  return (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Resumo do Parcelamento:</p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        • {parcelas.length}x · Soma das parcelas: <strong>R$ {somaParc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        • Total do título: R$ {totalT.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                      {Math.abs(dif) > 0.005 && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          • Diferença a distribuir: R$ {dif.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (edite uma parcela ou gere novamente)
+                        </p>
+                      )}
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        • Primeira: {parcelas[0]?.vencimento ? new Date(parcelas[0].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                        {' · '}Última: {parcelas[parcelas.length - 1]?.vencimento ? new Date(parcelas[parcelas.length - 1].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

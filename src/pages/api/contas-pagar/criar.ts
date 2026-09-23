@@ -169,11 +169,14 @@ export default async function handler(
         ? parcelas[i].vencimento 
         : dt_venc;
 
-      // Calcular valor desta parcela (a PRIMEIRA parcela recebe os centavos restantes,
-      // igual ao Contas a Receber / criar.ts do CR)
-      const valorDestaParcela = i === 0
-        ? valorParcelaFormatado + restocentavos
-        : valorParcelaFormatado;
+      // Valor desta parcela: usa o VALOR informado por parcela (parcelas[i].valor, editável no
+      // Novo Título) quando presente; senão divide igual (1ª leva o resto de centavos).
+      const valorInformado = parcelado && parcelas[i] && parcelas[i].valor != null
+        ? parseFloat(String(parcelas[i].valor))
+        : NaN;
+      const valorDestaParcela = !isNaN(valorInformado)
+        ? valorInformado
+        : (i === 0 ? valorParcelaFormatado + restocentavos : valorParcelaFormatado);
 
       // Gerar nro_dup para esta parcela (formato: base/X ou X/Y). Sem cobrança → NULL.
       const nroDupParcela = !temCobr
