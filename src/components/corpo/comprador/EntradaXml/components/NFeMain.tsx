@@ -101,6 +101,7 @@ export const NFeMain: React.FC = () => {
   const [nfeParaAntecipados, setNfeParaAntecipados] = useState<NFeDTO | null>(null);
   const [ordensAntecipadasSelecionadas, setOrdensAntecipadasSelecionadas] = useState<number[]>([]);
   const [valorAntecipadoSelecionado, setValorAntecipadoSelecionado] = useState(0);
+  const [valorAntecipadoPagoSelecionado, setValorAntecipadoPagoSelecionado] = useState(0);
 
   // Estados para Gerar Entrada (modal GerarEntradaModal - com associações carregadas)
   const [showGerarEntradaDireta, setShowGerarEntradaDireta] = useState(false);
@@ -496,9 +497,10 @@ export const NFeMain: React.FC = () => {
   };
 
   // Handler quando usuário seleciona pagamentos antecipados e prossegue
-  const handleProsseguirComAntecipados = (ordensIds: number[], valorTotal: number) => {
+  const handleProsseguirComAntecipados = (ordensIds: number[], valorTotal: number, valorPago: number = 0) => {
     setOrdensAntecipadasSelecionadas(ordensIds);
     setValorAntecipadoSelecionado(valorTotal);
+    setValorAntecipadoPagoSelecionado(valorPago);
     setShowSelecionarAntecipados(false);
 
     // Abrir modal de configuração de pagamento com as ordens selecionadas
@@ -1519,6 +1521,7 @@ export const NFeMain: React.FC = () => {
             setNfeParaCobranca(null);
             setOrdensAntecipadasSelecionadas([]);
             setValorAntecipadoSelecionado(0);
+            setValorAntecipadoPagoSelecionado(0);
           }}
           nfeId={nfeParaCobranca.id}
           onSuccess={handleSuccessCobranca}
@@ -1526,6 +1529,7 @@ export const NFeMain: React.FC = () => {
           userName={user?.usuario || ''}
           ordensAntecipadas={ordensAntecipadasSelecionadas}
           valorAntecipado={valorAntecipadoSelecionado}
+          valorAntecipadoPago={valorAntecipadoPagoSelecionado}
         />
       )}
 

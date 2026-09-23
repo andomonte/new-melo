@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Trash2, Lock, CheckCircle } from 'lucide-react';
+import { X, DollarSign, Trash2, Lock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -42,6 +42,7 @@ interface ConfiguracaoPagamentoNFeModalProps {
   // Novas props para ordens manuais (quando NFe não está associada)
   ordensAntecipadas?: number[];
   valorAntecipado?: number;
+  valorAntecipadoPago?: number; // soma dos antecipados selecionados que já foram PAGOS
 }
 
 const opcoestipoDocumento = [
@@ -55,7 +56,7 @@ const opcoestipoDocumento = [
 
 export const ConfiguracaoPagamentoNFeModal: React.FC<
   ConfiguracaoPagamentoNFeModalProps
-> = ({ isOpen, onClose, nfeId, onSuccess, userId, userName, ordensAntecipadas, valorAntecipado }) => {
+> = ({ isOpen, onClose, nfeId, onSuccess, userId, userName, ordensAntecipadas, valorAntecipado, valorAntecipadoPago }) => {
   const [loading, setLoading] = useState(false);
   const [loadingParcelas, setLoadingParcelas] = useState(false);
   const [parcelasSugeridas, setParcelasSugeridas] = useState<ParcelaSugerida[]>(
@@ -114,10 +115,25 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
   // Usar ref para controlar recálculo
   const [recalcularTrigger, setRecalcularTrigger] = React.useState(0);
 
+  // Regras do antecipado x NFe (spec §5.2):
+  const algumAntecipadoPago = (valorAntecipadoPago || 0) > 0.005;
+  const antecipadoCobreNF = (nf: number, ent: number) => nf > 0 && ent >= nf - 0.10;
+  // A ≥ NF e PAGO → NFe quitada pelo antecipado (0 parcelas; excedente vira crédito no backend).
+  const ehQuitadoPorAntecipadoPago = (nf: number, ent: number) => antecipadoCobreNF(nf, ent) && algumAntecipadoPago;
+  // A ≥ NF e NÃO pago → antecipados serão CANCELADOS; a cobrança é a NF inteira (parcelas do XML/manual).
+  const ehCancelaAntecipado = (nf: number, ent: number) => antecipadoCobreNF(nf, ent) && !algumAntecipadoPago;
+  // Entrada usada no cálculo de parcelas (0 quando os antecipados serão cancelados).
+  const entradaParaCalculo = (nf: number, ent: number) => (ehCancelaAntecipado(nf, ent) ? 0 : ent);
+
   // Recalcular valores quando necessário
   useEffect(() => {
+    // Quitado por antecipado PAGO → sem parcelas (nunca gerar parcela negativa).
+    if (ehQuitadoPorAntecipadoPago(valorNFe, valorEntrada)) {
+      if (parcelas.length > 0) setParcelas([]);
+      return;
+    }
     if (parcelas.length > 0 && valorNFe > 0) {
-      const valorRestante = valorNFe - valorEntrada;
+      const valorRestante = valorNFe - entradaParaCalculo(valorNFe, valorEntrada);
       const totalParcelas = parcelas.length;
       const valorPorParcela =
         Math.round((valorRestante / totalParcelas) * 100) / 100;
@@ -176,9 +192,16 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
         const parcelaAntecipado = data.data.find(
           (p: ParcelaSugerida) => p.numero_parcela === 0,
         );
-        if (parcelaAntecipado) {
+        // A seleção manual (tela "Selecionar Pagamentos") tem PRIORIDADE sobre a parcela 0
+        // do OC associado — senão o total selecionado (ex.: 2.100) era sobrescrito pela
+        // parcela 0 (ex.: 2.000), gerando a inconsistência entre as duas telas.
+        const veioSelecaoManual = !!(ordensAntecipadas && ordensAntecipadas.length > 0 && valorAntecipado && valorAntecipado > 0);
+        const entradaEfetiva = veioSelecaoManual
+          ? valorAntecipado
+          : (parcelaAntecipado ? parcelaAntecipado.valor_parcela : 0);
+        if (entradaEfetiva > 0) {
           setHabilitarEntrada(true);
-          setValorEntrada(parcelaAntecipado.valor_parcela);
+          setValorEntrada(entradaEfetiva);
         }
 
         // Normaliza qualquer data (ISO com/sem hora) para 'YYYY-MM-DD' sem
@@ -193,8 +216,13 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         };
 
-        // Carregar parcelas do XML como sugestão
-        const parcelasXML = data.data
+        // Só zera as parcelas quando o antecipado PAGO já quita a NFe. Se for o caso de
+        // CANCELAR (não pago > NF), mantém as parcelas do XML (cobrança da NF inteira).
+        const nfLocal = data.debug?.valorTotalNFe || 0;
+        const quitadoLocal = ehQuitadoPorAntecipadoPago(nfLocal, entradaEfetiva);
+
+        // Carregar parcelas do XML como sugestão (nenhuma quando quitado por antecipado)
+        const parcelasXML = quitadoLocal ? [] : data.data
           .filter((p: ParcelaSugerida) => p.numero_parcela > 0)
           .map((p: ParcelaSugerida) => {
             const dataISO = isoDate(p.data_vencimento);
@@ -241,24 +269,34 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
       return;
     }
 
-    // Validar se soma das parcelas + entrada = valor da NFe
+    // Validação de DATA: nenhuma parcela pode vencer antes de hoje (obriga informar data válida).
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const parcelaVencida = parcelas.find(
+      (p) => p.data_vencimento && String(p.data_vencimento).slice(0, 10) < hojeISO,
+    );
+    if (parcelaVencida) {
+      const msg = `Há parcela com vencimento no passado (${String(parcelaVencida.data_vencimento)
+        .slice(0, 10)
+        .split('-')
+        .reverse()
+        .join('/')}). Informe uma data de vencimento válida (hoje ou futura).`;
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    // Validar soma das parcelas + entrada = valor da NFe (entrada = 0 quando os antecipados
+    // não pagos serão cancelados; dispensada quando quitado por antecipado PAGO).
+    const entradaCalc = entradaParaCalculo(valorNFe, valorEntrada);
     const somaParcelas = parcelas.reduce((sum, p) => sum + p.valor_parcela, 0);
-    const totalComEntrada = somaParcelas + valorEntrada;
+    const totalComEntrada = somaParcelas + entradaCalc;
     const diferenca = Math.abs(totalComEntrada - valorNFe);
 
-    if (diferenca > 0.1) {
+    if (!ehQuitadoPorAntecipadoPago(valorNFe, valorEntrada) && diferenca > 0.1) {
       setError(
-        `A soma das parcelas (R$ ${somaParcelas.toFixed(
-          2,
-        )}) + entrada (R$ ${valorEntrada.toFixed(
-          2,
-        )}) = R$ ${totalComEntrada.toFixed(
-          2,
-        )} difere do valor da NFe (R$ ${valorNFe.toFixed(2)})`,
+        `A soma das parcelas (R$ ${somaParcelas.toFixed(2)})${entradaCalc > 0 ? ` + entrada (R$ ${entradaCalc.toFixed(2)})` : ''} = R$ ${totalComEntrada.toFixed(2)} difere do valor da NFe (R$ ${valorNFe.toFixed(2)})`,
       );
-      toast.error(
-        'A soma das parcelas + entrada não corresponde ao valor da NFe',
-      );
+      toast.error('A soma das parcelas não corresponde ao valor da NFe');
       return;
     }
 
@@ -323,6 +361,12 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
   };
 
   const handleGerarParcelas = () => {
+    // Quitado por antecipado PAGO → não gerar parcelas (evita parcela negativa).
+    if (ehQuitadoPorAntecipadoPago(valorNFe, valorEntrada)) {
+      toast.info('A NFe já está quitada pelo antecipado — não é necessário gerar parcelas.');
+      if (parcelas.length > 0) setParcelas([]);
+      return;
+    }
     const qtdParcelas = parseInt(prazoInput);
     if (!qtdParcelas || qtdParcelas <= 0) {
       toast.error('Insira uma quantidade válida de parcelas.');
@@ -334,7 +378,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
     }
 
     const intervalo = parseInt(intervaloDias, 10) || 30;
-    const valorRestante = valorNFe - valorEntrada;
+    const valorRestante = valorNFe - entradaParaCalculo(valorNFe, valorEntrada);
     const valorPorParcela = Math.round((valorRestante / qtdParcelas) * 100) / 100;
     const somaParcelas = valorPorParcela * qtdParcelas;
     const ajuste = Math.round((valorRestante - somaParcelas) * 100) / 100;
@@ -403,15 +447,19 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
     }
   };
 
+  const quitadoPorAntecipado = ehQuitadoPorAntecipadoPago(valorNFe, valorEntrada);
+  const cancelaAntecipado = ehCancelaAntecipado(valorNFe, valorEntrada);
+  const entradaCalc = entradaParaCalculo(valorNFe, valorEntrada);
   const somaParcelas = parcelas.reduce((sum, p) => sum + p.valor_parcela, 0);
-  const totalComEntrada = somaParcelas + valorEntrada;
+  const totalComEntrada = somaParcelas + entradaCalc;
   const diferenca = Math.abs(valorNFe - totalComEntrada);
-  const isValido = diferenca < 0.1;
+  const excedenteAntecipado = quitadoPorAntecipado ? Math.round((valorEntrada - valorNFe) * 100) / 100 : 0;
+  const isValido = quitadoPorAntecipado || diferenca < 0.1;
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <style>{`
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button {
@@ -422,9 +470,9 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
           -moz-appearance: textfield;
         }
       `}</style>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl max-h-[92vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <DollarSign className="text-green-500" size={24} />
             <div>
@@ -566,7 +614,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                           onKeyDown={handleKeyDown}
                           placeholder="Ex: 3"
                           className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                          disabled={loading || pagamentoConfigurado}
+                          disabled={loading || pagamentoConfigurado || quitadoPorAntecipado}
                         />
                       </div>
                       <div>
@@ -580,13 +628,14 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                           placeholder="30"
                           title="Intervalo em dias entre as parcelas"
                           className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                          disabled={loading || pagamentoConfigurado}
+                          disabled={loading || pagamentoConfigurado || quitadoPorAntecipado}
                         />
                       </div>
                       <button
                         type="button"
                         onClick={handleGerarParcelas}
-                        disabled={loading || pagamentoConfigurado}
+                        disabled={loading || pagamentoConfigurado || quitadoPorAntecipado}
+                        title={quitadoPorAntecipado ? 'NFe quitada pelo antecipado — não há parcelas a gerar' : undefined}
                         className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Gerar Parcelas
@@ -744,6 +793,51 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                 </div>
               </div>
 
+              {/* Quitação por antecipado: NF coberta pelo antecipado, sem parcelas */}
+              {quitadoPorAntecipado && (
+                <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" size={20} />
+                    <div className="text-sm">
+                      <h4 className="font-semibold text-blue-800 dark:text-blue-200">
+                        NFe quitada pelo antecipado
+                      </h4>
+                      <p className="text-blue-700 dark:text-blue-300 mt-1">
+                        O antecipado (R$ {valorEntrada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) cobre toda a
+                        NFe (R$ {valorNFe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) — nenhuma parcela será gerada.
+                        {excedenteAntecipado > 0 && (
+                          <>
+                            {' '}O excedente de{' '}
+                            <b>R$ {excedenteAntecipado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b>{' '}
+                            será registrado como <b>crédito do fornecedor</b>.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Antecipado(s) não pago(s) > NF → serão cancelados; cobrança = NF inteira */}
+              {cancelaAntecipado && (
+                <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" size={20} />
+                    <div className="text-sm">
+                      <h4 className="font-semibold text-amber-800 dark:text-amber-200">
+                        Antecipado(s) não pago(s) serão cancelados
+                      </h4>
+                      <p className="text-amber-700 dark:text-amber-300 mt-1">
+                        O total antecipado (R$ {valorEntrada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) é maior que a
+                        NFe (R$ {valorNFe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) e <b>não foi pago</b>. Os
+                        antecipados serão <b>cancelados</b> e a cobrança será gerada pela <b>NFe inteira</b> — pelas parcelas do
+                        XML ou lançadas manualmente abaixo.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Resumo */}
               {parcelas.length > 0 && (
                 <div
@@ -832,7 +926,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="sticky bottom-0 z-10 bg-white dark:bg-gray-800 flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={onClose}
             disabled={loading}
@@ -848,7 +942,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
           ) : (
             <button
               onClick={handleSalvar}
-              disabled={loading || !banco || parcelas.length === 0 || !isValido}
+              disabled={loading || !banco || (!quitadoPorAntecipado && parcelas.length === 0) || !isValido}
               className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
             >
               {loading ? 'Salvando...' : 'Confirmar Pagamento'}

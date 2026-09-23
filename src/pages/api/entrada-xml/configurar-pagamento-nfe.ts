@@ -17,7 +17,8 @@ const bodySchema = z.object({
   nfeId: z.string().min(1, "NFE ID é obrigatório"),
   banco: z.string().min(1, "Banco é obrigatório"),
   tipoDocumento: z.string().min(1, "Tipo de documento é obrigatório"),
-  parcelas: z.array(parcelaSchema).min(1, "Pelo menos uma parcela é necessária"),
+  // Pode vir VAZIO quando o antecipado já cobre toda a NFe (quitação por antecipado / excedente).
+  parcelas: z.array(parcelaSchema).default([]),
   xmlNf: z.string().optional(), // XML da NFe para salvar no dbpgto
   ordensAssociadas: z.array(z.number()).optional(), // Lista de ordens associadas à NFe (manual ou automático)
   valorAntecipadoManual: z.number().optional(), // Valor antecipado quando ordens são selecionadas manualmente
@@ -30,6 +31,9 @@ interface ConfigurarPagamentoResponse {
   message: string;
   parcelasCriadas?: number;
   valorTotal?: number;
+  quitadaPorAntecipado?: boolean;
+  antecipadosCancelados?: number;
+  creditoGerado?: number;
 }
 
 export default async function handler(
@@ -187,26 +191,83 @@ export default async function handler(
       valorAntecipado = parseFloat(pgtoAntecipadoResult.rows[0]?.valor_antecipado || 0);
     }
 
-    // 5. Validar soma das parcelas + antecipado = valor NFe (tolerância de R$ 0.10)
-    const somaParcelasRecebidas = parcelas.reduce((sum, p) => sum + p.valor_parcela, 0);
-    const totalComAntecipado = somaParcelasRecebidas + valorAntecipado;
-    const diferenca = Math.abs(totalComAntecipado - valorTotalNFe);
+    // ===== Detecção de EXCEDENTE (antecipado TOTAL >= NF) =====
+    // O valorAntecipado acima conta só parcela 0 com paga='N'. Para o excedente precisamos
+    // do TOTAL (valor_pgto) e do PAGO (valor_pago) dos antecipados das ordens desta NFe.
+    let orcIdsAnt: number[] = [];
+    if (ordensAssociadas && ordensAssociadas.length > 0) {
+      orcIdsAnt = ordensAssociadas;
+    } else {
+      const rOrc = await client.query(
+        `SELECT DISTINCT req_id::bigint AS orc FROM nfe_item_pedido_associacao WHERE nfe_id = $1`, [nfeId]
+      );
+      orcIdsAnt = rOrc.rows.map((r) => Number(r.orc));
+    }
+    let antTotal = 0, antPago = 0;
+    const antTitulos: { cod_pgto: string; orc_id: number; valor_pgto: number; valor_pago: number }[] = [];
+    if (orcIdsAnt.length > 0) {
+      const ai = await client.query(`
+        SELECT p.cod_pgto, opc.orc_id,
+               COALESCE(p.valor_pgto,0) AS valor_pgto, COALESCE(p.valor_pago,0) AS valor_pago
+        FROM dbpgto p
+        INNER JOIN ordem_pagamento_conta opc ON p.cod_pgto = opc.cod_pgto
+        WHERE opc.orc_id = ANY($1::bigint[]) AND opc.numero_parcela = 0 AND COALESCE(p.cancel,'N') <> 'S'
+        ORDER BY p.cod_pgto`, [orcIdsAnt]);
+      for (const r of ai.rows) {
+        const vp = parseFloat(r.valor_pgto), vpg = parseFloat(r.valor_pago);
+        antTotal += vp; antPago += vpg;
+        antTitulos.push({ cod_pgto: r.cod_pgto, orc_id: Number(r.orc_id), valor_pgto: vp, valor_pago: vpg });
+      }
+    }
+    const TOL_EXC = 0.10;
+    const antBase = valorAntecipado > 0 ? valorAntecipado : antTotal;
+    const excedente = Math.round((antBase - valorTotalNFe) * 100) / 100;
+    const ehExcedente = excedente > TOL_EXC;
+    const algumPago = antPago > 0.005;
+    // A > NF: PAGO → quita + crédito (0 parcelas). NÃO PAGO → cancela antecipados e a cobrança
+    // da NF inteira vem das parcelas (XML ou manual). Spec §5.2.
+    const quitaPorAntecipado = ehExcedente && algumPago;
+    const cancelaAntecipado = ehExcedente && !algumPago;
 
-    console.log(`\n💰 Validação de valores:`);
-    console.log(`   Parcelas recebidas: R$ ${somaParcelasRecebidas.toFixed(2)}`);
-    console.log(`   Antecipado (parcela 0): R$ ${valorAntecipado.toFixed(2)}`);
-    console.log(`   Total (parcelas + antecipado): R$ ${totalComAntecipado.toFixed(2)}`);
-    console.log(`   Valor da NFe: R$ ${valorTotalNFe.toFixed(2)}`);
-    console.log(`   Diferença: R$ ${diferenca.toFixed(2)}`);
-
-    if (diferenca > 0.10) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        error: `A soma das parcelas (R$ ${somaParcelasRecebidas.toFixed(2)}) + antecipado (R$ ${valorAntecipado.toFixed(2)}) = R$ ${totalComAntecipado.toFixed(2)} difere do valor da NFe (R$ ${valorTotalNFe.toFixed(2)}). Diferença: R$ ${diferenca.toFixed(2)}`
-      });
+    // Validação de DATA: nenhuma parcela pode vencer antes de hoje (obriga o usuário a corrigir).
+    if (!quitaPorAntecipado && parcelas.length > 0) {
+      const hojeStr = new Date().toISOString().slice(0, 10);
+      const vencida = parcelas.find(p => p.data_vencimento && String(p.data_vencimento).slice(0, 10) < hojeStr);
+      if (vencida) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `Há parcela com vencimento no passado (${String(vencida.data_vencimento).slice(0, 10)}). Informe uma data de vencimento válida (hoje ou futura).`
+        });
+      }
     }
 
-    console.log(`✅ Validação de valores OK!\n`);
+    if (quitaPorAntecipado) {
+      console.log(`\n💰 EXCEDENTE PAGO: antecipado R$ ${antBase.toFixed(2)} > NF R$ ${valorTotalNFe.toFixed(2)}. NFe quitada; excedente pago vira crédito.\n`);
+    } else {
+      // Antecipado efetivo = 0 quando os antecipados serão cancelados (não pago); senão o detectado.
+      const antecipadoEfetivo = cancelaAntecipado ? 0 : valorAntecipado;
+      const somaParcelasRecebidas = parcelas.reduce((sum, p) => sum + p.valor_parcela, 0);
+      const totalComAntecipado = somaParcelasRecebidas + antecipadoEfetivo;
+      const diferenca = Math.abs(totalComAntecipado - valorTotalNFe);
+
+      console.log(`\n💰 Validação: parcelas ${somaParcelasRecebidas.toFixed(2)} + antecipado ${antecipadoEfetivo.toFixed(2)} = ${totalComAntecipado.toFixed(2)} vs NF ${valorTotalNFe.toFixed(2)} (dif ${diferenca.toFixed(2)})${cancelaAntecipado ? ' [antecipados serão CANCELADOS]' : ''}`);
+
+      if (parcelas.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: cancelaAntecipado
+            ? 'Os antecipados não pagos são maiores que a NFe e serão cancelados — informe as parcelas da cobrança (do XML ou manual).'
+            : 'Pelo menos uma parcela é necessária.'
+        });
+      }
+      if (diferenca > 0.10) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `A soma das parcelas (R$ ${somaParcelasRecebidas.toFixed(2)})${antecipadoEfetivo > 0 ? ` + antecipado (R$ ${antecipadoEfetivo.toFixed(2)})` : ''} = R$ ${totalComAntecipado.toFixed(2)} difere do valor da NFe (R$ ${valorTotalNFe.toFixed(2)}). Diferença: R$ ${diferenca.toFixed(2)}`
+        });
+      }
+      console.log(`✅ Validação OK!\n`);
+    }
 
     // 6. Buscar todas as ordens associadas à NFe (se não foram passadas) COM SEUS VALORES
     let todasOrdensAssociadas = ordensAssociadas || [];
@@ -310,7 +371,9 @@ export default async function handler(
     let parcelasCriadas = 0;
     let valorTotalCriado = 0;
 
-    const parcelasNormais = parcelas.filter(p => p.numero_parcela > 0);
+    // Quitado por antecipado PAGO → 0 parcelas. Nos demais casos (inclusive cancelaAntecipado),
+    // a cobrança vem das parcelas enviadas (XML ou manual).
+    const parcelasNormais = quitaPorAntecipado ? [] : parcelas.filter(p => p.numero_parcela > 0);
     const totalParcelasNormais = parcelasNormais.length;
 
     console.log(`📝 Criando ${parcelasNormais.length} parcela(s) em dbpgto (parcela 0 já existe)\n`);
@@ -401,6 +464,39 @@ export default async function handler(
       proximoCodPgto++;
     }
 
+    // 8.1 EXCEDENTE tratado (spec §5.2):
+    //  - PAGO     → NFe quitada + crédito do excedente pago (títulos permanecem);
+    //  - NÃO PAGO → cancela TODOS os antecipados das OCs (a cobrança da NF veio das parcelas acima).
+    let creditoGeradoValor = 0;
+    if (quitaPorAntecipado) {
+      const excedentePago = Math.min(excedente, Math.round(Math.max(0, antPago - valorTotalNFe) * 100) / 100);
+      const grpRes = await client.query(
+        `SELECT fn_grupo_credor(cpf_cgc) AS gk FROM dbcredor WHERE cod_credor = $1`, [fornecedorCod]
+      );
+      const grupoKey = grpRes.rows[0]?.gk || fornecedorCod;
+      if (excedentePago > 0.005) {
+        await client.query(`
+          INSERT INTO credor_credito
+            (grupo_key, cod_credor, origem, cod_pgto, nfe_id, valor_original, valor_disponivel, status, obs, username)
+          VALUES ($1,$2,'SOBRA_PAGAMENTO',$3,$4,$5,$5,'ABERTO',$6,$7)`,
+          [grupoKey, fornecedorCod, antTitulos[0]?.cod_pgto || null, nfeId, excedentePago,
+           `Excedente de antecipado pago na NFe ${nfeId} (antecipado R$ ${antBase.toFixed(2)} - NF R$ ${valorTotalNFe.toFixed(2)})`,
+           userName || null]);
+        creditoGeradoValor = excedentePago;
+      }
+      console.log(`💰 Quitado por antecipado pago. Crédito gerado: R$ ${creditoGeradoValor.toFixed(2)}`);
+    } else if (cancelaAntecipado) {
+      // Cancela TODOS os antecipados (parcela 0) das OCs associadas — cancel='S', nada excluído.
+      for (const t of antTitulos) {
+        await client.query(
+          `UPDATE dbpgto SET cancel = 'S', obs = COALESCE(obs,'') || $2 WHERE cod_pgto = $1`,
+          [t.cod_pgto, ` [CANCELADO: antecipado nao pago substituido pela cobranca do XML da NFe ${nfeId}]`]);
+        await client.query(`UPDATE ordem_pagamento_conta SET status = 'CANCELADO' WHERE cod_pgto = $1 AND numero_parcela = 0`, [t.cod_pgto]);
+        await client.query(`UPDATE ordem_pagamento_parcelas SET status = 'CANCELADO' WHERE orc_id = $1 AND numero_parcela = 0`, [t.orc_id]);
+      }
+      console.log(`🚫 ${antTitulos.length} antecipado(s) NAO pago(s) cancelado(s) (A > NF). Cobranca gerada pelas parcelas.`);
+    }
+
     // 9. Marcar NFe como com pagamento configurado
     // (Campo pode não existir ainda, então fazer UPDATE sem validação)
     await client.query(`
@@ -464,11 +560,19 @@ export default async function handler(
     console.log(`   Parcela 0 (antecipado): JÁ EXISTIA, não foi criada novamente`);
     console.log(`========================================\n`);
 
+    const msgExc = quitaPorAntecipado
+      ? ` NFe quitada pelo antecipado.${creditoGeradoValor > 0 ? ` Crédito de R$ ${creditoGeradoValor.toFixed(2)} gerado para o fornecedor.` : ''}`
+      : cancelaAntecipado
+      ? ` ${antTitulos.length} antecipado(s) não pago(s) cancelado(s); cobrança gerada pela NFe.`
+      : '';
     return res.status(200).json({
       success: true,
-      message: `Pagamento da NFe configurado com sucesso! ${parcelasCriadas} parcela(s) criada(s).`,
+      message: `Pagamento da NFe configurado com sucesso! ${parcelasCriadas} parcela(s) criada(s).${msgExc}`,
       parcelasCriadas,
-      valorTotal: valorTotalCriado
+      valorTotal: valorTotalCriado,
+      quitadaPorAntecipado: quitaPorAntecipado,
+      antecipadosCancelados: cancelaAntecipado ? antTitulos.length : 0,
+      creditoGerado: creditoGeradoValor,
     });
 
   } catch (error: any) {
