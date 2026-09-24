@@ -134,10 +134,12 @@ export default async function handle(
     const newVendedor = newVendedorResult.rows[0];
 
     // 3. Inserir dados relacionados (lógica mantida)
-    if (pst) {
+    // PST é OPCIONAL (fiel ao Delphi): só grava quando há Código PST — a coluna
+    // dbvend_pst.codpst é NOT NULL, então inserir vazio quebrava o cadastro.
+    if (pst && pst.codpst && String(pst.codpst).trim()) {
       await client.query(
         `INSERT INTO dbvend_pst (codvend, codpst, local) VALUES ($1, $2, $3);`,
-        [newVendedor.codvend, pst.codpst || null, pst.local || 'MAO'],
+        [newVendedor.codvend, String(pst.codpst).trim(), pst.local || 'MAO'],
       );
     }
 
@@ -228,8 +230,22 @@ export default async function handle(
           const coluna = error.column || 'desconhecido';
           const nomesAmigaveis: { [key: string]: string } = {
             codvend: 'Código do Vendedor',
-            nome: 'Nome',
+            nome: 'Apelido',
+            codcv: 'Classe do Vendedor',
             valobj: 'Valor Objetivo',
+            comnormal: 'Comissão Normal',
+            comtele: 'Comissão Telemarketing',
+            limite: 'Limite de Débito',
+            ra_mat: 'Matrícula',
+            codpst: 'Código PST',
+            bairro: 'Bairro',
+            cep: 'CEP',
+            cidade: 'Cidade',
+            estado: 'UF',
+            celular: 'Celular',
+            logradouro: 'Endereço',
+            cpf_cnpj: 'CPF/CNPJ',
+            tipo: 'Tipo de Pessoa',
           };
           const nomeCampoAmigavel = nomesAmigaveis[coluna] || coluna;
 

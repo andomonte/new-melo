@@ -118,7 +118,8 @@ export default function CustomModal({
               'detalhado_vendedor.logradouro',
               data.logradouro,
             );
-            handleVendedorChange('detalhado_vendedor.bairro', data.bairro);
+            // NÃO preenche bairro pelo viacep: o campo bairro é um CÓDIGO (VARCHAR 5),
+            // e o viacep devolve o NOME — o usuário seleciona o bairro no combo.
             handleVendedorChange('detalhado_vendedor.cidade', data.localidade);
             handleVendedorChange('detalhado_vendedor.estado', data.uf);
           } else {
