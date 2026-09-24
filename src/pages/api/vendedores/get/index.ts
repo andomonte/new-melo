@@ -117,7 +117,10 @@ export default async function handle(
         SELECT
             codvend,
             nome AS "NOMERAZAO",
-            nome,
+            COALESCE(
+              (SELECT dd.nome FROM dbdados_vend dd WHERE dd.codvend = dbvend.codvend LIMIT 1),
+              nome
+            ) AS nome,
             valobj,
             comnormal,
             comtele,
@@ -135,8 +138,8 @@ export default async function handle(
         WHERE
             LOWER(CAST(codvend AS TEXT)) LIKE LOWER($1)
             OR
-            LOWER(COALESCE(nome, '')) LIKE LOWER($1)
-        ORDER BY COALESCE(nome, codvend)
+            LOWER(COALESCE(dbvend.nome, '')) LIKE LOWER($1)
+        ORDER BY COALESCE(dbvend.nome, codvend)
         OFFSET $2
         LIMIT $3
       `,
@@ -225,7 +228,10 @@ export default async function handle(
         SELECT
             codvend,
             nome AS "NOMERAZAO",
-            nome,
+            COALESCE(
+              (SELECT dd.nome FROM dbdados_vend dd WHERE dd.codvend = dbvend.codvend LIMIT 1),
+              nome
+            ) AS nome,
             valobj,
             comnormal,
             comtele,
@@ -242,7 +248,7 @@ export default async function handle(
         FROM dbvend
         ${searchCondition}
         ${whereClause}
-        ORDER BY COALESCE(nome, codvend)
+        ORDER BY COALESCE(dbvend.nome, codvend)
         OFFSET $${offsetParamIndex}
         LIMIT $${limitParamIndex}
       `,
