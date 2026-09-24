@@ -17,7 +17,8 @@ export default async function handler(
       tipo, // 'F' = Fornecedor, 'T' = Transportadora
       cod_credor, // Código do fornecedor (se tipo = 'F')
       cod_transp, // Código da transportadora (se tipo = 'T')
-      cod_conta, // Código da conta contábil
+      cod_conta, // Conta (dbconta / banco)
+      pag_cof_id, // Conta Financeira (cad_conta_financeira.cof_id) — selecionada no form
       cod_ccusto, // Código do centro de custo
       cod_comprador, // Código do comprador (opcional)
       dt_venc, // Data de vencimento
@@ -150,18 +151,23 @@ export default async function handler(
       observacaoFinal = observacaoFinal ? `${observacaoFinal} | ${infoNotas}` : infoNotas;
     }
 
+    // Conta Financeira (pag_cof_id) = cof_id escolhido no form (mesmo p/ todas as parcelas).
+    // Se não for selecionada, grava NULL (coluna aceita NULL a partir da migration 056).
+    // NÃO auto-gerar (o antigo MAX+1 criava valores órfãos que não batem com cad_conta_financeira).
+    const contaFinanceiraId: number | null =
+      pag_cof_id != null && String(pag_cof_id).trim() !== '' && !isNaN(parseInt(String(pag_cof_id), 10))
+        ? parseInt(String(pag_cof_id), 10)
+        : null;
+
     // Criar cada parcela
     for (let i = 0; i < totalParcelas; i++) {
-      // Gerar próximo cod_pgto e pag_cof_id
+      // Gerar próximo cod_pgto
       const maxCodResult = await pool.query(
         'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM dbpgto'
       );
       const nextCodPgto = maxCodResult.rows[0].next_cod.toString().padStart(9, '0');
 
-      const maxPagCofResult = await pool.query(
-        'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM dbpgto'
-      );
-      const nextPagCofId = maxPagCofResult.rows[0].next_pag_cof_id;
+      const nextPagCofId = contaFinanceiraId;
 
       // Calcular data de vencimento desta parcela
       // Se parcelado, usar vencimento do array, senão usar dt_venc

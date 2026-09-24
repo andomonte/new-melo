@@ -292,7 +292,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           p.banco,
           b.nome as nome_banco,
           p.ordem_compra,
-          cf.cof_descricao as descricao_conta,
+          NULLIF(TRIM(COALESCE(dbc.nro_conta, '') || CASE WHEN dbcb.nome IS NOT NULL THEN ' | ' || dbcb.nome ELSE '' END), '') as descricao_conta,
+          p.pag_cof_id,
+          cf.cof_descricao as descricao_conta_financeira,
           p.eh_internacional,
           p.moeda,
           p.taxa_conversao,
@@ -336,10 +338,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ELSE 'pendente'
           END as status
       FROM dbpgto p
-      LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+      LEFT JOIN dbcredor c ON LTRIM(c.cod_credor, '0') = LTRIM(COALESCE(p.cod_credor,''), '0') AND COALESCE(p.cod_credor,'') <> ''
       LEFT JOIN dbtransp t ON t.codtransp = p.cod_transp
       LEFT JOIN dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
-      LEFT JOIN cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)
+      LEFT JOIN dbconta dbc ON dbc.cod_conta = p.cod_conta
+      LEFT JOIN dbbanco dbcb ON dbcb.cod_banco = dbc.cod_banco
+      LEFT JOIN cad_conta_financeira cf ON cf.cof_id = p.pag_cof_id
       LEFT JOIN dbbanco b ON b.cod_banco = p.banco
         LEFT JOIN dbcompradores comp ON comp.codcomprador = p.codcomprador
         WHERE 1=1 ${whereClause}
@@ -386,7 +390,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ELSE 'pendente'
           END as status
         FROM dbpgto p
-        LEFT JOIN dbcredor c ON c.cod_credor = p.cod_credor
+        LEFT JOIN dbcredor c ON LTRIM(c.cod_credor, '0') = LTRIM(COALESCE(p.cod_credor,''), '0') AND COALESCE(p.cod_credor,'') <> ''
         LEFT JOIN dbtransp t ON t.codtransp = p.cod_transp
         LEFT JOIN dbccusto cc ON cc.cod_ccusto = p.cod_ccusto
         LEFT JOIN cad_conta_financeira cf ON cf.cof_id = CAST(p.cod_conta AS INTEGER)

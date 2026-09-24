@@ -217,6 +217,8 @@ export function ContasAPagar() {
   // Estados para dados dinâmicos da API
   const [bancosDisponiveis, setBancosDisponiveis] = useState<{ value: string; label: string }[]>([]);
   const [contasDbconta, setContasDbconta] = useState<{ value: string; label: string }[]>([]);
+  // Formas de pagamento (Contas a Pagar) — vêm do cadastro cad_forma_pgto; grava a LETRA em tp_pgto
+  const [formasPgtoOpcoes, setFormasPgtoOpcoes] = useState<{ letra: string; descricao: string }[]>([]);
   const [contaSelecionadaPgto, setContaSelecionadaPgto] = useState('');
   const [historicoPagamentos, setHistoricoPagamentos] = useState<{
     historico: any[];
@@ -249,6 +251,7 @@ export function ContasAPagar() {
     nro_dup: '',
     cod_credor: '',
     cod_conta: '',
+    pag_cof_id: '',
     cod_ccusto: ''
   });
   const [dadosValidacaoValor, setDadosValidacaoValor] = useState<{
@@ -636,6 +639,7 @@ export function ContasAPagar() {
     'Ordem Compra',
     'Centro Custo',
     'Conta',
+    'Conta Financeira',
     'Comprador',
     'Internacional',
     'Moeda',
@@ -832,6 +836,28 @@ export function ContasAPagar() {
       }
     }
     carregarContasDbconta();
+  }, []);
+
+  // Buscar formas de pagamento ativas (cadastro) para o modal de pagamento
+  useEffect(() => {
+    async function carregarFormasPgto() {
+      try {
+        const response = await fetch('/api/forma-pgto?ativos=1');
+        if (response.ok) {
+          const data = await response.json();
+          const formas = (data.data || []).map((f: any) => ({
+            letra: f.fpg_letra,
+            descricao: f.fpg_descricao,
+          }));
+          setFormasPgtoOpcoes(formas);
+        } else {
+          console.error('Erro ao buscar formas de pagamento:', await response.text());
+        }
+      } catch (error) {
+        console.error('Erro ao buscar formas de pagamento:', error);
+      }
+    }
+    carregarFormasPgto();
   }, []);
 
   // ✅ OTIMIZAÇÃO 8: Atalhos de Teclado
@@ -1455,8 +1481,38 @@ export function ContasAPagar() {
             ) : '-'}
           </span>
         ),
-        // Conta
-        <span className="text-xs">{conta.descricao_conta}</span>,
+        // Conta (código - nome)
+        (
+          <span className="text-xs">
+            {conta.cod_conta ? (
+              <>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.cod_conta}</span>
+                {conta.descricao_conta && (
+                  <>
+                    {" - "}
+                    <span className="text-gray-900 dark:text-white">{conta.descricao_conta}</span>
+                  </>
+                )}
+              </>
+            ) : '-'}
+          </span>
+        ),
+        // Conta Financeira (código - nome)
+        (
+          <span className="text-xs">
+            {conta.pag_cof_id ? (
+              <>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.pag_cof_id}</span>
+                {conta.descricao_conta_financeira && (
+                  <>
+                    {" - "}
+                    <span className="text-gray-900 dark:text-white">{conta.descricao_conta_financeira}</span>
+                  </>
+                )}
+              </>
+            ) : '-'}
+          </span>
+        ),
         // Comprador
         (
           <span className="text-xs">
@@ -1555,7 +1611,9 @@ export function ContasAPagar() {
     setValorPago(formatarValorParaInput(saldoRestante));
     
     // ✅ OTIMIZAÇÃO 4: Lembrar última forma de pagamento usada
-    const ultimaForma = localStorage.getItem('ultimaFormaPgto') || '001'; // Dinheiro como padrão
+    let ultimaForma = localStorage.getItem('ultimaFormaPgto') || 'D'; // Dinheiro (letra) como padrão
+    // Ignora valores antigos (códigos numéricos '001'..'007'): agora é LETRA de 1 caractere
+    if (ultimaForma.length !== 1) ultimaForma = 'D';
     setFormaPgto(ultimaForma);
     
     setCentroCustoSelecionado(conta.cod_ccusto?.toString() || '');
@@ -1677,6 +1735,7 @@ export function ContasAPagar() {
       nro_dup: conta.nro_dup || '',
       cod_credor: conta.cod_credor?.toString() || '',
       cod_conta: conta.cod_conta?.toString() || '',
+      pag_cof_id: conta.pag_cof_id?.toString() || '',
       cod_ccusto: conta.cod_ccusto?.toString() || ''
     });
     modais.setModalEditarAberto(true);
@@ -2081,7 +2140,7 @@ export function ContasAPagar() {
       return;
     }
 
-    if (formaPgto === '002' && !nroCheque) {
+    if (formaPgto === 'C' && !nroCheque) {
       toast.error('Número do cheque é obrigatório', { position: 'top-right' });
       return;
     }
@@ -2122,17 +2181,8 @@ export function ContasAPagar() {
   const processarPagamento = async () => {
     if (!modais.contaSelecionada) return;
 
-    // Determinar tp_pgto baseado na forma de pagamento
-    const tipoPgtoMap: Record<string, string> = {
-      '001': 'D', // Dinheiro
-      '002': 'C', // Cheque
-      '003': 'P', // PIX
-      '004': 'T', // Transferência
-      '005': 'R', // Cartão Crédito
-      '006': 'E', // Cartão Débito
-      '007': 'B', // Boleto
-    };
-
+    // A forma de pagamento agora É a LETRA vinda do cadastro (cad_forma_pgto).
+    // A mesma letra vai para tp_pgto e cod_fpgto (convenção MELO: D/C/B/A/F/R/V/N).
     try {
       // Capturar username do sessionStorage
       const perfilUserMelo = localStorage.getItem('perfilUserMelo');
@@ -2144,9 +2194,9 @@ export function ContasAPagar() {
         valor_pago: desmascarar(valorPago),
         obs: obsPagamento || modais.contaSelecionada.obs,
         banco: bancoSelecionado || null,
-        forma_pgto: formaPgto, // cod_fpgto para registrar em DBFPGTO
-        tp_pgto: tipoPgtoMap[formaPgto] || 'D', // Tipo de pagamento
-        nro_cheque: formaPgto === '002' ? nroCheque : null, // Apenas se for cheque
+        forma_pgto: formaPgto, // cod_fpgto = a mesma letra selecionada
+        tp_pgto: formaPgto, // tp_pgto = LETRA do cadastro (discriminador real)
+        nro_cheque: formaPgto === 'C' ? nroCheque : null, // Apenas se for cheque
         cod_ccusto: centroCustoSelecionado || modais.contaSelecionada.cod_ccusto?.toString() || null,
         valor_juros: desmascarar(valorJuros) || 0,
         cod_conta: contaSelecionadaPgto || contaBancariaSelecionada || modais.contaSelecionada.cod_conta?.toString() || null,
@@ -2192,9 +2242,11 @@ export function ContasAPagar() {
         obs: dadosEdicao.obs || undefined,
         nro_nf: dadosEdicao.nro_nf || undefined,
         nro_dup: dadosEdicao.nro_dup || undefined,
-        cod_credor: dadosEdicao.cod_credor ? parseInt(dadosEdicao.cod_credor) : undefined,
-        cod_conta: dadosEdicao.cod_conta ? parseInt(dadosEdicao.cod_conta) : undefined,
-        cod_ccusto: dadosEdicao.cod_ccusto ? parseInt(dadosEdicao.cod_ccusto) : undefined
+        // STRING (mantém zeros à esquerda; parseInt quebrava o vínculo do credor/conta).
+        cod_credor: dadosEdicao.cod_credor || undefined,
+        cod_conta: dadosEdicao.cod_conta || undefined,
+        pag_cof_id: dadosEdicao.pag_cof_id || undefined,
+        cod_ccusto: dadosEdicao.cod_ccusto || undefined
       });
 
       toast.success('Conta atualizada com sucesso!', {
@@ -3363,13 +3415,11 @@ export function ContasAPagar() {
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="001">001 - Dinheiro</SelectItem>
-                  <SelectItem value="002">002 - Cheque</SelectItem>
-                  <SelectItem value="003">003 - PIX</SelectItem>
-                  <SelectItem value="004">004 - Transferência</SelectItem>
-                  <SelectItem value="005">005 - Cartão Crédito</SelectItem>
-                  <SelectItem value="006">006 - Cartão Débito</SelectItem>
-                  <SelectItem value="007">007 - Boleto</SelectItem>
+                  {formasPgtoOpcoes.map((f) => (
+                    <SelectItem key={f.letra} value={f.letra}>
+                      {f.letra} - {f.descricao}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3387,7 +3437,7 @@ export function ContasAPagar() {
               />
             </div>
 
-            {formaPgto === '002' && (
+            {formaPgto === 'C' && (
               <div>
                 <Label htmlFor="nro_cheque">Nº Cheque</Label>
                 <Input
@@ -3401,7 +3451,7 @@ export function ContasAPagar() {
               </div>
             )}
 
-            <div className={formaPgto === '002' ? 'col-span-2' : 'col-span-3'}>
+            <div className={formaPgto === 'C' ? 'col-span-2' : 'col-span-3'}>
               <Label htmlFor="obs_pgto">Observações</Label>
               <Input
                 id="obs_pgto"
@@ -3657,29 +3707,42 @@ export function ContasAPagar() {
             </div>
           </div>
 
-          {/* Linha 2: Conta Bancária + Centro Custo + NF + Duplicata */}
+          {/* Linha 2: Conta Financeira + Conta + NF + Duplicata (igual ao cadastro) */}
           <div className="grid grid-cols-4 gap-3">
             <div>
-              <Label>Conta Bancária</Label>
+              <Label>Conta Financeira</Label>
               <Autocomplete
-                placeholder="Buscar conta..."
+                placeholder="Buscar conta financeira..."
                 apiUrl="/api/contas-pagar/contas"
-                value={dadosEdicao.cod_conta}
-                initialLabel={modais.contaSelecionada?.descricao_conta || (modais.contaSelecionada?.cod_conta ? `Cód: ${modais.contaSelecionada.cod_conta}` : undefined)}
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
+                value={dadosEdicao.pag_cof_id}
+                initialLabel={
+                  modais.contaSelecionada?.pag_cof_id &&
+                  modais.contaSelecionada?.descricao_conta_financeira
+                    ? `${modais.contaSelecionada.pag_cof_id} - ${modais.contaSelecionada.descricao_conta_financeira}`
+                    : undefined
+                }
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, pag_cof_id: value }))}
                 mapResponse={(data) => data.contas || []}
               />
             </div>
 
             <div>
-              <Label>Centro de Custo</Label>
+              <Label>Conta</Label>
               <Autocomplete
-                placeholder="Buscar centro de custo..."
-                apiUrl="/api/contas-pagar/centros-custo"
-                value={dadosEdicao.cod_ccusto}
-                initialLabel={modais.contaSelecionada?.descricao_ccusto || (modais.contaSelecionada?.cod_ccusto ? `Cód: ${modais.contaSelecionada.cod_ccusto}` : undefined)}
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_ccusto: value }))}
-                mapResponse={(data) => data.centrosCusto || []}
+                placeholder="Buscar conta..."
+                apiUrl="/api/contas-pagar/contas-dbconta"
+                value={dadosEdicao.cod_conta}
+                initialLabel={
+                  modais.contaSelecionada?.cod_conta
+                    ? `${modais.contaSelecionada.cod_conta}${
+                        modais.contaSelecionada.descricao_conta
+                          ? ` - ${modais.contaSelecionada.descricao_conta}`
+                          : ''
+                      }`
+                    : undefined
+                }
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
+                mapResponse={(data) => data.contas || []}
               />
             </div>
 
@@ -4032,18 +4095,23 @@ export function ContasAPagar() {
                       // Determinar a forma de pagamento com base em tp_pgto e outros campos
                       let formaPgtoNome = '';
                       let detalhes = '';
-                      
+
+                      // 1º: resolve pela LETRA do cadastro (cad_forma_pgto) — pagamentos novos
+                      const formaCadastro = formasPgtoOpcoes.find(
+                        (f) => f.letra === pagamento.tp_pgto,
+                      );
                       if (pagamento.tp_pgto === 'C') {
-                        // Cheque
-                        formaPgtoNome = 'Cheque';
                         detalhes = pagamento.nro_cheque ? `Nº ${pagamento.nro_cheque}` : '';
+                      }
+
+                      if (formaCadastro) {
+                        formaPgtoNome = formaCadastro.descricao;
+                      } else if (pagamento.tp_pgto === 'C') {
+                        formaPgtoNome = 'Cheque';
                       } else if (pagamento.tp_pgto === 'D') {
-                        // Dinheiro/Débito
-                        if (pagamento.nro_cheque === 'DEB.AUTOM') {
-                          formaPgtoNome = 'Débito Automático';
-                        } else {
-                          formaPgtoNome = 'Dinheiro';
-                        }
+                        // Legado: Dinheiro/Débito
+                        formaPgtoNome =
+                          pagamento.nro_cheque === 'DEB.AUTOM' ? 'Débito Automático' : 'Dinheiro';
                       } else if (pagamento.tp_pgto === 'X') {
                         formaPgtoNome = 'PIX';
                       } else if (pagamento.tp_pgto === 'T') {
@@ -4055,7 +4123,7 @@ export function ContasAPagar() {
                       } else if (pagamento.tp_pgto === 'CD') {
                         formaPgtoNome = 'Cartão Débito';
                       } else {
-                        // Fallback para o código da forma de pagamento
+                        // Fallback para o código legado da forma de pagamento
                         const formasPagamento: { [key: string]: string } = {
                           '01': 'Dinheiro',
                           '02': 'Cheque',
@@ -4068,7 +4136,7 @@ export function ContasAPagar() {
                         };
                         formaPgtoNome = formasPagamento[pagamento.cod_fpgto] || pagamento.cod_fpgto || 'Outro';
                       }
-                      
+
                       const estaCancelado = pagamento.cancel === 'S';
                       
                       return (

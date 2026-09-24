@@ -9,16 +9,17 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Power, Search, Loader2 } from 'lucide-react';
+import useConfirmarSalvar from '@/hooks/useConfirmarSalvar';
 
 interface Forma {
-  codfpgt: string;
-  descricao: string;
-  status: string;
+  fpg_letra: string;
+  fpg_descricao: string;
+  fpg_ativo: string; // 'S' | 'N'
 }
 
-const EMPTY = { codfpgt: '', descricao: '' };
+const EMPTY = { fpg_letra: '', fpg_descricao: '' };
 
-export default function FormaPagamentoCadastro() {
+export default function FormaPgtoCadastro() {
   const [formas, setFormas] = useState<Forma[]>([]);
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState<'ativo' | 'inativo' | 'todos'>('ativo');
@@ -27,13 +28,14 @@ export default function FormaPagamentoCadastro() {
   const [editando, setEditando] = useState<Forma | null>(null);
   const [form, setForm] = useState({ ...EMPTY });
   const [salvando, setSalvando] = useState(false);
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
 
   const carregar = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/cadastros/forma-pagamento?status=${statusFiltro}`);
+      const r = await fetch(`/api/forma-pgto?status=${statusFiltro}`);
       const d = await r.json();
-      setFormas(Array.isArray(d?.formas) ? d.formas : []);
+      setFormas(Array.isArray(d?.data) ? d.data : []);
     } catch {
       toast.error('Erro ao carregar formas de pagamento.');
     } finally {
@@ -50,7 +52,9 @@ export default function FormaPagamentoCadastro() {
     const t = busca.trim().toLowerCase();
     if (!t) return formas;
     return formas.filter(
-      (f) => f.codfpgt.includes(t) || (f.descricao || '').toLowerCase().includes(t),
+      (f) =>
+        f.fpg_letra.toLowerCase().includes(t) ||
+        (f.fpg_descricao || '').toLowerCase().includes(t),
     );
   }, [formas, busca]);
 
@@ -61,29 +65,32 @@ export default function FormaPagamentoCadastro() {
   };
   const abrirEditar = (f: Forma) => {
     setEditando(f);
-    setForm({ codfpgt: f.codfpgt, descricao: f.descricao || '' });
+    setForm({ fpg_letra: f.fpg_letra, fpg_descricao: f.fpg_descricao || '' });
     setModalAberto(true);
   };
 
   const salvar = async () => {
-    if (!form.descricao.trim()) {
+    if (!form.fpg_descricao.trim()) {
       toast.error('Informe a descrição.');
       return;
     }
-    if (!editando && !/^\d{1,2}$/.test(form.codfpgt.trim())) {
-      toast.error('Informe o código (2 dígitos).');
+    if (!editando && !form.fpg_letra.trim()) {
+      toast.error('Informe a letra.');
       return;
     }
     setSalvando(true);
     try {
       const url = editando
-        ? `/api/cadastros/forma-pagamento/${editando.codfpgt}`
-        : '/api/cadastros/forma-pagamento';
+        ? `/api/forma-pgto/${editando.fpg_letra}`
+        : '/api/forma-pgto';
       const method = editando ? 'PUT' : 'POST';
+      const body = editando
+        ? { fpg_descricao: form.fpg_descricao }
+        : { fpg_letra: form.fpg_letra, fpg_descricao: form.fpg_descricao, fpg_ativo: 'S' };
       const r = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Erro ao salvar.');
@@ -97,27 +104,43 @@ export default function FormaPagamentoCadastro() {
     }
   };
 
-  const toggleStatus = async (f: Forma) => {
-    const novo = f.status === 'ativo' ? 'inativo' : 'ativo';
+  const aplicarStatus = async (f: Forma, novo: 'S' | 'N') => {
     try {
-      const r = await fetch(`/api/cadastros/forma-pagamento/${f.codfpgt}`, {
-        method: 'PATCH',
+      const r = await fetch(`/api/forma-pgto/${f.fpg_letra}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: novo }),
+        body: JSON.stringify({ fpg_ativo: novo }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Erro ao alterar status.');
-      toast.success(novo === 'ativo' ? 'Forma ativada.' : 'Forma inativada.');
+      if (!r.ok) throw new Error(d.error || 'Erro ao alterar situação.');
+      toast.success(novo === 'S' ? 'Forma ativada.' : 'Forma inativada.');
       carregar();
     } catch (e: any) {
       toast.error(e.message);
     }
   };
 
+  const toggleStatus = (f: Forma) => {
+    if (f.fpg_ativo === 'S') {
+      // Inativar → pede confirmação no modal central (padrão)
+      pedirConfirmacao(() => aplicarStatus(f, 'N'), {
+        title: 'Inativar forma de pagamento',
+        message: `Inativar "${f.fpg_letra} - ${f.fpg_descricao}"? Ela deixa de aparecer na seleção do pagamento.`,
+        type: 'warning',
+        confirmText: 'Inativar',
+        cancelText: 'Cancelar',
+      });
+    } else {
+      aplicarStatus(f, 'S');
+    }
+  };
+
   return (
     <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 p-6 gap-4">
       <header className="flex flex-wrap justify-between items-center gap-3">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-gray-100">Cadastro de Forma de Recebimento</h1>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-gray-100">
+          Cadastro de Forma de Pagamento
+        </h1>
         <Button onClick={abrirNova}>
           <Plus size={16} className="mr-1" /> Nova Forma
         </Button>
@@ -127,7 +150,7 @@ export default function FormaPagamentoCadastro() {
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por código ou descrição..."
+            placeholder="Buscar por letra ou descrição..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="pl-8"
@@ -150,9 +173,9 @@ export default function FormaPagamentoCadastro() {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-gray-100 dark:bg-slate-800">
             <tr>
-              <th className="px-3 py-2 text-left w-24">Código</th>
+              <th className="px-3 py-2 text-left w-24">Letra</th>
               <th className="px-3 py-2 text-left">Descrição</th>
-              <th className="px-3 py-2 text-center w-24">Status</th>
+              <th className="px-3 py-2 text-center w-24">Situação</th>
               <th className="px-3 py-2 text-center w-28">Ações</th>
             </tr>
           </thead>
@@ -171,11 +194,14 @@ export default function FormaPagamentoCadastro() {
               </tr>
             ) : (
               filtradas.map((f) => (
-                <tr key={f.codfpgt} className="border-t border-gray-100 dark:border-slate-800">
-                  <td className="px-3 py-2 font-mono">{f.codfpgt}</td>
-                  <td className="px-3 py-2">{f.descricao}</td>
+                <tr
+                  key={f.fpg_letra}
+                  className="border-t border-gray-100 dark:border-slate-800"
+                >
+                  <td className="px-3 py-2 font-mono">{f.fpg_letra}</td>
+                  <td className="px-3 py-2">{f.fpg_descricao}</td>
                   <td className="px-3 py-2 text-center">
-                    {f.status === 'ativo' ? (
+                    {f.fpg_ativo === 'S' ? (
                       <Badge className="bg-green-500 hover:bg-green-600 text-[10px]">Ativa</Badge>
                     ) : (
                       <Badge className="bg-gray-400 hover:bg-gray-500 text-[10px]">Inativa</Badge>
@@ -183,13 +209,17 @@ export default function FormaPagamentoCadastro() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => abrirEditar(f)} className="p-1.5 text-gray-500 hover:text-blue-600" title="Editar">
+                      <button
+                        onClick={() => abrirEditar(f)}
+                        className="p-1.5 text-gray-500 hover:text-blue-600"
+                        title="Editar"
+                      >
                         <Pencil size={16} />
                       </button>
                       <button
                         onClick={() => toggleStatus(f)}
-                        className={`p-1.5 ${f.status === 'ativo' ? 'text-gray-500 hover:text-red-600' : 'text-gray-500 hover:text-green-600'}`}
-                        title={f.status === 'ativo' ? 'Inativar' : 'Ativar'}
+                        className={`p-1.5 ${f.fpg_ativo === 'S' ? 'text-gray-500 hover:text-red-600' : 'text-gray-500 hover:text-green-600'}`}
+                        title={f.fpg_ativo === 'S' ? 'Inativar' : 'Ativar'}
                       >
                         <Power size={16} />
                       </button>
@@ -205,27 +235,33 @@ export default function FormaPagamentoCadastro() {
       <Modal
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
-        title={editando ? `Editar Forma ${editando.codfpgt}` : 'Nova Forma de Recebimento'}
+        title={editando ? `Editar Forma ${editando.fpg_letra}` : 'Nova Forma de Pagamento'}
         width="w-[95%] max-w-md"
       >
         <div className="space-y-4">
           <div>
-            <Label>Código (2 dígitos) *</Label>
+            <Label>Letra *</Label>
             <Input
-              value={form.codfpgt}
-              onChange={(e) => setForm({ ...form, codfpgt: e.target.value.replace(/\D/g, '').slice(0, 2) })}
-              placeholder="Ex: 45"
+              value={form.fpg_letra}
+              onChange={(e) =>
+                setForm({ ...form, fpg_letra: e.target.value.toUpperCase().slice(0, 2) })
+              }
+              placeholder="Ex: D"
               disabled={!!editando}
               className="font-mono w-24"
             />
-            {editando && <p className="text-[11px] text-gray-500 mt-1">O código não pode ser alterado.</p>}
+            {editando && (
+              <p className="text-[11px] text-gray-500 mt-1">A letra não pode ser alterada.</p>
+            )}
           </div>
           <div>
             <Label>Descrição *</Label>
             <Input
-              value={form.descricao}
-              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-              placeholder="Ex: PIX"
+              value={form.fpg_descricao}
+              onChange={(e) =>
+                setForm({ ...form, fpg_descricao: e.target.value.toUpperCase().slice(0, 30) })
+              }
+              placeholder="Ex: DINHEIRO"
             />
           </div>
 
@@ -240,6 +276,8 @@ export default function FormaPagamentoCadastro() {
           </div>
         </div>
       </Modal>
+
+      {ConfirmacaoSalvarModal}
     </div>
   );
 }
