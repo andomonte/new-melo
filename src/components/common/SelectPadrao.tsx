@@ -195,11 +195,13 @@ function SearchableDropdown({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [modified, setModified] = React.useState(false);
+  const [highlight, setHighlight] = React.useState(0); // opção destacada (setas do teclado)
   const [dropdownStyle, setDropdownStyle] = React.useState<React.CSSProperties>({});
   const initialValueRef = React.useRef<string | undefined>(undefined);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const activeOptionRef = React.useRef<HTMLDivElement>(null);
 
   // Captura valor inicial
   React.useEffect(() => {
@@ -253,7 +255,19 @@ function SearchableDropdown({
     };
   }, [open, reposicionar]);
 
-  const selectedLabel = options.find((o) => o.value === value)?.label;
+  // Rótulo do item selecionado. Como `options` vem de busca remota (a lista muda a cada
+  // digitação), fixamos o último rótulo conhecido do valor selecionado — assim ele NÃO
+  // some ao selecionar e a lista de opções ser trocada pela próxima busca.
+  const [pinnedLabel, setPinnedLabel] = React.useState<string | undefined>(undefined);
+  const foundLabel = options.find((o) => String(o.value) === String(value))?.label;
+  React.useEffect(() => {
+    if (!value) {
+      setPinnedLabel(undefined);
+    } else if (foundLabel) {
+      setPinnedLabel(foundLabel);
+    }
+  }, [value, foundLabel]);
+  const selectedLabel = value ? (foundLabel ?? pinnedLabel) : undefined;
 
   const filtered = search
     ? options.filter((o) =>
@@ -262,9 +276,28 @@ function SearchableDropdown({
       )
     : options;
 
+  // Lista efetivamente renderizada (deduplicada) — base da navegação por teclado.
+  const visible = filtered.filter(
+    (item, index, arr) => arr.findIndex((o) => o.value === item.value) === index,
+  );
+
+  // Reinicia o destaque quando abre ou muda a busca/lista; mantém dentro dos limites.
+  React.useEffect(() => {
+    setHighlight(0);
+  }, [search, open, visible.length]);
+
+  // Rola a opção destacada para dentro da área visível.
+  React.useEffect(() => {
+    if (open) activeOptionRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open]);
+
   const handleSelect = (optionValue: string) => {
     if (initialValueRef.current === undefined) initialValueRef.current = value || '';
     if (optionValue !== initialValueRef.current) setModified(true);
+
+    // Fixa o rótulo do que foi selecionado antes que a busca troque as opções.
+    const opt = options.find((o) => String(o.value) === String(optionValue));
+    setPinnedLabel(optionValue ? opt?.label : undefined);
 
     onValueChange(optionValue);
     setOpen(false);
@@ -345,9 +378,26 @@ function SearchableDropdown({
                   if (e.key === 'Escape') {
                     setOpen(false);
                     setSearch('');
+                    return;
                   }
-                  if (e.key === 'Enter' && filtered.length === 1) {
-                    handleSelect(filtered[0].value);
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setHighlight((h) => Math.min(h + 1, visible.length - 1));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setHighlight((h) => Math.max(h - 1, 0));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation(); // não deixa o Enter vazar (ex.: adicionar no pai)
+                    const alvo = visible[highlight] ?? (visible.length === 1 ? visible[0] : undefined);
+                    if (alvo) handleSelect(alvo.value);
+                    return;
                   }
                 }}
               />
@@ -361,18 +411,20 @@ function SearchableDropdown({
                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                 Carregando...
               </div>
-            ) : filtered.length === 0 ? (
+            ) : visible.length === 0 ? (
               <div className="px-2 py-3 text-xs text-center text-gray-500 dark:text-gray-400">
                 {search ? 'Nenhum resultado encontrado' : 'Digite para buscar...'}
               </div>
             ) : (
-              filtered.filter((item, index, arr) => arr.findIndex(o => o.value === item.value) === index).map((option, index) => (
+              visible.map((option, index) => (
                 <div
                   key={`${option.value}-${index}`}
+                  ref={index === highlight ? activeOptionRef : undefined}
                   onClick={() => handleSelect(option.value)}
+                  onMouseEnter={() => setHighlight(index)}
                   className={cn(
                     'relative flex items-center rounded-sm py-1.5 pl-2 pr-8 text-sm cursor-pointer',
-                    'hover:bg-gray-100 dark:hover:bg-zinc-700',
+                    index === highlight && 'bg-gray-100 dark:bg-zinc-700',
                     value === option.value
                       ? 'bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300'
                       : 'text-gray-700 dark:text-gray-100',
