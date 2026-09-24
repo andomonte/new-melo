@@ -17,6 +17,7 @@ import { decrypt } from '@/utils/crypto';
 import { extrairCNPJDoCertificado } from '@/utils/certificadoExtractor';
 import { create } from 'xmlbuilder2';
 import { getPgPool } from '@/lib/pg';
+import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { DOMParser } from 'xmldom';
 
@@ -657,7 +658,15 @@ export default async function handler(
             ],
           );
           console.log('✅ Nota salva no banco');
-          
+
+          // Enfileira a DANFE para o Robô de Impressão (imprime ao ser reemitida)
+          const enfileirou = await enfileirarImpressaoDanfe(saveClient, codfat);
+          console.log(
+            enfileirou
+              ? `🖨️ DANFE ${codfat} enfileirada para impressão (fin_impressao)`
+              : `🖨️ DANFE ${codfat} já estava na fila de impressão`,
+          );
+
           // Limpar status de denegação na fatura (se existir a coluna)
           try {
             await saveClient.query(

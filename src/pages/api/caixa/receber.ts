@@ -7,6 +7,7 @@ import {
   type TituloReceber,
 } from '@/lib/caixa/receber';
 import { gerarComprovante } from '@/lib/financeiro/gerarComprovante';
+import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 
 /**
  * Fase 1 — recebimento do Caixa (dinheiro/PIX/cartão), 1 ou vários títulos.
@@ -56,7 +57,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ sucesso: true, simulado: true, mensagem: 'Simulação — nada foi gravado.', ...resultado });
     }
 
-    // Inserir na fila de impressão DANFE (robô 2) para cada fatura envolvida
+    // Fila de impressão da DANFE: a impressão é disparada na EMISSÃO da NF-e
+    // (faturamento/emitir e emitir-faturado enfileiram ao autorizar). Aqui só há uma
+    // REDE DE SEGURANÇA: enfileira a fatura recebida apenas se ela nunca teve job de
+    // impressão (somenteSeInexistente=true) — evita reimprimir no recebimento algo que
+    // já foi impresso na emissão.
     try {
       const codRecebs: string[] = [];
       if (ehMulti && resultado.resultados) {
@@ -72,17 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           [codRecebs],
         );
         for (const f of faturas.rows) {
-          const existe = await client.query(
-            `SELECT 1 FROM fin_impressao WHERE imp_aut_id = $1 AND imp_impresso = 'N' LIMIT 1`,
-            [f.cod_fat],
-          );
-          if (existe.rows.length === 0) {
-            await client.query(
-              `INSERT INTO fin_impressao (imp_aut_id, imp_data, imp_impresso, imp_fila)
-               VALUES ($1, NOW(), 'N', 1)`,
-              [f.cod_fat],
-            );
-          }
+          await enfileirarImpressaoDanfe(client, f.cod_fat, { somenteSeInexistente: true });
         }
       }
     } catch (filaErr: any) {

@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { getPgPool } from '@/lib/pg';
+import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { parseStringPromise } from 'xml2js';
 import { create } from 'xmlbuilder2';
 import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
@@ -845,6 +846,15 @@ export default async function handler(
               ]
             );
             console.log('✅ Cupom salvo no banco');
+
+            // Enfileira o cupom (NFC-e) para o Robô de Impressão — mesma fila/impressora
+            // da DANFE (imprime ao ser emitido).
+            const enfileirou = await enfileirarImpressaoDanfe(client, codfat);
+            console.log(
+              enfileirou
+                ? `🖨️ NFC-e ${codfat} enfileirada para impressão (fin_impressao)`
+                : `🖨️ NFC-e ${codfat} já estava na fila de impressão`,
+            );
           } finally {
             client.release();
           }
