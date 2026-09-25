@@ -341,14 +341,26 @@ export default async function handler(
     await client.query('LOCK TABLE dbfatura IN EXCLUSIVE MODE');
 
     console.log('🔍 Buscando último código de fatura...');
-    // Busca o último código de fatura gerado (apenas valores numéricos válidos)
+    // Próximo codfat = MAIOR valor entre dbfatura E dbreceb + 1.
+    // Por que dbreceb também: a dbfatura desta base é uma migração PARCIAL (poucos
+    // milhares de linhas), mas a dbreceb tem o histórico completo de títulos (cod_fat).
+    // Olhar só a dbfatura fazia o web reusar números que títulos antigos já usavam
+    // (colisão de cod_fat, ex.: 001027708 de 2015). O GREATEST alinha o contador ao
+    // histórico real, como o GERAR_FATURA (Oracle) faz.
+    // Exclui SENTINELAS (>= 90.000.000): cod_fat "sem fatura" (98888888/98888889/
+    // 99999999) usados por títulos avulsos — não são numeração real de fatura.
+    const SENTINELA_MIN = 90000000;
     const maxCodResult = await client.query(
-      `SELECT COALESCE(MAX(CAST(codfat AS INTEGER)), 0) as ultimo_codigo 
-       FROM dbfatura 
-       WHERE codfat ~ '^[0-9]+$'`,
+      `SELECT GREATEST(
+                COALESCE((SELECT MAX(CAST(codfat AS BIGINT)) FROM dbfatura
+                           WHERE codfat ~ '^[0-9]+$' AND CAST(codfat AS BIGINT) < $1), 0),
+                COALESCE((SELECT MAX(CAST(cod_fat AS BIGINT)) FROM dbreceb
+                           WHERE cod_fat ~ '^[0-9]+$' AND CAST(cod_fat AS BIGINT) < $1), 0)
+              ) as ultimo_codigo`,
+      [SENTINELA_MIN],
     );
 
-    const ultimoCodigo = maxCodResult.rows[0].ultimo_codigo || 0;
+    const ultimoCodigo = Number(maxCodResult.rows[0].ultimo_codigo) || 0;
     const novoCodigoInt = ultimoCodigo + 1;
     const novoCodfat = String(novoCodigoInt).padStart(9, '0');
 

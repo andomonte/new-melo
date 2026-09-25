@@ -89,12 +89,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `);
     let proximoCod = parseInt(maxCodResult.rows[0]?.max_cod || '0') + 1;
 
-    // cod_fat COMPARTILHADO pelas parcelas (o "Cod_Avulso" do Delphi) — é o que agrupa as
-    // parcelas para o cálculo Parcela X/N. Gerado como MAX(numérico)+1, 9 dígitos.
+    // cod_fat COMPARTILHADO pelas parcelas (o "Cod_Avulso" do Delphi) — agrupa as parcelas
+    // para o cálculo Parcela X/N. Título AVULSO NÃO recebe codfat real de fatura: usa a
+    // FAIXA DE SENTINELA (>= 90.000.000, base 98888888), único por grupo. Assim nunca
+    // colide com a numeração real de fatura (que fica < 90M). Sem forçar a faixa, um
+    // MAX(tudo)+1 pegaria um número real quando não houvesse sentinela ainda.
+    const SENTINELA_MIN = 90000000;
+    const SENTINELA_BASE = 98888887; // 1º avulso = 98888888
     const maxFatResult = await client.query(
-      `SELECT COALESCE(MAX(CAST(cod_fat AS bigint)), 0) AS mx FROM dbreceb WHERE cod_fat ~ '^[0-9]+$'`,
+      `SELECT GREATEST(
+                COALESCE((SELECT MAX(CAST(cod_fat AS bigint)) FROM dbreceb
+                           WHERE cod_fat ~ '^[0-9]+$' AND CAST(cod_fat AS bigint) >= $1), 0),
+                $2
+              ) AS mx`,
+      [SENTINELA_MIN, SENTINELA_BASE],
     );
-    const codFatCompartilhado = String(Number(maxFatResult.rows[0]?.mx || 0) + 1).padStart(9, '0');
+    const codFatCompartilhado = String(Number(maxFatResult.rows[0]?.mx || SENTINELA_BASE) + 1).padStart(9, '0');
 
     // Criar cada parcela
     for (let i = 0; i < totalParcelas; i++) {
