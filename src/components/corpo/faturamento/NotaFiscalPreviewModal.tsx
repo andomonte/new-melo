@@ -216,7 +216,7 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
           if (chaveNum.length >= 20) {
             const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             try {
-              JsBarcode(svgEl as any, chaveNum, { format: 'CODE128C', displayValue: false, margin: 0, height: 40, width: 1.4 });
+              JsBarcode(svgEl as any, chaveNum, { format: 'CODE128C', displayValue: false, margin: 10, height: 40, width: 1.4 });
               barcodeSvg = svgEl.outerHTML;
             } catch { /* sem barcode no preview sem chave */ }
           }
