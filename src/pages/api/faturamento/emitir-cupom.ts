@@ -126,10 +126,14 @@ export default async function handler(
     }
     
     // Validações básicas
-    if (!dados?.dbfatura?.codfat) {
-      return res.status(400).json({ 
+    // O codfat pode vir dentro de dbfatura OU no topo do payload (dados.codfat).
+    // O novoFaturamento monta dbfatura a partir do estado pré-save (sem codfat) e envia
+    // o codfat no topo — igual ao emitir.ts (NF-e), que já lê das duas fontes. Só rejeita
+    // quando NÃO há codfat em lugar nenhum (fatura realmente não salva).
+    if (!dados?.dbfatura?.codfat && !dados?.codfat) {
+      return res.status(400).json({
         erro: 'Dados da fatura não informados. Forneça dbfatura ou codfat válido.',
-        sucesso: false 
+        sucesso: false
       });
     }
 
@@ -150,8 +154,8 @@ export default async function handler(
       });
     }
 
-    codfat = dados.dbfatura.codfat;
-    let serie = dados.dbfatura.serie || '2'; // Série 2 para NFC-e (padrão)
+    codfat = dados?.dbfatura?.codfat || dados?.codfat || '';
+    let serie = dados.dbfatura?.serie || '2'; // Série 2 para NFC-e (padrão)
     
     // 🧪 TESTE: Em homologação, forçar série 1 (geralmente a série padrão cadastrada)
     // A variável AMBIENTE_NFCE será definida mais abaixo, então vamos verificar diretamente
