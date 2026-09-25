@@ -78,6 +78,7 @@ import DadosEmpresa from '@/components/corpo/admin/cadastro/dadosEmpresa';
 import TransportadorasPage from '../corpo/admin/cadastro/transportadoras';
 import CfopPage from '../corpo/admin/cadastro/cfop';
 import FormaPgtoPage from '../corpo/admin/cadastro/formaPgto';
+import LocacoesProdutoPage from '../corpo/admin/cadastro/locacoes';
 import TipoOperacaoFiscalPage from '../corpo/admin/cadastro/tipoOperacaoFiscal';
 import FormacaoPrecoVendaPage from '../corpo/admin/cadastro/formacao-preco';
 import LocaisPage from '../corpo/admin/cadastro/locais';
@@ -262,6 +263,12 @@ export const menus = [
             href: '/admin/cadastros/formaPgto',
             icon: WalletIcon,
             corpo: FormaPgtoPage,
+          },
+          {
+            name: 'Locações do Produto',
+            href: '/admin/cadastros/locacoes',
+            icon: MapPin,
+            corpo: LocacoesProdutoPage,
           },
           {
             name: 'Tipos de Operação Fiscal',

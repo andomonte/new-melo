@@ -14,7 +14,8 @@ import { ConfirmarPrecoModal } from './ConfirmarPrecoModal';
 import { ConfirmarEstoqueModal } from './ConfirmarEstoqueModal';
 import { ConsultaEntradaModal, ConsultaTipo } from './ConsultaEntradaModal';
 import ExportarItensEntradaModal from './ExportarItensEntradaModal';
-import { Truck, ShoppingCart, FileText, FileSpreadsheet, FileDown } from 'lucide-react';
+import ImprimirEntradaModal from './ImprimirEntradaModal';
+import { Truck, ShoppingCart, FileText, FileSpreadsheet, FileDown, Printer } from 'lucide-react';
 
 /** Badge de atalho de teclado exibido à direita do item do menu. */
 const Kbd: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -60,6 +61,7 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   const [consultaTipo, setConsultaTipo] = useState<ConsultaTipo | null>(null);
   const [showConfirmCancelar, setShowConfirmCancelar] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
+  const [showImprimir, setShowImprimir] = useState(false);
   const [messageData, setMessageData] = useState({ title: '', message: '', type: 'info' as any });
   const [loading, setLoading] = useState(false);
   const [exportarItensModal, setExportarItensModal] = useState<{ open: boolean; formato: 'excel' | 'pdf' }>({
@@ -72,7 +74,7 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   const algumModalOperacaoAberto =
     showConfirmReabrir || showRomaneio || showConfirmarPreco || showConfirmarSemCusto ||
     showConfirmarEstoque || showConfirmCancelar || showMessage || consultaTipo !== null ||
-    exportarItensModal.open;
+    exportarItensModal.open || showImprimir;
   useEffect(() => {
     onOperacaoAtiva?.(algumModalOperacaoAberto);
   }, [algumModalOperacaoAberto, onOperacaoAtiva]);
@@ -467,6 +469,13 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
               <Kbd>P</Kbd>
             </DropdownMenuItem>
 
+            {/* Imprimir (Entrada + Romaneio) — PDF ou matricial (robô) */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setShowImprimir(true)}>
+              <Printer className="mr-2 h-4 w-4 text-slate-700 dark:text-slate-300" />
+              Imprimir (Entrada/Romaneio)
+            </DropdownMenuItem>
+
             {/* Fazer Romaneio */}
             {canFazerRomaneio && (
               <>
@@ -589,6 +598,13 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
         onClose={() => setExportarItensModal((s) => ({ ...s, open: false }))}
         entradaId={entrada.id}
         formato={exportarItensModal.formato}
+      />
+
+      <ImprimirEntradaModal
+        isOpen={showImprimir}
+        onClose={() => setShowImprimir(false)}
+        entradaId={entrada.id}
+        numeroEntrada={entrada.numeroEntrada || entrada.numeroNF}
       />
 
       <RomaneioModal
