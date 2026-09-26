@@ -150,6 +150,7 @@ import LegislacaoSignatarioPage from '../corpo/admin/legislacao/legislacao-signa
 import RemessaEquifax from '../corpo/remessa/remessa';
 import { FaNoteSticky } from 'react-icons/fa6';
 import RelatorioConciliacaoCartao from '../corpo/contas-receber/RelatorioConciliacaoCartao';
+import RelatorioComissao from '../corpo/admin/relatorios/comissao';
 import CalculadoraTributariaManual from '../corpo/admin/calculadora/CalculadoraTributariaManual';
 
 // Financeiro > Arquivos — porte do menu homônimo do Delphi (UniPrincipal.dfm)
@@ -466,6 +467,12 @@ export const menus = [
             href: '/admin/financeiro/relatorio-cartao',
             icon: FileTextIcon,
             corpo: RelatorioConciliacaoCartao,
+          },
+          {
+            name: 'Comissão de Vendedor',
+            href: '/admin/financeiro/comissao',
+            icon: HandCoinsIcon,
+            corpo: RelatorioComissao,
           },
           {
             name: 'Nota de Conhecimento',
