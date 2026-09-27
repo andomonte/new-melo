@@ -1,5 +1,8 @@
 // src/lib/pg.ts
 import { Pool, types } from 'pg';
+import { createHash } from 'crypto';
+import type { NextApiRequest } from 'next';
+import { decrypt } from '@/utils/crypto';
 
 // TIMEZONE FIX: O driver pg converte date/timestamp usando o timezone do processo Node.
 // Na Vercel (UTC), isso faz datas aparecerem 1 dia atrás no browser de Manaus (UTC-4).
@@ -12,6 +15,10 @@ types.setTypeParser(1184, (val: string) => val); // timestamp with tz → string
 declare global {
   // eslint-disable-next-line no-var
   var __pgPoolSingle__: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var __pgPoolsBySchema__: Record<string, Pool> | undefined;
+  // eslint-disable-next-line no-var
+  var __schemaFilialCache__: { at: number; map: Record<string, any> } | undefined;
 }
 
 /**
@@ -125,19 +132,173 @@ if (process.env.NODE_ENV === 'development') {
   }, 30000); // A cada 30 segundos
 }
 
-// Helper para executar queries com garantia de liberação de conexão
+// ─────────────────────────────────────────────────────────────────────────────
+// MULTI-FILIAL: pool de DADOS resolvido por filial (data-driven via tb_filial)
+//
+// Regra de negócio: só o ACESSO/ACL é central (db_manaus). Cadastros E movimento
+// são por filial. O vínculo filial→banco vem do BANCO (tb_filial), não de env/
+// código, então criar filial nova não exige deploy: basta cadastrar a filial com
+// sua conexão + schema.
+//
+// Dois campos em tb_filial:
+//  - db_conn_enc : string de conexão COMPLETA da filial, criptografada (AES, via
+//                  utils/crypto). Em DEV as filiais dividem o mesmo servidor, então
+//                  fica NULL → usa a DATABASE_URL padrão. Em PROD cada filial terá
+//                  seu servidor local → aqui vem a conexão dela.
+//  - schema_db   : search_path. DEV: db_rondonia/db_roraima. PROD (banco próprio): public.
+//
+// Compatibilidade: sem filial, ou filial sem conexão/schema → pool central
+// (db_manaus), mesmo comportamento de hoje. Permite migrar tela a tela.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Só aceita nomes de schema no padrão db_<algo>/public — evita injeção no options.
+const SCHEMA_SEGURO_RX = /^(db_[a-z0-9_]+|public)$/;
+
+interface FilialConexao {
+  schema: string | null;
+  connEnc: string | null; // string de conexão criptografada (ou null = usa padrão)
+}
+
+/**
+ * Pool para uma (conexão + schema). Cacheado por assinatura (hash), pois a
+ * conexão pode conter senha — não usamos a string crua como chave de cache.
+ */
+async function poolParaConexao(info: FilialConexao): Promise<Pool> {
+  const schemaOk =
+    info.schema && SCHEMA_SEGURO_RX.test(info.schema) ? info.schema : DB_SCHEMA;
+  const searchPath = `${schemaOk},public`;
+
+  // Sem conexão própria E schema central → reaproveita o pool central.
+  if (!info.connEnc && schemaOk === DB_SCHEMA) return getPgPool();
+
+  // Decripta a conexão (se houver) só quando for montar um pool novo.
+  let connectionString = process.env.DATABASE_URL as string;
+  if (info.connEnc) {
+    const dec = await decrypt(info.connEnc);
+    if (dec) connectionString = dec;
+  }
+
+  const sig = createHash('sha256')
+    .update(`${connectionString}::${searchPath}`)
+    .digest('hex');
+
+  const pools = (global.__pgPoolsBySchema__ ??= {});
+  if (!pools[sig]) {
+    const pool = new Pool({
+      connectionString,
+      options: `-c search_path=${searchPath}`,
+      max: 10,
+      min: 1,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
+      statement_timeout: 60000,
+      query_timeout: 60000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
+      allowExitOnIdle: true,
+    });
+    pool.on('error', (err) => console.error(`❌ Erro no pool ${schemaOk}:`, err.message));
+    pool.on('connect', (client) => {
+      client.query('SET statement_timeout = 60000').catch(() => {});
+      client.query(`SET search_path TO ${searchPath}`).catch(() => {});
+    });
+    pools[sig] = pool;
+  }
+  return pools[sig];
+}
+
+/** Mapa filial(NOME maiúsculo) → {schema, connEnc}, lido de tb_filial (cache 60s). */
+async function getMapaFilialConexao(): Promise<Record<string, FilialConexao>> {
+  const cache = global.__schemaFilialCache__ as
+    | { at: number; map: Record<string, FilialConexao> }
+    | undefined;
+  if (cache && Date.now() - cache.at < 60_000) return cache.map;
+  const map: Record<string, FilialConexao> = {};
+  try {
+    // tb_filial vive no schema CENTRAL (db_manaus) — usa o pool central.
+    const r = await getPgPool().query(
+      `SELECT UPPER(nome_filial) AS nome, schema_db, db_conn_enc FROM tb_filial`,
+    );
+    for (const row of r.rows) {
+      map[row.nome] = { schema: row.schema_db || null, connEnc: row.db_conn_enc || null };
+    }
+  } catch (e: any) {
+    console.warn('getMapaFilialConexao falhou (fallback db_manaus):', e?.message);
+  }
+  (global as any).__schemaFilialCache__ = { at: Date.now(), map };
+  return map;
+}
+
+/**
+ * Invalida o cache filial→conexão. Chamar após criar/editar uma filial para que
+ * a mudança de schema/conexão valha imediatamente (sem esperar o TTL de 60s).
+ */
+export function invalidarCacheFilial(): void {
+  global.__schemaFilialCache__ = undefined;
+}
+
+/** Nome da filial da requisição, lido do cookie `filial_melo`. */
+export function filialDaRequisicao(req: NextApiRequest): string {
+  try {
+    const raw = req.headers.cookie || '';
+    const m = raw.match(/(?:^|;\s*)filial_melo=([^;]+)/);
+    return m ? decodeURIComponent(m[1]).trim().toUpperCase() : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Pool de DADOS pelo NOME da filial (ex.: 'RONDONIA'). Fallback db_manaus quando
+ * vazio/desconhecido ou filial sem schema/conexão. Use quando o endpoint já
+ * resolveu a filial (cookie/body/query) numa variável própria.
+ */
+export async function getPgPoolPorNomeFilial(nome: string): Promise<Pool> {
+  const filial = String(nome || '').trim().toUpperCase();
+  if (!filial) return getPgPool();
+  const mapa = await getMapaFilialConexao();
+  const info = mapa[filial];
+  if (!info || (!info.schema && !info.connEnc)) return getPgPool();
+  return poolParaConexao(info);
+}
+
+/**
+ * Pool de DADOS da filial selecionada na requisição (lê o cookie filial_melo).
+ * Fallback para o pool central (db_manaus) quando não há filial/conexão/schema —
+ * 100% compatível com o comportamento atual, permitindo migração tela a tela.
+ */
+export async function getPgPoolFilial(req: NextApiRequest): Promise<Pool> {
+  return getPgPoolPorNomeFilial(filialDaRequisicao(req));
+}
+
+// Helper para executar queries com garantia de liberação de conexão (pool CENTRAL).
 export async function queryWithRelease<T = any>(
   text: string,
   params?: any[]
 ): Promise<{ rows: T[]; rowCount: number | null }> {
   const pool = getPgPool();
   const client = await pool.connect();
-  
+
   try {
     const result = await client.query(text, params);
     return result;
   } finally {
     // SEMPRE libera a conexão, mesmo em caso de erro
+    client.release();
+  }
+}
+
+// Versão FILIAL-AWARE do queryWithRelease: resolve o pool pela filial da requisição.
+export async function queryWithReleaseFilial<T = any>(
+  req: NextApiRequest,
+  text: string,
+  params?: any[]
+): Promise<{ rows: T[]; rowCount: number | null }> {
+  const pool = await getPgPoolFilial(req);
+  const client = await pool.connect();
+  try {
+    return await client.query(text, params);
+  } finally {
     client.release();
   }
 }

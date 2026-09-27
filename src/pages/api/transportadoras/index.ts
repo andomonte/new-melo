@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 export default async function handler(
@@ -13,7 +13,7 @@ export default async function handler(
   let client;
 
   try {
-    const pool = getPgPool('manaus');
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     // Busca por termo (nome, código ou CNPJ) — dbtransp. Sem termo retorna as 500 primeiras.

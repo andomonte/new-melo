@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { parseStringPromise } from 'xml2js';
 import { gerarCartaCorrecaoHtml } from '@/lib/danfe/gerarCartaCorrecaoHtml';
 import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const seq = String(req.query.seq || '').trim();
   if (!codfat) return res.status(400).json({ erro: 'codfat é obrigatório.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // Carta de correção (a mais recente do seq, ou a última do codfat).
     const cceQ = await client.query(

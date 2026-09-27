@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
 import { gerarReciboHtml, type ReciboData } from '@/lib/titulo/gerarReciboHtml';
 
@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ erro: 'Informe cod_fat ou cod_receb.' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const filtro = codReceb ? 'r.cod_receb = $1' : 'r.cod_fat = $1';
     const param = codReceb || codFat;

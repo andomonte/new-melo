@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * API para gerenciar sugestões de compra
@@ -21,7 +21,7 @@ export default async function handle(
   req: NextApiRequest,
   res: NextApiResponse,
 ): Promise<void> {
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
 
   if (req.method === 'POST') {
     const {

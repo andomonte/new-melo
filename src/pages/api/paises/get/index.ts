@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { GetParams } from '@/data/common/getParams';
 import { serializeBigInt } from '@/utils/serializeBigInt';
@@ -12,7 +12,7 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     const pageNumber = Number(page);

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { gerarEstorno } from '@/lib/faturamento/gerarEstorno';
 
 // ESTORNO DE NF-e — FASE 1: cria o Documento Interno (DI = fatura de devolução) que
@@ -30,7 +30,7 @@ export default async function handler(
 
   try {
     // 1. Buscar a NF-e autorizada da fatura.
-    const cli = await getPgPool().connect();
+    const cli = await (await getPgPoolFilial(req)).connect();
     let nota: any;
     try {
       let r = await cli.query(
@@ -71,7 +71,7 @@ export default async function handler(
     }
 
     // 3. Cria a DI numa transação (sem emitir).
-    const db = await getPgPool().connect();
+    const db = await (await getPgPoolFilial(req)).connect();
     try {
       await db.query('BEGIN');
       const resultado = await gerarEstorno(db, {

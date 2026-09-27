@@ -2,7 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient'; // Importe sua função getPgPool
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Importe sua função getPgPool
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { parseCookies } from 'nookies';
 import { DBDadosEmpresa } from '@/data/dadosEmpresa/dadosEmpresas';
@@ -26,7 +26,7 @@ export default async function handle(
 
   try {
     // Usa a filial do cookie para obter o pool de conexão COM A BASE DE DADOS CORRETA
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     // Consulta para buscar TODOS os dados da empresa.

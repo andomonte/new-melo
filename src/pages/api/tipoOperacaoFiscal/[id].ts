@@ -1,6 +1,6 @@
 // pages/api/tipoOperacaoFiscal/[id].ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import { queryWithRelease } from '@/lib/pg';
+import { queryWithReleaseFilial } from '@/lib/pg';
 
 const TABLE = '"cad_tipo_operacao_fiscal"';
 
@@ -11,13 +11,13 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   }
   switch (req.method) {
     case 'GET':
-      await handleGetOne(res, id);
+      await handleGetOne(req, res, id);
       break;
     case 'PUT':
       await handleUpdate(req, res, id);
       break;
     case 'DELETE':
-      await handleDelete(res, id);
+      await handleDelete(req, res, id);
       break;
     default:
       res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
@@ -25,9 +25,9 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   }
 }
 
-const handleGetOne = async (res: NextApiResponse, id: string) => {
+const handleGetOne = async (req: NextApiRequest, res: NextApiResponse, id: string) => {
   try {
-    const result = await queryWithRelease(`SELECT * FROM ${TABLE} WHERE "id" = $1`, [id]);
+    const result = await queryWithReleaseFilial(req, `SELECT * FROM ${TABLE} WHERE "id" = $1`, [id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Registro não encontrado.' });
     res.status(200).json(result.rows[0]);
   } catch (error: any) {
@@ -52,7 +52,7 @@ const handleUpdate = async (req: NextApiRequest, res: NextApiResponse, id: strin
   const setClause = fields.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
   const values = Object.values(data);
   try {
-    const result = await queryWithRelease(
+    const result = await queryWithReleaseFilial(req, 
       `UPDATE ${TABLE} SET ${setClause}, "atualizado_em" = now() WHERE "id" = $${fields.length + 1} RETURNING *`,
       [...values, id],
     );
@@ -64,9 +64,9 @@ const handleUpdate = async (req: NextApiRequest, res: NextApiResponse, id: strin
   }
 };
 
-const handleDelete = async (res: NextApiResponse, id: string) => {
+const handleDelete = async (req: NextApiRequest, res: NextApiResponse, id: string) => {
   try {
-    const result = await queryWithRelease(`DELETE FROM ${TABLE} WHERE "id" = $1`, [id]);
+    const result = await queryWithReleaseFilial(req, `DELETE FROM ${TABLE} WHERE "id" = $1`, [id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Registro não encontrado.' });
     res.status(204).end();
   } catch (error: any) {

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { inserirCobranca } from '@/lib/faturamento/inserirCobranca';
 
 // Endpoint standalone para gravar/atualizar a cobrança de uma fatura JÁ existente
@@ -22,7 +22,7 @@ export default async function handler(
 
   let client;
   try {
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     // ALTERAR COBRANÇA (fiel ao Delphi: limpa os títulos atuais e gera os novos).
     // Salvaguarda (além do Delphi): NÃO altera se houver parcela PAGA, e NÃO altera

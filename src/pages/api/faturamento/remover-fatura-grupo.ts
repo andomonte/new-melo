@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { inserirCobrancaGP } from '@/lib/faturamento/inserirCobrancaGP';
 import { dropdownDeBancoInterno } from '@/lib/faturamento/bancoCobranca';
 
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const usuarioTxt = String(usuario ?? '').trim() || 'DESCONHECIDO';
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const mem = await client.query(
       `SELECT codfat FROM dbfatura WHERE codgp = $1 AND codfat NOT LIKE 'GP%'`,

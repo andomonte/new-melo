@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import fs from 'fs';
 import https from 'https';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { parseStringPromise } from 'xml2js';
 
 import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assinarXml';
@@ -30,7 +30,7 @@ export default async function handler(
 
   try {
     // 1. Buscar dados da nota na base
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
     let nota;
     try {
       // Primeiro tentativa: buscar como string
@@ -150,7 +150,7 @@ export default async function handler(
     let cadeiaCrt: string | null = null;
     let cnpjEmitente = '18053139000169';
     {
-      const cliCert = await getPgPool().connect();
+      const cliCert = await (await getPgPoolFilial(req)).connect();
       try {
         const emp = await cliCert.query(
           `SELECT "certificadoKey", "certificadoCrt", "cadeiaCrt", cgc
@@ -303,7 +303,7 @@ export default async function handler(
     // 9. Verificar se o cancelamento foi aceito
     if (status === '135') {
       // 135 = Cancelamento homologado
-      const clientDb = await getPgPool().connect();
+      const clientDb = await (await getPgPoolFilial(req)).connect();
       try {
         // Inicia a transação para garantir que ambas as tabelas sejam atualizadas
         await clientDb.query('BEGIN');

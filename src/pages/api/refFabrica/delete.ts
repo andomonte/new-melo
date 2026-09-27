@@ -1,12 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'DELETE') return res.status(405).json({ error: 'Método não permitido' });
   const cod_id = req.query.cod_id ?? req.body?.cod_id;
   if (!cod_id) return res.status(400).json({ error: 'Código é obrigatório.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     await client.query('BEGIN');
     // remove vínculos com produtos e a referência

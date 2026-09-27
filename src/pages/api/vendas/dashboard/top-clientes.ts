@@ -1,6 +1,6 @@
 // src/pages/api/vendas/dashboard/top-clientes.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 export type TopCliente = {
@@ -21,7 +21,7 @@ export default async function handler(
   let client: any;
 
   try {
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     try {

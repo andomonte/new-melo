@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * PUT   /api/cadastros/conta-financeira/[id]  { cof_descricao, cof_cec_id?, cof_operacional? } → atualiza.
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const id = Number(req.query.id);
   if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     if (req.method === 'PUT') {

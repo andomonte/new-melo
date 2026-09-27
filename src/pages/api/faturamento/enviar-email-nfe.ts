@@ -1,9 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { enviarDocumentoFiscal } from '@/lib/nfeEmailService';
 import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
-import { pool } from '@/lib/db';
 
 export default async function handler(
   req: NextApiRequest,
@@ -21,8 +20,9 @@ export default async function handler(
     });
   }
 
+  const pool = await getPgPoolFilial(req);
   try {
-    const client = await getPgPool().connect();
+    const client = await pool.connect();
 
     // Buscar dados da fatura, documento fiscal (NF-e ou NFC-e) e cliente
     const queryFatura = `
@@ -944,7 +944,7 @@ export default async function handler(
     });
 
     // Atualizar flag de email enviado na NFe
-    const clientUpdate = await getPgPool().connect();
+    const clientUpdate = await (await getPgPoolFilial(req)).connect();
     await clientUpdate.query(
       'UPDATE dbfat_nfe SET emailenviado = $1 WHERE codfat = $2',
       ['S', codfat],

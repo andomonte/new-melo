@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 /**
@@ -33,7 +33,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Fornecedor é obrigatório.' });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // Já existe? devolve sem duplicar

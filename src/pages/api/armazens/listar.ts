@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolFilial } from '@/lib/pg';
 
 interface Armazem {
   arm_id: number;
@@ -25,7 +25,7 @@ export default async function handler(
   let client;
 
   try {
-    const pool = getPgPool('manaus');
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     // Buscar armazéns ativos (incluindo todos para o usuário escolher)

@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 // Carregamos via require para evitar tipagem do oracledb em TS
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -676,7 +676,7 @@ export default async function handler(
   try {
     // conecta
     oraConn = await getOracleConnection();
-    const pgPool = getPgPool(filial);
+    const pgPool = await getPgPoolPorNomeFilial(filial);
     pgClient = await pgPool.connect();
 
     // inicia transações

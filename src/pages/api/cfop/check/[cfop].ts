@@ -3,7 +3,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 // ✅ Padronizando o nome da tabela em uma constante para evitar erros
 const TABLE_NAME = 'public."dbcfop_n"';
@@ -32,7 +32,7 @@ export default async function handle(
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const query = `SELECT COUNT(*) as count FROM ${TABLE_NAME} WHERE "cfop" = $1`;

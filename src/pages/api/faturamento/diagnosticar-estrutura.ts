@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function diagnosticarEstrutura(
   req: NextApiRequest,
@@ -13,7 +13,7 @@ export default async function diagnosticarEstrutura(
   }
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     const diagnostico: any = {
       estrutura_grupo_pagamento_fatura: null,

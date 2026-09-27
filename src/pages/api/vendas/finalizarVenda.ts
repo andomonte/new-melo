@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { Sequelize, QueryTypes } from 'sequelize';
 import { CalculadoraImpostos } from '@/lib/impostos/calculadoraImpostos';
 import type { DadosCalculoImposto } from '@/lib/impostos/types';
@@ -1052,7 +1052,7 @@ export default async function handler(
   try {
     // Conexões
     ora = await getOracleSequelize();
-    const pgPool = getPgPool(filial);
+    const pgPool = await getPgPoolPorNomeFilial(filial);
     pgClient = await pgPool.connect();
 
     // Transações

@@ -2,7 +2,7 @@
 // API para buscar dados completos por codfat (para preview de faturas já processadas)
 // Padrão alinhado com detalhes-venda.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { montarTextoDuplicata } from '@/lib/danfe/duplicata';
 
 export default async function handler(
@@ -19,7 +19,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Código da fatura é obrigatório.' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // Query para buscar dados completos da fatura através da tabela intermediária fatura_venda
     const query = `

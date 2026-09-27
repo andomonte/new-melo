@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * PUT   /api/cadastros/forma-pagamento/[codfpgt]  { descricao }            → atualiza descrição.
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const codfpgt = String(req.query.codfpgt || '').trim();
   if (!codfpgt) return res.status(400).json({ error: 'Código inválido.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     if (req.method === 'PUT') {

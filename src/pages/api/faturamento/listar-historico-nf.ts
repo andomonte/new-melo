@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { pool } from '@/lib/db';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -25,6 +25,7 @@ export default async function handler(
     // Ignore parse errors
   }
 
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // Construir WHERE baseado nos filtros

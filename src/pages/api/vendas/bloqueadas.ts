@@ -1,7 +1,7 @@
 // pages/api/vendas/bloqueadas.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
@@ -39,7 +39,7 @@ export default async function handle(
     const perPage = parseInt(req.query.perPage as string) || 10;
     const offset = (page - 1) * perPage;
 
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     // 3. CONTAGEM TOTAL DE REGISTROS (PARA PAGINAÇÃO)

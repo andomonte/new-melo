@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
+import type { Pool } from 'pg';
 import { parseStringPromise } from 'xml2js';
 import { create } from 'xmlbuilder2';
 import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
@@ -15,8 +16,6 @@ import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal'
 import https from 'https';
 import { DOMParser } from 'xmldom';
 
-const pool = getPgPool();
-
 /**
  * API para emissão de Cupom Fiscal Eletrônico (NFC-e) - Modelo 65
  * Usado para vendas a consumidor final com CPF
@@ -24,11 +23,12 @@ const pool = getPgPool();
 
 // Função para registrar erros/mensagens da emissão
 async function registrarMensagemCupom(
+  pool: Pool,
   codfat: string,
   codigo: string,
   mensagem: string,
 ) {
-  const client = await getPgPool().connect();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
@@ -82,6 +82,9 @@ export default async function handler(
   let xmlBruto = '';
   let xmlResposta = '';
   let codfat = '';
+
+  // Pool de DADOS da filial selecionada (multi-filial).
+  const pool = await getPgPoolFilial(req);
 
   try {
     console.log(
@@ -936,7 +939,7 @@ export default async function handler(
           '0',
         );
 
-        const client = await getPgPool().connect();
+        const client = await (await getPgPoolFilial(req)).connect();
         try {
           await client.query(
             `INSERT INTO dbfat_nfe (
@@ -975,7 +978,7 @@ export default async function handler(
 
     // Registrar mensagem de erro
     if (codfat) {
-      await registrarMensagemCupom(codfat, status, motivo || 'Erro não especificado');
+      await registrarMensagemCupom(pool, codfat, status, motivo || 'Erro não especificado');
       
       // Marcar como denegada se for 301/302/303
       if ((status === '301' || status === '302' || status === '303') && pool) {

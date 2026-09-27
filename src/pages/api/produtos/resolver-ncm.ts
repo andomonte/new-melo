@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Resolve um NCM na tabela dbclassificacao_fiscal e devolve PIS,
@@ -20,7 +20,7 @@ export default async function handle(
     return res.status(400).json({ error: 'NCM inválido' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // compara só os dígitos, tolerando NCM gravado com ou sem pontuação
     const r = await client.query(

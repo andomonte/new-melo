@@ -2,7 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { sqlSafeNumeric, sqlSafeNumericNull } from '@/utils/monetario';
 
@@ -923,7 +923,7 @@ export default async function handle(
       });
     }
 
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const page = toInt(req.query.page, 1);

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 // Converte 'MM/YYYY' para 'MMM/AAAA' em português (ex.: '12/2014' -> 'DEZ/2014'), igual ao Delphi.
 const MESES_ABREV = [
@@ -33,7 +33,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Filial não especificada' });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
 
   try {
     // Buscar dados principais do cliente

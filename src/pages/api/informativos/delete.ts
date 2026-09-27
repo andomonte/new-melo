@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // Informativos com regra de sistema não podem ser excluídos
 const PROTEGIDOS = ['*', '-', 'D', 'E', 'L', 'N', 'S'];
@@ -11,7 +11,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   if (PROTEGIDOS.includes(simbolo))
     return res.status(400).json({ error: `O informativo "${simbolo}" é padrão do sistema e não pode ser excluído.` });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query('DELETE FROM dbinformativo WHERE simbolo = $1', [simbolo]);
     if (!r.rowCount) return res.status(404).json({ error: 'Informativo não encontrado.' });

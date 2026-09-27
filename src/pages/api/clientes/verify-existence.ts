@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 interface ClientExistsResult {
@@ -29,7 +29,7 @@ export default async function handler(
   }
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     try {
       // Remove formatação do CPF/CNPJ para comparação

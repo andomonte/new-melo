@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * POST /api/faturamento/cancelar-fatura
@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const motivoTxt = String(motivo ?? '').trim();
   const usuarioTxt = String(usuario ?? '').trim() || 'DESCONHECIDO';
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const fat = await client.query(
       `SELECT cancel FROM dbfatura WHERE codfat = $1`,

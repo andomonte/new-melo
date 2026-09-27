@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Localiza um produto pela Referência para a tela "Substituir Produto"
@@ -22,7 +22,7 @@ export default async function handle(
   const ref = typeof req.query.ref === 'string' ? req.query.ref.trim() : '';
   if (!ref) return res.status(400).json({ error: 'Referência inválida' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // 1) exata
     let r = await client.query(

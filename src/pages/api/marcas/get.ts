@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { GetParams } from '@/data/common/getParams';
@@ -24,7 +24,7 @@ export default async function handle(
     const offset = (Number(page) - 1) * Number(perPage);
     const limit = Number(perPage);
 
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     // Construir condição WHERE para busca

@@ -18,8 +18,11 @@ export default async function handle(
     const offset = (Number(page) - 1) * Number(perPage);
     const limit = Number(perPage);
 
+    // Nunca expor db_conn_enc (segredo) — só o flag tem_conn.
     const filiaisQuery = `
-      SELECT * FROM tb_filial
+      SELECT codigo_filial, nome_filial, timezone, codigo_acesso, schema_db,
+             (db_conn_enc IS NOT NULL) AS tem_conn
+      FROM tb_filial
       WHERE nome_filial ILIKE $1
       ORDER BY nome_filial ASC
       LIMIT $2 OFFSET $3;

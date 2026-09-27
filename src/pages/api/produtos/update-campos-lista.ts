@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Salva a tela "Alterar Campos Lista" (frmAlteraCampoProduto do Delphi):
@@ -64,7 +64,7 @@ export default async function handle(
     return res.status(400).json({ error: `Campo "${campo}" não permitido` });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     await client.query('BEGIN');
     let alterados = 0;

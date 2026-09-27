@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 
 export default async function handle(
@@ -11,7 +11,7 @@ export default async function handle(
   const { page = '1', perPage = '10', search = '' } = req.query;
 
   try {
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
 
     const offset = (Number(page) - 1) * Number(perPage);

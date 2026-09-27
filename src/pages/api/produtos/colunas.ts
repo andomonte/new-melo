@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Lista as colunas do dbprod (para o filtro avançado por coluna funcionar
@@ -17,7 +17,7 @@ export default async function handler(
   }
 
   try {
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     const r = await pool.query(
       `SELECT column_name
          FROM information_schema.columns

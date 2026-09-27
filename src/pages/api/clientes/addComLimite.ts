@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { Cliente } from '@/data/clientes/clientes';
 import { serializeBigInt } from '@/utils/serializeBigInt';
@@ -92,7 +92,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Filial não informada no cookie' });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   let client: PoolClient | undefined;
 
   const {

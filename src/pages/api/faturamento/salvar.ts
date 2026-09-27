@@ -1,7 +1,7 @@
 // pages/api/faturamento/salvar.ts
 
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
 import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
 import { resolverFiscalArmazem, determinarSeriePorIE } from '@/lib/faturamento/fiscalPorArmazem';
@@ -263,7 +263,7 @@ export default async function handler(
     });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     console.log('🔄 Iniciando transação...');

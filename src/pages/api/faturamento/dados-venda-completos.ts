@@ -1,7 +1,7 @@
 // pages/api/faturamento/dados-venda-completos.ts
 // API para buscar dados completos por codvenda (para preview antes de faturar)
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -27,7 +27,7 @@ export default async function handler(
   }
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     // Determinar o campo e valor de busca
     const campoConsulta = codvenda ? 'codvenda' : 'nrovenda';

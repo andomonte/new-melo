@@ -1,8 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPool, invalidarCacheFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { Filial } from '@/data/filiais/filiais';
+import { encrypt } from '@/utils/crypto';
 
 export default async function handle(
   req: NextApiRequest,
@@ -36,8 +37,27 @@ export default async function handle(
     let i = 2;
     if (timezone) { sets.push(`timezone = $${i++}`); params.push(timezone); }
     if (temCodigo) { sets.push(`codigo_acesso = $${i++}`); params.push(codigoAcesso); }
+
+    // schema_db (search_path da filial). Enviado → atualiza (vazio vira NULL = usa central).
+    if (Object.prototype.hasOwnProperty.call(req.body, 'schema_db')) {
+      const schemaDb = String((req.body as any).schema_db ?? '').trim() || null;
+      sets.push(`schema_db = $${i++}`);
+      params.push(schemaDb);
+    }
+
+    // db_conn (string de conexão completa). Só atualiza quando vem PREENCHIDA
+    // (vazio = manter atual, para não exigir redigitar a senha a cada edição).
+    // Guardada CRIPTOGRAFADA (AES, utils/crypto) — nunca em texto puro.
+    const dbConnRaw = (req.body as any).db_conn;
+    if (typeof dbConnRaw === 'string' && dbConnRaw.trim() !== '') {
+      const enc = await encrypt(dbConnRaw.trim());
+      sets.push(`db_conn_enc = $${i++}`);
+      params.push(enc);
+    }
+
     params.push(codigo_filial);
-    const updateQuery = `UPDATE tb_filial SET ${sets.join(', ')} WHERE codigo_filial = $${i} RETURNING *`;
+    const updateQuery = `UPDATE tb_filial SET ${sets.join(', ')} WHERE codigo_filial = $${i}
+      RETURNING codigo_filial, nome_filial, timezone, codigo_acesso, schema_db, (db_conn_enc IS NOT NULL) AS tem_conn`;
 
     const result = await client.query(updateQuery, params);
 
@@ -47,6 +67,9 @@ export default async function handle(
     }
 
     const updatedFilial = result.rows[0];
+
+    // Reflete a mudança de schema/conexão imediatamente (mata o cache de 60s).
+    invalidarCacheFilial();
 
     res
       .status(200)

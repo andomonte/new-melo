@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient'; // Certifique-se de que este é o caminho correto para sua função getPgPool
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Certifique-se de que este é o caminho correto para sua função getPgPool
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 export default async function buscarCliente(
@@ -30,7 +30,7 @@ export default async function buscarCliente(
   }
 
   try {
-    const pool = getPgPool(filial); // Passa a filial para obter o pool correto
+    const pool = await getPgPoolPorNomeFilial(filial); // Passa a filial para obter o pool correto
     client = await pool.connect();
 
     const pageNumber = Number(page);

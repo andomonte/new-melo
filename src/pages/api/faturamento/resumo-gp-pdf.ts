@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * GET /api/faturamento/resumo-gp-pdf?codgp=X&via=N
@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const via = Math.max(1, Number(req.query.via) || 1);
   if (!codgp) return res.status(400).json({ erro: 'Informe codgp.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // Faturas reais do grupo (exclui o container sintético 'GP...' sem nroform).
     const { rows } = await client.query(

@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 // Função auxiliar para executar operações com timeout
 const withTimeout = async <T>(
@@ -94,7 +94,7 @@ const handleGetOne = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
 
     // Obtém conexão com timeout
     client = await withTimeout(
@@ -173,7 +173,7 @@ const handleUpdate = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
 
     // Obtém conexão com timeout
     client = await withTimeout(
@@ -254,7 +254,7 @@ const handleDelete = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
 
     // Obtém conexão com timeout
     client = await withTimeout(

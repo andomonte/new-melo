@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 /**
@@ -32,7 +32,7 @@ export default async function handle(
     return res.status(400).json({ error: 'codprod é obrigatório' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // Substituto adicionável na mesma forma do carrinho. O WHERE final garante
     // que o próprio substituto não esteja bloqueado (inf D/S/N).

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * API para consultar extrato de movimentações de produto
@@ -41,7 +41,7 @@ export default async function handle(
       .json({ error: 'Data inicial e final são obrigatórias' });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
 
   try {
     // Array para armazenar todas as movimentações

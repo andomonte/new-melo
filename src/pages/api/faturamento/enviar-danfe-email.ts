@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import nodemailer from 'nodemailer';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { getSmtpConfigWithFallback } from '@/lib/smtpConfig';
 
 /**
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (lista.length === 0) return res.status(400).json({ erro: 'Informe ao menos um destinatário válido.' });
   const unicos = Array.from(new Set(lista));
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // PDF da DANFE + XMLs (guardados na emissão)
     const nfe = await client.query(

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 /**
  * GET /api/produtos/politica-preco/[codprod]
@@ -44,9 +44,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let client;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
-    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     // Produto (custo base + atributos p/ o divisor "fora do estado")
     const prodRes = await client.query(

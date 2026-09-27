@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * API para validar CEST contra NCM
@@ -37,7 +37,7 @@ export default async function handle(
   }
 
   try {
-    const pool = getPgPool('MANAUS');
+    const pool = await getPgPoolFilial(req);
     const client = await pool.connect();
 
     try {

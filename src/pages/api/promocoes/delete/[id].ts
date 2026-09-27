@@ -3,7 +3,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient'; // Importe sua função getPgPool
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Importe sua função getPgPool
 
 export default async function handler(
   req: NextApiRequest,
@@ -38,7 +38,7 @@ export default async function handler(
   const promocaoId = Number(id); // Converte o ID para número
 
   try {
-    const pool = getPgPool(filial); // Obtém o pool de conexão para a filial
+    const pool = await getPgPoolPorNomeFilial(filial); // Obtém o pool de conexão para a filial
     client = await pool.connect(); // Obtém uma conexão do pool
 
     // ✨ PASSO 1: INICIA A TRANSAÇÃO.

@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 export default async function handle(
   req: NextApiRequest,
@@ -42,7 +42,7 @@ const handleGetOne = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const query =
@@ -131,7 +131,7 @@ const handleUpdate = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const query = `
@@ -176,7 +176,7 @@ const handleDelete = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const query =

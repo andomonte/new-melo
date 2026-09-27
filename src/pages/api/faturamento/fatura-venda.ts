@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const pool = getPgPool();
+    const pool = await getPgPoolFilial(req);
     const { rows } = await pool.query(
       `SELECT fv.id, fv.codfat, fv.codvenda, fv.data_associacao, fv.valor_venda, fv.observacao, fv.usuario_associacao, fv.status,
               v.nrovenda, v.codvend, v.data, v.obs, v.total, v.codcli, v.transp, c.nome AS cliente_nome, c.nomefant, c.cpfcgc, c.bairro, c.cidade, c.uf, c.cep

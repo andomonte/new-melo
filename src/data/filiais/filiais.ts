@@ -8,6 +8,12 @@ export interface Filial {
   timezone?: string;
   /** Código de acesso da filial (segredo do setor) p/ as telas soltas. */
   codigo_acesso?: string | null;
+  /** search_path das consultas desta filial (ex.: db_rondonia; prod: public). */
+  schema_db?: string | null;
+  /** String de conexão da filial — SÓ no envio do form (write-only); guardada criptografada. */
+  db_conn?: string;
+  /** Flag: a filial já tem conexão própria configurada (não expõe o segredo). */
+  tem_conn?: boolean;
 }
 
 export interface Filiais {

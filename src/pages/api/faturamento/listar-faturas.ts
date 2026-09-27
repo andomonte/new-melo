@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 const operadoresSQL: Record<string, string> = {
   igual: '=',
@@ -177,7 +177,10 @@ export default async function listarFaturas(
   const offset = (page - 1) * perPage;
 
   try {
-    const client = await getPgPool().connect();
+    // Pool da FILIAL selecionada (cookie filial_melo → tb_filial.schema_db).
+    // Fallback db_manaus quando sem filial → compatível com o comportamento atual.
+    const pool = await getPgPoolFilial(req);
+    const client = await pool.connect();
 
     // Verificar se a tabela grupo_pagamento existe
     let hasGrupoPagamentoTable = false;

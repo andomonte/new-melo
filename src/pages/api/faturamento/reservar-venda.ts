@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // Reserva (soft lock) de vendas para o Novo Faturamento. Também serve de HEARTBEAT:
 // chamar de novo com as mesmas vendas RENOVA a validade (expira_em) das que já são suas.
@@ -26,9 +26,8 @@ export default async function handler(
 
   const ttl = Number(ttlMin) > 0 ? Number(ttlMin) : 3; // minutos
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
-    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
     const reservadas: string[] = [];
     const falhou: string[] = [];

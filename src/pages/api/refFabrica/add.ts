@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
@@ -10,7 +10,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   if (!referencia) return res.status(400).json({ error: 'Referência é obrigatória.' });
   if (!codmarca) return res.status(400).json({ error: 'Marca é obrigatória.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     await client.query('BEGIN');
     const dup = await client.query(

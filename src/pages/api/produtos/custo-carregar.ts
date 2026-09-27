@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Resolve os produtos de uma importação de "Atualizar Custo da Mercadoria"
@@ -27,7 +27,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Nenhuma referência informada' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const resultados: Array<{
       ref: string;

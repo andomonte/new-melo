@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Desativa / Ativa produtos (individual ou em massa).
@@ -39,7 +39,7 @@ export default async function handle(
   // desativar => inf='D'; ativar => inf='-' (SEM INFORMATIVO)
   const novoInf = acao === 'desativar' ? 'D' : '-';
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

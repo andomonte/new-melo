@@ -132,6 +132,55 @@ const FormFilialContainer: React.FC<FormFilialContainerProps> = ({
                   Segredo compartilhado do setor, pedido ao abrir Separação / Conferência / TV. Vazio = filial sem código.
                 </p>
               </div>
+
+              {/* ── Banco de dados da filial ─────────────────────────────── */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Schema do banco
+                </label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  style={{ textTransform: 'none' }}
+                  defaultValue={(filial as any).schema_db || ''}
+                  placeholder="ex.: db_rondonia (em produção com banco próprio: public)"
+                  onChange={(e) => {
+                    setHasChanges(true);
+                    handleFilialChange({ ...filial, schema_db: e.target.value.trim() } as any);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  search_path das consultas desta filial. Vazio = usa o banco central (db_manaus).
+                </p>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Conexão do banco (string){' '}
+                  {(filial as any).tem_conn ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">• configurada</span>
+                  ) : (
+                    <span className="text-gray-400">• usando banco central</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  style={{ textTransform: 'none' }}
+                  defaultValue=""
+                  placeholder="postgresql://usuario:senha@host:5432/banco — vazio = manter atual"
+                  onChange={(e) => {
+                    setHasChanges(true);
+                    handleFilialChange({ ...filial, db_conn: e.target.value } as any);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Servidor local da filial (produção). Guardada <b>criptografada</b>; nunca é exibida de volta.
+                  Vazio = mantém a conexão atual. Em desenvolvimento, deixe vazio (todas usam o mesmo servidor).
+                </p>
+              </div>
             </div>
           )}
         </div>

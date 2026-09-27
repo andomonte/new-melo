@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function sincronizarAgrupamentos(
   req: NextApiRequest,
@@ -15,7 +15,7 @@ export default async function sincronizarAgrupamentos(
   const { acao = 'verificar' } = req.body;
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     // Verificar se as tabelas existem
     const tablesCheck = await client.query(`

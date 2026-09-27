@@ -1,7 +1,7 @@
 // API equivalente à REGRAS_VENDAS.SUBMETER_REGRA do Oracle
 // Replica a lógica exata: STATUS_CLIENTE + SEM_LIMITE_FINANCEIRO
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'codcli obrigatório' });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
 
   try {

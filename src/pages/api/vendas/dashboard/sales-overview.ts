@@ -1,7 +1,7 @@
 // pages/api/vendas/dashboard/sales-overview.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import {
   SalesOverviewDataPoint,
@@ -25,7 +25,7 @@ export default async function handle(
     const { range = 'ultimos_30_dias' } = req.query as { range?: string };
     const { startDate, endDate } = getDateRange(range);
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     // Utiliza a função auxiliar para determinar o agrupamento ideal
     const trunc = await getDynamicTrunc(client, range);

@@ -1,7 +1,7 @@
 // pages/api/vendas/reload-cad-armazem-produto.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { Sequelize, QueryTypes } from 'sequelize';
 import { parseCookies } from 'nookies';
 
@@ -179,7 +179,7 @@ export default async function handler(
   try {
     const cookies = parseCookies({ req });
     const filial = cookies.filial_melo; // seu padrão multi-filial
-    const pgPool = getPgPool(filial);
+    const pgPool = await getPgPoolPorNomeFilial(filial);
     const pg = await pgPool.connect();
     const ora = await getOracleSequelize();
 

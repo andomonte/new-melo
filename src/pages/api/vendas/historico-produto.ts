@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * GET /api/vendas/historico-produto?codprod=XXX
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { codprod } = req.query;
   if (!codprod || typeof codprod !== 'string') return res.status(400).json({ error: 'codprod obrigatório' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   try {
     const queryVendas = `
       SELECT

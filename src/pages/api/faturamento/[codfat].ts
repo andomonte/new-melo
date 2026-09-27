@@ -1,6 +1,6 @@
 // pages/api/faturamento/fatura/[codfat].ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -19,7 +19,7 @@ export default async function handler(
   // Método DELETE - Excluir fatura
   if (req.method === 'DELETE') {
     try {
-      const client = await getPgPool().connect();
+      const client = await (await getPgPoolFilial(req)).connect();
 
       // Buscar as vendas associadas a esta fatura antes de excluir
       const vendasResult = await client.query(
@@ -97,7 +97,7 @@ export default async function handler(
   }`;
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     // Se está cancelando a fatura, reverter o status das vendas
     if (dadosRecebidos.cancel === 'S') {

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Carrega os produtos SELECIONADOS na lista (por codprod) para o "Atualizar Custo
@@ -25,7 +25,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Nenhum produto selecionado.' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query(
       `SELECT codprod, ref, descr, aplic_extendida, prfabr, preconf, precosnf,

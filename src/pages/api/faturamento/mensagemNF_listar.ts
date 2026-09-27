@@ -1,7 +1,7 @@
 // pages/api/mensagens/listar.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -12,7 +12,7 @@ export default async function handler(
   }
 
   try {
-    const result = await getPgPool().query(
+    const result = await (await getPgPoolFilial(req)).query(
       'SELECT * FROM dbmensagens ORDER BY codigo DESC',
     );
     return res.status(200).json(result.rows);
