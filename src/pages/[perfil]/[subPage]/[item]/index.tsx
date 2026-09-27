@@ -1,83 +1,65 @@
-import React, { useEffect, useContext, useState } from 'react';
+import React, { useEffect, useContext, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { AuthContext } from '@/contexts/authContexts';
 import MenuPadrao from '@/components/menus/padrao';
-import Carregamento from '@/utils/carregamento';
-import type { Permissao } from '@/contexts/authContexts';
 
+/**
+ * Rota dinâmica das telas internas (ex.: /admin/controleAcesso/perfis).
+ *
+ * A tela ativa é derivada DIRETAMENTE de router.query via useMemo — assim o
+ * conteúdo troca imediatamente quando a URL muda (navegação por <Link> entre
+ * telas do mesmo padrão de rota). O antigo fluxo guardava a permissão em estado
+ * atualizado por useEffect + reescrevia a URL com window.history.replaceState,
+ * o que dessincronizava o router do Next e causava "a URL muda mas a página não
+ * troca, só com refresh".
+ */
 const Page = () => {
   const router = useRouter();
-  const { user, isLoading } = useContext(AuthContext); // ✅ Pegue o novo estado isLoading
-  const [dadosCarregados, setDadosCarregados] = useState(false);
-  const [permissaoAtual, setPermissaoAtual] = useState<Permissao | null>(null);
-  const [permissoesPaths, setPermissoesPaths] = useState<string[]>([]);
-
+  const { user, isLoading } = useContext(AuthContext);
   const { subPage, item, perfil } = router.query;
 
-  useEffect(() => {
-    // ✅ Verifique se o router está pronto E se o carregamento do usuário está completo
-    if (!router.isReady || isLoading) {
-      return;
-    } // Se o usuário não existir (não autenticado), redirecione para login
+  const telaAtual =
+    typeof perfil === 'string' && typeof subPage === 'string' && typeof item === 'string'
+      ? `/${perfil}/${subPage}/${item}`
+      : null;
 
+  const permissoesPaths = useMemo(
+    () =>
+      (user?.permissoes ?? [])
+        .map((p) => p.tb_telas?.PATH_TELA)
+        .filter((p): p is string => !!p),
+    [user],
+  );
+
+  const permissaoAtual = useMemo(
+    () =>
+      telaAtual && user?.permissoes
+        ? user.permissoes.find((p) => p.tb_telas?.PATH_TELA === telaAtual) ?? null
+        : null,
+    [telaAtual, user],
+  );
+
+  // Autenticação/autorização + registro da última tela (sem reescrever a URL).
+  useEffect(() => {
+    if (!router.isReady || isLoading) return;
     if (!user) {
       router.replace('/login');
       return;
     }
-
-    if (
-      typeof subPage !== 'string' ||
-      typeof item !== 'string' ||
-      !user.permissoes
-    ) {
-      // Se o usuário está autenticado mas não tem permissões, ou os dados da rota estão incompletos,
-      // redirecione para a página de não autorizado
+    if (!telaAtual || !user.permissoes || !permissaoAtual) {
       router.replace('/naoAutorizado');
       return;
     }
-
-    const telaAtual = `/${perfil}/${subPage}/${item}`;
-
-    const permissaoEncontrada = user.permissoes.find(
-      (p) => p.tb_telas?.PATH_TELA === telaAtual,
-    );
-
-    if (!permissaoEncontrada) {
-      router.replace('/naoAutorizado');
-      return;
-    }
-
-    setPermissaoAtual(permissaoEncontrada);
-
-    const pathsPermitidos = user.permissoes
-      .map((p) => p.tb_telas?.PATH_TELA)
-      .filter((p): p is string => !!p);
-
-    setPermissoesPaths(pathsPermitidos);
-
-    if (
-      typeof window !== 'undefined' &&
-      window.location.pathname !== telaAtual
-    ) {
-      // Preserva o history.state do Next (NÃO passar null — zerar o state quebra
-      // o router do Next: as navegações seguintes mudam a URL mas não trocam a
-      // página, só voltando com refresh).
-      window.history.replaceState(window.history.state, '', telaAtual);
-    }
-
-    setDadosCarregados(true);
-
-    // Salvar última tela acessada no banco
-    if (user?.usuario && telaAtual) {
+    if (user.usuario) {
       fetch('/api/userPreferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user: user.usuario, screen: 'ultima_tela', preferences: { value: telaAtual } }),
       }).catch(() => {});
     }
-  }, [router, subPage, item, user, perfil, isLoading]);
+  }, [router, telaAtual, user, isLoading, permissaoAtual]);
 
-  if (isLoading || !dadosCarregados || !permissaoAtual) {
+  if (isLoading || !router.isReady || !user || !permissaoAtual) {
     return <div className="h-screen bg-white dark:bg-zinc-900" />;
   }
 

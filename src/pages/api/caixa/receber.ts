@@ -7,6 +7,7 @@ import {
   type TituloReceber,
 } from '@/lib/caixa/receber';
 import { gerarComprovante } from '@/lib/financeiro/gerarComprovante';
+import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 
 /**
  * Fase 1 — recebimento do Caixa (dinheiro/PIX/cartão), 1 ou vários títulos.
@@ -56,7 +57,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ sucesso: true, simulado: true, mensagem: 'Simulação — nada foi gravado.', ...resultado });
     }
 
-    // Inserir na fila de impressão DANFE (robô 2) para cada fatura envolvida
+    // Fila de impressão da DANFE: a impressão é disparada na EMISSÃO da NF-e
+    // (faturamento/emitir e emitir-faturado enfileiram ao autorizar). Aqui só há uma
+    // REDE DE SEGURANÇA: enfileira a fatura recebida apenas se ela nunca teve job de
+    // impressão (somenteSeInexistente=true) — evita reimprimir no recebimento algo que
+    // já foi impresso na emissão.
     try {
       const codRecebs: string[] = [];
       if (ehMulti && resultado.resultados) {
@@ -72,17 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           [codRecebs],
         );
         for (const f of faturas.rows) {
-          const existe = await client.query(
-            `SELECT 1 FROM fin_impressao WHERE imp_aut_id = $1 AND imp_impresso = 'N' LIMIT 1`,
-            [f.cod_fat],
-          );
-          if (existe.rows.length === 0) {
-            await client.query(
-              `INSERT INTO fin_impressao (imp_aut_id, imp_data, imp_impresso, imp_fila)
-               VALUES ($1, NOW(), 'N', 1)`,
-              [f.cod_fat],
-            );
-          }
+          await enfileirarImpressaoDanfe(client, f.cod_fat, { somenteSeInexistente: true });
         }
       }
     } catch (filaErr: any) {
@@ -91,6 +86,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Comprovante de pagamento (fin_autenticacao) — fiel ao Delphi. Não bloqueia o recebimento.
+    let autIdComp: string | null = null;
+    let codRecebsComp: string[] = [];
     try {
       let codusrComp: string | null = null;
       if (body.username) {
@@ -100,34 +97,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const codRecebs: string[] = ehMulti
         ? (body.titulos as any[]).map((t) => String(t.cod_receb))
         : [String(body.cod_receb)];
+      codRecebsComp = codRecebs;
       const docs = await client.query(`SELECT cod_receb, nro_doc FROM dbreceb WHERE cod_receb = ANY($1)`, [codRecebs]);
       const nroMap = new Map(docs.rows.map((r: any) => [String(r.cod_receb), r.nro_doc]));
+      // Juros e principal pendente por título (vêm do corpo) — p/ o comprovante mostrar o Valor do
+      // Juros e o Valor Total a Pagar (fiel ao Delphi: o item guarda valor pago, juros e total).
+      const jurosMap = new Map<string, number>();
+      const pendMap = new Map<string, number>();
+      if (ehMulti) {
+        for (const t of body.titulos as any[]) {
+          jurosMap.set(String(t.cod_receb), Number(t.juros || 0));
+          pendMap.set(String(t.cod_receb), Number(t.principalPendente || 0));
+        }
+      }
+      const r2c = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
       const itens = ehMulti
-        ? (resultado.resultados || []).map((r: any) => ({
-            cod_receb: String(r.cod_receb),
-            valor: Number(r.baixa?.principalRecebido || 0),
-            nro_doc: nroMap.get(String(r.cod_receb)) ?? null,
-            valor_areceber: Number(r.baixa?.principalRecebido || 0),
-            valor_juros: 0,
-            valor_total: Number(r.baixa?.principalRecebido || 0),
-          }))
-        : [
-            {
-              cod_receb: String(body.cod_receb),
-              valor: Number(resultado?.baixa?.principalRecebido || 0),
-              nro_doc: nroMap.get(String(body.cod_receb)) ?? null,
-            },
-          ];
+        ? (resultado.resultados || []).map((r: any) => {
+            const cod = String(r.cod_receb);
+            const principalRec = Number(r.baixa?.principalRecebido || 0);
+            const juros = jurosMap.get(cod) || 0;
+            const pend = pendMap.get(cod) || principalRec;
+            return {
+              cod_receb: cod,
+              valor: r2c(principalRec + juros), // Valor Pago = principal + juros recebidos
+              nro_doc: nroMap.get(cod) ?? null,
+              valor_areceber: pend, // base do Valor Original (fallback do join)
+              valor_juros: juros, // Valor do Juros
+              valor_total: r2c(pend + juros), // Valor Total a Pagar (principal pendente + juros)
+            };
+          })
+        : (() => {
+            const principalRec = Number(resultado?.baixa?.principalRecebido || 0);
+            const juros = Number(body.juros || 0);
+            const pend = Number(body.principalPendente || principalRec);
+            return [
+              {
+                cod_receb: String(body.cod_receb),
+                valor: r2c(principalRec + juros),
+                nro_doc: nroMap.get(String(body.cod_receb)) ?? null,
+                valor_areceber: pend,
+                valor_juros: juros,
+                valor_total: r2c(pend + juros),
+              },
+            ];
+          })();
       const compItens = itens.filter((i: any) => i.cod_receb);
       if (compItens.length > 0) {
-        await gerarComprovante(client, { codusr: codusrComp, cod_conta: body.cod_conta, itens: compItens });
+        const comp = await gerarComprovante(client, { codusr: codusrComp, cod_conta: body.cod_conta, itens: compItens });
+        autIdComp = comp?.aut_id ?? null;
       }
     } catch (e) {
       console.warn('Falha ao gerar comprovante (não bloqueia o recebimento):', e);
     }
 
+    // Conciliação bancária: se este recebimento veio de uma linha de extrato, marca a linha
+    // como conciliada (com os títulos baixados e o comprovante gerado) na MESMA transação.
+    if (body.conc_lin_id) {
+      await client
+        .query(
+          `UPDATE conc_linha SET lin_status='conciliado', lin_titulo=$2, lin_aut_id=$3::numeric WHERE lin_id=$1`,
+          [body.conc_lin_id, codRecebsComp.join(','), autIdComp],
+        )
+        .catch((e: any) => console.warn('Falha ao vincular conc_linha (não bloqueia):', e.message));
+    }
+
     await client.query('COMMIT');
-    return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', ...resultado });
+    return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', aut_id: autIdComp, ...resultado });
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error('Erro no recebimento do caixa:', error);

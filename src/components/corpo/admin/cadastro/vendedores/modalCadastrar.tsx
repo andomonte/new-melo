@@ -34,7 +34,10 @@ export type CadVendedorSearchOptions =
   | 'grupoProduto';
 
 // ✅ CORREÇÃO: Estado inicial completo para evitar erros de tipo com objetos aninhados.
-const estadoInicialVendedor: Vendedor = {
+// Factory: retorna SEMPRE um objeto novo (com objetos aninhados novos). Necessário
+// porque handleVendedorChange muta os aninhados no lugar — um const de módulo seria
+// mutado e o "Limpar/Novo" não limparia os campos do detalhado/pst.
+const criarEstadoInicialVendedor = (): Vendedor => ({
   codvend: '',
   nome: '',
   valobj: 0,
@@ -50,10 +53,10 @@ const estadoInicialVendedor: Vendedor = {
   valobjm: 0,
   valobjsf: 0,
   ra_mat: '',
-  detalhado_vendedor: { codvend: '', nome: '' }, // Garante que as propriedades obrigatórias existam
+  detalhado_vendedor: { codvend: '', nome: '' },
   grupos_produto: [],
-  pst: { id: 0, codvend: '', codpst: '', local: '' }, // Garante que as propriedades obrigatórias existam
-};
+  pst: { id: 0, codvend: '', codpst: '', local: '' },
+});
 
 export default function CustomModal({
   isOpen,
@@ -61,8 +64,12 @@ export default function CustomModal({
   onSuccess,
 }: ModalProps) {
   const [activeTab, setActiveTab] = useState('dadosCadastrais');
-  const [vendedor, setVendedor] = useState<Vendedor>(estadoInicialVendedor);
+  const [vendedor, setVendedor] = useState<Vendedor>(() =>
+    criarEstadoInicialVendedor(),
+  );
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  // Remonta o form (inputs não-controlados) ao abrir e ao "Limpar".
+  const [formKey, setFormKey] = useState(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [options, setOptions] = useState({
     classesVendedor: {} as ClassesVendedor,
@@ -111,7 +118,8 @@ export default function CustomModal({
               'detalhado_vendedor.logradouro',
               data.logradouro,
             );
-            handleVendedorChange('detalhado_vendedor.bairro', data.bairro);
+            // NÃO preenche bairro pelo viacep: o campo bairro é um CÓDIGO (VARCHAR 5),
+            // e o viacep devolve o NOME — o usuário seleciona o bairro no combo.
             handleVendedorChange('detalhado_vendedor.cidade', data.localidade);
             handleVendedorChange('detalhado_vendedor.estado', data.uf);
           } else {
@@ -136,7 +144,11 @@ export default function CustomModal({
   };
 
   const handleActiveTab = (tab: string) => setActiveTab(tab);
-  const handleClear = () => setVendedor(estadoInicialVendedor);
+  const handleClear = () => {
+    setVendedor(criarEstadoInicialVendedor()); // objeto NOVO (não o const mutado)
+    setErrors({});
+    setFormKey((k) => k + 1); // remonta os inputs para limparem de fato
+  };
 
   const handleSearchOptionsChange = useDebouncedCallback(
     (option: CadVendedorSearchOptions, value: string) => {
@@ -145,36 +157,57 @@ export default function CustomModal({
     300,
   );
 
+  // Carga inicial ao abrir (UMA vez): classes (20) e bairros (899) cabem por completo
+  // e são filtrados client-side. Grupos ficam a cargo do efeito dedicado abaixo.
   useEffect(() => {
     if (!isOpen) {
       handleClear();
       return;
     }
+    let ativo = true;
     setLoading(true);
-    const fetchInitialData = async () => {
+    (async () => {
       try {
-        const [classesVendedor, bairros, gruposProduto] = await Promise.all([
-          getClassesVendedor({
-            page: 1,
-            perPage: 999,
-            search: searchOptions.classeVendedor,
-          }),
-          getBairros({ page: 1, perPage: 999, search: searchOptions.bairro }),
-          getGruposProduto({
-            page: 1,
-            perPage: 999,
-            search: searchOptions.grupoProduto,
-          }),
+        const [classesVendedor, bairros] = await Promise.all([
+          getClassesVendedor({ page: 1, perPage: 999, search: '' }),
+          getBairros({ page: 1, perPage: 999, search: '' }),
         ]);
-        setOptions({ classesVendedor, bairros, gruposProduto });
+        if (ativo) {
+          setOptions((prev) => ({ ...prev, classesVendedor, bairros }));
+        }
       } catch (_error) {
         console.error('Error fetching data:', _error);
       } finally {
-        setLoading(false);
+        if (ativo) setLoading(false);
       }
+    })();
+    return () => {
+      ativo = false;
     };
-    fetchInitialData();
-  }, [isOpen, searchOptions]);
+  }, [isOpen]);
+
+  // Busca remota SÓ de grupos de produto (2018 registros > página): atualiza apenas a
+  // lista de grupos — não re-busca classes/bairros, então a tela não "recarrega toda"
+  // ao digitar/selecionar um grupo.
+  useEffect(() => {
+    if (!isOpen) return;
+    let ativo = true;
+    (async () => {
+      try {
+        const gruposProduto = await getGruposProduto({
+          page: 1,
+          perPage: 999,
+          search: searchOptions.grupoProduto,
+        });
+        if (ativo) setOptions((prev) => ({ ...prev, gruposProduto }));
+      } catch (e) {
+        console.error('Erro ao buscar grupos de produto:', e);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [isOpen, searchOptions.grupoProduto]);
 
   const handleSubmit = async () => {
     try {
@@ -272,6 +305,7 @@ export default function CustomModal({
         setActiveTab={handleActiveTab}
         renderTabContent={() => (
           <DadosCadastrais
+            key={formKey}
             vendedor={vendedor}
             handleVendedorChange={handleVendedorChange}
             handleRemoveGrupoProduto={handleRemoveGrupoProduto}

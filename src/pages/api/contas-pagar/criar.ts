@@ -17,7 +17,8 @@ export default async function handler(
       tipo, // 'F' = Fornecedor, 'T' = Transportadora
       cod_credor, // Código do fornecedor (se tipo = 'F')
       cod_transp, // Código da transportadora (se tipo = 'T')
-      cod_conta, // Código da conta contábil
+      cod_conta, // Conta (dbconta / banco)
+      pag_cof_id, // Conta Financeira (cad_conta_financeira.cof_id) — selecionada no form
       cod_ccusto, // Código do centro de custo
       cod_comprador, // Código do comprador (opcional)
       dt_venc, // Data de vencimento
@@ -80,8 +81,10 @@ export default async function handler(
       }
     }
 
-    if (!dt_venc) {
-      return res.status(400).json({ erro: 'Data de vencimento é obrigatória' });
+    // Vencimento só é obrigatório quando há cobrança (fiel ao MELOSYS: sem cobrança,
+    // vDt_venc := NULL e o título é gravado em aberto, sem vencimento).
+    if (tem_cobr && !dt_venc) {
+      return res.status(400).json({ erro: 'Data de vencimento é obrigatória quando há cobrança' });
     }
 
     if (!valor_pgto || parseFloat(valor_pgto) <= 0) {
@@ -89,10 +92,10 @@ export default async function handler(
     }
 
     // Validações
-    if (!tipo || !dt_venc || !valor_pgto) {
+    if (!tipo || !valor_pgto) {
       return res.status(400).json({
         erro: 'Campos obrigatórios não preenchidos',
-        detalhes: 'tipo, dt_venc e valor_pgto são obrigatórios'
+        detalhes: 'tipo e valor_pgto são obrigatórios'
       });
     }
 
@@ -126,10 +129,12 @@ export default async function handler(
     const valorParcelaFormatado = Math.floor(valorParcela * 100) / 100;
     const restocentavos = parseFloat(valor_pgto) - (valorParcelaFormatado * totalParcelas);
     
-    // Gerar base do nro_dup se não fornecido
-    let baseDup = nro_dup || nro_nf || '';
-    if (!baseDup && parcelado && totalParcelas > 1) {
-      // Gerar um ID único baseado em timestamp
+    // Nro. da duplicata só é gravado quando há cobrança (tem_cobr), fiel ao Delphi
+    // (UniContasP: Check4 desmarcado → vNro_Dup := NULL). Sem cobrança, nro_dup fica NULL.
+    const temCobr = !!tem_cobr;
+    let baseDup = temCobr ? (nro_dup || '') : '';
+    if (temCobr && !baseDup && totalParcelas > 1) {
+      // Gerar um ID único baseado em timestamp (só quando há cobrança e múltiplas parcelas)
       baseDup = `DUP${Date.now().toString().slice(-8)}`;
     }
 
@@ -146,18 +151,23 @@ export default async function handler(
       observacaoFinal = observacaoFinal ? `${observacaoFinal} | ${infoNotas}` : infoNotas;
     }
 
+    // Conta Financeira (pag_cof_id) = cof_id escolhido no form (mesmo p/ todas as parcelas).
+    // Se não for selecionada, grava NULL (coluna aceita NULL a partir da migration 056).
+    // NÃO auto-gerar (o antigo MAX+1 criava valores órfãos que não batem com cad_conta_financeira).
+    const contaFinanceiraId: number | null =
+      pag_cof_id != null && String(pag_cof_id).trim() !== '' && !isNaN(parseInt(String(pag_cof_id), 10))
+        ? parseInt(String(pag_cof_id), 10)
+        : null;
+
     // Criar cada parcela
     for (let i = 0; i < totalParcelas; i++) {
-      // Gerar próximo cod_pgto e pag_cof_id
+      // Gerar próximo cod_pgto
       const maxCodResult = await pool.query(
         'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM dbpgto'
       );
       const nextCodPgto = maxCodResult.rows[0].next_cod.toString().padStart(9, '0');
 
-      const maxPagCofResult = await pool.query(
-        'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM dbpgto'
-      );
-      const nextPagCofId = maxPagCofResult.rows[0].next_pag_cof_id;
+      const nextPagCofId = contaFinanceiraId;
 
       // Calcular data de vencimento desta parcela
       // Se parcelado, usar vencimento do array, senão usar dt_venc
@@ -165,14 +175,20 @@ export default async function handler(
         ? parcelas[i].vencimento 
         : dt_venc;
 
-      // Calcular valor desta parcela (última parcela recebe os centavos restantes)
-      const valorDestaParcela = i === totalParcelas - 1 
-        ? valorParcelaFormatado + restocentavos
-        : valorParcelaFormatado;
+      // Valor desta parcela: usa o VALOR informado por parcela (parcelas[i].valor, editável no
+      // Novo Título) quando presente; senão divide igual (1ª leva o resto de centavos).
+      const valorInformado = parcelado && parcelas[i] && parcelas[i].valor != null
+        ? parseFloat(String(parcelas[i].valor))
+        : NaN;
+      const valorDestaParcela = !isNaN(valorInformado)
+        ? valorInformado
+        : (i === 0 ? valorParcelaFormatado + restocentavos : valorParcelaFormatado);
 
-      // Gerar nro_dup para esta parcela (formato: base/X ou X/Y)
-      const nroDupParcela = totalParcelas > 1 
-        ? `${baseDup}/${String(i + 1).padStart(2, '0')}` 
+      // Gerar nro_dup para esta parcela (formato: base/X ou X/Y). Sem cobrança → NULL.
+      const nroDupParcela = !temCobr
+        ? null
+        : totalParcelas > 1
+        ? `${baseDup}/${String(i + 1).padStart(2, '0')}`
         : (baseDup || null);
 
       // Inserir a parcela

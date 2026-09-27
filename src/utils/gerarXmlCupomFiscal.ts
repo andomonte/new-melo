@@ -453,6 +453,11 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
   let accIBSUF = 0;
   let accIBSMun = 0;
   let accCBS = 0;
+  // ✅ CORREÇÃO 531 (NFC-e): o ICMSTot.vBC/vICMS DEVE ser a soma EXATA do vBC/vICMS que
+  // cada item realmente grava. Itens sem base (CSOSN, CST 40/41/50/60) não escrevem vBC
+  // → não podem entrar no total. Somar aqui evita a rejeição 531 em notas 100% ST.
+  let accVBC = 0;
+  let accVICMS = 0;
 
   for (const prod of produtos) {
     const det = infNFe.ele('det', { nItem: String(itemNum) });
@@ -615,6 +620,12 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
         g.ele('vICMS').txt(vICMS).up();
         g.up();
       }
+
+      // Só entra no total o vBC/vICMS que o item de fato gravou (CST 40/41/50/60 não têm base).
+      if (!['40', '41', '50', '60'].includes(cst)) {
+        accVBC += Number(vBC);
+        accVICMS += Number(vICMS);
+      }
     }
     icms.up();
     
@@ -700,9 +711,10 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
     itemNum++;
   }
 
-  // Totais - usar valores reais calculadosss
-  const vBCTotal = isSimples ? '0.00' : Number(totalProdutos || 0).toFixed(2);
-  const vICMSTotal = isSimples ? '0.00' : Number(totalICMS || 0).toFixed(2);
+  // Totais — ICMSTot.vBC/vICMS = soma EXATA do que cada item gravou (evita rejeição 531).
+  // Em Simples (CSOSN) nenhum item grava vBC/vICMS → acumuladores ficam 0.00 naturalmente.
+  const vBCTotal = accVBC.toFixed(2);
+  const vICMSTotal = accVICMS.toFixed(2);
   
   const total = infNFe.ele('total').ele('ICMSTot');
   total.ele('vBC').txt(vBCTotal).up();

@@ -363,11 +363,12 @@ export default function FormEditarUsuario({
     const chave = filialSelecionada;
     const armazens = armazensSelecionados[chave] ?? [];
 
-    if (armazens.length === 0) {
+    // Armazém só é obrigatório para quem VENDE (tem vendedor/codvend).
+    if (codvendInput && armazens.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Armazém obrigatório',
-        description: 'Selecione um armazém para o item.',
+        description: 'Perfis com vendedor precisam de pelo menos um armazém.',
       });
       return;
     }
@@ -626,11 +627,14 @@ export default function FormEditarUsuario({
       for (const filial of perfil.filial) {
         const contexto = `${perfil.perfil_name} - ${filial.nome_filial}`;
 
-        // Armazém é obrigatório para todos os perfis
-        if (!filial.armazens || filial.armazens.length === 0) {
+        // Armazém obrigatório apenas para quem vende (tem vendedor/codvend).
+        if (
+          filial.codvend &&
+          (!filial.armazens || filial.armazens.length === 0)
+        ) {
           toast({
             title: 'Armazém obrigatório',
-            description: `Selecione pelo menos um armazém para ${contexto}.`,
+            description: `Perfil com vendedor precisa de armazém em ${contexto}.`,
             variant: 'destructive',
           });
           return;
@@ -823,7 +827,8 @@ export default function FormEditarUsuario({
     const chave = filialSelecionada;
     const armazens = armazensSelecionados[chave] ?? [];
 
-    if (armazens.length === 0) return false;
+    // Armazém obrigatório apenas quando há vendedor (perfil que cria venda).
+    if (codvendInput && armazens.length === 0) return false;
 
     if (perfilSelecionado === 'VENDAS' && !codvendInput) return false;
 

@@ -32,7 +32,7 @@ interface SelecionarPagamentosAntecipadosProps {
   isOpen: boolean;
   onClose: () => void;
   nfe: NFeDTO;
-  onProsseguir: (ordensIds: number[], valorTotalAntecipado: number) => void;
+  onProsseguir: (ordensIds: number[], valorTotalAntecipado: number, valorPagoAntecipado: number) => void;
   onSemPagamentos: () => void;
 }
 
@@ -127,6 +127,13 @@ export const SelecionarPagamentosAntecipados: React.FC<SelecionarPagamentosAntec
       .reduce((acc, p) => acc + p.valor, 0);
   };
 
+  // Soma só dos antecipados selecionados que já foram PAGOS (define crédito × cancelamento no backend).
+  const calcularTotalPago = () => {
+    return pagamentos
+      .filter(p => selecionados.has(p.ordem_id) && p.status === 'PAGO')
+      .reduce((acc, p) => acc + p.valor, 0);
+  };
+
   const formatarData = (data: string | null) => {
     if (!data) return '-';
     return new Date(data).toLocaleDateString('pt-BR');
@@ -176,7 +183,7 @@ export const SelecionarPagamentosAntecipados: React.FC<SelecionarPagamentosAntec
 
     const ordensIds = Array.from(selecionados);
     const valorTotal = calcularTotalSelecionado();
-    onProsseguir(ordensIds, valorTotal);
+    onProsseguir(ordensIds, valorTotal, calcularTotalPago());
   };
 
   // Filtrar pagamentos pela busca
@@ -390,7 +397,7 @@ export const SelecionarPagamentosAntecipados: React.FC<SelecionarPagamentosAntec
                     </h4>
                     <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                       Excesso: {formatarValor(calcularTotalSelecionado() - (nfeInfo?.valor_total || nfe.valorTotal || 0))}
-                      {' '}- O valor antecipado será usado proporcionalmente.
+                      {' '}- A NFe será quitada pelo antecipado e o excedente vira crédito do fornecedor.
                     </p>
                   </div>
                 </div>

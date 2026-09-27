@@ -7,7 +7,9 @@ import type { LinhaExtrato } from './parseCsv';
  * estorno, rendimento). O que sobra (positivo, sem tipo claro) fica 'a_identificar'.
  */
 
-export type CategoriaLancamento = 'recebimento' | 'descarte' | 'a_identificar';
+// 'boleto' = liquidação de cobrança/boleto: é recebimento, MAS identificado pelo banco
+// (retorno CNAB / tela de baixa de boletos) — NÃO entra na conciliação manual de dar baixa.
+export type CategoriaLancamento = 'recebimento' | 'boleto' | 'descarte' | 'a_identificar';
 
 export interface Classificacao {
   tipo: string;
@@ -27,7 +29,8 @@ const RE_PIX_RECEBIDO = /PIX\s+RECEBIDO/i;
 const RE_PIX_ENVIADO = /PIX\s+ENVIADO/i;
 const RE_TED_DOC = /\b(TED|DOC)\b/i;
 const RE_DEPOSITO = /DEP[ÓO]SITO/i;
-const RE_COBRANCA = /CR[ÉE]DITO.*(COBRAN|LIQUIDA)|LIQUIDA[ÇC][ÃA]O.*COBRAN/i;
+// Liquidação de boleto/cobrança recebida (crédito) → categoria 'boleto' (baixa na tela de boletos).
+const RE_BOLETO = /LIQUIDA[ÇC][ÃA]O|COBRAN[ÇC]A|\bBOLETO\b|TIT(ULO)?\.?\s*(COBR|DESC|VINC)|LIQ\.?\s*COBR/i;
 
 export function classificarLancamento(historico: string, valorCentavos: number): Classificacao {
   const h = String(historico || '');
@@ -47,9 +50,12 @@ export function classificarLancamento(historico: string, valorCentavos: number):
   if (RE_TRANSF_PROPRIA.test(h)) return { tipo: 'transferencia_propria', categoria: 'descarte', motivo: 'Transferência entre contas próprias' };
   if (RE_TARIFA.test(h)) return { tipo: 'tarifa', categoria: 'descarte', motivo: 'Ajuste de tarifa (crédito)' };
 
-  // 3) Recebimentos de cliente (candidatos à conciliação).
+  // 3) BOLETO (liquidação de cobrança) — recebimento IDENTIFICADO pelo banco: NÃO entra na baixa
+  //    manual; é baixado na tela de boletos (retorno CNAB). Fica fora da lista de conciliação.
+  if (RE_BOLETO.test(h)) return { tipo: 'boleto', categoria: 'boleto', motivo: 'Liquidação de boleto/cobrança (baixa na tela de boletos)' };
+
+  // 4) Recebimentos de cliente para conciliação MANUAL (Pix/TED/DOC/depósito avulso).
   if (RE_PIX_RECEBIDO.test(h)) return { tipo: 'pix_recebido', categoria: 'recebimento', motivo: 'PIX recebido' };
-  if (RE_COBRANCA.test(h)) return { tipo: 'cobranca', categoria: 'recebimento', motivo: 'Crédito de cobrança' };
   if (RE_TED_DOC.test(h)) return { tipo: 'ted_doc', categoria: 'recebimento', motivo: 'TED/DOC recebido' };
   if (RE_DEPOSITO.test(h)) return { tipo: 'deposito', categoria: 'recebimento', motivo: 'Depósito' };
 

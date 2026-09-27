@@ -30,6 +30,8 @@ export interface ContaPagar {
   nome_banco?: string; // Nome do banco
   ordem_compra?: string; // Número da ordem de compra
   descricao_conta: string;
+  pag_cof_id?: number | string | null; // Conta Financeira (cad_conta_financeira.cof_id)
+  descricao_conta_financeira?: string | null;
   status: 'pendente' | 'pago_parcial' | 'pago' | 'cancelado';
   forma_pgto?: string; // Código da forma de pagamento (da tabela dbfpgto)
   total_pago_historico?: number; // Soma de todos os pagamentos do histórico
@@ -52,7 +54,8 @@ export interface ContaPagar {
   nro_contrato?: string; // Número do contrato internacional
   xml_nf?: string; // XML da nota fiscal
   titulo_importado?: boolean; // Indica se o título foi gerado automaticamente a partir de CT-e
-  // possui_entrada?: boolean; // Indica se possui entrada aduaneira
+  // Status da ENTRADA (derivado no /api/contas-pagar): 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso' | null
+  entrada_status?: 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso' | null;
 }
 
 export interface FiltrosContasPagar {
@@ -76,6 +79,8 @@ export interface FiltrosContasPagar {
   nro_invoice?: string;
   nro_contrato?: string;
   search?: string; // Busca geral
+  origem_compras?: 'antecipado' | 'xml' | 'compras'; // Títulos gerados pelo Compras
+  entrada_status?: 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso'; // Status da entrada
 }
 
 export interface Paginacao {
@@ -114,9 +119,12 @@ export interface EditarContaData {
   obs?: string;
   nro_nf?: string;
   nro_dup?: string;
-  cod_credor?: number;
-  cod_conta?: number;
-  cod_ccusto?: number;
+  // Códigos são VARCHAR com zeros à esquerda no banco (ex.: '04400', '0003').
+  // Enviar como STRING para não perder o padding (parseInt quebrava o JOIN do credor).
+  cod_credor?: string;
+  cod_conta?: string;
+  pag_cof_id?: string | number;
+  cod_ccusto?: string;
 }
 
 export function useContasPagar() {
@@ -137,7 +145,7 @@ export function useContasPagar() {
       const params = new URLSearchParams({
         page: pagina.toString(),
         limit: limite.toString(),
-        ...filtros
+        ...(filtros as any)
       });
 
       const response = await fetch(`/api/contas-pagar?${params}`);
@@ -218,7 +226,7 @@ export function useContasPagar() {
       setContasPagar(prev =>
         prev.map(conta =>
           conta.id === id
-            ? { ...conta, ...data }
+            ? { ...conta, ...(data as any) }
             : conta
         )
       );

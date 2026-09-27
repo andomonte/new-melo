@@ -43,6 +43,18 @@ export async function renderHtmlToPdf(
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+    // Espera o código de barras (JsBarcode) desenhar dentro do <svg id="barcode">
+    // antes de gerar o PDF. Sem isso o page.pdf() saía antes do script renderizar e o
+    // DANFE ficava SEM barcode. Páginas sem #barcode retornam de imediato (el == null).
+    await page
+      .waitForFunction(
+        () => {
+          const el = document.querySelector('#barcode');
+          return !el || el.childNodes.length > 0;
+        },
+        { timeout: 3000 },
+      )
+      .catch(() => {});
     const pdf = await page.pdf({
       format: 'A4',
       landscape,

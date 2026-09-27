@@ -10,8 +10,11 @@ export default async function handler(
   }
 
   try {
-    const { busca, search } = req.query;
+    const { busca, search, limit } = req.query;
     const termoBusca = (busca || search) as string;
+    // Limite configurável (o dropdown do modal de Pagamento carrega TODAS as contas de
+    // uma vez p/ filtrar client-side; a busca-as-you-type do cadastro usa o default 50).
+    const limiteNum = Math.min(Math.max(parseInt(String(limit ?? ''), 10) || 50, 1), 2000);
     const pool = getPgPool();
 
     let query = `
@@ -31,22 +34,17 @@ export default async function handler(
     const params: any[] = [];
     let paramIndex = 1;
     
-    // Filtro por busca (código ou nro_conta)
-    if (termoBusca && typeof termoBusca === 'string') {
-      const isNumeric = /^\d+$/.test(termoBusca.trim());
-      
-      if (isNumeric) {
-        query += ` AND (c.cod_conta LIKE $${paramIndex} OR c.nro_conta ILIKE $${paramIndex + 1})`;
-        params.push(`%${termoBusca.trim()}%`, `%${termoBusca}%`);
-        paramIndex += 2;
-      } else {
-        query += ` AND c.nro_conta ILIKE $${paramIndex}`;
-        params.push(`%${termoBusca}%`);
-        paramIndex++;
-      }
+    // Filtro por busca: casa com o CÓDIGO da conta, o Nº da conta OU o NOME do banco
+    // (o "nome" exibido no combobox é banco_nome, ex.: "MANAUS - CENTRO", que antes
+    // não era pesquisado — só o cod_conta/nro_conta batiam).
+    if (termoBusca && typeof termoBusca === 'string' && termoBusca.trim() !== '') {
+      const termo = `%${termoBusca.trim()}%`;
+      query += ` AND (c.cod_conta ILIKE $${paramIndex} OR c.nro_conta ILIKE $${paramIndex} OR b.nome ILIKE $${paramIndex})`;
+      params.push(termo);
+      paramIndex++;
     }
     
-    query += ` ORDER BY c.cod_conta LIMIT 50`;
+    query += ` ORDER BY c.cod_conta LIMIT ${limiteNum}`;
 
     const result = await pool.query(query, params);
 

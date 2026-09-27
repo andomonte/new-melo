@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Lock, Unlock, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Lock, Unlock, ArrowUp, ArrowDown, X, Printer } from 'lucide-react';
 import { mascaraInputBRL, desmascarar, formatarBRL } from '@/utils/monetario';
 import type { SessaoCaixaHook } from '@/hooks/useSessaoCaixa';
 import type { FormaPagamentoSessao } from '@/data/caixa/sessao';
 import { getRelatorio } from '@/data/caixa/sessao';
+import { imprimirMovimentoCaixa } from '@/lib/caixa/imprimirMovimentoCaixa';
+
+const hojeISO = () => new Date().toISOString().slice(0, 10);
 
 const FORMA_LABEL: Record<string, string> = {
   DINHEIRO: 'Dinheiro', CREDITO: 'Cartão crédito', DEBITO: 'Cartão débito',
@@ -38,6 +41,14 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
   const [contado, setContado] = useState('');
   const [obsFechar, setObsFechar] = useState('');
   const [resultado, setResultado] = useState<{ quebra: number } | null>(null);
+  // Movimento do Caixa (relatório do dia por operador)
+  const [movAberto, setMovAberto] = useState(false);
+  const [dataMov, setDataMov] = useState(hojeISO());
+
+  const abrirMovimento = async (dataISO: string, sessaoId?: string | number) => {
+    try { await imprimirMovimentoCaixa({ data: dataISO, conta: codConta, operadorLabel: operador, sessaoId }); }
+    catch (e: any) { toast.error(e?.message || 'Erro ao abrir o movimento do caixa.'); }
+  };
 
   const fechar = () => { setModal(null); setResultado(null); };
 
@@ -105,6 +116,8 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
       );
       setResultado({ quebra: r?.quebra ?? 0 });
       toast.success('Caixa fechado.');
+      // Abre o comprovante DESTA sessão (id vem do retorno; s.sessao já pode estar nulo).
+      abrirMovimento(hojeISO(), (r as any)?.sessao?.id ?? s.sessao?.id);
     } catch (e: any) {
       toast.error(e.message || 'Erro ao confirmar fechamento.');
     } finally { setBusy(false); }
@@ -149,6 +162,7 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
         )}
 
         <div className={`flex items-center gap-2 flex-wrap ${mostraSaldo ? '' : 'ml-auto'}`}>
+          <Btn onClick={() => { setDataMov(hojeISO()); setMovAberto(true); }}><Printer size={15} /> Movimento</Btn>
           {!s.pronto ? (
             <span className="text-xs text-amber-600">Configure a conta do operador no cadastro.</span>
           ) : s.aberto ? (
@@ -185,6 +199,24 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
           <Rodape>
             <Btn onClick={fechar}>Cancelar</Btn>
             <Btn ok onClick={onAbrir} disabled={busy}>Abrir caixa</Btn>
+          </Rodape>
+        </Modal>
+      )}
+
+      {/* MODAL MOVIMENTO DO CAIXA (reabrir relatório por dia) */}
+      {movAberto && (
+        <Modal titulo="Movimento do Caixa" icone={<Printer size={18} />} onClose={() => setMovAberto(false)}>
+          <p className="text-sm text-gray-500">
+            Operador <b>{operador}</b> · Conta <b className="font-mono">{codConta || '—'}</b>
+          </p>
+          <Campo label="Data">
+            <input type="date" className="fld" value={dataMov} onChange={(e) => setDataMov(e.target.value)} />
+          </Campo>
+          <Rodape>
+            <Btn onClick={() => setMovAberto(false)}>Fechar</Btn>
+            <Btn ok onClick={async () => { await abrirMovimento(dataMov); setMovAberto(false); }}>
+              <Printer size={15} /> Abrir / Imprimir
+            </Btn>
           </Rodape>
         </Modal>
       )}

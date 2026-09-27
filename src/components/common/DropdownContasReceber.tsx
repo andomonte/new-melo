@@ -15,6 +15,7 @@ import {
   CircleChevronDown,
   History,
   FileText,
+  Percent,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -30,6 +31,8 @@ interface Props {
   onVerCartaoClick?: () => void;
   /** Abre a tela de Comprovantes filtrada pelo cliente deste título. */
   onComprovantesClick?: () => void;
+  /** Baixar Juros (liberar taxa) — autoriza a taxa do próximo recebimento p/ o caixa receber. */
+  onBaixarJurosClick?: () => void;
 }
 
 export default function DropdownContasReceber({
@@ -42,6 +45,7 @@ export default function DropdownContasReceber({
   onHistoricoClick,
   onVerCartaoClick,
   onComprovantesClick,
+  onBaixarJurosClick,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -61,6 +65,9 @@ export default function DropdownContasReceber({
   
   // Pode cancelar se não estiver cancelada ou totalmente recebida
   const podeCancelar = !estaCancelada && !estaRecebido;
+
+  // Só faz sentido liberar juros de título VENCIDO (juros incide apenas sobre atraso).
+  const estaVencido = conta.status === 'vencido';
 
   return (
     <DropdownMenu onOpenChange={setOpen}>
@@ -123,6 +130,22 @@ export default function DropdownContasReceber({
           <Undo2 className="size-4 text-orange-600 group-hover:text-white transition group-disabled:text-gray-400" />
           Retirar Baixa
         </DropdownMenuItem>
+
+        {onBaixarJurosClick && (
+          <DropdownMenuItem
+            onClick={onBaixarJurosClick}
+            disabled={!estaVencido}
+            title={
+              estaVencido
+                ? 'Liberar taxa de juros (0 = isentar) para o próximo recebimento'
+                : 'Só é possível liberar juros de título vencido'
+            }
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-blue-600 hover:text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current"
+          >
+            <Percent className="size-4 text-blue-600 group-hover:text-white transition group-disabled:text-gray-400" />
+            Baixar Juros
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           onClick={onCancelarClick}

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import { parseExtratoCsv } from '@/lib/conciliacao/parseCsv';
+import { parseExtratoOfx, ehOfx, bancoDoOfx } from '@/lib/conciliacao/parseOfx';
 import { classificarLancamento } from '@/lib/conciliacao/classificar';
 import { extrairPagador } from '@/lib/conciliacao/extrairPagador';
 import { encontrarSugestoes } from '@/lib/conciliacao/matcher';
@@ -29,8 +30,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ erro: 'Não foi possível decodificar o arquivo.' });
   }
 
-  const ext = parseExtratoCsv(texto);
-  if (ext.linhas.length === 0) return res.status(400).json({ erro: 'Nenhuma linha de extrato reconhecida.' });
+  // Detecta o formato: OFX (Santander/Bradesco) ou CSV. Mesma estrutura de saída.
+  const formatoOfx = ehOfx(texto);
+  const ext = formatoOfx ? parseExtratoOfx(texto) : parseExtratoCsv(texto);
+  const banco = formatoOfx ? bancoDoOfx(texto) || 'BANCO' : 'SANTANDER';
+  if (ext.linhas.length === 0) return res.status(400).json({ erro: 'Nenhuma linha de extrato reconhecida (CSV ou OFX).' });
 
   const pool = getPgPool();
   const client = await pool.connect();
@@ -99,8 +103,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await client.query('BEGIN');
     const loteRes = await client.query(
       `INSERT INTO conc_lote (lot_hash_arquivo, lot_banco, lot_agencia, lot_conta, lot_cod_conta, lot_arquivo_nome, lot_usuario, lot_qtd_linhas)
-       VALUES ($1,'SANTANDER',$2,$3,$4,$5,$6,$7) RETURNING lot_id`,
-      [ext.hashArquivo, ext.agencia, ext.conta, cod_conta || null, nome || null, String(usuario ?? '').substring(0, 60), ext.linhas.length],
+       VALUES ($1,$8,$2,$3,$4,$5,$6,$7) RETURNING lot_id`,
+      [ext.hashArquivo, ext.agencia, ext.conta, cod_conta || null, nome || null, String(usuario ?? '').substring(0, 60), ext.linhas.length, banco.substring(0, 40)],
     );
     const loteId = Number(loteRes.rows[0].lot_id);
 
@@ -115,7 +119,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let pagTipo: string | null = null;
       let pagNome: string | null = null;
       let sugestoes: any[] = [];
-      let status: string = cls.categoria === 'descarte' ? 'descartado' : 'a_identificar';
+      // Boleto = liquidação de cobrança identificada pelo banco → status 'boleto' (fora da baixa manual).
+      let status: string =
+        cls.categoria === 'descarte' ? 'descartado' : cls.categoria === 'boleto' ? 'boleto' : 'a_identificar';
 
       if (cls.categoria === 'recebimento') {
         qtdReceb++;

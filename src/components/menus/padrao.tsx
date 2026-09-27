@@ -47,6 +47,8 @@ import {
   FileTextIcon,
   Calculator,
   RotateCcw,
+  TrendingUpIcon,
+  CalendarClock,
 } from 'lucide-react';
 import {
   LiaFileInvoiceSolid,
@@ -75,6 +77,8 @@ import KickbackBosch from '@/components/corpo/gerenciamento/produtos/kickback';
 import DadosEmpresa from '@/components/corpo/admin/cadastro/dadosEmpresa';
 import TransportadorasPage from '../corpo/admin/cadastro/transportadoras';
 import CfopPage from '../corpo/admin/cadastro/cfop';
+import FormaPgtoPage from '../corpo/admin/cadastro/formaPgto';
+import LocacoesProdutoPage from '../corpo/admin/cadastro/locacoes';
 import TipoOperacaoFiscalPage from '../corpo/admin/cadastro/tipoOperacaoFiscal';
 import FormacaoPrecoVendaPage from '../corpo/admin/cadastro/formacao-preco';
 import LocaisPage from '../corpo/admin/cadastro/locais';
@@ -86,6 +90,9 @@ import ContasAReceber from '@/components/corpo/admin/financeiro/contasAReceber';
 import Caixa from '@/components/corpo/admin/financeiro/caixa';
 import Faturar from '@/components/corpo/admin/financeiro/faturar';
 import Transferencia from '@/components/corpo/admin/financeiro/transferencia';
+import FluxoCaixa from '@/components/corpo/admin/financeiro/fluxoCaixa';
+import CaixaDiario from '@/components/corpo/admin/financeiro/caixaDiario';
+import PrevistoRecebido from '@/components/corpo/admin/financeiro/previstoRecebido';
 import DashboardFinanceiro from '@/components/common/DashboardFinanceiro';
 import HistoricoNF from '@/components/corpo/faturamento/historicoNF';
 import NovoFaturamento from '@/components/corpo/faturamento/novoFaturamento';
@@ -143,6 +150,7 @@ import LegislacaoSignatarioPage from '../corpo/admin/legislacao/legislacao-signa
 import RemessaEquifax from '../corpo/remessa/remessa';
 import { FaNoteSticky } from 'react-icons/fa6';
 import RelatorioConciliacaoCartao from '../corpo/contas-receber/RelatorioConciliacaoCartao';
+import RelatorioComissao from '../corpo/admin/relatorios/comissao';
 import CalculadoraTributariaManual from '../corpo/admin/calculadora/CalculadoraTributariaManual';
 
 // Financeiro > Arquivos — porte do menu homônimo do Delphi (UniPrincipal.dfm)
@@ -252,6 +260,18 @@ export const menus = [
             corpo: CfopPage,
           },
           {
+            name: 'Forma de Pagamento',
+            href: '/admin/cadastros/formaPgto',
+            icon: WalletIcon,
+            corpo: FormaPgtoPage,
+          },
+          {
+            name: 'Locações do Produto',
+            href: '/admin/cadastros/locacoes',
+            icon: MapPin,
+            corpo: LocacoesProdutoPage,
+          },
+          {
             name: 'Tipos de Operação Fiscal',
             href: '/admin/cadastros/tiposOperacaoFiscal',
             icon: Calculator,
@@ -324,7 +344,7 @@ export const menus = [
             corpo: ContaFinanceira,
           },
           {
-            name: 'Forma de Pagamento',
+            name: 'Forma de Recebimento',
             href: '/admin/cadastros/formaPagamento',
             icon: BadgeDollarSignIcon,
             corpo: FormaPagamento,
@@ -407,6 +427,24 @@ export const menus = [
             corpo: DashboardFinanceiro,
           },
           {
+            name: 'Fluxo de Caixa',
+            href: '/admin/fluxoCaixa',
+            icon: TrendingUpIcon,
+            corpo: FluxoCaixa,
+          },
+          {
+            name: 'Movimento Diário do Caixa',
+            href: '/admin/caixaDiario',
+            icon: WalletIcon,
+            corpo: CaixaDiario,
+          },
+          {
+            name: 'Previsto x Recebido (Atrasados)',
+            href: '/admin/previstoRecebido',
+            icon: CalendarClock,
+            corpo: PrevistoRecebido,
+          },
+          {
             name: 'Contas a Pagar',
             href: '/admin/financeiro/contasAPagar',
             icon: LandmarkIcon,
@@ -429,6 +467,12 @@ export const menus = [
             href: '/admin/financeiro/relatorio-cartao',
             icon: FileTextIcon,
             corpo: RelatorioConciliacaoCartao,
+          },
+          {
+            name: 'Comissão de Vendedor',
+            href: '/admin/financeiro/comissao',
+            icon: HandCoinsIcon,
+            corpo: RelatorioComissao,
           },
           {
             name: 'Nota de Conhecimento',

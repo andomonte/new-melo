@@ -3,6 +3,7 @@ import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { getPgPoolFilial } from '@/lib/pg';
 import type { Pool } from 'pg';
+import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { parseStringPromise } from 'xml2js';
 import { create } from 'xmlbuilder2';
 import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
@@ -128,10 +129,14 @@ export default async function handler(
     }
     
     // Validações básicas
-    if (!dados?.dbfatura?.codfat) {
-      return res.status(400).json({ 
+    // O codfat pode vir dentro de dbfatura OU no topo do payload (dados.codfat).
+    // O novoFaturamento monta dbfatura a partir do estado pré-save (sem codfat) e envia
+    // o codfat no topo — igual ao emitir.ts (NF-e), que já lê das duas fontes. Só rejeita
+    // quando NÃO há codfat em lugar nenhum (fatura realmente não salva).
+    if (!dados?.dbfatura?.codfat && !dados?.codfat) {
+      return res.status(400).json({
         erro: 'Dados da fatura não informados. Forneça dbfatura ou codfat válido.',
-        sucesso: false 
+        sucesso: false
       });
     }
 
@@ -152,8 +157,8 @@ export default async function handler(
       });
     }
 
-    codfat = dados.dbfatura.codfat;
-    let serie = dados.dbfatura.serie || '2'; // Série 2 para NFC-e (padrão)
+    codfat = dados?.dbfatura?.codfat || dados?.codfat || '';
+    let serie = dados.dbfatura?.serie || '2'; // Série 2 para NFC-e (padrão)
     
     // 🧪 TESTE: Em homologação, forçar série 1 (geralmente a série padrão cadastrada)
     // A variável AMBIENTE_NFCE será definida mais abaixo, então vamos verificar diretamente
@@ -848,6 +853,15 @@ export default async function handler(
               ]
             );
             console.log('✅ Cupom salvo no banco');
+
+            // Enfileira o cupom (NFC-e) para o Robô de Impressão — mesma fila/impressora
+            // da DANFE (imprime ao ser emitido).
+            const enfileirou = await enfileirarImpressaoDanfe(client, codfat);
+            console.log(
+              enfileirou
+                ? `🖨️ NFC-e ${codfat} enfileirada para impressão (fin_impressao)`
+                : `🖨️ NFC-e ${codfat} já estava na fila de impressão`,
+            );
           } finally {
             client.release();
           }

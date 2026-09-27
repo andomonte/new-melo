@@ -21,39 +21,27 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const currentPage = parseInt(page, 10);
     const itemsPerPage = parseInt(perPage, 10);
-    const offset = (currentPage - 1) * itemsPerPage;
 
     const pool = getPgPool();
     client = await pool.connect();
 
+    // Este endpoint alimenta o COMBO de perfis (Cadastrar/Editar Usuário) — precisa
+    // trazer TODOS os perfis, ordenados. Antes usava LIMIT 10 sem ORDER BY, então
+    // perfis novos (ex.: "financeiro") ficavam de fora do dropdown.
     const query = `
 SELECT login_perfil_name
 FROM tb_login_perfil
 WHERE LOWER(login_perfil_name) LIKE $1
-LIMIT $2 OFFSET $3
+ORDER BY login_perfil_name
 `;
 
-    const countQuery = `
-SELECT COUNT(*) AS total
-FROM tb_login_perfil
-WHERE LOWER(login_perfil_name) LIKE $1
-`;
-
-    const [perfisResult, countResult] = await Promise.all([
-      client.query<Perfil>(query, [
-        `%${search.toLowerCase()}%`,
-        itemsPerPage,
-        offset,
-      ]),
-      client.query<{ total: string }>(countQuery, [
-        `%${search.toLowerCase()}%`,
-      ]),
+    const perfisResult = await client.query<Perfil>(query, [
+      `%${search.toLowerCase()}%`,
     ]);
 
     const perfis = perfisResult.rows;
-    const count = parseInt(countResult.rows[0]?.total || '0', 10);
+    const count = perfis.length;
 
     res
       .status(200)
@@ -63,8 +51,8 @@ WHERE LOWER(login_perfil_name) LIKE $1
           data: perfis,
           meta: {
             total: count,
-            lastPage: count > 0 ? Math.ceil(count / itemsPerPage) : 1,
-            currentPage: count > 0 ? currentPage : 1,
+            lastPage: 1,
+            currentPage: 1,
             perPage: itemsPerPage,
           },
         }),

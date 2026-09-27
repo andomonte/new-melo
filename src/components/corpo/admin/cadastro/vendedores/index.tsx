@@ -1,15 +1,23 @@
 import React, { useEffect, useRef, useState, useContext } from 'react';
-import { Vendedores, getVendedores } from '@/data/vendedores/vendedores';
+import {
+  Vendedores,
+  getVendedores,
+  getClassesVendedor,
+} from '@/data/vendedores/vendedores';
 import { useDebouncedCallback } from 'use-debounce';
-import DataTable from '@/components/common/DataTableFiltro';
+import DataTablePadrao from '@/components/common/DataTablePadrao';
+import SelectPadrao from '@/components/common/SelectPadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
+import useConfirmarSalvar from '@/hooks/useConfirmarSalvar';
 import Cadastrar from './modalCadastrar';
 import Editar from './modalEditar';
 import { GoPencil } from 'react-icons/go';
-import { PlusIcon, CircleChevronDown } from 'lucide-react';
+import { PlusIcon, CircleChevronDown, Ban, CheckCircle2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { AuthContext } from '@/contexts/authContexts';
+
+const CLASSE_INATIVO = '001'; // classe que marca o vendedor como inativo (Delphi)
 
 export type Permissao = {
   cadastrar?: boolean;
@@ -61,6 +69,7 @@ const VendedoresPage = () => {
 
   const { dismiss, toast } = useToast();
   const { user } = useContext(AuthContext) as AuthContextProps;
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
 
   const [userPermissions, setUserPermissions] = useState<{
     cadastrar: boolean;
@@ -97,20 +106,70 @@ const VendedoresPage = () => {
   });
   const [headers, setHeaders] = useState<string[]>([]);
 
+  // Situação (Ativo/Inativo/Todos) via classe INATIVO (001) — sem coluna nova.
+  const [situacao, setSituacao] = useState<'ativo' | 'inativo' | 'todos'>(
+    'ativo',
+  );
+  // Modal de reativação (operador escolhe a nova classe).
+  const [reativarOpen, setReativarOpen] = useState(false);
+  const [vendedorReativar, setVendedorReativar] = useState<any>(null);
+  const [classeReativar, setClasseReativar] = useState('');
+  const [salvandoSituacao, setSalvandoSituacao] = useState(false);
+  const [classesOptions, setClassesOptions] = useState<
+    { value: string; label: string }[]
+  >([]);
+
+  // Filtro de situação convertido para o mecanismo de filtros do backend (coluna codcv).
+  const filtroSituacao = (
+    sit: 'ativo' | 'inativo' | 'todos',
+  ): { campo: string; tipo: string; valor: string }[] =>
+    sit === 'todos'
+      ? []
+      : [
+          {
+            campo: 'codcv',
+            tipo: sit === 'inativo' ? 'igual' : 'diferente',
+            valor: CLASSE_INATIVO,
+          },
+        ];
+
+  // Carrega as classes uma vez (para o modal de reativação).
+  useEffect(() => {
+    getClassesVendedor({ page: 1, perPage: 999, search: '' })
+      .then((r: any) =>
+        setClassesOptions(
+          (r?.data || [])
+            .filter((c: any) => String(c.codcv) !== CLASSE_INATIVO)
+            .map((c: any) => ({
+              value: String(c.codcv),
+              label: `${c.codcv} - ${c.descr}`,
+            })),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+
   const fetchVendedores = async ({
     page,
     perPage,
     filtros,
+    sit,
+    force,
   }: {
     page: number;
     perPage: number;
     filtros: { campo: string; tipo: string; valor: string }[];
+    sit?: 'ativo' | 'inativo' | 'todos';
+    force?: boolean;
   }) => {
+    const filtrosEfetivos = [...filtros, ...filtroSituacao(sit ?? situacao)];
     const ultima = ultimaChamada.current;
-    const filtrosString = JSON.stringify(filtros);
+    const filtrosString = JSON.stringify(filtrosEfetivos);
     const ultimaFiltrosString = JSON.stringify(ultima.filtros);
 
+    // `force` ignora o cache (usado após inativar/reativar/cadastrar/editar).
     if (
+      !force &&
       ultima.page === page &&
       ultima.perPage === perPage &&
       filtrosString === ultimaFiltrosString &&
@@ -119,13 +178,23 @@ const VendedoresPage = () => {
       return;
     }
 
-    ultimaChamada.current = { page, perPage, filtros, limiteColunas };
+    ultimaChamada.current = {
+      page,
+      perPage,
+      filtros: filtrosEfetivos,
+      limiteColunas,
+    };
 
     setLoading(true);
 
     try {
-      // Corrigido para usar filtros ao invés de search vazio
-      const data = await getVendedores({ page, perPage, search: '', filtros });
+      // Sempre pela via de filtros (inclui a situação Ativo/Inativo).
+      const data = await getVendedores({
+        page,
+        perPage,
+        search: '',
+        filtros: filtrosEfetivos,
+      });
       setVendedores(data);
 
       if (data.data?.length > 0) {
@@ -340,7 +409,78 @@ const VendedoresPage = () => {
     checkPermissions();
   }, [user, toast]);
 
+  const aplicarSituacao = (nova: 'ativo' | 'inativo' | 'todos') => {
+    setSituacao(nova);
+    setPage(1);
+    fetchVendedores({ page: 1, perPage, filtros, sit: nova });
+  };
+
+  const alterarSituacaoVendedor = async (codvend: string, codcv: string) => {
+    setSalvandoSituacao(true);
+    try {
+      const resp = await fetch('/api/vendedores/situacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codvend, codcv }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Erro ao alterar situação');
+      toast({
+        title:
+          codcv === CLASSE_INATIVO
+            ? 'Vendedor inativado'
+            : 'Vendedor reativado',
+      });
+      fetchVendedores({ page, perPage, filtros, force: true });
+      return true;
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: e.message || 'Não foi possível alterar a situação.',
+      });
+      return false;
+    } finally {
+      setSalvandoSituacao(false);
+    }
+  };
+
+  const inativarVendedor = (vendedor: any) => {
+    closeAllDropdowns();
+    pedirConfirmacao(
+      () => alterarSituacaoVendedor(vendedor.codvend, CLASSE_INATIVO),
+      {
+        title: 'Inativar vendedor',
+        message: `Inativar o vendedor "${vendedor.nome || vendedor.codvend}"? A classe passa para INATIVO.`,
+        type: 'warning',
+        confirmText: 'Inativar',
+        cancelText: 'Cancelar',
+      },
+    );
+  };
+
+  const abrirReativar = (vendedor: any) => {
+    closeAllDropdowns();
+    setVendedorReativar(vendedor);
+    setClasseReativar('');
+    setReativarOpen(true);
+  };
+
+  const confirmarReativar = async () => {
+    if (!vendedorReativar || !classeReativar) return;
+    const ok = await alterarSituacaoVendedor(
+      vendedorReativar.codvend,
+      classeReativar,
+    );
+    if (ok) {
+      setReativarOpen(false);
+      setVendedorReativar(null);
+      setClasseReativar('');
+    }
+  };
+
   const rows = vendedores.data?.map((vendedor) => {
+    const inativo = String((vendedor as any).codcv) === CLASSE_INATIVO;
     const linha: Record<string, any> = {};
 
     headers?.forEach((coluna) => {
@@ -414,6 +554,27 @@ const VendedoresPage = () => {
                     Editar
                   </button>
                 )}
+
+                {userPermissions.editar &&
+                  (inativo ? (
+                    <button
+                      onClick={() => abrirReativar(vendedor)}
+                      className="flex items-center px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300 hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-left"
+                      role="menuitem"
+                    >
+                      <CheckCircle2 className="mr-2" size={16} />
+                      Reativar
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => inativarVendedor(vendedor)}
+                      className="flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-300 hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-left"
+                      role="menuitem"
+                    >
+                      <Ban className="mr-2" size={16} />
+                      Inativar
+                    </button>
+                  ))}
               </div>
             </div>,
             document.body,
@@ -455,27 +616,60 @@ const VendedoresPage = () => {
 
   return (
     <div className="h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
-      <main className="p-4 w-full">
-        <header className="mb-2">
-          <div className="flex justify-between mb-4 mr-6 ml-6">
+      <main className="flex-1 flex flex-col p-4 w-full overflow-hidden">
+        <header className="mb-2 flex-shrink-0">
+          <div className="flex justify-between mb-4">
             <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
               Vendedores
             </div>
-            {userPermissions.cadastrar && (
-              <DefaultButton
-                onClick={() => {
-                  setSelectedRow('');
-                  setCadastrarOpen(true);
-                }}
-                className="flex items-center gap-0 px-3 py-2 text-sm h-8"
-                text="Novo"
-                icon={<PlusIcon size={18} />}
-              />
-            )}
+            <div className="flex items-center gap-2">
+              {/* Situação: Ativo/Inativo/Todos (classe INATIVO) */}
+              <div className="w-40">
+                <SelectPadrao
+                  placeholder="Situação"
+                  value={situacao}
+                  options={[
+                    { value: 'ativo', label: 'Ativos' },
+                    { value: 'inativo', label: 'Inativos' },
+                    { value: 'todos', label: 'Todos' },
+                  ]}
+                  onValueChange={(v) =>
+                    aplicarSituacao((v || 'ativo') as any)
+                  }
+                  required
+                />
+              </div>
+              {userPermissions.cadastrar && (
+                <DefaultButton
+                  onClick={() => {
+                    setSelectedRow('');
+                    setCadastrarOpen(true);
+                  }}
+                  className="flex items-center gap-0 px-3 py-2 text-sm h-8"
+                  text="Novo"
+                  icon={<PlusIcon size={18} />}
+                />
+              )}
+            </div>
           </div>
         </header>
 
-        <DataTable
+        <div className="flex-1 min-h-20 flex flex-col overflow-hidden">
+        <DataTablePadrao
+          screenKey="cadastro-vendedores"
+          userName={user?.usuario}
+          columnLabels={{
+            codvend: 'Vendedor',
+            NOMERAZAO: 'Apelido',
+            nome: 'Nome',
+            valobj: 'Valor Objetivo',
+            comnormal: 'Comissão Normal',
+            comtele: 'Comissão Telemkt',
+            limite: 'Limite',
+            codcv: 'Classe',
+          }}
+          semColunaDeAcaoPadrao={true}
+          nonsortableColumns={['ações']}
           carregando={loading}
           headers={headers}
           rows={rows || []}
@@ -511,13 +705,14 @@ const VendedoresPage = () => {
             );
           }}
         />
+        </div>
       </main>
 
       <Cadastrar
         isOpen={cadastrarOpen}
         onClose={() => {
           setCadastrarOpen(false);
-          fetchVendedores({ page, perPage, filtros });
+          fetchVendedores({ page, perPage, filtros, force: true });
         }}
         title="Cadastrar Registro"
       >
@@ -535,7 +730,7 @@ const VendedoresPage = () => {
         isOpen={editarOpen}
         onClose={() => {
           setEditarOpen(false);
-          fetchVendedores({ page, perPage, filtros });
+          fetchVendedores({ page, perPage, filtros, force: true });
         }}
         title="Editar Registro"
         vendedorId={idVendedor}
@@ -549,6 +744,54 @@ const VendedoresPage = () => {
             ))}
         </div>
       </Editar>
+
+      {/* Modal: Reativar vendedor (operador escolhe a nova classe) */}
+      {reativarOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
+          onClick={() => setReativarOpen(false)}
+        >
+          <div
+            className="w-[92%] max-w-md rounded-lg bg-white dark:bg-slate-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-bold mb-1 text-gray-700 dark:text-gray-100">
+              Reativar vendedor
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              {vendedorReativar?.nome || vendedorReativar?.codvend} — escolha a
+              nova classe do vendedor.
+            </p>
+            <SelectPadrao
+              searchable
+              label="Classe"
+              placeholder="Selecione a classe..."
+              options={classesOptions}
+              value={classeReativar}
+              onValueChange={(v) => setClasseReativar(v)}
+              required
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setReativarOpen(false)}
+                className="px-3 py-1.5 text-xs rounded border border-gray-300 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarReativar}
+                disabled={!classeReativar || salvandoSituacao}
+                className="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {salvandoSituacao ? 'Salvando…' : 'Reativar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {ConfirmacaoSalvarModal}
     </div>
   );
 };

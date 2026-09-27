@@ -222,7 +222,23 @@ export function gerarXMLNFe(dados: any): string {
     console.log(`✅ [gerarXMLNFe] Validação OK: totalBaseICMS (${totalBaseICMS}) = soma bases itens (${somaBasesItens.toFixed(2)})`);
   }
 
-  
+  // ✅ CORREÇÃO 531/529: o ICMSTot.vBC/vICMS do cabeçalho DEVE ser exatamente a soma
+  // dos vBC/vICMS que cada item escreve no XML. Itens com CST sem base (40/41/50/60)
+  // não emitem vBC → não podem entrar no total. Somar o que o item realmente grava
+  // elimina tanto esse caso quanto divergências de arredondamento (round(Σ) ≠ Σ(round)).
+  const totItens = produtos.reduce((acc: { vbc: number; vicms: number }, item: any) => {
+    const preco = Number(item.preco ?? 0);
+    const qtde = Number(item.qtde ?? 1);
+    const vProd = Math.round(preco * qtde * 100) / 100;
+    const grupo: any = montarGrupoICMS(item.icms, vProd.toFixed(2));
+    const sub: any = Object.values(grupo)[0] || {};
+    acc.vbc += sub.vBC != null ? Number(sub.vBC) : 0;
+    acc.vicms += sub.vICMS != null ? Number(sub.vICMS) : 0;
+    return acc;
+  }, { vbc: 0, vicms: 0 });
+  const totalVbcXml = totItens.vbc.toFixed(2);
+  const totalVicmsXml = totItens.vicms.toFixed(2);
+
   const cUF = '13';
   // dhEmi = INSTANTE REAL da emissão (com hora), igual à NFC-e. Antes usava `data`
   // (data da VENDA, que vinha sem hora → 00:00 e com dia desatualizado); a SEFAZ
@@ -448,9 +464,9 @@ export function gerarXMLNFe(dados: any): string {
         }),
         total: {
           ICMSTot: {
-            vBC: Number(totalBaseICMS).toFixed(2),
-            // USANDO TOTAIS REAIS CALCULADOS
-            vICMS: Number(totalICMS ?? 0).toFixed(2),
+            // Soma EXATA dos vBC/vICMS escritos por item (evita rejeição 531/529).
+            vBC: totalVbcXml,
+            vICMS: totalVicmsXml,
             vICMSDeson: '0.00',
             vFCP: '0.00', // Somar FCP se houver
             vBCST: '0.00',

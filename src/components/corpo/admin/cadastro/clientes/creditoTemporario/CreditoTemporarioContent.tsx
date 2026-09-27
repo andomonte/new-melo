@@ -48,6 +48,15 @@ const hojeISO = () => {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 };
 
+// Máscara de moeda "da direita p/ esquerda": os dígitos digitados são os centavos.
+// Ex.: "150000" → 150000 centavos → "1.500,00". digitosParaCent(display)/100 = valor em reais.
+const digitosParaCent = (t: string) => {
+  const d = String(t ?? '').replace(/\D/g, '');
+  return d ? parseInt(d, 10) : 0;
+};
+const centParaBRL = (c: number) =>
+  (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function CreditoTemporarioContent({ clientePreselecionado }: Props) {
   const { toast } = useToast();
   const [lista, setLista] = useState<CreditoTemp[]>([]);
@@ -125,7 +134,8 @@ export function CreditoTemporarioContent({ clientePreselecionado }: Props) {
       toast({ title: 'Informe o cliente', variant: 'destructive' });
       return;
     }
-    if (!Number(limite) || Number(limite) <= 0) {
+    const limiteNum = digitosParaCent(limite) / 100; // "1.500,00" → 1500.00
+    if (!limiteNum || limiteNum <= 0) {
       toast({ title: 'Adicione um limite válido', variant: 'destructive' });
       return;
     }
@@ -136,7 +146,7 @@ export function CreditoTemporarioContent({ clientePreselecionado }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           codcli: codcli.trim(),
-          limite: Number(limite),
+          limite: limiteNum,
           datavencimento,
         }),
       });
@@ -240,12 +250,15 @@ export function CreditoTemporarioContent({ clientePreselecionado }: Props) {
             <div>
               <Label>Limite (R$)</Label>
               <Input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="numeric"
                 value={limite}
-                onChange={(e) => setLimite(e.target.value)}
+                onChange={(e) => {
+                  const c = digitosParaCent(e.target.value);
+                  setLimite(c ? centParaBRL(c) : '');
+                }}
                 placeholder="0,00"
+                className="text-right tabular-nums"
               />
             </div>
             <div>

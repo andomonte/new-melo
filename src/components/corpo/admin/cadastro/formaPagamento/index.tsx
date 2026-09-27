@@ -117,7 +117,7 @@ export default function FormaPagamentoCadastro() {
   return (
     <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 p-6 gap-4">
       <header className="flex flex-wrap justify-between items-center gap-3">
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-gray-100">Cadastro de Forma de Pagamento</h1>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-gray-100">Cadastro de Forma de Recebimento</h1>
         <Button onClick={abrirNova}>
           <Plus size={16} className="mr-1" /> Nova Forma
         </Button>
@@ -205,7 +205,7 @@ export default function FormaPagamentoCadastro() {
       <Modal
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
-        title={editando ? `Editar Forma ${editando.codfpgt}` : 'Nova Forma de Pagamento'}
+        title={editando ? `Editar Forma ${editando.codfpgt}` : 'Nova Forma de Recebimento'}
         width="w-[95%] max-w-md"
       >
         <div className="space-y-4">

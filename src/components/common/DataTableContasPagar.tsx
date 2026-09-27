@@ -22,6 +22,17 @@ import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 import Carregamento from '@/utils/carregamento';
 
+// Cor da fonte da linha por status de ENTRADA (Contas a Pagar). Vazio = sem cor (neutro).
+const corEntradaStatus = (status: any): string => {
+  switch (status) {
+    case 'gerada': return 'text-green-700 dark:text-green-400';       // Entrada gerada
+    case 'nao_gerada': return 'text-yellow-600 dark:text-yellow-400'; // Entrada não gerada
+    case 'cancelada': return 'text-red-600 dark:text-red-400';        // NFe cancelada
+    case 'avulso': return 'text-black dark:text-white font-medium';   // Avulso com NF, sem entrada
+    default: return '';
+  }
+};
+
 const tiposDeFiltro = [
   { label: 'Começa com', value: 'começa' },
   { label: 'Contém', value: 'contém' },
@@ -49,6 +60,9 @@ interface DataTableContasPagarProps {
   noDataMessage?: string;
   onFiltroChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
   colunasFiltro?: string[];
+  /** Rótulos amigáveis por chave de coluna p/ o filtro avançado (ex.: { cod_receb: 'Número Título' })
+   *  — deixa o "Selecionar campo" igual aos cabeçalhos do datatable. */
+  rotulosFiltro?: Record<string, string>;
   onExportarExcel?: () => void;
   onDashboardGeral?: () => void;
   columnWidths?: string[];
@@ -86,6 +100,7 @@ export default function DataTableContasPagar({
   noDataMessage = 'Nenhum dado encontrado.',
   onFiltroChange,
   colunasFiltro = [],
+  rotulosFiltro,
   onExportarExcel,
   onDashboardGeral,
   columnWidths,
@@ -105,13 +120,15 @@ export default function DataTableContasPagar({
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});
+  // Rascunho do que está sendo digitado nos filtros de coluna. Só vira filtro APLICADO no Enter/blur
+  // (padrão de todos os datatables: a busca acontece ao dar Enter, não a cada tecla).
+  const [rascunhoColuna, setRascunhoColuna] = useState<Record<string, string>>({});
   const [termoBuscaGlobal, setTermoBuscaGlobal] = useState('');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [larguraTabela, setLarguraTabela] = useState(0);
   // Largura customizada por coluna (arrastar) — persistida junto às demais preferências.
   const [customColWidths, setCustomColWidths] = useState<Record<string, number>>({});
   const resizingRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [colunasVisiveis, setColunasVisiveis] = useState<string[]>(headers);
   const [mostrarSeletorColunas, setMostrarSeletorColunas] = useState(false);
   const [ordemColunas, setOrdemColunas] = useState<string[]>(headers);
@@ -131,11 +148,17 @@ export default function DataTableContasPagar({
       .then((data) => {
         if (data.preferences) {
           const p = data.preferences;
-          if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
-            setColunasVisiveis(p.colunasVisiveis);
-          }
+          // Mescla headers novos (adicionados após o usuário salvar prefs) para que
+          // colunas recém-criadas apareçam automaticamente em vez de ficarem ocultas.
           if (Array.isArray(p.ordemColunas) && p.ordemColunas.length > 0) {
-            setOrdemColunas(p.ordemColunas);
+            const salvos: string[] = p.ordemColunas.filter((h: string) => headers.includes(h));
+            const novos = headers.filter((h) => !salvos.includes(h));
+            setOrdemColunas([...salvos, ...novos]);
+            if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
+              setColunasVisiveis([...p.colunasVisiveis.filter((h: string) => headers.includes(h)), ...novos]);
+            }
+          } else if (Array.isArray(p.colunasVisiveis) && p.colunasVisiveis.length > 0) {
+            setColunasVisiveis(p.colunasVisiveis.filter((h: string) => headers.includes(h)));
           }
           if (p.sortColumn) setSortColumn(p.sortColumn);
           if (p.sortDirection) setSortDirection(p.sortDirection);
@@ -238,37 +261,25 @@ export default function DataTableContasPagar({
     setMostrarModalFiltroAvancado(false);
   };
 
+  // Digitar só atualiza o rascunho — NÃO busca (nem local, nem servidor). A busca é no Enter/blur.
   const handleInputChange = (key: string, value: string) => {
-    const novoMapa = {
-      ...filtrosColuna,
-      [key]: { tipo: filtrosColuna[key]?.tipo || 'contém', valor: value },
-    };
-    setFiltrosColuna(novoMapa);
-
-    if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
-
-    // Modo local: o filtro é aplicado na renderização, sem consultar o servidor.
-    if (filtroLocal) {
-      notificarFiltrosLocais(novoMapa);
-      return;
-    }
-
-    // Debounce the filter application
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
-      aplicarFiltro();
-    }, 300);
+    setRascunhoColuna((prev) => ({ ...prev, [key]: value }));
   };
 
-  const aplicarFiltro = () => {
-    // Enviar TODOS os filtros, incluindo os vazios (para remover filtros anteriores)
-    const filtrosAtualizados = Object.entries(filtrosColuna)
-      .map(([campo, { tipo, valor }]) => ({ campo, tipo, valor }));
-    
-    console.log('🔍 Aplicando filtros rápidos (incluindo vazios):', filtrosAtualizados);
-    onFiltroChange?.(filtrosAtualizados);
+  // Aplica o filtro de UMA coluna (no Enter ou ao sair do campo): promove o rascunho a filtro e busca.
+  const commitFiltroColuna = (key: string) => {
+    const valor = rascunhoColuna[key] ?? filtrosColuna[key]?.valor ?? '';
+    const novoMapa = {
+      ...filtrosColuna,
+      [key]: { tipo: filtrosColuna[key]?.tipo || 'contém', valor },
+    };
+    setFiltrosColuna(novoMapa);
+    if (termoBuscaGlobal !== '') setTermoBuscaGlobal('');
+    if (filtroLocal) {
+      notificarFiltrosLocais(novoMapa); // a tabela re-filtra pela mudança de filtrosColuna
+    } else {
+      onFiltroChange?.(Object.entries(novoMapa).map(([campo, { tipo, valor }]) => ({ campo, tipo, valor })));
+    }
   };
 
   // Página visual — muda IMEDIATO ao clicar, busca no banco com debounce
@@ -412,6 +423,7 @@ export default function DataTableContasPagar({
               if (valor.trim() !== '' && Object.keys(filtrosColuna).length > 0) {
                 console.log('🔍 Limpando filtros de coluna para busca global');
                 setFiltrosColuna({});
+                setRascunhoColuna({});
                 onFiltroChange?.([]);
                 onFiltrosLocaisChange?.([]);
               }
@@ -427,6 +439,7 @@ export default function DataTableContasPagar({
               <button
                 onClick={() => {
                   setFiltrosColuna({});
+                  setRascunhoColuna({});
                   setTermoBuscaGlobal('');
                   onFiltrosLocaisChange?.([]);
                   if (onLimparFiltros) onLimparFiltros();
@@ -455,6 +468,7 @@ export default function DataTableContasPagar({
                 </DialogHeader>
                 <FiltroDinamicoDeClientes
                   colunas={colunasFiltro}
+                  rotulos={rotulosFiltro}
                   onChange={handleFiltroAvancado}
                 />
               </DialogContent>
@@ -477,6 +491,7 @@ export default function DataTableContasPagar({
                       if (!novoEstado) {
                         console.log('🔍 Limpando todos os filtros rápidos');
                         setFiltrosColuna({});
+                        setRascunhoColuna({});
                         onFiltroChange?.([]);
                         onFiltrosLocaisChange?.([]);
                       }
@@ -564,7 +579,7 @@ export default function DataTableContasPagar({
             </colgroup>
             
             {/* Cabeçalho da tabela - fixo */}
-            <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700">
+            <thead className="sticky top-0 z-30 bg-gray-100 dark:bg-zinc-800 border-b border-gray-300 dark:border-zinc-700">
               <tr>
                 {ordemColunas.map((header, index) => {
                   if (!colunasVisiveis.includes(header)) return null;
@@ -707,21 +722,14 @@ export default function DataTableContasPagar({
                       ) : header !== 'Ações' ? (
                         <input
                           type="text"
-                          placeholder={`Filtrar ${obterNomeAmigavel(header)}...`}
-                          value={filtrosColuna[header.toLowerCase()]?.valor || ''}
+                          placeholder={`Filtrar ${obterNomeAmigavel(header)} (Enter)...`}
+                          value={rascunhoColuna[header.toLowerCase()] ?? filtrosColuna[header.toLowerCase()]?.valor ?? ''}
                           onChange={(e) => handleInputChange(header.toLowerCase(), e.target.value)}
-                          onBlur={() => {
-                            if (debounceRef.current) {
-                              clearTimeout(debounceRef.current);
-                            }
-                            aplicarFiltro();
-                          }}
+                          onBlur={() => commitFiltroColuna(header.toLowerCase())}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              if (debounceRef.current) {
-                                clearTimeout(debounceRef.current);
-                              }
-                              aplicarFiltro();
+                              e.preventDefault();
+                              commitFiltroColuna(header.toLowerCase());
                             }
                           }}
                           className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500"
@@ -775,7 +783,8 @@ export default function DataTableContasPagar({
 
                         // Tenta comparar como data BR (DD/MM/YYYY)
                         const parseDataBR = (s: string) => {
-                          const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                          // Não ancorar: a célula pode ter texto extra (ex.: "02/12/2025 Vencido").
+                          const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);
                           if (!m) return null;
                           return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
                         };
@@ -807,7 +816,11 @@ export default function DataTableContasPagar({
                     }
                   }
                   return sortedRows;
-                })().map((row, rowIndex) => (
+                })().map((row, rowIndex) => {
+                  // Cor da fonte da linha conforme o status da ENTRADA (Contas a Pagar):
+                  // verde=entrada gerada, amarelo=não gerada, vermelho=NFe cancelada, preto=avulso c/ NF.
+                  const corLinha = corEntradaStatus((row as any).entradaStatus);
+                  return (
                   <tr
                     key={rowIndex}
                     className="hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors"
@@ -817,12 +830,13 @@ export default function DataTableContasPagar({
                       if (!colunasVisiveis.includes(header) || cellIndex === -1) return null;
                       const value = row[cellIndex];
                       const isLastColumn = cellIndex === headers.length - 1;
+                      // Preserva os badges (Status/Tipo/Ações/☑️) com a cor original; colore o resto da linha.
+                      const preservarCor = ['Ações', 'Status', 'Tipo', '☑️'].includes(header);
+                      const corCel = (corLinha && !preservarCor) ? `${corLinha} [&_*]:!text-inherit` : 'text-gray-900 dark:text-gray-100';
                       return (
                         <td
                           key={cellIndex}
-                          className={`px-2 py-1 text-xs text-gray-900 dark:text-gray-100 select-text ${
-                            isLastColumn ? 'text-center' : 'text-center'
-                          }`}
+                          className={`px-2 py-1 text-xs select-text text-center ${corCel}`}
                         >
                           <div className={isLastColumn ? 'flex justify-center items-center' : ''}>
                             {value}
@@ -831,7 +845,8 @@ export default function DataTableContasPagar({
                       );
                     })}
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

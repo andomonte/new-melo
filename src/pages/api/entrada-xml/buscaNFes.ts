@@ -30,6 +30,14 @@ const filtroParaColunaSQL: Record<string, string> = {
   tipoFrete: 'n.modfrete',
 };
 
+// O DataTablePadrao emite o `campo` do filtro em minúsculas (header.toLowerCase()),
+// mas o mapa acima usa camelCase. Sem casar sem diferenciar caixa, os filtros de
+// colunas camelCase (numeroNF, chaveNFe, dataEmissao, fornecedorCnpj...) caem em
+// "campo não mapeado" e são silenciosamente descartados. Este índice minúsculo resolve.
+const filtroColunaLower: Record<string, string> = Object.fromEntries(
+  Object.entries(filtroParaColunaSQL).map(([k, v]) => [k.toLowerCase(), v]),
+);
+
 // Mapeamento de status legivel para codigo do banco
 // 'N' = importada/não executada (é o que o upload grava e o legado usa).
 // Antes estava mapeada como "erro", fazendo toda NFe recém-importada aparecer
@@ -150,20 +158,22 @@ export default async function handler(
       return;
     }
 
-    const coluna = filtroParaColunaSQL[campo];
+    // Casar o campo sem diferenciar maiúsc./minúsc. (DataTablePadrao envia minúsculo).
+    const chaveCampo = String(campo).toLowerCase();
+    const coluna = filtroParaColunaSQL[campo] ?? filtroColunaLower[chaveCampo];
     if (!coluna) {
       console.log(`Campo ${campo} nao mapeado para SQL, ignorando`);
       return;
     }
 
-    // Identificar tipos de campo
-    const camposData = ['dataEmissao', 'dataUpload'];
-    const camposNumerico = ['numeroNF', 'serie', 'valorTotal', 'totalProdutos', 'totalIcms', 'totalIpi', 'pesoLiquido', 'pesoBruto'];
+    // Identificar tipos de campo (comparação em minúsculas)
+    const camposData = ['dataemissao', 'dataupload'];
+    const camposNumerico = ['numeronf', 'serie', 'valortotal', 'totalprodutos', 'totalicms', 'totalipi', 'pesoliquido', 'pesobruto'];
     const operadoresTextuais = ['contém', 'começa', 'termina'];
 
-    const isCampoData = camposData.includes(campo);
-    const isCampoNumerico = camposNumerico.includes(campo);
-    const isCampoStatus = campo === 'status';
+    const isCampoData = camposData.includes(chaveCampo);
+    const isCampoNumerico = camposNumerico.includes(chaveCampo);
+    const isCampoStatus = chaveCampo === 'status';
 
     const filtrosCampoSQL: string[] = [];
 
@@ -309,7 +319,7 @@ export default async function handler(
 
   // Ordenação dinâmica (whitelist = filtroParaColunaSQL). Sem sort válido, mantém
   // o padrão (mais recentes primeiro).
-  const colOrdenacao = filtroParaColunaSQL[String(sortCampo)];
+  const colOrdenacao = filtroParaColunaSQL[String(sortCampo)] ?? filtroColunaLower[String(sortCampo).toLowerCase()];
   const direcaoOrdenacao = String(sortDirecao).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
   const orderByClause = colOrdenacao
     ? `ORDER BY ${colOrdenacao} ${direcaoOrdenacao} NULLS LAST, n.dtimport DESC`

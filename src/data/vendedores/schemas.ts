@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { validarCPF, validarCNPJ } from '@/utils/validarDocumento';
+
+// Campo string obrigatório que trata undefined/null como vazio (evita a mensagem
+// padrão "Required" do zod — mostra sempre a mensagem amigável).
+const obrigatorio = (msg: string, max: number) =>
+  z.preprocess(
+    (v) => (v == null ? '' : v),
+    z.string().min(1, msg).max(max, `Não pode exceder ${max} caracteres`),
+  );
 
 // Função helper para preprocessar campos numéricos
 const preprocessNumericField = (val: unknown) => {
@@ -13,16 +22,9 @@ export const cadastroVendedorSchema = z.object({
   // Campo obrigatório baseado em dbvend
   // codvend: VARCHAR(5) @id - gerado automaticamente pela API
 
-  nome: z
-    .string({ required_error: 'Campo nome é obrigatório' })
-    .min(1, 'Nome é obrigatório')
-    .max(30, 'Nome não pode exceder 30 caracteres'), // VARCHAR(30)
+  nome: obrigatorio('Apelido é obrigatório', 30), // dbvend.nome VARCHAR(30)
 
-  codcv: z
-    .string()
-    .max(3, 'Código da classe não pode exceder 3 caracteres') // VARCHAR(3)
-    .optional()
-    .nullable(),
+  codcv: obrigatorio('Classe do vendedor é obrigatória', 3), // VARCHAR(3)
 
   status: z
     .string()
@@ -147,20 +149,30 @@ export const cadastroVendedorSchema = z.object({
       .nullable(),
   ),
 
-  // Dados detalhados do vendedor (tabela dbdados_vend)
+  // Dados detalhados do vendedor (tabela dbdados_vend).
+  // Obrigatórios fiéis ao Delphi (UniVendedor.Btn2Click): Nome completo, Endereço,
+  // Bairro, CEP, Cidade, UF, Tipo pessoa e CPF/CNPJ. Celular é opcional.
   detalhado_vendedor: z
     .object({
-      bairro: z.string().max(50).nullable().optional(),
-      cep: z.string().max(9).nullable().optional(),
-      cidade: z.string().max(50).nullable().optional(),
-      estado: z.string().max(2).nullable().optional(),
+      bairro: obrigatorio('Bairro é obrigatório', 5),
+      cep: obrigatorio('CEP é obrigatório', 9),
+      cidade: obrigatorio('Cidade é obrigatória', 50),
+      estado: obrigatorio('UF é obrigatória', 2),
       celular: z.string().max(15).nullable().optional(),
-      logradouro: z.string().max(100).nullable().optional(),
-      nome: z.string().max(100).nullable().optional(),
-      tipo: z.string().max(20).nullable().optional(),
-      cpf_cnpj: z.string().max(18).nullable().optional(),
+      logradouro: obrigatorio('Endereço é obrigatório', 100),
+      nome: obrigatorio('Nome completo é obrigatório', 100),
+      tipo: obrigatorio('Tipo de pessoa é obrigatório', 20),
+      cpf_cnpj: obrigatorio('CPF/CNPJ é obrigatório', 18),
     })
-    .optional(),
+    .refine(
+      (d) => {
+        const doc = (d.cpf_cnpj || '').replace(/\D/g, '');
+        if (d.tipo === 'F') return validarCPF(doc);
+        if (d.tipo === 'J') return validarCNPJ(doc);
+        return true; // outros tipos (ex.: exterior) não validam documento
+      },
+      { message: 'CPF/CNPJ inválido', path: ['cpf_cnpj'] },
+    ),
 
   // Grupos de produtos (tabela dbvendgpp)
   grupos_produto: z

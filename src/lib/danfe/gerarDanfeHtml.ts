@@ -432,7 +432,7 @@ ${
     opts.barcodeSvg
       ? ''
       : opts.jsBarcodeSrc && chaveNum
-        ? `<script>${opts.jsBarcodeSrc}</script><script>try{JsBarcode('#barcode',${JSON.stringify(chaveNum)},{format:'CODE128C',displayValue:false,margin:0,height:40,width:1.4});}catch(e){}</script>`
+        ? `<script>${opts.jsBarcodeSrc}</script><script>try{JsBarcode('#barcode',${JSON.stringify(chaveNum)},{format:'CODE128C',displayValue:false,margin:10,height:40,width:1.4});}catch(e){}</script>`
         : `<script>window.__CHAVE__=${JSON.stringify(chaveNum)};</script>`
   }
 </body></html>`;

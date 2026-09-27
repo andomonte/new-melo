@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useRef, ChangeEvent } from 'react';
 import { AuthContext } from '@/contexts/authContexts';
 import Carregamento from '@/utils/carregamento';
-import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
+import { mascaraInputBRL, desmascarar, formatarDecimalBR } from '@/utils/monetario';
 import SelectPadrao from '@/components/common/SelectPadrao';
 import { useContasPagar, ContaPagar, FiltrosContasPagar } from '@/hooks/useContasPagar';
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { toast } from 'sonner';
-import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2, Search } from 'lucide-react';
+import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2, Search, Landmark, MoreHorizontal, ChevronDown } from 'lucide-react';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import DropdownContasPagar from '@/components/common/DropdownContasPagar';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
@@ -26,7 +26,17 @@ import ModalSelecionarParcelas from '@/components/common/ModalSelecionarParcelas
 import { useModaisContasPagar } from './useModaisContasPagar';
 import ModaisDashboard from './ModaisDashboard';
 import BotoesAcaoHeader from './BotoesAcaoHeader';
+import ModalRelatoriosContasP from './ModalRelatoriosContasP';
+import ModalConciliacaoPagar from './ModalConciliacaoPagar';
+import ModalImportarDDA from './ModalImportarDDA';
+import ModalConsultaAvancadaPag from './ModalConsultaAvancadaPag';
+import ModalCadastrarFornecedor from '@/components/corpo/admin/cadastro/fornecedores/modalCadastrar';
 import { formatarMoeda, formatarData, formatarDataHora, calcularDiasAtraso, obterCorStatus, obterTextoStatus } from './utils';
+import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
+
+// Data local yyyy-MM-dd (sem shift de timezone) — mesmo helper do Novo Título de Contas a Receber.
+const fmtLocalData = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export function ContasAPagar() {
   const { user } = useContext(AuthContext);
@@ -193,6 +203,13 @@ export function ContasAPagar() {
   });
   const [exportando, setExportando] = useState(false);
   const [modalRelatorioAberto, setModalRelatorioAberto] = useState(false);
+  const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
+  const [modalDDAAberto, setModalDDAAberto] = useState(false);
+  const [ddaFornecedorAberto, setDdaFornecedorAberto] = useState(false);
+  const [ddaFornecedorInicial, setDdaFornecedorInicial] = useState<any>(null);
+  const [ddaReprocessar, setDdaReprocessar] = useState(0);
+  const [menuAcoesAberto, setMenuAcoesAberto] = useState(false);
+  const [modalConsultaAvancadaPagAberto, setModalConsultaAvancadaPagAberto] = useState(false);
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [dadosParaExportar, setDadosParaExportar] = useState<ContaPagar[]>([]);
   const [colunasParaExportar, setColunasParaExportar] = useState<string[]>([]);
@@ -200,6 +217,8 @@ export function ContasAPagar() {
   // Estados para dados dinâmicos da API
   const [bancosDisponiveis, setBancosDisponiveis] = useState<{ value: string; label: string }[]>([]);
   const [contasDbconta, setContasDbconta] = useState<{ value: string; label: string }[]>([]);
+  // Formas de pagamento (Contas a Pagar) — vêm do cadastro cad_forma_pgto; grava a LETRA em tp_pgto
+  const [formasPgtoOpcoes, setFormasPgtoOpcoes] = useState<{ letra: string; descricao: string }[]>([]);
   const [contaSelecionadaPgto, setContaSelecionadaPgto] = useState('');
   const [historicoPagamentos, setHistoricoPagamentos] = useState<{
     historico: any[];
@@ -232,6 +251,7 @@ export function ContasAPagar() {
     nro_dup: '',
     cod_credor: '',
     cod_conta: '',
+    pag_cof_id: '',
     cod_ccusto: ''
   });
   const [dadosValidacaoValor, setDadosValidacaoValor] = useState<{
@@ -361,8 +381,9 @@ export function ContasAPagar() {
     // possui_entrada: false,
   });
 
-  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string }[]>([]);
-  const [prazoSelecionado, setPrazoSelecionado] = useState('');
+  const [parcelas, setParcelas] = useState<{ dias: number; vencimento: string; valor: number }[]>([]);
+  // Quantidade de parcelas do Novo Título (default 1 = conta não parcelada, vencimento em dias).
+  const [prazoSelecionado, setPrazoSelecionado] = useState('1');
 
   // Função para limpar dados do modal de nova conta
   const limparDadosNovaConta = () => {
@@ -400,10 +421,199 @@ export function ContasAPagar() {
     setValorPgtoInput('');
     setValorMoedaInput('');
     setParcelas([]);
-    setPrazoSelecionado('');
+    setPrazoSelecionado('1');
     // Forçar re-renderização dos componentes Autocomplete
     const novoModalKey = Math.random(); // Usar Math.random para garantir unicidade
     setModalKey(novoModalKey);
+  };
+
+  // Carrega feriados (para o ajuste de dia útil das parcelas — igual ao Novo Título do Contas a Receber).
+  useEffect(() => {
+    const ano = new Date().getFullYear();
+    carregarFeriados(ano);
+    carregarFeriados(ano + 1);
+  }, []);
+
+  // --- Parcelas do Novo Título: mesma mecânica do Contas a Receber (dia útil/feriado),
+  //     com a base do prazo na DATA DE EMISSÃO (fiel ao Delphi UniContasP/UniContasR). ---
+  const baseEmissaoNT = () => {
+    const iso = novaContaDados.dt_emissao || new Date().toISOString().split('T')[0];
+    const d = new Date(iso + 'T00:00:00');
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  // Valor de cada parcela: divide o total, resto de centavos na 1ª (igual criar.ts do CR).
+  const valorParcelaNT = (i: number, n: number) => {
+    const total = Number(novaContaDados.valor_pgto) || 0;
+    if (n <= 0) return 0;
+    const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+    const base = Math.floor((total / n) * 100) / 100;
+    const resto = r2(total - base * n);
+    // 1ª parcela leva o resto de centavos; arredonda p/ evitar dízima (ex.: 1666,6799999).
+    return i === 0 ? r2(base + resto) : base;
+  };
+
+  const gerarParcelasNT = () => {
+    const num = parseInt(prazoSelecionado);
+    const intervalo = Number(novaContaDados.intervalo_dias) || 30;
+    if (!num || num < 1 || num > 48) {
+      toast.error('Informe a quantidade de parcelas (1 a 48).');
+      return;
+    }
+    if (!novaContaDados.dt_emissao) {
+      toast.error('Informe a data de emissão primeiro.');
+      return;
+    }
+    const base = baseEmissaoNT();
+    const novas: { dias: number; vencimento: string; valor: number }[] = [];
+    let acum = 0;
+    for (let i = 0; i < num; i++) {
+      acum += intervalo;
+      const venc = new Date(base.getTime());
+      venc.setDate(venc.getDate() + acum);
+      const util = getProximoDiaUtil(venc);
+      novas.push({ dias: acum, vencimento: fmtLocalData(util), valor: valorParcelaNT(i, num) });
+    }
+    setParcelas(novas);
+    setNovaContaDados((prev) => ({ ...prev, dt_venc: novas[0].vencimento }));
+  };
+
+  const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
+
+  // Redistribui igualmente o `total` pelas parcelas a partir do índice `from` (inclusive);
+  // a 1ª redistribuída leva o resto de centavos. Mantém as parcelas anteriores fixas.
+  const redistribuir = (arr: { dias: number; vencimento: string; valor: number }[], from: number, total: number) => {
+    const n = arr.length - from;
+    if (n <= 0) return;
+    const base = Math.floor((total / n) * 100) / 100;
+    const resto = round2(total - base * n);
+    for (let j = from; j < arr.length; j++) arr[j].valor = j === from ? round2(base + resto) : base;
+  };
+
+  // Edita o VALOR de uma parcela: fixa as anteriores + a editada, e divide a sobra nas
+  // seguintes. A soma NUNCA passa do valor do título (cap na parcela editada).
+  const atualizarValorNT = (idx: number, valorNum: number) => {
+    const total = round2(Number(novaContaDados.valor_pgto) || 0);
+    setParcelas((prev) => {
+      const arr = prev.map((p) => ({ ...p }));
+      if (idx < 0 || idx >= arr.length) return prev;
+      const somaAntes = round2(arr.slice(0, idx).reduce((a, p) => a + (p.valor || 0), 0));
+      const restante = round2(total - somaAntes);            // teto para esta parcela + as seguintes
+      let novo = round2(Number(valorNum) || 0);
+      if (novo < 0) novo = 0;
+      if (novo > restante) novo = restante;                  // soma nunca > total
+      arr[idx].valor = novo;
+      const seguintes = arr.length - (idx + 1);
+      if (seguintes > 0) redistribuir(arr, idx + 1, round2(restante - novo));
+      return arr;
+    });
+  };
+
+  // Edita pela quantidade de DIAS → vencimento = emissão + dias (dia útil).
+  const atualizarDiasNT = (idx: number, diasStr: string) => {
+    const dias = parseInt(diasStr, 10);
+    if (isNaN(dias) || dias <= 0) {
+      setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias: 0 } : p)));
+      return;
+    }
+    const base = baseEmissaoNT();
+    base.setDate(base.getDate() + dias);
+    const util = getProximoDiaUtil(base);
+    setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias, vencimento: fmtLocalData(util) } : p)));
+  };
+
+  // Edita a DATA → dias = venc − emissão (dia útil).
+  const atualizarVencimentoNT = (idx: number, isoDate: string) => {
+    if (!isoDate) return;
+    const d = new Date(isoDate + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    const emis = baseEmissaoNT();
+    if (d < emis) {
+      toast.error('O vencimento não pode ser anterior à data de emissão.');
+      return;
+    }
+    const util = getProximoDiaUtil(d);
+    const novosDias = Math.max(0, Math.ceil((util.getTime() - emis.getTime()) / (1000 * 60 * 60 * 24)));
+    setParcelas((prev) =>
+      prev.map((p, i) => (i === idx ? { ...p, vencimento: fmtLocalData(util), dias: novosDias } : p)),
+    );
+  };
+
+  const removerParcelaNT = (idx: number) => setParcelas((prev) => {
+    const arr = prev.filter((_, i) => i !== idx).map((p) => ({ ...p }));
+    // ao remover, redistribui igualmente o total pelas parcelas restantes
+    if (arr.length > 0) redistribuir(arr, 0, round2(Number(novaContaDados.valor_pgto) || 0));
+    return arr;
+  });
+
+  // Ao mudar o VALOR TOTAL com parcelas já geradas, redistribui igualmente (a 1ª leva o resto).
+  useEffect(() => {
+    setParcelas((prev) => {
+      if (prev.length === 0) return prev;
+      const arr = prev.map((p) => ({ ...p }));
+      redistribuir(arr, 0, round2(Number(novaContaDados.valor_pgto) || 0));
+      return arr;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novaContaDados.valor_pgto]);
+
+  // Lançar um título NOVO do DDA como conta a pagar: pré-preenche o form Nova Conta
+  // (credor, valor, emissão, duplicata, Tem Cobrança=boleto) + a parcela do vencimento.
+  // O usuário completa Conta Financeira / Comprador / Conta e salva.
+  const handleLancarDda = (t: any) => {
+    const dataHoje = new Date().toISOString().split('T')[0];
+    const emissao = t.dtEmissao || dataHoje;
+    setNovaContaDados({
+      tipo: 'F',
+      cod_credor: t.cod_credor || null,
+      cod_transp: null,
+      cod_conta: null,
+      pag_cof_id: null,
+      cod_ccusto: null,
+      cod_comprador: null,
+      dt_emissao: emissao,
+      dt_venc: t.dtVenc || emissao,
+      valor_pgto: Number(t.valor) || 0,
+      nro_nf: '',
+      tem_nota: false,
+      obs: `Lançado do DDA (${t.cnpjFmt || ''} - ${t.nome || ''})`.slice(0, 200),
+      tem_cobr: true, // boleto DDA = tem cobrança
+      nro_dup: t.documento || '',
+      parcelado: true,
+      num_parcelas: 1,
+      intervalo_dias: 30,
+      banco: null,
+      eh_internacional: false,
+      moeda: '',
+      taxa_conversao: 0,
+      valor_moeda: 0,
+      nro_invoice: '',
+      nro_contrato: '',
+    });
+    setValorPgtoInput((Number(t.valor) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    // parcela única com o vencimento do DDA
+    if (t.dtVenc) {
+      const base = new Date(emissao + 'T00:00:00');
+      const venc = new Date(t.dtVenc + 'T00:00:00');
+      const dias = Math.max(1, Math.ceil((venc.getTime() - base.getTime()) / (1000 * 60 * 60 * 24)));
+      setParcelas([{ dias, vencimento: t.dtVenc, valor: round2(Number(t.valor) || 0) }]);
+    } else {
+      setParcelas([]);
+    }
+    setPrazoSelecionado('1');
+    setModalKey(Math.random()); // re-renderiza os Autocomplete com o novo credor
+    setModalDDAAberto(false);
+    modais.setModalNovaContaAberto(true);
+    toast.info('Complete Conta Financeira, Comprador e Conta, e salve.');
+  };
+
+  // Cadastrar fornecedor a partir do cedente do DDA: abre o modal de cadastro de fornecedor
+  // PRÉ-PREENCHIDO (tipo/CNPJ/nome); o usuário completa os obrigatórios e salva. Ao salvar,
+  // re-processa o DDA para atualizar "Cadastrado?" e liberar o "Lançar".
+  const handlePedirCadastroDda = (cedente: { nome: string; cnpjFmt: string; tipo: 'F' | 'J' }) => {
+    setDdaFornecedorInicial({ tipo: cedente.tipo, cpf_cgc: cedente.cnpjFmt, nome: cedente.nome });
+    setDdaFornecedorAberto(true);
   };
 
   // Headers da tabela (adicionar mais colunas conforme dbpgto)
@@ -422,10 +632,14 @@ export function ContasAPagar() {
     'Juros',
     'Nº NF',
     'Nº Duplicata',
+    'Parcela',
+    'Tem Nota',
+    'Tem Cobrança',
     'Banco',
     'Ordem Compra',
     'Centro Custo',
     'Conta',
+    'Conta Financeira',
     'Comprador',
     'Internacional',
     'Moeda',
@@ -606,7 +820,7 @@ export function ContasAPagar() {
   useEffect(() => {
     async function carregarContasDbconta() {
       try {
-        const response = await fetch('/api/contas-pagar/contas-dbconta');
+        const response = await fetch('/api/contas-pagar/contas-dbconta?limit=2000');
         if (response.ok) {
           const data = await response.json();
           const contas = (data.contas || []).map((conta: any) => ({
@@ -622,6 +836,28 @@ export function ContasAPagar() {
       }
     }
     carregarContasDbconta();
+  }, []);
+
+  // Buscar formas de pagamento ativas (cadastro) para o modal de pagamento
+  useEffect(() => {
+    async function carregarFormasPgto() {
+      try {
+        const response = await fetch('/api/forma-pgto?ativos=1');
+        if (response.ok) {
+          const data = await response.json();
+          const formas = (data.data || []).map((f: any) => ({
+            letra: f.fpg_letra,
+            descricao: f.fpg_descricao,
+          }));
+          setFormasPgtoOpcoes(formas);
+        } else {
+          console.error('Erro ao buscar formas de pagamento:', await response.text());
+        }
+      } catch (error) {
+        console.error('Erro ao buscar formas de pagamento:', error);
+      }
+    }
+    carregarFormasPgto();
   }, []);
 
   // ✅ OTIMIZAÇÃO 8: Atalhos de Teclado
@@ -1075,7 +1311,7 @@ export function ContasAPagar() {
       };
       
       // Retornar array na mesma ordem dos headers
-      return [
+      const _linha: any[] = [
         // Ações
         (
           <DropdownContasPagar
@@ -1129,11 +1365,12 @@ export function ContasAPagar() {
                 {" - "}
                 {conta.nome_exibicao || conta.nome_credor}
               </span>
-              {conta.parcela_atual && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0 font-normal">
-                  Parcela {conta.parcela_atual}
-                </Badge>
-              )}
+              <span
+                className="ml-1 px-1.5 rounded bg-gray-200 dark:bg-zinc-700 text-[9px] font-bold"
+                title={conta.tipo === 'T' ? 'Transportadora' : 'Fornecedor'}
+              >
+                {conta.tipo === 'T' ? 'T' : 'F'}
+              </span>
             </div>
           </div>
         ),
@@ -1172,9 +1409,39 @@ export function ContasAPagar() {
         ),
         // Nº NF
         <span className="text-xs">{conta.nro_nf || '-'}</span>,
-        // Nº Duplicata
+        // Nº Duplicata — troca o sufixo "/NN" pela fração da parcela ("1/3")
         (
-          <span className="text-xs font-mono">{conta.nro_dup || '-'}</span>
+          <span className="text-xs font-mono">
+            {conta.nro_dup
+              ? (conta.parcela_atual
+                  ? conta.nro_dup.replace(/\/\d+$/, '/' + conta.parcela_atual.replace(' de ', '/'))
+                  : conta.nro_dup)
+              : '-'}
+          </span>
+        ),
+        // Parcela (formato "1/2")
+        (
+          <span className="text-xs font-mono">
+            {conta.parcela_atual ? conta.parcela_atual.replace(' de ', '/') : '-'}
+          </span>
+        ),
+        // Tem Nota
+        (
+          <Badge
+            variant={conta.tem_nota === 'S' ? 'default' : 'secondary'}
+            className="text-[10px] px-1 py-0"
+          >
+            {conta.tem_nota === 'S' ? 'Sim' : 'Não'}
+          </Badge>
+        ),
+        // Tem Cobrança
+        (
+          <Badge
+            variant={conta.tem_cobr === 'S' ? 'default' : 'secondary'}
+            className="text-[10px] px-1 py-0"
+          >
+            {conta.tem_cobr === 'S' ? 'Sim' : 'Não'}
+          </Badge>
         ),
         // Banco
         (
@@ -1214,8 +1481,38 @@ export function ContasAPagar() {
             ) : '-'}
           </span>
         ),
-        // Conta
-        <span className="text-xs">{conta.descricao_conta}</span>,
+        // Conta (código - nome)
+        (
+          <span className="text-xs">
+            {conta.cod_conta ? (
+              <>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.cod_conta}</span>
+                {conta.descricao_conta && (
+                  <>
+                    {" - "}
+                    <span className="text-gray-900 dark:text-white">{conta.descricao_conta}</span>
+                  </>
+                )}
+              </>
+            ) : '-'}
+          </span>
+        ),
+        // Conta Financeira (código - nome)
+        (
+          <span className="text-xs">
+            {conta.pag_cof_id ? (
+              <>
+                <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400">{conta.pag_cof_id}</span>
+                {conta.descricao_conta_financeira && (
+                  <>
+                    {" - "}
+                    <span className="text-gray-900 dark:text-white">{conta.descricao_conta_financeira}</span>
+                  </>
+                )}
+              </>
+            ) : '-'}
+          </span>
+        ),
         // Comprador
         (
           <span className="text-xs">
@@ -1271,6 +1568,9 @@ export function ContasAPagar() {
         //   </Badge>
         // ),
       ];
+      // Anexa o status da entrada à linha (sobrevive a filtro/ordenação local do DataTable)
+      (_linha as any).entradaStatus = conta.entrada_status ?? null;
+      return _linha;
     });
   };
 
@@ -1311,12 +1611,18 @@ export function ContasAPagar() {
     setValorPago(formatarValorParaInput(saldoRestante));
     
     // ✅ OTIMIZAÇÃO 4: Lembrar última forma de pagamento usada
-    const ultimaForma = localStorage.getItem('ultimaFormaPgto') || '001'; // Dinheiro como padrão
+    let ultimaForma = localStorage.getItem('ultimaFormaPgto') || 'D'; // Dinheiro (letra) como padrão
+    // Ignora valores antigos (códigos numéricos '001'..'007'): agora é LETRA de 1 caractere
+    if (ultimaForma.length !== 1) ultimaForma = 'D';
     setFormaPgto(ultimaForma);
     
     setCentroCustoSelecionado(conta.cod_ccusto?.toString() || '');
     setObsPagamento(conta.obs || '');
     setNroCheque('');
+
+    // Pré-preencher o combobox "Conta" com a conta cadastrada no título (dbpgto.cod_conta),
+    // quando houver — assim o operador não precisa reselecionar a cada pagamento.
+    setContaSelecionadaPgto(conta.cod_conta ? conta.cod_conta.toString() : '');
     
     // ✅ OTIMIZAÇÃO 5: Buscar conta bancária e banco preferencial do credor
     const codCredor = conta.cod_credor || (conta as any).cod_transp;
@@ -1429,6 +1735,7 @@ export function ContasAPagar() {
       nro_dup: conta.nro_dup || '',
       cod_credor: conta.cod_credor?.toString() || '',
       cod_conta: conta.cod_conta?.toString() || '',
+      pag_cof_id: conta.pag_cof_id?.toString() || '',
       cod_ccusto: conta.cod_ccusto?.toString() || ''
     });
     modais.setModalEditarAberto(true);
@@ -1833,7 +2140,7 @@ export function ContasAPagar() {
       return;
     }
 
-    if (formaPgto === '002' && !nroCheque) {
+    if (formaPgto === 'C' && !nroCheque) {
       toast.error('Número do cheque é obrigatório', { position: 'top-right' });
       return;
     }
@@ -1874,17 +2181,8 @@ export function ContasAPagar() {
   const processarPagamento = async () => {
     if (!modais.contaSelecionada) return;
 
-    // Determinar tp_pgto baseado na forma de pagamento
-    const tipoPgtoMap: Record<string, string> = {
-      '001': 'D', // Dinheiro
-      '002': 'C', // Cheque
-      '003': 'P', // PIX
-      '004': 'T', // Transferência
-      '005': 'R', // Cartão Crédito
-      '006': 'E', // Cartão Débito
-      '007': 'B', // Boleto
-    };
-
+    // A forma de pagamento agora É a LETRA vinda do cadastro (cad_forma_pgto).
+    // A mesma letra vai para tp_pgto e cod_fpgto (convenção MELO: D/C/B/A/F/R/V/N).
     try {
       // Capturar username do sessionStorage
       const perfilUserMelo = localStorage.getItem('perfilUserMelo');
@@ -1896,9 +2194,9 @@ export function ContasAPagar() {
         valor_pago: desmascarar(valorPago),
         obs: obsPagamento || modais.contaSelecionada.obs,
         banco: bancoSelecionado || null,
-        forma_pgto: formaPgto, // cod_fpgto para registrar em DBFPGTO
-        tp_pgto: tipoPgtoMap[formaPgto] || 'D', // Tipo de pagamento
-        nro_cheque: formaPgto === '002' ? nroCheque : null, // Apenas se for cheque
+        forma_pgto: formaPgto, // cod_fpgto = a mesma letra selecionada
+        tp_pgto: formaPgto, // tp_pgto = LETRA do cadastro (discriminador real)
+        nro_cheque: formaPgto === 'C' ? nroCheque : null, // Apenas se for cheque
         cod_ccusto: centroCustoSelecionado || modais.contaSelecionada.cod_ccusto?.toString() || null,
         valor_juros: desmascarar(valorJuros) || 0,
         cod_conta: contaSelecionadaPgto || contaBancariaSelecionada || modais.contaSelecionada.cod_conta?.toString() || null,
@@ -1944,9 +2242,11 @@ export function ContasAPagar() {
         obs: dadosEdicao.obs || undefined,
         nro_nf: dadosEdicao.nro_nf || undefined,
         nro_dup: dadosEdicao.nro_dup || undefined,
-        cod_credor: dadosEdicao.cod_credor ? parseInt(dadosEdicao.cod_credor) : undefined,
-        cod_conta: dadosEdicao.cod_conta ? parseInt(dadosEdicao.cod_conta) : undefined,
-        cod_ccusto: dadosEdicao.cod_ccusto ? parseInt(dadosEdicao.cod_ccusto) : undefined
+        // STRING (mantém zeros à esquerda; parseInt quebrava o vínculo do credor/conta).
+        cod_credor: dadosEdicao.cod_credor || undefined,
+        cod_conta: dadosEdicao.cod_conta || undefined,
+        pag_cof_id: dadosEdicao.pag_cof_id || undefined,
+        cod_ccusto: dadosEdicao.cod_ccusto || undefined
       });
 
       toast.success('Conta atualizada com sucesso!', {
@@ -2055,12 +2355,7 @@ export function ContasAPagar() {
         return;
       }
 
-      if (!novaContaDados.dt_venc) {
-        toast.error('Informe a data de vencimento', {
-          position: 'top-right',
-        });
-        return;
-      }
+      // Vencimento não é mais campo avulso — é governado por "Tem Cobrança" (validado adiante).
 
       if (!novaContaDados.valor_pgto || novaContaDados.valor_pgto <= 0) {
         toast.error('Informe um valor válido', {
@@ -2069,21 +2364,36 @@ export function ContasAPagar() {
         return;
       }
 
-      if (novaContaDados.parcelado && parcelas.length === 0) {
-        toast.error('Adicione ao menos uma parcela', {
-          position: 'top-right',
-        });
-        return;
+      // "Tem Cobrança" governa o parcelamento:
+      // - COM cobrança → parcela(s) por emissão + dias (Qtd 1 = não parcelado) + duplicata obrigatória;
+      //   a soma das parcelas (valores editáveis) precisa fechar com o valor do título.
+      // - SEM cobrança → 1 parcela única, vencimento = data de EMISSÃO, valor total.
+      const temCobr = !!novaContaDados.tem_cobr;
+      if (temCobr) {
+        if (parcelas.length === 0) {
+          toast.error('Com cobrança: gere ao menos uma parcela (informe a quantidade e clique em "Gerar Parcelas").', { position: 'top-right' });
+          return;
+        }
+        if (!String(novaContaDados.nro_dup || '').trim()) {
+          toast.error('Parcelar Título marcado: informe o número da duplicata.', { position: 'top-right' });
+          return;
+        }
+        const somaParc = round2(parcelas.reduce((a, p) => a + (p.valor || 0), 0));
+        if (Math.abs(somaParc - round2(Number(novaContaDados.valor_pgto) || 0)) > 0.01) {
+          toast.error(`A soma das parcelas (R$ ${somaParc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) deve ser igual ao valor do título (R$ ${Number(novaContaDados.valor_pgto).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).`, { position: 'top-right' });
+          return;
+        }
       }
 
       const response = await fetch('/api/contas-pagar/criar', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...novaContaDados,
-          parcelas: novaContaDados.parcelado ? parcelas : [],
+          // Com cobrança: vencimento = 1ª parcela + parcelas (com valor editado). Sem cobrança: 1 parcela na EMISSÃO.
+          dt_venc: temCobr ? parcelas[0].vencimento : novaContaDados.dt_emissao,
+          parcelado: temCobr,
+          parcelas: temCobr ? parcelas : [],
         }),
       });
 
@@ -2646,13 +2956,47 @@ export function ContasAPagar() {
               icon={<Search className="w-4 h-4" />}
               text="Pesquisar"
             />
-            <DefaultButton
-              variant="secondary"
-              size="default"
-              onClick={() => setModalRelatorioAberto(true)}
-              icon={<FileBarChart className="w-4 h-4" />}
-              text="Relatório"
-            />
+            {/* Ações secundárias agrupadas num menu (espelha o Contas a Receber) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuAcoesAberto((v) => !v)}
+                aria-expanded={menuAcoesAberto}
+                aria-haspopup="true"
+                className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium transition ${
+                  menuAcoesAberto
+                    ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <MoreHorizontal className="w-4 h-4" /> Ações <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              </button>
+              {menuAcoesAberto && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuAcoesAberto(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[240px] rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-1.5">
+                    <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      Ações do Contas a Pagar
+                    </div>
+                    {[
+                      { icon: <FileBarChart className="w-4 h-4" />, label: 'Relatório', onClick: () => setModalRelatorioAberto(true) },
+                      { icon: <FileBarChart className="w-4 h-4" />, label: 'Consulta Avançada', onClick: () => setModalConsultaAvancadaPagAberto(true) },
+                      { icon: <Landmark className="w-4 h-4" />, label: 'Conciliação', onClick: () => setModalConciliacaoAberto(true) },
+                      { icon: <FileText className="w-4 h-4" />, label: 'Importar DDA', onClick: () => setModalDDAAberto(true) },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => { setMenuAcoesAberto(false); item.onClick(); }}
+                        className="flex w-full items-center gap-2.5 px-2 py-2 rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/40 dark:hover:text-blue-300 transition"
+                      >
+                        <span className="text-gray-400 dark:text-gray-500">{item.icon}</span> {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <DefaultButton
               variant="primary"
               size="default"
@@ -2662,6 +3006,50 @@ export function ContasAPagar() {
               icon={<Plus className="w-4 h-4" />}
               text="Novo"
             />
+          </div>
+        </div>
+
+        {/* Barra: filtros de origem do Compras + legenda de cores da entrada */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1 px-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-gray-600 dark:text-gray-300">Origem Compras:</label>
+            <select
+              value={filtros.origem_compras || ''}
+              onChange={(e) => {
+                const v = e.target.value as any;
+                setFiltros(prev => { const n = { ...prev }; if (v) n.origem_compras = v; else delete n.origem_compras; return n; });
+                setPaginaAtual(1);
+              }}
+              className="border rounded px-2 py-1 text-xs bg-white dark:bg-zinc-800 dark:border-zinc-600"
+            >
+              <option value="">Todos</option>
+              <option value="antecipado">Pagamento Antecipado</option>
+              <option value="xml">Gerado por XML/NFe</option>
+              <option value="compras">Todos do Compras</option>
+            </select>
+            <label className="text-xs text-gray-600 dark:text-gray-300 ml-1">Entrada:</label>
+            <select
+              value={filtros.entrada_status || ''}
+              onChange={(e) => {
+                const v = e.target.value as any;
+                setFiltros(prev => { const n = { ...prev }; if (v) n.entrada_status = v; else delete n.entrada_status; return n; });
+                setPaginaAtual(1);
+              }}
+              className="border rounded px-2 py-1 text-xs bg-white dark:bg-zinc-800 dark:border-zinc-600"
+            >
+              <option value="">Todas</option>
+              <option value="gerada">Entrada Gerada</option>
+              <option value="nao_gerada">Entrada não Gerada</option>
+              <option value="cancelada">NFe Cancelada</option>
+              <option value="avulso">Avulso (com NF)</option>
+            </select>
+          </div>
+          {/* Legenda de cores (fonte da linha) */}
+          <div className="flex flex-wrap items-center gap-3 text-[11px]">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Entrada Gerada</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Entrada não Gerada</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block" /> NFe Cancelada</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-black dark:bg-white inline-block" /> Avulso (c/ NF)</span>
           </div>
         </div>
 
@@ -3027,13 +3415,11 @@ export function ContasAPagar() {
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="001">001 - Dinheiro</SelectItem>
-                  <SelectItem value="002">002 - Cheque</SelectItem>
-                  <SelectItem value="003">003 - PIX</SelectItem>
-                  <SelectItem value="004">004 - Transferência</SelectItem>
-                  <SelectItem value="005">005 - Cartão Crédito</SelectItem>
-                  <SelectItem value="006">006 - Cartão Débito</SelectItem>
-                  <SelectItem value="007">007 - Boleto</SelectItem>
+                  {formasPgtoOpcoes.map((f) => (
+                    <SelectItem key={f.letra} value={f.letra}>
+                      {f.letra} - {f.descricao}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -3051,7 +3437,7 @@ export function ContasAPagar() {
               />
             </div>
 
-            {formaPgto === '002' && (
+            {formaPgto === 'C' && (
               <div>
                 <Label htmlFor="nro_cheque">Nº Cheque</Label>
                 <Input
@@ -3065,7 +3451,7 @@ export function ContasAPagar() {
               </div>
             )}
 
-            <div className={formaPgto === '002' ? 'col-span-2' : 'col-span-3'}>
+            <div className={formaPgto === 'C' ? 'col-span-2' : 'col-span-3'}>
               <Label htmlFor="obs_pgto">Observações</Label>
               <Input
                 id="obs_pgto"
@@ -3321,29 +3707,42 @@ export function ContasAPagar() {
             </div>
           </div>
 
-          {/* Linha 2: Conta Bancária + Centro Custo + NF + Duplicata */}
+          {/* Linha 2: Conta Financeira + Conta + NF + Duplicata (igual ao cadastro) */}
           <div className="grid grid-cols-4 gap-3">
             <div>
-              <Label>Conta Bancária</Label>
+              <Label>Conta Financeira</Label>
               <Autocomplete
-                placeholder="Buscar conta..."
+                placeholder="Buscar conta financeira..."
                 apiUrl="/api/contas-pagar/contas"
-                value={dadosEdicao.cod_conta}
-                initialLabel={modais.contaSelecionada?.descricao_conta || (modais.contaSelecionada?.cod_conta ? `Cód: ${modais.contaSelecionada.cod_conta}` : undefined)}
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
+                value={dadosEdicao.pag_cof_id}
+                initialLabel={
+                  modais.contaSelecionada?.pag_cof_id &&
+                  modais.contaSelecionada?.descricao_conta_financeira
+                    ? `${modais.contaSelecionada.pag_cof_id} - ${modais.contaSelecionada.descricao_conta_financeira}`
+                    : undefined
+                }
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, pag_cof_id: value }))}
                 mapResponse={(data) => data.contas || []}
               />
             </div>
 
             <div>
-              <Label>Centro de Custo</Label>
+              <Label>Conta</Label>
               <Autocomplete
-                placeholder="Buscar centro de custo..."
-                apiUrl="/api/contas-pagar/centros-custo"
-                value={dadosEdicao.cod_ccusto}
-                initialLabel={modais.contaSelecionada?.descricao_ccusto || (modais.contaSelecionada?.cod_ccusto ? `Cód: ${modais.contaSelecionada.cod_ccusto}` : undefined)}
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_ccusto: value }))}
-                mapResponse={(data) => data.centrosCusto || []}
+                placeholder="Buscar conta..."
+                apiUrl="/api/contas-pagar/contas-dbconta"
+                value={dadosEdicao.cod_conta}
+                initialLabel={
+                  modais.contaSelecionada?.cod_conta
+                    ? `${modais.contaSelecionada.cod_conta}${
+                        modais.contaSelecionada.descricao_conta
+                          ? ` - ${modais.contaSelecionada.descricao_conta}`
+                          : ''
+                      }`
+                    : undefined
+                }
+                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
+                mapResponse={(data) => data.contas || []}
               />
             </div>
 
@@ -3696,18 +4095,23 @@ export function ContasAPagar() {
                       // Determinar a forma de pagamento com base em tp_pgto e outros campos
                       let formaPgtoNome = '';
                       let detalhes = '';
-                      
+
+                      // 1º: resolve pela LETRA do cadastro (cad_forma_pgto) — pagamentos novos
+                      const formaCadastro = formasPgtoOpcoes.find(
+                        (f) => f.letra === pagamento.tp_pgto,
+                      );
                       if (pagamento.tp_pgto === 'C') {
-                        // Cheque
-                        formaPgtoNome = 'Cheque';
                         detalhes = pagamento.nro_cheque ? `Nº ${pagamento.nro_cheque}` : '';
+                      }
+
+                      if (formaCadastro) {
+                        formaPgtoNome = formaCadastro.descricao;
+                      } else if (pagamento.tp_pgto === 'C') {
+                        formaPgtoNome = 'Cheque';
                       } else if (pagamento.tp_pgto === 'D') {
-                        // Dinheiro/Débito
-                        if (pagamento.nro_cheque === 'DEB.AUTOM') {
-                          formaPgtoNome = 'Débito Automático';
-                        } else {
-                          formaPgtoNome = 'Dinheiro';
-                        }
+                        // Legado: Dinheiro/Débito
+                        formaPgtoNome =
+                          pagamento.nro_cheque === 'DEB.AUTOM' ? 'Débito Automático' : 'Dinheiro';
                       } else if (pagamento.tp_pgto === 'X') {
                         formaPgtoNome = 'PIX';
                       } else if (pagamento.tp_pgto === 'T') {
@@ -3719,7 +4123,7 @@ export function ContasAPagar() {
                       } else if (pagamento.tp_pgto === 'CD') {
                         formaPgtoNome = 'Cartão Débito';
                       } else {
-                        // Fallback para o código da forma de pagamento
+                        // Fallback para o código legado da forma de pagamento
                         const formasPagamento: { [key: string]: string } = {
                           '01': 'Dinheiro',
                           '02': 'Cheque',
@@ -3732,7 +4136,7 @@ export function ContasAPagar() {
                         };
                         formaPgtoNome = formasPagamento[pagamento.cod_fpgto] || pagamento.cod_fpgto || 'Outro';
                       }
-                      
+
                       const estaCancelado = pagamento.cancel === 'S';
                       
                       return (
@@ -4152,24 +4556,26 @@ export function ContasAPagar() {
                 <Input
                   type="date"
                   value={novaContaDados.dt_emissao}
-                  disabled
-                  className="opacity-60 cursor-not-allowed"
+                  onChange={(e) => {
+                    const novaEmissao = e.target.value;
+                    setNovaContaDados((prev) => ({ ...prev, dt_emissao: novaEmissao }));
+                    // Recalcula os vencimentos das parcelas já geradas a partir da nova emissão.
+                    if (novaEmissao && parcelas.length > 0) {
+                      const base = new Date(novaEmissao + 'T00:00:00');
+                      base.setHours(0, 0, 0, 0);
+                      setParcelas((prev) =>
+                        prev.map((p) => {
+                          const venc = new Date(base.getTime());
+                          venc.setDate(venc.getDate() + (p.dias || 0));
+                          return { ...p, vencimento: fmtLocalData(getProximoDiaUtil(venc)) };
+                        }),
+                      );
+                    }
+                  }}
                 />
-              </div>
-              <div>
-                <Label>Data de Vencimento {novaContaDados.parcelado ? '(Base)' : '*'}</Label>
-                <Input
-                  type="date"
-                  value={novaContaDados.dt_venc}
-                  onChange={(e) => setNovaContaDados({ ...novaContaDados, dt_venc: e.target.value })}
-                  disabled={novaContaDados.parcelado}
-                  className={novaContaDados.parcelado ? 'opacity-50 cursor-not-allowed' : ''}
-                />
-                {novaContaDados.parcelado && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Desabilitado - vencimento definido pelas parcelas
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  O vencimento é definido pelas parcelas (data de emissão + dias).
+                </p>
               </div>
               <div>
                 <Label>Valor {novaContaDados.eh_internacional ? '(Calculado)' : '*'}</Label>
@@ -4207,10 +4613,60 @@ export function ContasAPagar() {
             </div>
           </div>
 
-          {/* Seção: Documentos Fiscais */}
+          {/* Seção: Documentos Fiscais.
+              Fiel ao Delphi (UniContasP): "Tem Nota" é derivado (marcado quando há Nº NF,
+              aparece só na listagem). "Tem Cobrança" é um flag independente que habilita e
+              exige o Nº da Duplicata; desmarcado grava tem_cobr='N' e nro_dup=NULL — o título
+              é criado do mesmo jeito (não bloqueia nem força parcelamento). */}
           <div className="border-b pb-3">
             <h3 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">Documentos Fiscais</h3>
-            <div className="grid grid-cols-4 gap-3">
+            {/* Checkbox "Tem Cobrança" em LINHA PRÓPRIA, acima dos campos que ele controla.
+                Estilos inline (specificity máxima) p/ vencer o CSS global de input e garantir
+                o alinhamento box↔texto igual ao mockup aprovado. */}
+            <label
+              htmlFor="tem_cobr"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                userSelect: 'none',
+                marginBottom: '12px',
+                padding: '4px 0',
+              }}
+            >
+              <input
+                id="tem_cobr"
+                type="checkbox"
+                checked={novaContaDados.tem_cobr}
+                onChange={(e) => {
+                  const marcado = e.target.checked;
+                  setNovaContaDados({
+                    ...novaContaDados,
+                    tem_cobr: marcado,
+                    // Desmarcou → limpa a duplicata (grava NULL, fiel ao Delphi/MELOSYS)
+                    ...(marcado ? {} : { nro_dup: '' }),
+                  });
+                }}
+                style={{
+                  flex: '0 0 auto',
+                  width: '16px',
+                  height: '16px',
+                  margin: 0,
+                  accentColor: '#2f6fa8',
+                  cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: '14px', fontWeight: 600, lineHeight: '20px' }}>
+                Parcelar Título
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 400 }} className="text-muted-foreground">
+                — define o vencimento, as parcelas e a duplicata
+              </span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-4 items-start">
+              {/* Número da NF (dirige o Tem Nota, que aparece só na listagem) */}
               <div>
                 <Label>{novaContaDados.eh_internacional ? 'Número da Invoice' : 'Número da NF'}</Label>
                 <Input
@@ -4220,51 +4676,61 @@ export function ContasAPagar() {
                     const valor = e.target.value;
                     const temValor = valor.trim().length > 0;
                     if (novaContaDados.eh_internacional) {
-                      setNovaContaDados({ 
-                        ...novaContaDados, 
+                      setNovaContaDados({
+                        ...novaContaDados,
                         nro_invoice: valor,
-                        tem_nota: temValor // Marca automaticamente se tiver invoice
+                        tem_nota: temValor, // Tem Nota derivado da NF/Invoice
                       });
                     } else {
-                      setNovaContaDados({ 
-                        ...novaContaDados, 
+                      setNovaContaDados({
+                        ...novaContaDados,
                         nro_nf: valor,
-                        tem_nota: temValor // Marca automaticamente se tiver NF
+                        tem_nota: temValor, // Tem Nota derivado da NF
                       });
                     }
                   }}
                   placeholder={novaContaDados.eh_internacional ? 'Ex: INV-2025-001' : 'Ex: 12345'}
                 />
               </div>
+              {/* Nº da Duplicata — habilitado só com "Tem Cobrança" */}
               <div>
-                <Label>{novaContaDados.eh_internacional ? 'Número do Contrato' : 'Número da Duplicata'}</Label>
+                <Label className={novaContaDados.eh_internacional || novaContaDados.tem_cobr ? '' : 'opacity-50'}>
+                  {novaContaDados.eh_internacional ? 'Número do Contrato' : 'Número da Duplicata'}
+                  {novaContaDados.tem_cobr && !novaContaDados.eh_internacional ? ' *' : ''}
+                </Label>
                 <Input
                   type="text"
                   value={novaContaDados.eh_internacional ? novaContaDados.nro_contrato : novaContaDados.nro_dup}
+                  disabled={!novaContaDados.eh_internacional && !novaContaDados.tem_cobr}
                   onChange={(e) => {
                     const valor = e.target.value;
-                    const temValor = valor.trim().length > 0;
                     if (novaContaDados.eh_internacional) {
-                      setNovaContaDados({ ...novaContaDados, nro_contrato: valor, tem_cobr: temValor });
+                      setNovaContaDados({ ...novaContaDados, nro_contrato: valor });
                     } else {
-                      setNovaContaDados({ 
-                        ...novaContaDados, 
-                        nro_dup: valor,
-                        tem_cobr: temValor // Marca automaticamente se tiver duplicata
-                      });
+                      setNovaContaDados({ ...novaContaDados, nro_dup: valor });
                     }
                   }}
-                  placeholder={novaContaDados.eh_internacional ? 'Ex: CONT-2025-001' : 'Ex: 001'}
+                  placeholder={
+                    novaContaDados.eh_internacional
+                      ? 'Ex: CONT-2025-001'
+                      : novaContaDados.tem_cobr
+                      ? 'Nº da duplicata (ex: 001)'
+                      : 'Marque "Parcelar Título" para habilitar'
+                  }
+                  className={
+                    !novaContaDados.eh_internacional && !novaContaDados.tem_cobr
+                      ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed'
+                      : ''
+                  }
                 />
+                {!novaContaDados.eh_internacional && !novaContaDados.tem_cobr && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Disponível quando “Parcelar Título” estiver marcado.
+                  </p>
+                )}
               </div>
             </div>
           </div>
-
-          {/* Opções Adicionais — ocultos do usuário, lógica automática mantida:
-              - eh_internacional: definido pelo fornecedor/conta selecionada
-              - tem_nota: marcado automaticamente ao digitar NF/Invoice
-              - tem_cobr: marcado automaticamente ao digitar Duplicata/Contrato
-          */}
 
           {/* Campos de Conversão de Moeda (Condicional - apenas se internacional) */}
           {novaContaDados.eh_internacional && (
@@ -4393,32 +4859,28 @@ export function ContasAPagar() {
             </div>
           )}
 
-          {/* Parcelamento */}
+          {/* Vencimento / Parcelas — fiel ao MELOSYS: só existe quando "Tem Cobrança".
+              Sem cobrança → título em aberto sem vencimento (dt_venc NULL, sem parcela).
+              Com cobrança → vencimento por emissão + dias (Qtd 1 = não parcelado),
+              igual ao Novo Título de Contas a Receber. */}
           <div className="border-b pb-4">
-            <div className="flex items-center space-x-2 mb-3">
-              <input
-                type="checkbox"
-                id="parcelado"
-                checked={novaContaDados.parcelado}
-                onChange={(e) => {
-                  setNovaContaDados({ ...novaContaDados, parcelado: e.target.checked });
-                  if (!e.target.checked) {
-                    setParcelas([]);
-                    setPrazoSelecionado('');
-                  }
-                }}
-                className="w-4 h-4"
-              />
-              <Label htmlFor="parcelado" className="cursor-pointer font-semibold">
-                Parcelar Conta
-              </Label>
-            </div>
+            <h3 className="text-xs font-semibold mb-3 text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+              Vencimento / Parcelas
+            </h3>
 
-            {novaContaDados.parcelado && (
-              <div className="pl-6 border-l-2 border-blue-200 space-y-3">
-                <div>
-                  <Label htmlFor="qtd_parcelas">Quantidade de Parcelas</Label>
-                  <div className="flex items-center gap-2 mt-1">
+            {!novaContaDados.tem_cobr && (
+              <p className="text-sm text-muted-foreground pl-6 border-l-2 border-gray-200">
+                Sem cobrança: o título é gravado como <strong>1 parcela única</strong>, com
+                vencimento na <strong>data de emissão</strong> e o valor total. Marque
+                <strong> “Parcelar Título”</strong> (em Documentos Fiscais) para <strong>parcelar</strong>.
+              </p>
+            )}
+
+            {novaContaDados.tem_cobr && (
+            <div className="pl-6 border-l-2 border-blue-200 space-y-3">
+              <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <Label htmlFor="qtd_parcelas">Quantidade de Parcelas</Label>
                     <Input
                       id="qtd_parcelas"
                       type="number"
@@ -4427,67 +4889,51 @@ export function ContasAPagar() {
                       value={prazoSelecionado}
                       onChange={(e) => setPrazoSelecionado(e.target.value)}
                       placeholder="Ex: 3"
-                      className="w-24"
+                      className="w-24 mt-1"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const qtdParcelas = parseInt(prazoSelecionado);
-                        if (!qtdParcelas || qtdParcelas <= 0) {
-                          toast.error('Insira uma quantidade válida de parcelas.');
-                          return;
-                        }
-                        if (qtdParcelas > 48) {
-                          toast.error('Máximo de 48 parcelas permitido.');
-                          return;
-                        }
-                        if (!novaContaDados.dt_emissao) {
-                          toast.error('Informe a data de emissão primeiro.');
-                          return;
-                        }
-                        // Gerar parcelas automaticamente (30, 60, 90 dias...)
-                        const novasParcelas = [] as { dias: number; vencimento: string }[];
-                        const dataBase = new Date(novaContaDados.dt_emissao);
-                        for (let i = 1; i <= qtdParcelas; i++) {
-                          const diasParcela = i * 30;
-                          const vencimento = new Date(dataBase);
-                          vencimento.setDate(vencimento.getDate() + diasParcela);
-                          novasParcelas.push({
-                            dias: diasParcela,
-                            vencimento: vencimento.toISOString().split('T')[0],
-                          });
-                        }
-                        setParcelas(novasParcelas);
-                        // Atualizar data de vencimento base com a primeira parcela
-                        if (novasParcelas.length > 0) {
-                          setNovaContaDados(prev => ({
-                            ...prev,
-                            dt_venc: novasParcelas[0].vencimento
-                          }));
-                        }
-                        toast.success(`${qtdParcelas} parcela(s) gerada(s) automaticamente!`);
-                      }}
-                      className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 whitespace-nowrap text-sm"
-                    >
-                      Gerar Parcelas
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setParcelas([]);
-                        setPrazoSelecionado('');
-                      }}
-                      className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 whitespace-nowrap text-sm"
-                    >
-                      Limpar
-                    </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    As parcelas serão geradas com intervalos de 30 dias a partir da data de emissão (30, 60, 90 dias...)
-                  </p>
+                  <div>
+                    <Label htmlFor="intervalo_dias">Intervalo (dias)</Label>
+                    <Input
+                      id="intervalo_dias"
+                      type="number"
+                      min="1"
+                      value={novaContaDados.intervalo_dias}
+                      onChange={(e) =>
+                        setNovaContaDados({
+                          ...novaContaDados,
+                          intervalo_dias: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      placeholder="30"
+                      className="w-24 mt-1"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={gerarParcelasNT}
+                    className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 whitespace-nowrap text-sm"
+                  >
+                    Gerar Parcelas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setParcelas([]);
+                      setPrazoSelecionado('1');
+                    }}
+                    className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 whitespace-nowrap text-sm"
+                  >
+                    Limpar
+                  </button>
                 </div>
+                <p className="text-xs text-gray-500">
+                  As parcelas são geradas a partir da <strong>data de emissão</strong>, somando o
+                  intervalo a cada parcela e ajustando o vencimento para o próximo dia útil
+                  (feriados/fins de semana), igual ao Novo Título de Contas a Receber.
+                </p>
 
-                {/* Lista de Parcelas */}
+                {/* Lista de Parcelas — dias e vencimento editáveis, com remover (igual ao CR) */}
                 {parcelas.length > 0 && (
                   <div>
                     <p className="text-sm font-medium mb-2">
@@ -4502,24 +4948,41 @@ export function ContasAPagar() {
                           <span className="font-medium text-blue-600 dark:text-blue-400 min-w-[80px]">
                             {i + 1}ª Parcela
                           </span>
-                          <span className="text-gray-500 min-w-[60px]">
-                            {p.dias} dias
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min="1"
+                              value={p.dias}
+                              onChange={(e) => atualizarDiasNT(i, e.target.value)}
+                              className="w-20 text-xs"
+                            />
+                            <span className="text-gray-500 text-xs">dias</span>
+                          </div>
                           <Input
                             type="date"
                             value={p.vencimento}
-                            onChange={(e) => {
-                              const novasParcelas = [...parcelas];
-                              novasParcelas[i] = { ...novasParcelas[i], vencimento: e.target.value };
-                              setParcelas(novasParcelas);
-                            }}
+                            onChange={(e) => atualizarVencimentoNT(i, e.target.value)}
                             className="w-36 text-xs"
                           />
-                          {novaContaDados.valor_pgto > 0 && (
-                            <span className="text-green-600 dark:text-green-400 font-medium min-w-[100px] text-right">
-                              R$ {(novaContaDados.valor_pgto / parcelas.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            <span className="text-gray-500 text-xs">R$</span>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatarDecimalBR(p.valor)}
+                              onChange={(e) => atualizarValorNT(i, desmascarar(mascaraInputBRL(e.target.value)))}
+                              className="w-28 text-xs text-right"
+                              title="Valor da parcela — a diferença é redistribuída nas parcelas seguintes"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removerParcelaNT(i)}
+                            className="text-red-500 hover:text-red-700 ml-auto"
+                            title="Remover parcela"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -4527,25 +4990,31 @@ export function ContasAPagar() {
                 )}
 
                 {/* Resumo */}
-                {parcelas.length > 0 && novaContaDados.valor_pgto > 0 && (
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
-                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                      Resumo do Parcelamento:
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                      • {parcelas.length}x de R$ {(novaContaDados.valor_pgto / parcelas.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      • Total: R$ {novaContaDados.valor_pgto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      • Primeira parcela: {parcelas[0]?.vencimento ? new Date(parcelas[0].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      • Última parcela: {parcelas[parcelas.length - 1]?.vencimento ? new Date(parcelas[parcelas.length - 1].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
-                    </p>
-                  </div>
-                )}
+                {parcelas.length > 0 && novaContaDados.valor_pgto > 0 && (() => {
+                  const somaParc = round2(parcelas.reduce((a, p) => a + (p.valor || 0), 0));
+                  const totalT = round2(Number(novaContaDados.valor_pgto) || 0);
+                  const dif = round2(totalT - somaParc);
+                  return (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Resumo do Parcelamento:</p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        • {parcelas.length}x · Soma das parcelas: <strong>R$ {somaParc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        • Total do título: R$ {totalT.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                      {Math.abs(dif) > 0.005 && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          • Diferença a distribuir: R$ {dif.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (edite uma parcela ou gere novamente)
+                        </p>
+                      )}
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        • Primeira: {parcelas[0]?.vencimento ? new Date(parcelas[0].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                        {' · '}Última: {parcelas[parcelas.length - 1]?.vencimento ? new Date(parcelas[parcelas.length - 1].vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -4716,69 +5185,50 @@ export function ContasAPagar() {
         carregando={carregandoNotas}
       />
 
-      {/* Modal Relatório */}
-      <Modal
+      {/* Modal Relatórios — 7 tipos fiéis ao Delphi (Por Período, Conta Financeira,
+          Pagas sem NF, Comprador, Filtro da Tela, Centro de Custo, Grupo de Centros) */}
+      <ModalRelatoriosContasP
         isOpen={modalRelatorioAberto}
         onClose={() => setModalRelatorioAberto(false)}
-        title="Gerar Relatório - Contas a Pagar"
-      >
-        <div className="form-compact space-y-4 p-4">
-          <p className="text-xs text-gray-600 dark:text-gray-400">
-            O relatório será gerado com os filtros atualmente aplicados na tela
-            {rangeDataAtivo === 'semana' && ' (período: semana atual)'}
-            {rangeDataAtivo === 'mes' && ' (período: mês atual)'}
-            {rangeDataAtivo === 'personalizado' && dataInicioPersonalizada && dataFimPersonalizada &&
-              ` (período: ${dataInicioPersonalizada} a ${dataFimPersonalizada})`}
-            {rangeDataAtivo === 'todos' && ' (todos os períodos)'}
-            {filtros.status && filtros.status !== 'todos' && ` — Status: ${filtros.status}`}
-            .
-          </p>
+        userName={user?.usuario}
+      />
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
-            Colunas do Relatório
-          </div>
-          <div className="grid grid-cols-4 gap-1 text-[11px] text-gray-600 dark:text-gray-400">
-            <span>• COD</span>
-            <span>• NRO_DUP</span>
-            <span>• NOME</span>
-            <span>• VALOR</span>
-            <span>• PAGO</span>
-            <span>• ABERTO</span>
-            <span>• NRO_NF</span>
-            <span>• DT_VENC</span>
-            <span>• CONTA FINANCEIRA</span>
-            <span>• DT_PGTO</span>
-            <span>• DT_EMISSAO</span>
-            <span>• COD_CONTA</span>
-            <span>• OBS</span>
-            <span>• PAGA</span>
-          </div>
+      {/* Conciliação bancária — lê o extrato (saídas) e casa com títulos a pagar em aberto */}
+      <ModalConciliacaoPagar
+        isOpen={modalConciliacaoAberto}
+        onClose={() => setModalConciliacaoAberto(false)}
+        usuario={user?.usuario}
+        onBaixaConcluida={() => consultarContasPagar(paginaAtual, limite, filtros)}
+      />
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">
-            Formato de Saída
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('pdf')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-              Gerar PDF
-            </button>
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('excel')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              Gerar Excel
-            </button>
-          </div>
-        </div>
-      </Modal>
+      {/* Consulta Avançada do Financeiro — Pagamentos (pivô por conta financeira × mês) */}
+      <ModalConsultaAvancadaPag
+        isOpen={modalConsultaAvancadaPagAberto}
+        onClose={() => setModalConsultaAvancadaPagAberto(false)}
+        usuario={user?.usuario}
+      />
+
+      {/* Importar Arquivo DDA (CNAB240) — lê os títulos registrados no banco e checa cedentes */}
+      <ModalImportarDDA
+        isOpen={modalDDAAberto}
+        onClose={() => setModalDDAAberto(false)}
+        onLancarConta={handleLancarDda}
+        onPedirCadastro={handlePedirCadastroDda}
+        reprocessarSignal={ddaReprocessar}
+      />
+
+      {/* Cadastro de fornecedor a partir do DDA (pré-preenchido) */}
+      {ddaFornecedorAberto && (
+        <ModalCadastrarFornecedor
+          isOpen={ddaFornecedorAberto}
+          onClose={() => setDdaFornecedorAberto(false)}
+          dadosIniciais={ddaFornecedorInicial}
+          onSuccess={() => {
+            setDdaFornecedorAberto(false);
+            setDdaReprocessar((n) => n + 1); // re-processa o DDA e atualiza "Cadastrado?"
+          }}
+        />
+      )}
     </div>
   );
 }

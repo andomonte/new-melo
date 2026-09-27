@@ -19,8 +19,8 @@ export const colunasDbNFe = [
   { campo: 'numeroNF', label: 'Número NFe' },            // Doc. Fiscal
   { campo: 'serie', label: 'Série' },                    // Série
   { campo: 'dataEmissao', label: 'Data Emissão' },       // Dt Emissão
-  { campo: 'fornecedorCnpj', label: 'CNPJ Emitente' },   // Emit. CPF/CNPJ
-  { campo: 'emitente', label: 'Emitente' },              // Emit. Nome
+  { campo: 'fornecedorCnpj', label: 'CNPJ Fornecedor' }, // Emit. CPF/CNPJ
+  { campo: 'emitente', label: 'Fornecedor' },            // Emit. Nome (o emitente da NF-e de entrada é o fornecedor)
   { campo: 'versao', label: 'Versão' },                  // Versão
   { campo: 'chaveNFe', label: 'Chave NFe' },             // Chave
   { campo: 'protocolo', label: 'Protocolo' },            // Protocolo

@@ -15,6 +15,7 @@ import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { create } from 'xmlbuilder2';
 import { getPgPoolFilial } from '@/lib/pg';
 import type { Pool } from 'pg';
+import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
 import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
@@ -803,7 +804,6 @@ export default async function handler(
 
       let pdfBuffer: Buffer;
       // Declaradas FORA do try para ficarem visíveis também no catch (fallback jsPDF).
-      // Antes eram const dentro do try → o fallback quebrava com ReferenceError.
       let produtosParaPdf: any;
       let vendaParaPdf: any;
       let empresaParaPdf: any;
@@ -1175,6 +1175,15 @@ export default async function handler(
             '✅ Dados salvos: nrodoc_fiscal=' +
               nrodoc_fiscal +
               ', série obtida via dbfatura.codfat',
+          );
+
+          // Enfileira a DANFE para o Robô de Impressão — imprime ao ser emitida
+          // (vale p/ Faturamento e Caixa, que emitem por este endpoint).
+          const enfileirou = await enfileirarImpressaoDanfe(client, codfat);
+          console.log(
+            enfileirou
+              ? `🖨️ DANFE ${codfat} enfileirada para impressão (fin_impressao)`
+              : `🖨️ DANFE ${codfat} já estava na fila de impressão`,
           );
         } finally {
           client.release();

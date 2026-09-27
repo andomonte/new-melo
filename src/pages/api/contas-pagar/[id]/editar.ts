@@ -19,6 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       nro_dup,
       cod_credor,
       cod_conta,
+      pag_cof_id,
       cod_ccusto
     } = req.body;
 
@@ -112,6 +113,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (cod_conta !== undefined) {
       updates.push(`cod_conta = $${paramIndex}`);
       params.push(cod_conta);
+      paramIndex++;
+    }
+
+    if (pag_cof_id !== undefined) {
+      // Vazio/inválido → NULL (coluna aceita NULL); senão o número da conta financeira
+      const cofNum =
+        pag_cof_id != null && String(pag_cof_id).trim() !== '' && !isNaN(parseInt(String(pag_cof_id), 10))
+          ? parseInt(String(pag_cof_id), 10)
+          : null;
+      updates.push(`pag_cof_id = $${paramIndex}`);
+      params.push(cofNum as any);
       paramIndex++;
     }
 

@@ -4,8 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { getPgPool } from '@/lib/pg';
 import { getSmtpConfigWithFallback } from '@/lib/smtpConfig';
-import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
-import { gerarComprovanteHtml } from '@/lib/financeiro/comprovanteHtml';
+import { gerarComprovantePdf } from '@/lib/financeiro/comprovantePdf';
 
 /**
  * POST /api/contas-receber/comprovantes/enviar-email
@@ -89,22 +88,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const c = cab.rows[0];
-    const html = gerarComprovanteHtml(
+    // PDF via jsPDF (server-side, sem Chrome — o deploy não tem puppeteer/Chrome).
+    const pdf = gerarComprovantePdf(
       {
         aut_id: String(c.aut_id),
         aut_data: c.aut_data,
         aut_autenticacao: c.aut_autenticacao,
         aut_cancel: c.aut_cancel,
-        aut_codconta: c.aut_codconta,
         codcli: c.codcli,
         nome_cliente: c.nome_cliente,
         itens: itens.rows,
         formas,
       },
-      logoDataUri,
+      logoDataUri || undefined,
     );
-
-    const pdf = await renderHtmlToPdf(html, { landscape: false });
 
     const smtp = await getSmtpConfigWithFallback();
     if (!smtp.user || !smtp.pass) return res.status(422).json({ erro: 'SMTP não configurado.' });

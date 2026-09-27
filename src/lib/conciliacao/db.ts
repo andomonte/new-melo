@@ -96,24 +96,36 @@ export async function buscarTitulosAbertos(
   codcli: string,
   dataPgto: string,
 ): Promise<TituloAberto[]> {
+  // Parcela X/N por window function sobre o resultado (rápido). NÃO usar subquery correlacionada
+  // com COALESCE(cod_fat,...) — ela faz full-scan do dbreceb (1,8 mi) por linha e TRAVA a importação.
+  // A contagem é das parcelas em aberto na janela (aproximada, suficiente para a dica da sugestão).
   const r = await client.query(
-    `SELECT r.cod_receb, r.codcli, c.nome AS nome_cliente, r.nro_doc,
-            ROUND((COALESCE(r.valor_pgto,0) - COALESCE(r.valor_rec,0)) * 100)::bigint AS saldo_cent,
-            to_char(r.dt_venc,'YYYY-MM-DD') AS dt_venc,
-            (SELECT COUNT(*) FROM dbreceb rn
-              WHERE COALESCE(rn.cod_fat,'AV'||rn.cod_receb) = COALESCE(r.cod_fat,'AV'||r.cod_receb))::int AS parcela_n,
-            (SELECT COUNT(*) FROM dbreceb rx
-              WHERE COALESCE(rx.cod_fat,'AV'||rx.cod_receb) = COALESCE(r.cod_fat,'AV'||r.cod_receb)
-                AND rx.cod_receb <= r.cod_receb)::int AS parcela_x
-       FROM dbreceb r
-       LEFT JOIN dbclien c ON c.codcli = r.codcli
-      WHERE LTRIM(CAST(r.codcli AS TEXT),'0') = LTRIM($1,'0')
-        AND r.rec IS DISTINCT FROM 'S'
-        AND (r.cancel IS NULL OR r.cancel <> 'S')
-        AND (COALESCE(r.valor_pgto,0) - COALESCE(r.valor_rec,0)) > 0
-        AND r.dt_venc BETWEEN $2::date - INTERVAL '1 month' AND $2::date + INTERVAL '1 month'
-      ORDER BY r.dt_venc
-      LIMIT 200`,
+    `SELECT cod_receb, codcli, nome_cliente, nro_doc, saldo_cent, dt_venc,
+            ROW_NUMBER() OVER (PARTITION BY fatkey ORDER BY dt_venc_raw, cod_receb)::int AS parcela_x,
+            COUNT(*)     OVER (PARTITION BY fatkey)::int                                AS parcela_n
+       FROM (
+         SELECT r.cod_receb, r.codcli, c.nome AS nome_cliente, r.nro_doc,
+                -- saldo aberto = valor_pgto - principal_recebido, onde principal_recebido = valor_rec - juros_recebido
+                -- (valor_rec inclui o juros; fiel ao Oracle CAIXA). Sem isso, título parcial c/ juros some.
+                ROUND((COALESCE(r.valor_pgto,0) - COALESCE(r.valor_rec,0) + jr.juros_rec) * 100)::bigint AS saldo_cent,
+                to_char(r.dt_venc,'YYYY-MM-DD') AS dt_venc, r.dt_venc AS dt_venc_raw,
+                COALESCE(r.cod_fat, 'AV'||r.cod_receb) AS fatkey
+           FROM dbreceb r
+           LEFT JOIN dbclien c ON c.codcli = r.codcli
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(SUM(fr.valor),0) AS juros_rec FROM dbfreceb fr
+              WHERE fr.cod_receb = r.cod_receb
+                AND fr.tipo IN ('18','20','21','22','23','25','26','43') AND fr.sf <> 'C'
+           ) jr ON TRUE
+          WHERE LTRIM(CAST(r.codcli AS TEXT),'0') = LTRIM($1,'0')
+            AND r.rec IS DISTINCT FROM 'S'
+            AND (r.cancel IS NULL OR r.cancel <> 'S')
+            AND (COALESCE(r.valor_pgto,0) - COALESCE(r.valor_rec,0) + jr.juros_rec) > 0
+            AND r.dt_venc BETWEEN $2::date - INTERVAL '1 month' AND $2::date + INTERVAL '1 month'
+          ORDER BY r.dt_venc
+          LIMIT 200
+       ) sub
+      ORDER BY dt_venc_raw`,
     [codcli, dataPgto],
   );
   return r.rows.map((x: any) => ({

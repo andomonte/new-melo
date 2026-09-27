@@ -15,7 +15,19 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch } from 'lucide-react';
+import { Plus, CheckCircle, DollarSign, FileText, AlertTriangle, CreditCard, Upload, FileBarChart, Download, Loader2, Search, FileSearch, ChevronDown, MoreHorizontal, X, Columns3, Printer } from 'lucide-react';
+
+// Rótulos dos chips de "filtros ativos" (espelham os campos/operadores do filtro avançado).
+const ROTULO_CAMPO_FILTRO: Record<string, string> = {
+  cod_receb: 'Número Título', codcli: 'Cód. Cliente', nome_cliente: 'Cliente', cliente: 'Cliente',
+  dt_emissao: 'Emissão', dt_venc: 'Vencimento', dt_pgto: 'Pagamento',
+  valor_original: 'Valor Original', valor_recebido: 'Valor Recebido',
+  nro_doc: 'Nº Documento', cod_fat: 'Fatura', banco: 'Banco', descricao_conta: 'Conta Financeira',
+};
+const ROTULO_OP_FILTRO: Record<string, string> = {
+  'contém': 'contém', igual: '=', diferente: '≠', 'começa': 'começa com', termina: 'termina com',
+  maior: '>', maior_igual: '≥', menor: '<', menor_igual: '≤', nulo: 'é nulo', nao_nulo: 'não nulo',
+};
 import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import Carregamento from '@/utils/carregamento';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
@@ -24,8 +36,11 @@ import { OPCOES_FORMA_FATURA, labelFormaFatura } from '@/lib/faturamento/formaFa
 import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/novaVenda/prazo';
 import { nomeBancoPorInterno } from '@/lib/faturamento/bancoCobranca';
 import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
+import ModalBaixarJuros from '@/components/corpo/contas-receber/ModalBaixarJuros';
 import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
 import ModalConciliacao from '@/components/corpo/contas-receber/ModalConciliacao';
+import ModalConsultaAvancadaReceb from '@/components/corpo/contas-receber/ModalConsultaAvancadaReceb';
+import { CreditoTemporarioModal } from '@/components/corpo/admin/cadastro/clientes/creditoTemporario/CreditoTemporarioModal';
 import ModalAIdentificar from '@/components/corpo/contas-receber/ModalAIdentificar';
 import { formatarBRL } from '@/utils/monetario';
 
@@ -233,6 +248,9 @@ export default function ContasAReceber() {
       return arr;
     });
   };
+  // Preview do relatório na tela + toggle do gerenciador de colunas (fluxo do Contas a Pagar).
+  const [relatResultado, setRelatResultado] = useState<{ titulo: string; layout: string; rows: any[] } | null>(null);
+  const [mostrarColunasRelat, setMostrarColunasRelat] = useState(false);
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [modalImportacaoCartao, setModalImportacaoCartao] = useState(false);
   const [contaSelecionada, setContaSelecionada] = useState<ContaReceber | null>(null);
@@ -278,6 +296,13 @@ export default function ContasAReceber() {
   // Seleção múltipla para Dar Baixa em lote (mesmo cliente).
   const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
   const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
+  // Baixar Juros (liberar taxa) por linha — 1 título.
+  const [modalBaixarJurosAberto, setModalBaixarJurosAberto] = useState(false);
+  const [contaBaixarJuros, setContaBaixarJuros] = useState<ContaReceber | null>(null);
+  const abrirBaixarJuros = (conta: ContaReceber) => {
+    setContaBaixarJuros(conta);
+    setModalBaixarJurosAberto(true);
+  };
   const [modalComprovantesAberto, setModalComprovantesAberto] = useState(false);
   const [comprovanteBuscaInicial, setComprovanteBuscaInicial] = useState('');
 
@@ -289,6 +314,9 @@ export default function ContasAReceber() {
   };
   const [modalConciliacaoAberto, setModalConciliacaoAberto] = useState(false);
   const [modalAIdentificarAberto, setModalAIdentificarAberto] = useState(false);
+  const [modalConsultaAvancadaAberto, setModalConsultaAvancadaAberto] = useState(false);
+  const [menuAcoesAberto, setMenuAcoesAberto] = useState(false); // dropdown "Ações" da barra
+  const [modalCreditoTempAberto, setModalCreditoTempAberto] = useState(false);
 
   // Bancos do Novo Título: vêm da dbbanco_cobranca filtrada por ATIVO (mesma fonte do
   // cadastro do cliente). Fallback = lista fixa se a busca falhar.
@@ -605,6 +633,7 @@ export default function ContasAReceber() {
           onHistoricoClick={() => abrirModalHistorico(conta)}
           onVerCartaoClick={conta.tem_cartao ? () => visualizarDetalhesCartao(conta) : undefined}
           onComprovantesClick={() => abrirComprovantes(conta.nro_doc || (conta.codcli ? String(conta.codcli) : ''))}
+          onBaixarJurosClick={() => abrirBaixarJuros(conta)}
         />,
 
         // Status
@@ -643,8 +672,14 @@ export default function ContasAReceber() {
         // Juros (se houver)
         <span key={`juros-${conta.cod_receb}`} className="text-xs text-gray-900 dark:text-white">{(conta as any).valor_juros ? formatarMoeda((conta as any).valor_juros) : '-'}</span>,
 
-        // Nº Documento
-        <span key={`doc-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.nro_doc || '-'}</span>,
+        // Nº Documento — troca o sufixo de parcela em letra (A/B/C…) pela fração ("1/3")
+        <span key={`doc-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">
+          {conta.nro_doc
+            ? (conta.eh_parcelada && conta.parcela_atual
+                ? conta.nro_doc.replace(/[A-Za-z]$/, '') + '/' + conta.parcela_atual
+                : conta.nro_doc)
+            : '-'}
+        </span>,
 
         // Fatura
         <span key={`fat-${conta.cod_receb}`} className="text-xs font-mono text-gray-900 dark:text-white">{conta.cod_fat || '-'}</span>,
@@ -1014,13 +1049,112 @@ export default function ContasAReceber() {
       window.URL.revokeObjectURL(url);
 
       toast.success(`Relatório ${formato.toUpperCase()} gerado com sucesso!`);
-      setModalRelatorioAberto(false);
     } catch (error: any) {
       console.error('Erro ao gerar relatório:', error);
       toast.error(error.message || 'Erro ao gerar relatório');
     } finally {
       setGerandoRelatorio(false);
     }
+  };
+
+  // ── Preview na tela + Imprimir (fluxo igual ao Contas a Pagar) ──
+  const TIPO_COL_REL: Record<string, 'text' | 'num' | 'money' | 'date'> = {
+    nro_doc: 'text', dias: 'num', cliente: 'text', cod_conta: 'text', valor_pgto: 'money',
+    valor_juros: 'money', valor_rec: 'money', valor_aberto: 'money', dt_emissao: 'date',
+    dt_venc: 'date', parcela: 'text', tarifa: 'money', dt_pgto: 'date',
+  };
+  const MONEY_KEYS_REL = ['valor_pgto', 'valor_juros', 'valor_rec', 'valor_aberto', 'tarifa'];
+  const brlRel = (v: any) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDataRel = (d: any) => { if (!d) return '—'; const dt = new Date(d); return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('pt-BR'); };
+  const valorColRel = (key: string, row: any) => {
+    const t = TIPO_COL_REL[key]; const v = row[key];
+    if (t === 'money') return brlRel(v);
+    if (t === 'date') return fmtDataRel(v);
+    return v == null ? '' : String(v);
+  };
+  const colunasVisiveisRel = () => relatColunas.filter((c) => c.visivel);
+  // Agrupa por cliente quando layout='por_cliente'; senão um grupo único (lista).
+  const agruparRelat = (rows: any[], layout: string) => {
+    const somaGrupo = () => Object.fromEntries(MONEY_KEYS_REL.map((k) => [k, 0])) as Record<string, number>;
+    if (layout !== 'por_cliente') {
+      const sub = somaGrupo();
+      rows.forEach((r) => MONEY_KEYS_REL.forEach((k) => (sub[k] += Number(r[k] || 0))));
+      return { grupos: [{ rotulo: null as string | null, linhas: rows, sub }], total: sub, qtd: rows.length };
+    }
+    const mapa = new Map<string, { rotulo: string; linhas: any[]; sub: Record<string, number> }>();
+    const total = somaGrupo();
+    for (const r of rows) {
+      const chave = String(r.cliente || '—');
+      if (!mapa.has(chave)) mapa.set(chave, { rotulo: chave, linhas: [], sub: somaGrupo() });
+      const g = mapa.get(chave)!;
+      g.linhas.push(r);
+      MONEY_KEYS_REL.forEach((k) => { g.sub[k] += Number(r[k] || 0); total[k] += Number(r[k] || 0); });
+    }
+    return { grupos: Array.from(mapa.values()), total, qtd: rows.length };
+  };
+
+  const gerarPreviewRelatorio = async () => {
+    try {
+      setGerandoRelatorio(true);
+      setRelatResultado(null);
+      const params = new URLSearchParams();
+      params.append('formato', 'json');
+      params.append('tipo', tipoRelatorio);
+      const campos = CAMPOS_RELATORIO[tipoRelatorio];
+      if (campos.datas) {
+        if (relatParams.data_inicio) params.append('data_inicio', relatParams.data_inicio);
+        if (relatParams.data_fim) params.append('data_fim', relatParams.data_fim);
+      }
+      if (campos.cliente && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
+      if (campos.conta && relatParams.cod_conta.trim()) params.append('cod_conta', relatParams.cod_conta.trim());
+      if (campos.classe && relatParams.classe_pgto && relatParams.classe_pgto !== 'T') params.append('classe_pgto', relatParams.classe_pgto);
+      if (campos.juros && relatParams.tx_juros.trim()) params.append('tx_juros', relatParams.tx_juros.trim());
+      const colunasSel = relatColunas.filter((c) => c.visivel).map((c) => c.key);
+      if (colunasSel.length === 0) { toast.error('Selecione ao menos uma coluna.'); setGerandoRelatorio(false); return; }
+      params.append('colunas', colunasSel.join(','));
+      const r = await fetch(`/api/contas-receber/relatorio?${params.toString()}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || data.erro || 'Erro ao gerar relatório');
+      setRelatResultado(data);
+      if (!data.rows?.length) toast.info('Nenhum registro para os filtros informados.');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao gerar relatório');
+    } finally {
+      setGerandoRelatorio(false);
+    }
+  };
+
+  const imprimirRelatorio = () => {
+    if (!relatResultado) return;
+    const cols = colunasVisiveisRel();
+    const { grupos, total, qtd } = agruparRelat(relatResultado.rows, relatResultado.layout);
+    const w = window.open('', '_blank', 'width=1200,height=800');
+    if (!w) { toast.error('Permita pop-ups para imprimir.'); return; }
+    const th = cols.map((c) => `<th class="${TIPO_COL_REL[c.key] === 'money' || TIPO_COL_REL[c.key] === 'num' ? 'n' : ''}">${c.label}</th>`).join('');
+    const tdLinha = (row: any) => `<tr>${cols.map((c) => `<td class="${TIPO_COL_REL[c.key] === 'money' || TIPO_COL_REL[c.key] === 'num' ? 'n' : ''}">${valorColRel(c.key, row)}</td>`).join('')}</tr>`;
+    const linhaResumo = (sub: Record<string, number>, label: string, cls: string) => {
+      let feito = false;
+      return `<tr class="${cls}">${cols.map((c, i) => {
+        if (MONEY_KEYS_REL.includes(c.key)) return `<td class="n">${brlRel(sub[c.key])}</td>`;
+        if (i === 0 && !feito) { feito = true; return `<td>${label}</td>`; }
+        return '<td></td>';
+      }).join('')}</tr>`;
+    };
+    const corpo = grupos.map((g) => `
+      ${g.rotulo ? `<tr class="grp"><td colspan="${cols.length}">${g.rotulo} — ${g.linhas.length} título(s)</td></tr>` : ''}
+      ${g.linhas.map(tdLinha).join('')}
+      ${g.rotulo ? linhaResumo(g.sub, 'SUBTOTAL', 'sub') : ''}`).join('');
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${relatResultado.titulo}</title>
+      <style>body{font-family:Arial,Helvetica,sans-serif;font-size:11px;margin:20px;color:#111}
+      h1{font-size:14px;margin:0}.sub-h{font-size:11px;color:#444;margin:2px 0 12px}
+      table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:3px 5px;text-align:left;white-space:nowrap}
+      th{background:#eee}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+      tr.grp td{background:#dbe5f1;font-weight:bold}tr.sub td{background:#f2f2f2;font-weight:bold}tr.tot td{background:#c9d8ea;font-weight:bold}</style></head><body>
+      <h1>MELO DISTRIBUIDORA DE PECAS LTDA.</h1>
+      <div class="sub-h">${relatResultado.titulo} — emitido em ${new Date().toLocaleString('pt-BR')}</div>
+      <table><thead><tr>${th}</tr></thead><tbody>${corpo}${linhaResumo(total, `TOTAL GERAL (${qtd})`, 'tot')}</tbody></table></body></html>`);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 300);
   };
 
   // Função de exportação para Excel
@@ -1188,9 +1322,40 @@ export default function ContasAReceber() {
     setFiltros(prev => {
       const novos = { ...prev } as any;
       ['cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'search', 'status',
-       'vendedor', 'operadora', 'conta', 'tipo', 'com_atraso'
+       'vendedor', 'operadora', 'conta', 'tipo', 'com_atraso', 'filtros_avancados'
       ].forEach(k => delete novos[k]);
       return novos; // mantém data_inicio/data_fim (período)
+    });
+    setPaginaAtual(1);
+  };
+
+  // Chips dos filtros ativos (avançados + status) — visíveis na tela, com ✕ para remover.
+  const chipsFiltros: { chave: string; label: string }[] = (() => {
+    const out: { chave: string; label: string }[] = [];
+    if (filtros.status) out.push({ chave: '__status', label: `Status: ${filtros.status}` });
+    try {
+      const av = (filtros as any).filtros_avancados ? JSON.parse((filtros as any).filtros_avancados) : [];
+      for (const f of Array.isArray(av) ? av : []) {
+        const camp = ROTULO_CAMPO_FILTRO[String(f.campo).toLowerCase()] || String(f.campo);
+        const opl = ROTULO_OP_FILTRO[f.tipo] || f.tipo;
+        const val = f.tipo === 'nulo' || f.tipo === 'nao_nulo' ? '' : ` ${f.valor}`;
+        out.push({ chave: String(f.campo), label: `${camp} ${opl}${val}` });
+      }
+    } catch { /* json inválido — ignora */ }
+    return out;
+  })();
+
+  const removerChip = (chave: string) => {
+    setFiltros((prev) => {
+      const novos = { ...prev } as any;
+      if (chave === '__status') { delete novos.status; return novos; }
+      try {
+        const av = novos.filtros_avancados ? JSON.parse(novos.filtros_avancados) : [];
+        const rest = (Array.isArray(av) ? av : []).filter((f: any) => String(f.campo) !== chave);
+        if (rest.length) novos.filtros_avancados = JSON.stringify(rest);
+        else delete novos.filtros_avancados;
+      } catch { delete novos.filtros_avancados; }
+      return novos;
     });
     setPaginaAtual(1);
   };
@@ -1199,53 +1364,27 @@ export default function ContasAReceber() {
   // O DataTable envia o nome da coluna em minúsculas (ex.: "número título", "nº documento").
   // Aqui traduzimos esses nomes para os campos aceitos pela API (FiltrosContasReceber).
   const handleFiltroAvancado = (filtrosDinamicos: { campo: string; tipo: string; valor: string }[]) => {
-    // Campos controlados pelo filtro rápido — recalculados a cada chamada
-    const camposGerenciados: (keyof FiltrosContasReceber)[] = [
-      'cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'status',
-    ];
-
-    // Parte dos filtros atuais (mantém período/data) e zera os campos gerenciados,
-    // para que valores apagados sejam removidos corretamente.
+    // Parte dos filtros atuais (mantém período/data) e zera os campos gerenciados pelo filtro
+    // avançado, para que valores apagados sejam removidos corretamente.
     const filtrosMesclados = { ...filtros };
-    camposGerenciados.forEach((c) => { delete filtrosMesclados[c]; });
+    (['status', 'cod_receb', 'cliente', 'nro_doc', 'cod_fat', 'banco', 'filtros_avancados'] as (keyof FiltrosContasReceber)[])
+      .forEach((c) => { delete filtrosMesclados[c]; });
 
-    filtrosDinamicos.forEach(({ campo, valor }) => {
+    // status é um CASE calculado → vai pelo statusFilter (param 'status'). As demais colunas vão
+    // para o filtro genérico server-side (campo + operador + valor), montado pela API.
+    const avancados: { campo: string; tipo: string; valor: string }[] = [];
+    filtrosDinamicos.forEach(({ campo, tipo, valor }) => {
+      const campoLc = String(campo).toLowerCase().trim();
       const v = (valor ?? '').trim();
-      if (!v) return; // vazio = filtro removido (já apagado acima)
-
-      switch (campo) {
-        case 'número título':
-        case 'cod_receb':
-          filtrosMesclados.cod_receb = v;
-          break;
-        case 'cliente':
-        case 'codcli':
-        case 'nome_cliente':
-          filtrosMesclados.cliente = v;
-          break;
-        case 'nº documento':
-        case 'nro_doc':
-          filtrosMesclados.nro_doc = v;
-          break;
-        case 'fatura':
-        case 'cod_fat':
-          filtrosMesclados.cod_fat = v;
-          break;
-        case 'banco':
-          filtrosMesclados.banco = v;
-          break;
-        case 'status':
-          filtrosMesclados.status = v as any;
-          break;
-        case 'rec':
-          if (v === 'S') filtrosMesclados.status = 'recebido';
-          else if (v === 'N') filtrosMesclados.status = 'pendente';
-          break;
-        case 'cancel':
-          if (v === 'S') filtrosMesclados.status = 'cancelado';
-          break;
+      if (campoLc === 'status') { if (v) filtrosMesclados.status = v as any; return; }
+      if (campoLc === 'rec') { if (v === 'S') filtrosMesclados.status = 'recebido'; else if (v === 'N') filtrosMesclados.status = 'pendente'; return; }
+      if (campoLc === 'cancel') { if (v === 'S') filtrosMesclados.status = 'cancelado'; return; }
+      // 'nulo'/'nao_nulo' não exigem valor; os demais operadores exigem.
+      if (v || tipo === 'nulo' || tipo === 'nao_nulo') {
+        avancados.push({ campo: campoLc, tipo: tipo || 'contém', valor: v });
       }
     });
+    if (avancados.length) filtrosMesclados.filtros_avancados = JSON.stringify(avancados);
 
     setFiltros(filtrosMesclados);
     setPaginaAtual(1);
@@ -1571,52 +1710,63 @@ export default function ContasAReceber() {
             >
               <Search className="w-4 h-4" /> Pesquisar
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                const hoje = new Date();
-                const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-                setRelatParams((p) => ({
-                  ...p,
-                  data_inicio: p.data_inicio || ini.toISOString().split('T')[0],
-                  data_fim: p.data_fim || fim.toISOString().split('T')[0],
-                }));
-                setModalRelatorioAberto(true);
-              }}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileBarChart className="w-4 h-4" /> Relatório
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalImportacaoCartao(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <CreditCard className="w-4 h-4" /> Importar Cartão
-            </button>
-            <button
-              type="button"
-              onClick={() => abrirComprovantes()}
-              title={selecionadosBaixa.length > 0 ? 'Abre já filtrado pelo cliente selecionado' : 'Comprovantes de hoje'}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileText className="w-4 h-4" /> Comprovantes
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalConciliacaoAberto(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <Upload className="w-4 h-4" /> Conciliação
-            </button>
-            <button
-              type="button"
-              onClick={() => setModalAIdentificarAberto(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition"
-            >
-              <FileSearch className="w-4 h-4" /> A Identificar
-            </button>
+            {/* Ações secundárias agrupadas num menu (mantém a barra em 1 linha) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuAcoesAberto((v) => !v)}
+                aria-expanded={menuAcoesAberto}
+                aria-haspopup="true"
+                className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition ${
+                  menuAcoesAberto
+                    ? 'bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                <MoreHorizontal className="w-4 h-4" /> Ações <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              </button>
+              {menuAcoesAberto && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuAcoesAberto(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[240px] rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-1.5">
+                    <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      Ações do Contas a Receber
+                    </div>
+                    {[
+                      {
+                        icon: <FileBarChart className="w-4 h-4" />, label: 'Relatório',
+                        onClick: () => {
+                          const hoje = new Date();
+                          const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+                          const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+                          setRelatParams((p) => ({
+                            ...p,
+                            data_inicio: p.data_inicio || ini.toISOString().split('T')[0],
+                            data_fim: p.data_fim || fim.toISOString().split('T')[0],
+                          }));
+                          setModalRelatorioAberto(true);
+                        },
+                      },
+                      { icon: <CreditCard className="w-4 h-4" />, label: 'Importar Cartão', onClick: () => setModalImportacaoCartao(true) },
+                      { icon: <FileText className="w-4 h-4" />, label: 'Comprovantes', onClick: () => abrirComprovantes() },
+                      { icon: <Upload className="w-4 h-4" />, label: 'Conciliação', onClick: () => setModalConciliacaoAberto(true) },
+                      { icon: <FileSearch className="w-4 h-4" />, label: 'A Identificar', onClick: () => setModalAIdentificarAberto(true) },
+                      { icon: <FileBarChart className="w-4 h-4" />, label: 'Consulta Avançada', onClick: () => setModalConsultaAvancadaAberto(true) },
+                      { icon: <DollarSign className="w-4 h-4" />, label: 'Crédito Temporário', onClick: () => setModalCreditoTempAberto(true) },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => { setMenuAcoesAberto(false); item.onClick(); }}
+                        className="flex w-full items-center gap-2.5 px-2 py-2 rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/40 dark:hover:text-blue-300 transition"
+                      >
+                        <span className="text-gray-400 dark:text-gray-500">{item.icon}</span> {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setModalNovaContaAberto(true)}
@@ -1652,6 +1802,27 @@ export default function ContasAReceber() {
           </div>
         )}
 
+        {/* Filtros ativos — visíveis e removíveis (inclui os do "Filtro avançado") */}
+        {chipsFiltros.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Filtros ativos:</span>
+            {chipsFiltros.map((ch) => (
+              <span
+                key={ch.chave}
+                className="inline-flex items-center gap-1.5 text-[11px] rounded-full px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              >
+                {ch.label}
+                <button type="button" onClick={() => removerChip(ch.chave)} title="Remover este filtro" className="hover:text-blue-900 dark:hover:text-blue-100">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            <button type="button" onClick={handleLimparFiltros} className="text-[11px] text-red-600 hover:underline ml-1">
+              Limpar tudo
+            </button>
+          </div>
+        )}
+
         {/* Container da tabela com altura calculada */}
         <div className="flex-1 min-h-20 flex flex-col">
           <DataTableContasPagar
@@ -1679,16 +1850,38 @@ export default function ContasAReceber() {
             onFiltroChange={handleFiltroAvancado}
             onExportarExcel={handleExportarDireto}
             nonsortableColumns={['☑️', 'Ações']}
+            // Todas as colunas filtráveis server-side (obs não existe em dbreceb; parcela/juros são
+            // calculadas → ficam fora). Os rótulos espelham os headers do datatable.
             colunasFiltro={[
               'cod_receb',
+              'codcli',
               'nome_cliente',
+              'dt_emissao',
               'dt_venc',
               'dt_pgto',
               'valor_original',
-              'status',
+              'valor_recebido',
               'nro_doc',
               'cod_fat',
+              'banco',
+              'descricao_conta',
+              'status',
             ]}
+            rotulosFiltro={{
+              cod_receb: 'Número Título',
+              codcli: 'Cód. Cliente',
+              nome_cliente: 'Cliente',
+              dt_emissao: 'Emissão',
+              dt_venc: 'Vencimento',
+              dt_pgto: 'Pagamento',
+              valor_original: 'Valor Original',
+              valor_recebido: 'Valor Recebido',
+              nro_doc: 'Nº Documento',
+              cod_fat: 'Fatura',
+              banco: 'Banco',
+              descricao_conta: 'Conta Financeira',
+              status: 'Status',
+            }}
           />
         </div>
       </main>
@@ -2793,6 +2986,20 @@ export default function ContasAReceber() {
         }}
       />
 
+      {/* Baixar Juros (liberar taxa) por linha */}
+      <ModalBaixarJuros
+        isOpen={modalBaixarJurosAberto}
+        conta={contaBaixarJuros}
+        username={user?.usuario || ''}
+        user={user as any}
+        onClose={() => setModalBaixarJurosAberto(false)}
+        onSuccess={() => {
+          setModalBaixarJurosAberto(false);
+          setContaBaixarJuros(null);
+          consultarContasReceber(paginaAtual, itensPorPagina, filtros);
+        }}
+      />
+
       {/* Modal de Comprovantes de Pagamento (aba do Delphi) */}
       <ModalComprovantes
         isOpen={modalComprovantesAberto}
@@ -2808,6 +3015,20 @@ export default function ContasAReceber() {
         usuario={user?.usuario || ''}
         filial={(user as any)?.filial ? String((user as any).filial) : ''}
         codContaPadrao={(user as any)?.cod_conta ? String((user as any).cod_conta) : ''}
+      />
+
+      {/* Consulta Avançada do Financeiro — Recebimentos (dados de db_manaus = unidade MAO) */}
+      <ModalConsultaAvancadaReceb
+        isOpen={modalConsultaAvancadaAberto}
+        onClose={() => setModalConsultaAvancadaAberto(false)}
+        usuario={user?.usuario || ''}
+        filial="MAO"
+      />
+
+      {/* Crédito Temporário (Financeiro › Contas a Receber › Crédito Temporário no Delphi) */}
+      <CreditoTemporarioModal
+        isOpen={modalCreditoTempAberto}
+        onClose={() => setModalCreditoTempAberto(false)}
       />
 
       <ModalAIdentificar
@@ -3138,35 +3359,32 @@ export default function ContasAReceber() {
       {/* Modal Relatório */}
       <Modal
         isOpen={modalRelatorioAberto}
-        onClose={() => setModalRelatorioAberto(false)}
+        onClose={() => { setModalRelatorioAberto(false); setRelatResultado(null); }}
         title="Gerar Relatório - Contas a Receber"
+        width="w-[97%] max-w-7xl"
+        bodyClassName="overflow-visible"
       >
         <div className="form-compact space-y-4 p-4">
           <p className="text-xs text-gray-600 dark:text-gray-400">
             Escolha o relatório e informe os <b>parâmetros próprios</b> dele (período, cliente, conta, classe e taxa de juros), como na tela de relatórios do Delphi.
           </p>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
-            Tipo de Relatório
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {OPCOES_RELATORIO.map((op) => (
-              <button
-                key={op.value}
-                type="button"
-                onClick={() => setTipoRelatorio(op.value)}
-                className={`text-left px-3 py-2 rounded-md border transition ${
-                  tipoRelatorio === op.value
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-zinc-700'
-                }`}
-              >
-                <div className="text-xs font-semibold">{op.label}</div>
-                <div className={`text-[10px] ${tipoRelatorio === op.value ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {op.desc}
-                </div>
-              </button>
-            ))}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 block mb-1">
+              Tipo de Relatório
+            </label>
+            <select
+              value={tipoRelatorio}
+              onChange={(e) => { setTipoRelatorio(e.target.value as TipoRelatorio); setRelatResultado(null); }}
+              className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-zinc-800 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-500"
+            >
+              {OPCOES_RELATORIO.map((op) => (
+                <option key={op.value} value={op.value}>{op.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+              {OPCOES_RELATORIO.find((o) => o.value === tipoRelatorio)?.desc}
+            </p>
           </div>
 
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1">
@@ -3248,69 +3466,139 @@ export default function ContasAReceber() {
             )}
           </div>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 flex items-center justify-between">
-            <span>Colunas do Relatório</span>
-            <span className="text-[10px] normal-case font-normal text-gray-400">marque para exibir · arraste para reordenar</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-            {relatColunas.map((c, i) => (
-              <div
-                key={c.key}
-                draggable
-                onDragStart={() => setDragColIdx(i)}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (dragColIdx !== null && dragColIdx !== i) {
-                    moverColuna(dragColIdx, i);
-                    setDragColIdx(i);
-                  }
-                }}
-                onDragEnd={() => setDragColIdx(null)}
-                className={`flex items-center gap-2 px-2 py-1 rounded border text-[11px] cursor-move select-none ${
-                  dragColIdx === i
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                    : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800'
-                }`}
-                title="Arraste para reordenar"
-              >
-                <span className="text-gray-400">⠿</span>
-                <input
-                  type="checkbox"
-                  checked={c.visivel}
-                  onChange={() => toggleColunaVisivel(i)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-3.5 w-3.5"
-                />
-                <span className={c.visivel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 line-through'}>{c.label}</span>
+          {/* Barra de ações: Gerar (preview) + Colunas (toggle) + Imprimir/PDF/Excel */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={gerandoRelatorio}
+              onClick={gerarPreviewRelatorio}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-md transition-colors text-sm font-medium"
+            >
+              {gerandoRelatorio ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Gerar
+            </button>
+            <button
+              type="button"
+              onClick={() => setMostrarColunasRelat((v) => !v)}
+              className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800"
+            >
+              <Columns3 className="w-4 h-4" />
+              Colunas ({relatColunas.filter((c) => c.visivel).length}/{relatColunas.length})
+            </button>
+            {relatResultado && relatResultado.rows.length > 0 && (
+              <div className="flex gap-2 ml-auto">
+                <button type="button" onClick={imprimirRelatorio} className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <Printer className="w-4 h-4" /> Imprimir
+                </button>
+                <button type="button" disabled={gerandoRelatorio} onClick={() => handleGerarRelatorio('pdf')} className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <FileText className="w-4 h-4" /> PDF
+                </button>
+                <button type="button" disabled={gerandoRelatorio} onClick={() => handleGerarRelatorio('excel')} className="flex items-center gap-1 px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-zinc-800">
+                  <Download className="w-4 h-4" /> Excel
+                </button>
               </div>
-            ))}
+            )}
           </div>
 
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300 border-b pb-1 mt-4">
-            Formato de Saída
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('pdf')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
-              Gerar PDF
-            </button>
-            <button
-              type="button"
-              disabled={gerandoRelatorio}
-              onClick={() => handleGerarRelatorio('excel')}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-md transition-colors text-sm font-medium"
-            >
-              {gerandoRelatorio ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              Gerar Excel
-            </button>
-          </div>
+          {/* Gerenciador de colunas (colapsável) */}
+          {mostrarColunasRelat && (
+            <div className="border rounded-md p-3 bg-gray-50 dark:bg-zinc-900/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Colunas do Relatório (marque para exibir · arraste para reordenar)</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                {relatColunas.map((c, i) => (
+                  <div
+                    key={c.key}
+                    draggable
+                    onDragStart={() => setDragColIdx(i)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragColIdx !== null && dragColIdx !== i) { moverColuna(dragColIdx, i); setDragColIdx(i); }
+                    }}
+                    onDragEnd={() => setDragColIdx(null)}
+                    className={`flex items-center gap-2 px-2 py-1 rounded border text-[11px] cursor-move select-none ${
+                      dragColIdx === i ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30' : 'border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800'
+                    }`}
+                    title="Arraste para reordenar"
+                  >
+                    <span className="text-gray-400">⠿</span>
+                    <input type="checkbox" checked={c.visivel} onChange={() => toggleColunaVisivel(i)} onClick={(e) => e.stopPropagation()} className="h-3.5 w-3.5" />
+                    <span className={c.visivel ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 line-through'}>{c.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview do relatório */}
+          {relatResultado && relatResultado.rows.length > 0 && (() => {
+            const cols = colunasVisiveisRel();
+            const { grupos, total, qtd } = agruparRelat(relatResultado.rows, relatResultado.layout);
+            const ehNum = (k: string) => TIPO_COL_REL[k] === 'money' || TIPO_COL_REL[k] === 'num';
+            return (
+              <div className="border rounded-md overflow-auto max-h-[45vh]">
+                <table className="w-full text-xs whitespace-nowrap">
+                  <thead className="sticky top-0 bg-gray-100 dark:bg-zinc-800">
+                    <tr>{cols.map((c) => <th key={c.key} className={`px-2 py-1 border-b text-left ${ehNum(c.key) ? 'text-right' : ''}`}>{c.label}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {grupos.map((g, gi) => (
+                      <FragmentRelGrupo key={gi} rotulo={g.rotulo} linhas={g.linhas} sub={g.sub} cols={cols} valorColRel={valorColRel} brlRel={brlRel} moneyKeys={MONEY_KEYS_REL} ehNum={ehNum} />
+                    ))}
+                    <tr className="bg-blue-100 dark:bg-blue-900/40 font-bold">
+                      {cols.map((c, i) => (
+                        <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>
+                          {MONEY_KEYS_REL.includes(c.key) ? brlRel(total[c.key]) : i === 0 ? `TOTAL GERAL (${qtd})` : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+          {relatResultado && relatResultado.rows.length === 0 && (
+            <p className="text-sm text-muted-foreground py-6 text-center">Nenhum registro encontrado para os filtros informados.</p>
+          )}
         </div>
       </Modal>
     </div>
+  );
+}
+
+// Bloco de grupo do preview do relatório (cabeçalho opcional + linhas + subtotal).
+function FragmentRelGrupo({ rotulo, linhas, sub, cols, valorColRel, brlRel, moneyKeys, ehNum }: {
+  rotulo: string | null;
+  linhas: any[];
+  sub: Record<string, number>;
+  cols: { key: string; label: string }[];
+  valorColRel: (key: string, row: any) => string;
+  brlRel: (v: any) => string;
+  moneyKeys: string[];
+  ehNum: (k: string) => boolean;
+}) {
+  return (
+    <>
+      {rotulo && (
+        <tr className="bg-slate-200 dark:bg-slate-700 font-semibold">
+          <td className="px-2 py-1" colSpan={cols.length}>{rotulo} — {linhas.length} título(s)</td>
+        </tr>
+      )}
+      {linhas.map((row, i) => (
+        <tr key={i} className="border-b hover:bg-gray-50 dark:hover:bg-zinc-800/50">
+          {cols.map((c) => <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>{valorColRel(c.key, row)}</td>)}
+        </tr>
+      ))}
+      {rotulo && (
+        <tr className="bg-gray-100 dark:bg-zinc-800 font-semibold">
+          {cols.map((c, i) => (
+            <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>
+              {moneyKeys.includes(c.key) ? brlRel(sub[c.key]) : i === 0 ? 'SUBTOTAL' : ''}
+            </td>
+          ))}
+        </tr>
+      )}
+    </>
   );
 }
