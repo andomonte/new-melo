@@ -3362,8 +3362,10 @@ export default function ContasAReceber() {
         onClose={() => { setModalRelatorioAberto(false); setRelatResultado(null); }}
         title="Gerar Relatório - Contas a Receber"
         width="w-[97%] max-w-7xl"
-        bodyClassName="overflow-visible"
       >
+        {/* Sem overflow-visible: o corpo do modal rola normalmente. O dropdown
+            da conta (Autocomplete) sai em portal, então não é mais recortado —
+            era só por causa dele que este modal abria mão do scroll. */}
         <div className="form-compact space-y-4 p-4">
           <p className="text-xs text-gray-600 dark:text-gray-400">
             Escolha o relatório e informe os <b>parâmetros próprios</b> dele (período, cliente, conta, classe e taxa de juros), como na tela de relatórios do Delphi.

@@ -36,19 +36,9 @@ export default async function handle(
     const queryParams: any[] = [];
 
     if (search) {
-      // Busca por código, descrição ou referência
-      const isNumericSearch = /^\d+$/.test(search as string);
-
-      if (isNumericSearch) {
-        // Se for numérico, buscar principalmente por código
-        whereClause = 'WHERE p.codprod ILIKE $1 OR p.descr ILIKE $1';
-        queryParams.push(`%${search}%`);
-      } else {
-        // Se for texto, buscar principalmente por descrição
-        whereClause =
-          'WHERE p.descr ILIKE $1 OR p.ref ILIKE $1 OR p.codprod ILIKE $1';
-        queryParams.push(`%${search}%`);
-      }
+      // Busca SEMPRE por REFERÊNCIA (p.ref) e descrição — nunca pelo codprod interno.
+      whereClause = 'WHERE p.ref ILIKE $1 OR p.descr ILIKE $1';
+      queryParams.push(`%${search}%`);
     }
 
     // Contar o total de registros
@@ -67,7 +57,7 @@ export default async function handle(
       ${whereClause}
       ORDER BY 
         CASE 
-          WHEN p.codprod ILIKE $${queryParams.length + 1} THEN 1
+          WHEN p.ref ILIKE $${queryParams.length + 1} THEN 1
           WHEN p.descr ILIKE $${queryParams.length + 2} THEN 2
           ELSE 3
         END,

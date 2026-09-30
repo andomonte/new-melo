@@ -180,8 +180,11 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
     const pool = getPgPool(filial);
     client = await pool.connect();
 
-    // Busca por Cód. do Produto
-    const whereClause = search ? `WHERE "CODPROD" ILIKE $3` : '';
+    // Busca por REFERÊNCIA (nunca pelo codprod interno). A view DBFORMACAOPRVENDA só
+    // tem CODPROD, então filtra os codprod cuja referência (dbprod.ref) casa com o termo.
+    const whereClause = search
+      ? `WHERE "CODPROD" IN (SELECT codprod FROM dbprod WHERE ref ILIKE $3)`
+      : '';
     const searchParam = search ? [`%${search}%`] : [];
 
     const totalQuery = `SELECT COUNT(*) FROM "DBFORMACAOPRVENDA" ${whereClause}`;

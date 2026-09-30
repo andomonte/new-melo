@@ -38,11 +38,11 @@ const baixarBlob = (blob: Blob, nome: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-// Tabela de movimento (entradas ou saídas). OFICIAL só nas ENTRADAS (fiel ao Delphi).
+// Tabela de movimento (entradas ou saídas).
+// CX_GERAL e OFICIAL saíram da tela e dos relatórios — não são usadas na
+// conferência do caixa e só ocupavam largura. Os campos continuam vindo da API.
 function GridMov({ linhas, coluna }: { linhas: Linha[]; coluna: 'ENTRADA' | 'SAIDA' }) {
   const total = linhas.reduce((a, x) => a + x.valor, 0);
-  const temOficial = coluna === 'ENTRADA';
-  const nCols = temOficial ? 6 : 5;
   return (
     <div className="overflow-auto border border-gray-200 rounded-lg h-full">
       <table className="text-xs min-w-max w-full">
@@ -52,21 +52,17 @@ function GridMov({ linhas, coluna }: { linhas: Linha[]; coluna: 'ENTRADA' | 'SAI
             <th className="px-2 py-1.5 text-left">CONTA</th>
             <th className="px-2 py-1.5 text-left">FORMA_PGTO</th>
             <th className="px-2 py-1.5 text-right">{coluna}</th>
-            <th className="px-2 py-1.5 text-center">CX_GERAL</th>
-            {temOficial && <th className="px-2 py-1.5 text-center">OFICIAL</th>}
           </tr>
         </thead>
         <tbody>
           {linhas.length === 0 ? (
-            <tr><td colSpan={nCols} className="text-center text-gray-400 py-6">Sem movimento.</td></tr>
+            <tr><td colSpan={4} className="text-center text-gray-400 py-6">Sem movimento.</td></tr>
           ) : linhas.map((l, i) => (
             <tr key={i} className="border-t border-gray-100 hover:bg-blue-50">
               <td className="px-2 py-1 whitespace-nowrap max-w-[360px] truncate" title={l.historico}>{l.historico}</td>
               <td className="px-2 py-1 whitespace-nowrap" title={l.banco}>{l.conta}</td>
               <td className="px-2 py-1 whitespace-nowrap">{l.forma_pgto}</td>
               <td className="px-2 py-1 text-right tabular-nums whitespace-nowrap">{brl(l.valor)}</td>
-              <td className="px-2 py-1 text-center">{l.cx_geral}</td>
-              {temOficial && <td className="px-2 py-1 text-center">{l.oficial}</td>}
             </tr>
           ))}
         </tbody>
@@ -75,7 +71,6 @@ function GridMov({ linhas, coluna }: { linhas: Linha[]; coluna: 'ENTRADA' | 'SAI
             <tr className="bg-gray-100 font-semibold border-t-2 border-gray-300">
               <td className="px-2 py-1" colSpan={3}>Total</td>
               <td className="px-2 py-1 text-right tabular-nums">{brl(total)}</td>
-              <td colSpan={temOficial ? 2 : 1} />
             </tr>
           </tfoot>
         )}
@@ -185,9 +180,25 @@ function ResumoFormaTabela({ linhas, coluna }: { linhas: Linha[]; coluna: 'ENTRA
   );
 }
 
-// Rodapé com os dois resumos lado a lado (por conta/forma + por forma).
-function ResumoRodape({ linhas, coluna }: { linhas: Linha[]; coluna: 'ENTRADA' | 'SAIDA' }) {
+// Rodapé com os resumos. Com uma conta filtrada o "resumo por conta" seria uma
+// única linha repetindo o total — nesse caso fica só o resumo por forma.
+function ResumoRodape({
+  linhas,
+  coluna,
+  soForma,
+}: {
+  linhas: Linha[];
+  coluna: 'ENTRADA' | 'SAIDA';
+  soForma: boolean;
+}) {
   if (linhas.length === 0) return null;
+  if (soForma) {
+    return (
+      <div className="shrink-0">
+        <ResumoFormaTabela linhas={linhas} coluna={coluna} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-2 shrink-0">
       <div className="flex-1 min-w-[280px]"><ResumoContas linhas={linhas} coluna={coluna} /></div>
@@ -206,6 +217,10 @@ export default function CaixaDiario() {
   const [aba, setAba] = useState<Aba>('e01');
   const [carregando, setCarregando] = useState(false);
   const [dados, setDados] = useState<Resposta | null>(null);
+  // Conta que gerou os dados em tela (não a digitada agora) — é ela que decide
+  // se o relatório sai com o resumo por conta.
+  const [contaFiltrada, setContaFiltrada] = useState('');
+  const soForma = contaFiltrada !== '';
 
   // Combobox de conta — busca em dbconta (mesmo endpoint do Contas a Pagar)
   const buscarContas = async (term: string) => {
@@ -227,6 +242,7 @@ export default function CaixaDiario() {
       const d: Resposta = await r.json();
       if (!r.ok || !d.ok) throw new Error(d.erro || 'Falha ao gerar o movimento.');
       setDados(d);
+      setContaFiltrada(conta.trim());
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao consultar.');
       setDados(null);
@@ -244,6 +260,20 @@ export default function CaixaDiario() {
     try {
       const ExcelJS = (await import('exceljs')).default;
       const wb = new ExcelJS.Workbook();
+      // Fonte reduzida: o padrão (Calibri 11) estoura a largura e gasta página
+      // na impressão da planilha.
+      const FONTE = 7;
+      const compactar = (ws: any) => {
+        ws.properties.defaultRowHeight = 11;
+        ws.eachRow({ includeEmpty: false }, (row: any) => {
+          row.height = undefined; // deixa o Excel ajustar com a fonte menor
+          row.eachCell({ includeEmpty: false }, (cell: any) => {
+            cell.font = { ...(cell.font || {}), name: 'Arial', size: cell.font?.size && cell.font.size > 10 ? 9 : FONTE };
+          });
+        });
+        // Cabe numa folha de largura na impressão da própria planilha.
+        ws.pageSetup = { ...(ws.pageSetup || {}), fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } };
+      };
       // Resumo por Conta → Forma de pagamento (anexado ao fim de cada planilha)
       const addResumo = (ws: any, linhas: Linha[], col: string) => {
         const resumo = resumoPorConta(linhas);
@@ -271,15 +301,14 @@ export default function CaixaDiario() {
         tg.font = { bold: true }; tg.getCell(2).numFmt = '#,##0.00';
       };
       const addAba = (nome: string, linhas: Linha[], col: string) => {
-        const oficial = col === 'ENTRADA';
         const ws = wb.addWorksheet(nome.slice(0, 31));
-        const head = ['HISTÓRICO', 'CONTA', 'FORMA_PGTO', col, 'CX_GERAL', ...(oficial ? ['OFICIAL'] : [])];
-        ws.addRow(head).font = { bold: true };
-        linhas.forEach((l) => ws.addRow([l.historico, l.conta, l.forma_pgto, l.valor, l.cx_geral, ...(oficial ? [l.oficial] : [])]));
-        ws.addRow(['Total', '', '', linhas.reduce((a, x) => a + x.valor, 0), '', ...(oficial ? [''] : [])]).font = { bold: true };
-        addResumo(ws, linhas, col);
+        ws.addRow(['HISTÓRICO', 'CONTA', 'FORMA_PGTO', col]).font = { bold: true };
+        linhas.forEach((l) => ws.addRow([l.historico, l.conta, l.forma_pgto, l.valor]));
+        ws.addRow(['Total', '', '', linhas.reduce((a, x) => a + x.valor, 0)]).font = { bold: true };
+        if (!soForma) addResumo(ws, linhas, col);
         addResumoForma(ws, linhas, col);
         ws.getColumn(1).width = 45; ws.getColumn(2).width = 22; ws.getColumn(4).numFmt = '#,##0.00';
+        compactar(ws);
       };
       // SEMPRE gera TODAS as abas, cada uma numa planilha (independente da aba ativa)
       addAba('Entradas 01', dados.entradas01, 'ENTRADA');
@@ -296,16 +325,17 @@ export default function CaixaDiario() {
       ws.addRow([]);
       const secao = (titulo: string, linhas: Linha[], col: string) => {
         ws.addRow([titulo]).font = { bold: true };
-        ws.addRow(['HISTÓRICO', 'CONTA', 'FORMA_PGTO', col, 'CX_GERAL', 'OFICIAL']).font = { bold: true };
-        linhas.forEach((l) => ws.addRow([l.historico, l.conta, l.forma_pgto, l.valor, l.cx_geral, l.oficial]));
-        ws.addRow(['Total', '', '', linhas.reduce((a, x) => a + x.valor, 0), '', '']).font = { bold: true };
-        addResumo(ws, linhas, col);
+        ws.addRow(['HISTÓRICO', 'CONTA', 'FORMA_PGTO', col]).font = { bold: true };
+        linhas.forEach((l) => ws.addRow([l.historico, l.conta, l.forma_pgto, l.valor]));
+        ws.addRow(['Total', '', '', linhas.reduce((a, x) => a + x.valor, 0)]).font = { bold: true };
+        if (!soForma) addResumo(ws, linhas, col);
         addResumoForma(ws, linhas, col);
         ws.addRow([]);
       };
       secao('ENTRADAS', dados.geralEntradas, 'ENTRADA');
       secao('SAÍDAS', dados.geralSaidas, 'SAIDA');
       ws.getColumn(1).width = 45; ws.getColumn(2).width = 22; ws.getColumn(4).numFmt = '#,##0.00';
+      compactar(ws);
       const buf = await wb.xlsx.writeBuffer();
       baixarBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `caixa-diario-${data}.xlsx`);
     } catch (e: any) { toast.error('Falha ao gerar Excel: ' + (e?.message || '')); }
@@ -315,13 +345,12 @@ export default function CaixaDiario() {
     if (!dados) return;
     const w = window.open('', '_blank', 'width=1000,height=800'); if (!w) return;
     const tabela = (titulo: string, linhas: Linha[], col: string) => {
-      const oficial = col === 'ENTRADA';
-      const nc = oficial ? 6 : 5;
-      const rows = linhas.map((l) => `<tr><td>${l.historico}</td><td>${l.conta}</td><td>${l.forma_pgto}</td><td class="num">${brl(l.valor)}</td><td class="c">${l.cx_geral}</td>${oficial ? `<td class="c">${l.oficial}</td>` : ''}</tr>`).join('');
+      const rows = linhas.map((l) => `<tr><td>${l.historico}</td><td>${l.conta}</td><td>${l.forma_pgto}</td><td class="num">${brl(l.valor)}</td></tr>`).join('');
       const tot = linhas.reduce((a, x) => a + x.valor, 0);
-      return `<h3>${titulo}</h3><table><thead><tr><th>HISTÓRICO</th><th>CONTA</th><th>FORMA_PGTO</th><th>${col}</th><th>CX_GERAL</th>${oficial ? '<th>OFICIAL</th>' : ''}</tr></thead>
-        <tbody>${rows || `<tr><td colspan="${nc}">Sem movimento.</td></tr>`}</tbody>
-        <tfoot><tr class="forte"><td colspan="3">Total</td><td class="num">${brl(tot)}</td><td colspan="${oficial ? 2 : 1}"></td></tr></tfoot></table>`;
+      const cols = '<colgroup><col class="hist"><col class="conta"><col class="forma"><col class="val"></colgroup>';
+      return `<h3>${titulo}</h3><table>${cols}<thead><tr><th>HISTÓRICO</th><th>CONTA</th><th>FORMA_PGTO</th><th>${col}</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4">Sem movimento.</td></tr>'}</tbody>
+        <tfoot><tr class="forte"><td colspan="3">Total</td><td class="num">${brl(tot)}</td></tr></tfoot></table>`;
     };
     const resumoHtml = (col: string, linhas: Linha[]) => {
       const resumo = resumoPorConta(linhas);
@@ -345,20 +374,33 @@ export default function CaixaDiario() {
         <table class="res"><thead><tr><th>FORMA</th><th>${col}</th></tr></thead>
         <tbody>${body}</tbody><tfoot><tr class="forte"><td>TOTAL</td><td class="num">${brl(total)}</td></tr></tfoot></table>`;
     };
+    // Com conta filtrada o resumo por conta vira uma linha só repetindo o total:
+    // sai do relatório e fica apenas o resumo por forma.
     const bloco = (titulo: string, linhas: Linha[], col: string) =>
-      tabela(titulo, linhas, col) + resumoHtml(col, linhas) + resumoFormaHtml(col, linhas);
+      tabela(titulo, linhas, col)
+      + (soForma ? '' : resumoHtml(col, linhas))
+      + resumoFormaHtml(col, linhas);
     const corpo = aba === 'geral'
       ? bloco('Entradas', dados.geralEntradas, 'ENTRADA') + bloco('Saídas', dados.geralSaidas, 'SAIDA')
         + `<div class="tot">Entradas do Dia: ${brl(dados.totalEntrada)} &nbsp;|&nbsp; Saídas do Dia: ${brl(dados.totalSaida)} &nbsp;|&nbsp; Saldo do Dia: ${brl(dados.saldo)}</div>`
       : bloco(ABAS.find((a) => a.key === aba)!.label, abaAtual(dados), colAba);
-    w.document.write(`<html><head><title>Movimento Diário do Caixa</title><style>
-      body{font-family:Arial;font-size:9px;padding:12px}h2{margin:0}h3{margin:10px 0 4px}
-      table{border-collapse:collapse;width:100%;margin-bottom:6px}th,td{border:1px solid #ccc;padding:2px 4px}
-      th{background:#1e40af;color:#fff;text-align:left}.num{text-align:right}.c{text-align:center}.forte{background:#eef2ff;font-weight:bold}
-      .tot{margin-top:8px;font-weight:bold}
-      .res{max-width:540px}.res th{background:#374151}.ch{background:#dbeafe;font-weight:bold}.ind{padding-left:18px;color:#333}
+    // Tipografia enxuta: o relatório é longo e cada ponto a mais custa página.
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Movimento Diário do Caixa</title><style>
+      @page{size:A4 portrait;margin:8mm}
+      body{font-family:Arial,Helvetica,sans-serif;font-size:8px;line-height:1.15;padding:0;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      h2{margin:0;font-size:11px}h3{margin:5px 0 2px;font-size:9px}
+      .sub{font-size:8px;margin-bottom:3px}
+      table{border-collapse:collapse;width:100%;margin-bottom:4px;table-layout:fixed;font-size:8px}
+      th,td{border:1px solid #ccc;padding:1px 3px;font-size:8px;font-family:Arial,Helvetica,sans-serif;word-wrap:break-word;overflow-wrap:anywhere}
+      th{background:#1e40af;color:#fff;text-align:left}
+      .num{text-align:right;white-space:nowrap}.c{text-align:center;white-space:nowrap}
+      .forte{background:#eef2ff;font-weight:bold}
+      .tot{margin-top:5px;font-weight:bold;font-size:8px}
+      .res{max-width:380px}.res th{background:#374151}.ch{background:#dbeafe;font-weight:bold}.ind{padding-left:12px;color:#333}
+      thead{display:table-header-group}tr{page-break-inside:avoid}
+      col.hist{width:52%}col.conta{width:17%}col.forma{width:18%}col.val{width:13%}
     </style></head><body><h2>MELO DISTRIBUIDORA DE PECAS LTDA.</h2>
-      <div>Movimento Diário do Caixa — ${dataBR(dados.data)}</div>${corpo}</body></html>`);
+      <div class="sub">Movimento Diário do Caixa — ${dataBR(dados.data)}${contaFiltrada ? ` — Conta: ${contaLabel}` : ''}</div>${corpo}</body></html>`);
     w.document.close();
     setTimeout(() => { w.focus(); w.print(); }, 300);
   };
@@ -436,11 +478,11 @@ export default function CaixaDiario() {
             <div className="flex-1 min-w-0 flex flex-col gap-2 min-h-0">
               <div className="flex-1 min-h-0 flex flex-col gap-1">
                 <div className="flex-1 min-h-0"><GridMov linhas={dados.geralEntradas} coluna="ENTRADA" /></div>
-                <ResumoRodape linhas={dados.geralEntradas} coluna="ENTRADA" />
+                <ResumoRodape linhas={dados.geralEntradas} coluna="ENTRADA" soForma={soForma} />
               </div>
               <div className="flex-1 min-h-0 flex flex-col gap-1">
                 <div className="flex-1 min-h-0"><GridMov linhas={dados.geralSaidas} coluna="SAIDA" /></div>
-                <ResumoRodape linhas={dados.geralSaidas} coluna="SAIDA" />
+                <ResumoRodape linhas={dados.geralSaidas} coluna="SAIDA" soForma={soForma} />
               </div>
             </div>
             {/* painel de totais */}
@@ -462,7 +504,7 @@ export default function CaixaDiario() {
         ) : (
           <div className="flex-1 min-h-0 mt-2 flex flex-col gap-2">
             <div className="flex-1 min-h-0"><GridMov linhas={abaAtual(dados)} coluna={colAba} /></div>
-            <ResumoRodape linhas={abaAtual(dados)} coluna={colAba} />
+            <ResumoRodape linhas={abaAtual(dados)} coluna={colAba} soForma={soForma} />
           </div>
         )
       ) : (

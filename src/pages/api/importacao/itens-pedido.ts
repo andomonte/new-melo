@@ -74,7 +74,6 @@ const QUERY_ITENS_PEDIDO_FILTRO = `
     AND (
       LOWER(p.descr) LIKE LOWER($2)
       OR LOWER(p.ref) LIKE LOWER($2)
-      OR p.codprod LIKE $2
       OR orc.orc_id::text LIKE $2
     )
   ORDER BY orc.orc_id DESC, p.descr

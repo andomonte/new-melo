@@ -77,7 +77,6 @@ export default async function Sec(
         AND (
           p.descr ILIKE $1
           OR p.ref ILIKE $1
-          OR p.codprod::text ILIKE $1
         )
       ORDER BY
         CASE WHEN kb.dscbalcao45 IS NOT NULL AND kb.dscbalcao45 > 0 THEN 0 ELSE 1 END,

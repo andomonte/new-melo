@@ -28,7 +28,7 @@ export default async function handle(
                          WHERE m.codmarca = p.codmarca LIMIT 1), '') AS marca_nome
          FROM dbprod p
         WHERE p.excluido = 0
-          AND (p.ref ILIKE $1 OR p.descr ILIKE $1 OR p.codprod ILIKE $1)
+          AND (p.ref ILIKE $1 OR p.descr ILIKE $1)
         ORDER BY p.ref
         LIMIT ${LIMITE}`,
       [like],

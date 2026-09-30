@@ -58,6 +58,8 @@ export default function ComboboxInput({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const initialRef = useRef<string | undefined>(undefined);
+  const listaRef = useRef<HTMLDivElement>(null);
+  const opcoesRef = useRef<(HTMLDivElement | null)[]>([]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? '';
 
@@ -128,6 +130,33 @@ export default function ComboboxInput({
       )
     : options;
 
+  // Lista efetivamente renderizada. Antes a deduplicação acontecia só na hora
+  // de desenhar, então o índice do teclado podia apontar para outra opção.
+  const visiveis = filtered.filter(
+    (item, i, arr) => arr.findIndex((o) => o.value === item.value) === i,
+  );
+
+  // Acompanha a seleção pelas setas: rola SÓ a lista do dropdown (nada de
+  // scrollIntoView, que mexeria também no scroll do modal atrás).
+  useEffect(() => {
+    if (!open || selectedIndex < 0) return;
+    const lista = listaRef.current;
+    const item = opcoesRef.current[selectedIndex];
+    if (!lista || !item) return;
+    const rItem = item.getBoundingClientRect();
+    const rLista = lista.getBoundingClientRect();
+    if (rItem.top < rLista.top) lista.scrollTop -= rLista.top - rItem.top;
+    else if (rItem.bottom > rLista.bottom) lista.scrollTop += rItem.bottom - rLista.bottom;
+  }, [selectedIndex, open]);
+
+  // Ao abrir, começa no item já selecionado (e a rolagem acima o traz à vista).
+  useEffect(() => {
+    if (!open) return;
+    const i = visiveis.findIndex((o) => o.value === value);
+    setSelectedIndex(i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const selecionar = (opt: Option) => {
     if (initialRef.current === undefined) initialRef.current = value || '';
     if (opt.value !== initialRef.current) setModified(true);
@@ -139,6 +168,7 @@ export default function ComboboxInput({
 
   const handleChange = (texto: string) => {
     setSearch(texto);
+    setSelectedIndex(-1); // a lista muda; o destaque anterior perde o sentido
     if (!open) setOpen(true);
     onInputChange?.(texto);
     if (texto.length === 0 && !required) onValueChange?.('');
@@ -160,16 +190,16 @@ export default function ComboboxInput({
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((p) => (p < filtered.length - 1 ? p + 1 : 0));
+      setSelectedIndex((p) => (p < visiveis.length - 1 ? p + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex((p) => (p > 0 ? p - 1 : filtered.length - 1));
+      setSelectedIndex((p) => (p > 0 ? p - 1 : visiveis.length - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (selectedIndex >= 0 && selectedIndex < filtered.length) {
-        selecionar(filtered[selectedIndex]);
-      } else if (filtered.length === 1) {
-        selecionar(filtered[0]);
+      if (selectedIndex >= 0 && selectedIndex < visiveis.length) {
+        selecionar(visiveis[selectedIndex]);
+      } else if (visiveis.length === 1) {
+        selecionar(visiveis[0]);
       }
     } else if (e.key === 'Escape') {
       setOpen(false);
@@ -258,24 +288,20 @@ export default function ComboboxInput({
             className="rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 shadow-lg"
             style={dropdownStyle}
           >
-            <div className="max-h-52 overflow-y-auto p-1">
+            <div ref={listaRef} className="max-h-52 overflow-y-auto p-1">
               {loading ? (
                 <div className="px-2 py-3 text-xs text-center text-gray-500 dark:text-gray-400">
                   Carregando...
                 </div>
-              ) : filtered.length === 0 ? (
+              ) : visiveis.length === 0 ? (
                 <div className="px-2 py-3 text-xs text-center text-gray-500 dark:text-gray-400">
                   {termo ? 'Nenhum resultado encontrado' : 'Digite para buscar...'}
                 </div>
               ) : (
-                filtered
-                  .filter(
-                    (item, i, arr) =>
-                      arr.findIndex((o) => o.value === item.value) === i,
-                  )
-                  .map((option, index) => (
+                visiveis.map((option, index) => (
                     <div
                       key={`${option.value}-${index}`}
+                      ref={(el) => { opcoesRef.current[index] = el; }}
                       onClick={() => selecionar(option)}
                       onMouseEnter={() => setSelectedIndex(index)}
                       className={cn(
@@ -296,7 +322,7 @@ export default function ComboboxInput({
                         </span>
                       )}
                     </div>
-                  ))
+                ))
               )}
             </div>
           </div>,

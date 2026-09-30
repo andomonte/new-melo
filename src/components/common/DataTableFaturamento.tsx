@@ -22,6 +22,8 @@ interface Props {
   faturasSelecionadas: any[]; // já tem isso
   onAbrirDetalhesCliente: () => void;
   onAbrirDetalhesProduto: () => void;
+  /** Itens extras do menu "Opções" (ex.: ação Fechar/Voltar vendas). */
+  opcoesExtraSlot?: React.ReactNode;
 }
 
 export default function DataTableFaturamentoPadronizado({
@@ -41,6 +43,7 @@ export default function DataTableFaturamentoPadronizado({
   onAbrirDetalhesCliente,
   onAbrirDetalhesProduto,
   onSelecionarFaturas,
+  opcoesExtraSlot,
 }: Props) {
   const headers = useMemo(
     () => [
@@ -171,6 +174,7 @@ export default function DataTableFaturamentoPadronizado({
             uf: 'UF',
             transporte: 'Transporte',
           }}
+          opcoesExtraSlot={opcoesExtraSlot}
           searchRightSlot={
             <div className="flex items-center gap-1">
               <button

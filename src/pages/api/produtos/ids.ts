@@ -28,7 +28,7 @@ export default async function handle(
 
     if (search) {
       params.push(`%${search}%`);
-      conds.push(`(codprod ILIKE $1 OR descr ILIKE $1 OR ref ILIKE $1)`);
+      conds.push(`(descr ILIKE $1 OR ref ILIKE $1)`);
     }
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 

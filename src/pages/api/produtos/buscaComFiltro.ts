@@ -115,7 +115,7 @@ export default async function handle(
     // Busca geral
     if (productSearch && productSearch.trim()) {
       whereConditions.push(
-        `(p.codprod ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex})`,
+        `(p.descr ILIKE $${paramIndex} OR p.ref ILIKE $${paramIndex})`,
       );
       queryParams.push(`%${productSearch.trim()}%`);
       paramIndex++;

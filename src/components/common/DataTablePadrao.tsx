@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   Dialog,
@@ -50,6 +51,9 @@ interface DataTablePadraoProps {
   /** Conteúdo renderizado na linha de busca, à esquerda do botão "Opções"
    *  (ex.: um select de status standalone). */
   searchRightSlot?: React.ReactNode;
+  /** Itens extras renderizados no TOPO do menu "Opções" (ex.: DropdownMenuItem
+   *  de ações da tela). Quando presente, aparece acima dos itens padrão + separador. */
+  opcoesExtraSlot?: React.ReactNode;
   /** Se false, o componente NÃO salva/restaura o "Qtd. Itens" nas preferências
    *  do servidor. Use quando a tela persiste o perPage por conta própria
    *  (ex.: localStorage), evitando conflito. Padrão: true. */
@@ -149,6 +153,7 @@ export default function DataTablePadrao({
   searchInputPlaceholder,
   loading,
   searchRightSlot,
+  opcoesExtraSlot,
   persistPerPage = true,
   ordenacaoServidor = false,
   noDataMessage = 'Nenhum dado encontrado.',
@@ -710,6 +715,14 @@ export default function DataTablePadrao({
                 collisionPadding={8}
                 className="w-52 bg-white dark:bg-zinc-900 shadow-md border border-gray-300 dark:border-zinc-600 text-xs text-gray-700 dark:text-white cursor-pointer max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto whitespace-nowrap"
               >
+                {/* Ações extras da tela (ex.: Fechar vendas), no topo do menu */}
+                {opcoesExtraSlot && (
+                  <>
+                    {opcoesExtraSlot}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+
                 {/* Toggle Filtros rápidos */}
                 <DropdownMenuItem
                   onClick={() => {

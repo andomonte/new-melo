@@ -16,6 +16,7 @@ interface Armazem {
 }
 interface Produto {
   codprod: string;
+  ref: string;
   descr: string;
   marca_nome: string;
   multiplo: number | null;
@@ -307,7 +308,7 @@ export default function LocacoesProdutoCadastro() {
           />
         </div>
         <div className="relative flex-1 min-w-[260px]">
-          <Label className="text-xs">Localizar (código, descrição ou marca)</Label>
+          <Label className="text-xs">Localizar (referência, descrição ou marca)</Label>
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -362,7 +363,7 @@ export default function LocacoesProdutoCadastro() {
               <th className="px-3 py-2 text-center w-10 bg-gray-100 dark:bg-slate-800">
                 <input type="checkbox" checked={todosSelecionados} onChange={toggleTodos} title="Selecionar todos" />
               </th>
-              <th className="px-3 py-2 text-left w-24">Código</th>
+              <th className="px-3 py-2 text-left w-28">Referência</th>
               <th className="px-3 py-2 text-left">Descrição</th>
               <th className="px-3 py-2 text-left w-36">Marca</th>
               <th className="px-3 py-2 text-center w-16">Múlt.</th>
@@ -382,7 +383,7 @@ export default function LocacoesProdutoCadastro() {
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-gray-400">
                   {exigeBusca
-                    ? 'Digite ao menos 2 caracteres e pesquise por código, descrição ou marca.'
+                    ? 'Digite ao menos 2 caracteres e pesquise por referência, descrição ou marca.'
                     : 'Nenhum produto encontrado.'}
                 </td>
               </tr>
@@ -399,7 +400,7 @@ export default function LocacoesProdutoCadastro() {
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox" checked={sel} onChange={() => toggleSel(p.codprod)} />
                     </td>
-                    <td className="px-3 py-2 font-mono">{p.codprod}</td>
+                    <td className="px-3 py-2 font-mono">{p.ref}</td>
                     <td className="px-3 py-2">{p.descr}</td>
                     <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{p.marca_nome || '-'}</td>
                     <td className="px-3 py-2 text-center">{p.multiplo ?? 1}</td>

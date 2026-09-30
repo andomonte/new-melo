@@ -63,9 +63,11 @@ export default async function handle(
       const colsGeral = sf === 'ref' ? ['p.ref']
         : sf === 'aplicacao' ? ['p.aplic_extendida']
         : ['p.aplic_extendida', 'p.ref'];
+      // Multi-palavra (termo com espaço): inclui p.ref também, senão uma REFERÊNCIA
+      // com espaço (ex.: "MB 482") cai só em aplic_extendida e não é encontrada.
       const colTexto = sf === 'ref' ? ['p.ref']
         : sf === 'aplicacao' ? ['p.aplic_extendida']
-        : ['p.aplic_extendida'];
+        : ['p.aplic_extendida', 'p.ref'];
 
       // Extrair frases entre aspas
       const frases: string[] = [];

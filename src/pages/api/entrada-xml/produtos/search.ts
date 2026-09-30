@@ -132,18 +132,18 @@ export default async function handler(
         LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
         WHERE (
           LOWER(p.descr) LIKE LOWER($${searchParams.length + 1})
-          OR LOWER(p.codprod) LIKE LOWER($${searchParams.length + 1})
+          OR LOWER(p.ref) LIKE LOWER($${searchParams.length + 1})
           OR p.codbar LIKE $${searchParams.length + 2}
           OR (${whereConditions})
         )
         ORDER BY
           CASE
-            -- Prioridade 1: Match EXATO de código do produto (case-insensitive)
-            WHEN p.codprod = $${searchParams.length + 2} THEN 1
+            -- Prioridade 1: Match EXATO de referência (case-insensitive)
+            WHEN p.ref = $${searchParams.length + 2} THEN 1
             -- Prioridade 2: Match EXATO de código de barras
             WHEN p.codbar = $${searchParams.length + 2} THEN 2
-            -- Prioridade 3: Código do produto começa com o termo (mas não é exato)
-            WHEN LOWER(p.codprod) LIKE LOWER($${searchParams.length + 1}) THEN 3
+            -- Prioridade 3: Referência começa com o termo (mas não é exato)
+            WHEN LOWER(p.ref) LIKE LOWER($${searchParams.length + 1}) THEN 3
             -- Prioridade 4: Descrição contém o termo
             WHEN LOWER(p.descr) LIKE LOWER($${searchParams.length + 1}) THEN 4
             ELSE 5

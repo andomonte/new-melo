@@ -24,20 +24,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Busca SEMPRE por REFERÊNCIA (p.ref) — nunca pelo codprod interno —, além de
+    // descrição e marca. Regra de negócio: o usuário procura o produto pela referência.
     const params: any[] = [armId];
-    const where: string[] = [];
-    const isNumeric = /^\d+$/.test(busca);
-    if (isNumeric) {
-      params.push(`${busca}%`);
-      where.push(`p.codprod ILIKE $${params.length}`);
-    } else {
-      params.push(`%${busca}%`);
-      const iDescr = params.length;
-      params.push(`%${busca}%`);
-      const iMarca = params.length;
-      where.push(`(p.descr ILIKE $${iDescr} OR m.descr ILIKE $${iMarca})`);
-    }
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const termo = `%${busca}%`;
+    params.push(termo);
+    const iRef = params.length;
+    params.push(termo);
+    const iDescr = params.length;
+    params.push(termo);
+    const iMarca = params.length;
+    const whereSql = `WHERE (p.ref ILIKE $${iRef} OR p.descr ILIKE $${iDescr} OR m.descr ILIKE $${iMarca})`;
 
     const baseFrom = `
       FROM db_manaus.dbprod p
@@ -60,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const dataRes = await pool.query(
       `SELECT
          p.codprod,
+         p.ref,
          p.descr,
          COALESCE(m.descr,'') as marca_nome,
          p.multiplo,

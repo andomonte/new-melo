@@ -3,6 +3,7 @@ import Head from 'next/head';
 import axios from 'axios';
 import { AuthContext } from '@/contexts/authContexts';
 import { ShoppingCart, Plus, Lock, RotateCcw } from 'lucide-react';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import DataTableFaturamentoNovo from '@/components/common/DataTableFaturamento';
@@ -487,59 +488,28 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
           </div>
 
           <div className="flex gap-3 items-center relative mr-4">
-
-            {modo === 'fechadas' ? (
-              /* Voltar Venda — desfaz o fechamento das vendas selecionadas. */
+            {/* Fechar (A faturar) / Voltar (Fechadas) foram movidos para o menu
+                "Opções" da grade — ação administrativa secundária (não emite NF-e).
+                Aqui fica só o carrinho, que abre o faturamento (ação principal). */}
+            {modo !== 'fechadas' && (
               <button
-                className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={carrinho.length === 0 || voltandoVendas}
-                onClick={handleVoltarVendas}
-                title="Voltar as vendas selecionadas para a lista de faturamento (desfaz o fechamento)"
+                className="relative flex items-center gap-2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                onClick={() => {
+                  if (carrinho.length > 0) {
+                    setModalFaturamentoAberto(true);
+                  } else {
+                    toast.info('Nenhuma venda no carrinho.');
+                  }
+                }}
               >
-                <RotateCcw size={16} />
-                {voltandoVendas
-                  ? 'Voltando...'
-                  : `Voltar ${carrinho.length > 0 ? carrinho.length + ' ' : ''}venda${carrinho.length === 1 ? '' : 's'}`}
+                <Plus size={18} className="text-blue-500 dark:text-white" />
+                <ShoppingCart className="text-blue-500 dark:text-white size-6" />
+                {carrinho.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs w-4 h-4 flex items-center justify-center rounded-full">
+                    {carrinho.length}
+                  </span>
+                )}
               </button>
-            ) : (
-              <>
-                {/* Fechar Vendas — fechamento administrativo das vendas selecionadas (1 ou várias). */}
-                <button
-                  className="flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  disabled={carrinho.length === 0 || fechandoVendas}
-                  onClick={handleFecharVendas}
-                  title="Fechar as vendas selecionadas (fechamento administrativo — não emite NF-e)"
-                >
-                  <Lock size={16} />
-                  {fechandoVendas
-                    ? 'Fechando...'
-                    : `Fechar ${carrinho.length > 0 ? carrinho.length + ' ' : ''}venda${carrinho.length === 1 ? '' : 's'}`}
-                </button>
-
-                <button
-                  className="relative flex items-center gap-2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                  onClick={() => {
-                    if (carrinho.length > 0) {
-                      setModalFaturamentoAberto(true);
-                    } else {
-                      toast.info('Nenhuma venda no carrinho.');
-                    }
-                  }}
-                >
-              {/* 1. O ícone de Plus foi movido para DENTRO do botão */}
-              <Plus size={18} className="text-blue-500 dark:text-white" />
-
-              {/* O ícone do carrinho permanece aqui */}
-              <ShoppingCart className="text-blue-500 dark:text-white size-6" />
-
-              {/* A notificação de contagem continua funcionando como antes */}
-              {carrinho.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs w-4 h-4 flex items-center justify-center rounded-full">
-                  {carrinho.length}
-                </span>
-              )}
-                </button>
-              </>
             )}
           </div>
         </div>
@@ -577,6 +547,31 @@ export default function NovoFaturamento({ faturasParaFaturar }: { faturasParaFat
             faturasSelecionadas={carrinho}
             onAbrirDetalhesCliente={() => abrirDetalhes('cliente')}
             onAbrirDetalhesProduto={() => abrirDetalhes('produto')}
+            opcoesExtraSlot={
+              modo === 'fechadas' ? (
+                <DropdownMenuItem
+                  disabled={carrinho.length === 0 || voltandoVendas}
+                  onSelect={() => handleVoltarVendas()}
+                  className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
+                >
+                  <RotateCcw className="mr-2 size-4 text-amber-500 dark:text-amber-300" />
+                  {voltandoVendas
+                    ? 'Voltando...'
+                    : `Voltar ${carrinho.length > 0 ? carrinho.length + ' ' : ''}venda${carrinho.length === 1 ? '' : 's'}`}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  disabled={carrinho.length === 0 || fechandoVendas}
+                  onSelect={() => handleFecharVendas()}
+                  className="cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
+                >
+                  <Lock className="mr-2 size-4 text-emerald-600 dark:text-emerald-400" />
+                  {fechandoVendas
+                    ? 'Fechando...'
+                    : `Fechar ${carrinho.length > 0 ? carrinho.length + ' ' : ''}venda${carrinho.length === 1 ? '' : 's'}`}
+                </DropdownMenuItem>
+              )
+            }
           />
         </div>
       </main>

@@ -52,7 +52,7 @@ export default async function handle(
     if (produtos.length === 0) {
       produtos = await buscar(
         client,
-        `(p.ref ILIKE $1 OR p.codprod ILIKE $1 OR p.descr ILIKE $1)`,
+        `(p.ref ILIKE $1 OR p.descr ILIKE $1)`,
         [`%${search}%`],
       );
     }

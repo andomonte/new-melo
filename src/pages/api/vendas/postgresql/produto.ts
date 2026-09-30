@@ -97,7 +97,6 @@ const baseQuery = `
         AND (
           p.aplic_extendida ILIKE $1
           OR p.ref ILIKE $1
-          OR p.codprod::text ILIKE $1
         )
       ORDER BY qtddisponivel DESC;
     `;

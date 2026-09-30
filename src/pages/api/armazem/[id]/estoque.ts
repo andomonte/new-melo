@@ -88,7 +88,7 @@ export default async function handler(
     let paramIndex = 2;
 
     if (search) {
-      whereConditions.push(`(p.codprod ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex})`);
+      whereConditions.push(`(p.ref ILIKE $${paramIndex} OR p.descr ILIKE $${paramIndex})`);
       params.push(searchTerm);
       paramIndex++;
     }
