@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
 
@@ -42,6 +43,39 @@ export function Autocomplete({
   const [isResetting, setIsResetting] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
+  const [posicao, setPosicao] = useState<React.CSSProperties>({});
+
+  // A lista sai em portal no body, com posição fixa presa ao campo. Sem isso
+  // ela é recortada por qualquer modal/container com overflow — e era por isso
+  // que telas como a de relatórios precisavam abrir mão do scroll do modal.
+  const atualizarPosicao = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const abrirParaCima = window.innerHeight - r.bottom < 260 && r.top > 260;
+    setPosicao({
+      position: 'fixed',
+      left: r.left,
+      width: r.width,
+      ...(abrirParaCima
+        ? { bottom: window.innerHeight - r.top + 4 }
+        : { top: r.bottom + 4 }),
+      zIndex: 9999,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!aberto) return;
+    atualizarPosicao();
+    // capture:true acompanha o scroll de qualquer container ancestral
+    window.addEventListener('scroll', atualizarPosicao, true);
+    window.addEventListener('resize', atualizarPosicao);
+    return () => {
+      window.removeEventListener('scroll', atualizarPosicao, true);
+      window.removeEventListener('resize', atualizarPosicao);
+    };
+  }, [aberto, atualizarPosicao]);
 
   // Reseta o destaque quando a lista de opções muda.
   useEffect(() => {
@@ -69,9 +103,11 @@ export function Autocomplete({
   // Fechar quando clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-        setAberto(false);
-      }
+      const alvo = event.target as Node;
+      const dentro =
+        (wrapperRef.current && wrapperRef.current.contains(alvo)) ||
+        (listaRef.current && listaRef.current.contains(alvo));
+      if (!dentro) setAberto(false);
     }
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -268,8 +304,12 @@ export function Autocomplete({
         )}
       </div>
 
-      {aberto && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
+      {aberto && !disabled && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={listaRef}
+          style={posicao}
+          className="bg-popover border rounded-md shadow-md max-h-60 overflow-auto"
+        >
           {carregando ? (
             <div className="p-3 text-sm text-muted-foreground text-center">
               Carregando...
@@ -295,7 +335,8 @@ export function Autocomplete({
               ))}
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
