@@ -3630,11 +3630,15 @@ export default function ContasAReceber() {
                 )}
                 {relatParams.escopo === 'V' && (
                   <div className="mt-2">
-                    <Label>Vendedor (código)</Label>
-                    <Input
-                      placeholder="Ex.: 12"
-                      value={relatParams.codvend ?? ''}
-                      onChange={(e) => setRelatParams((p) => ({ ...p, codvend: e.target.value }))}
+                    <Label>Vendedor</Label>
+                    {/* Busca igual à do cliente — no Delphi o vendedor também é
+                        escolhido por consulta, não digitando o código. */}
+                    <Autocomplete
+                      placeholder="Buscar vendedor..."
+                      apiUrl="/api/contas-receber/vendedores"
+                      value={relatParams.codvend}
+                      onChange={(value) => setRelatParams((p) => ({ ...p, codvend: value }))}
+                      mapResponse={(data) => data.vendedores || []}
                     />
                   </div>
                 )}
