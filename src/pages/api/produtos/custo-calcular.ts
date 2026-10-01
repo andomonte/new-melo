@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { calcularCustoCompraPg } from '@/lib/impostos/dadosCustoCompra';
 
 /**
@@ -50,7 +50,7 @@ export default async function handle(
   const zerarSt = !!p.zerarSt;
   const zerarIpi = !!p.zerarIpi;
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const resultados: Array<{
       codprod: string;

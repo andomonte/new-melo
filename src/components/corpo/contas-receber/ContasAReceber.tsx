@@ -185,6 +185,8 @@ export default function ContasAReceber() {
     { value: 'geral', label: 'Geral (lista)', desc: 'Todos os títulos do período' },
   ];
   // Quais parâmetros cada relatório mostra (fiel aos forms do Delphi).
+  // dia_juros = "Com juros até" (dtpJuros) e tarifa = "Tarifa Bancária" existem
+  // só na aba "Receber do Cliente"; a aba do período manda vDia = hoje.
   type CamposRel = {
     datas: boolean;
     periodoOpcional?: boolean; // Receber por Cliente: período é opcional
@@ -196,10 +198,12 @@ export default function ContasAReceber() {
     escopo?: boolean; // Em atraso: Todos/Cliente/Vendedor/Órgãos
     pagoNaoPago?: boolean; // Diário à vista
     uf?: boolean; // Diário à vista
+    dia_juros?: boolean; // Receber do Cliente: "Com juros até"
+    tarifa?: boolean; // Receber do Cliente: tarifa bancária
   };
   const CAMPOS_RELATORIO: Record<TipoRelatorio, CamposRel> = {
     receber_periodo:      { datas: true, cliente: false, conta: true,  classe: true,  juros: true },
-    por_cliente:          { datas: true, periodoOpcional: true, cliente: true, conta: false, classe: false, juros: true },
+    por_cliente:          { datas: true, periodoOpcional: true, cliente: true, conta: false, classe: false, juros: true, dia_juros: true, tarifa: true },
     em_atraso:            { datas: true, cliente: false, conta: false, classe: false, juros: true, escopo: true },
     diario_avista:        { datas: true, cliente: false, conta: false, classe: false, juros: false, pagoNaoPago: true, uf: true },
     recebimento_clientes: { datas: true, cliente: true, clienteObrig: true, conta: false, classe: false, juros: false },
@@ -218,7 +222,11 @@ export default function ContasAReceber() {
     rec_filtro: '' as '' | 'S' | 'N', // diário à vista: ''=todos, S=pago, N=não pago
     escopo: 'T' as 'T' | 'C' | 'V' | 'O', // em atraso: Todos/Cliente/Vendedor/Órgãos
     periodoAtivo: true, // Receber por Cliente: período é opcional
+    dia_juros: '',
+    tarifa: '',
   });
+  // Checkbox da tarifa — no Delphi, ao marcar já sugere 1,57 (ckCli_TarifaBancClick).
+  const [relatTarifaAtiva, setRelatTarifaAtiva] = useState(false);
   // Colunas do relatório (selecionáveis + reordenáveis, persistidas em localStorage).
   const COLS_RELATORIO_DEF: { key: string; label: string }[] = [
     { key: 'nro_doc', label: 'NRO_DOC' }, { key: 'dias', label: 'DIAS' }, { key: 'cliente', label: 'CLIENTE' },
@@ -1062,6 +1070,11 @@ export default function ContasAReceber() {
     // Diário à vista: pago/não pago + UF.
     if (campos.pagoNaoPago && relatParams.rec_filtro) params.append('rec_filtro', relatParams.rec_filtro);
     if (campos.uf && relatParams.uf.trim()) params.append('uf', relatParams.uf.trim().toUpperCase());
+    // Receber do Cliente: "Com juros até" (vDia) e tarifa bancária.
+    if (campos.dia_juros && relatParams.dia_juros) params.append('dia_juros', relatParams.dia_juros);
+    if (campos.tarifa && relatTarifaAtiva && relatParams.tarifa.trim()) {
+      params.append('tarifa', relatParams.tarifa.trim());
+    }
   };
 
   // Validação dos parâmetros obrigatórios (ex.: Recebimento de Clientes exige cliente).
@@ -1135,23 +1148,34 @@ export default function ContasAReceber() {
   };
   const colunasVisiveisRel = () => relatColunas.filter((c) => c.visivel);
   // Agrupa por cliente quando layout='por_cliente'; senão um grupo único (lista).
+  // layout 'por_cliente' agrupa por cliente (aba "Receber do Cliente" do Delphi)
+  // e 'por_dia' por vencimento, com "TOTAL DIA" — é o GeraRxReceberPeriodo.
   const agruparRelat = (rows: any[], layout: string) => {
     const somaGrupo = () => Object.fromEntries(MONEY_KEYS_REL.map((k) => [k, 0])) as Record<string, number>;
-    if (layout !== 'por_cliente') {
+    if (layout !== 'por_cliente' && layout !== 'por_dia') {
       const sub = somaGrupo();
       rows.forEach((r) => MONEY_KEYS_REL.forEach((k) => (sub[k] += Number(r[k] || 0))));
       return { grupos: [{ rotulo: null as string | null, linhas: rows, sub }], total: sub, qtd: rows.length };
     }
+    const porDia = layout === 'por_dia';
     const mapa = new Map<string, { rotulo: string; linhas: any[]; sub: Record<string, number> }>();
     const total = somaGrupo();
     for (const r of rows) {
-      const chave = String(r.cliente || '—');
-      if (!mapa.has(chave)) mapa.set(chave, { rotulo: chave, linhas: [], sub: somaGrupo() });
+      const chave = porDia
+        ? (r.dt_venc ? String(r.dt_venc).slice(0, 10) : '—')
+        : String(r.cliente || '—');
+      if (!mapa.has(chave)) {
+        const rotulo = porDia ? `DIA: ${chave.split('-').reverse().join('/')}` : chave;
+        mapa.set(chave, { rotulo, linhas: [], sub: somaGrupo() });
+      }
       const g = mapa.get(chave)!;
       g.linhas.push(r);
       MONEY_KEYS_REL.forEach((k) => { g.sub[k] += Number(r[k] || 0); total[k] += Number(r[k] || 0); });
     }
-    return { grupos: Array.from(mapa.values()), total, qtd: rows.length };
+    const grupos = Array.from(mapa.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([, g]) => g);
+    return { grupos, total, qtd: rows.length };
   };
 
   const gerarPreviewRelatorio = async () => {
@@ -1197,7 +1221,7 @@ export default function ContasAReceber() {
     const corpo = grupos.map((g) => `
       ${g.rotulo ? `<tr class="grp"><td colspan="${cols.length}">${g.rotulo} — ${g.linhas.length} título(s)</td></tr>` : ''}
       ${g.linhas.map(tdLinha).join('')}
-      ${g.rotulo ? linhaResumo(g.sub, 'SUBTOTAL', 'sub') : ''}`).join('');
+      ${g.rotulo ? linhaResumo(g.sub, g.rotulo.startsWith('DIA: ') ? 'TOTAL DIA' : 'SUBTOTAL', 'sub') : ''}`).join('');
     w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${relatResultado.titulo}</title>
       <style>body{font-family:Arial,Helvetica,sans-serif;font-size:11px;margin:20px;color:#111}
       h1{font-size:14px;margin:0}.sub-h{font-size:11px;color:#444;margin:2px 0 12px}
@@ -3685,7 +3709,50 @@ export default function ContasAReceber() {
                   value={relatParams.tx_juros}
                   onChange={(e) => setRelatParams((p) => ({ ...p, tx_juros: e.target.value }))}
                 />
-                <p className="text-[10px] text-gray-500 mt-1">Projeta o juros dos títulos em atraso (dias × valor × taxa).</p>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Mesma conta do Oracle (CAIXA.CALULAR_JUROS): taxa/3000 × (saldo em aberto + juros em aberto) × dias de atraso.
+                </p>
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].dia_juros && (
+              <div>
+                <Label>Com juros até</Label>
+                <Input
+                  type="date"
+                  value={relatParams.dia_juros}
+                  onChange={(e) => setRelatParams((p) => ({ ...p, dia_juros: e.target.value }))}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Data-base do atraso e do juros (vazio = hoje), como o campo do Delphi.
+                </p>
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].tarifa && (
+              <div>
+                <label className="flex items-center gap-2 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={relatTarifaAtiva}
+                    onChange={(e) => {
+                      const ligado = e.target.checked;
+                      setRelatTarifaAtiva(ligado);
+                      // Ao marcar, o Delphi já sugere 1,57 (ckCli_TarifaBancClick).
+                      setRelatParams((p) => ({ ...p, tarifa: ligado ? '1,57' : '' }));
+                    }}
+                  />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                    Tarifa bancária (R$)
+                  </span>
+                </label>
+                <Input
+                  placeholder="1,57"
+                  disabled={!relatTarifaAtiva}
+                  value={relatParams.tarifa}
+                  onChange={(e) => setRelatParams((p) => ({ ...p, tarifa: e.target.value }))}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Cobrada por título: entra na coluna TARIFA e soma no valor em aberto.
+                </p>
               </div>
             )}
           </div>
@@ -3820,7 +3887,11 @@ function FragmentRelGrupo({ rotulo, linhas, sub, cols, valorColRel, brlRel, mone
         <tr className="bg-gray-100 dark:bg-zinc-800 font-semibold">
           {cols.map((c, i) => (
             <td key={c.key} className={`px-2 py-1 ${ehNum(c.key) ? 'text-right tabular-nums' : ''}`}>
-              {moneyKeys.includes(c.key) ? brlRel(sub[c.key]) : i === 0 ? 'SUBTOTAL' : ''}
+              {moneyKeys.includes(c.key)
+                ? brlRel(sub[c.key])
+                : i === 0
+                ? (rotulo?.startsWith('DIA: ') ? 'TOTAL DIA' : 'SUBTOTAL')
+                : ''}
             </td>
           ))}
         </tr>

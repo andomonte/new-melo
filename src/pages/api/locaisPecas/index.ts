@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { localPecaSchema } from '@/data/locaisPecas/locaisPecasSchema';
 
 export default async function handle(
@@ -40,7 +40,7 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     // Construir filtro de busca
@@ -142,7 +142,7 @@ const handleGetListWithFilters = async (
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     // Mapeamento das colunas para evitar SQL injection
@@ -316,7 +316,7 @@ const handleCreate = async (req: NextApiRequest, res: NextApiResponse) => {
 
   let client: PoolClient | undefined;
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     // Verificar se o ID já existe

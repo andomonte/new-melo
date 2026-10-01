@@ -3,7 +3,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient'; // Certifique-se de que este caminho está correto
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Certifique-se de que este caminho está correto
 
 // --- Interface DBArmazem para o objeto armazém ---
 // Esta interface representa a estrutura da tabela dbarmazem no seu banco de dados.
@@ -78,7 +78,7 @@ export default async function handle(
 
   try {
     // Obtém o pool de conexão principal com base na filial do cookie
-    const poolPrincipal = getPgPool(filialDoCookie);
+    const poolPrincipal = await getPgPoolPorNomeFilial(filialDoCookie);
     clientPrincipal = await poolPrincipal.connect(); // Conecta o cliente principal
 
     await clientPrincipal.query('BEGIN'); // Inicia a transação

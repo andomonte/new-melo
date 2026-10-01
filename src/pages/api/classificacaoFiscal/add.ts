@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 const num = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -10,7 +10,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   if (!ncm) return res.status(400).json({ error: 'NCM é obrigatório.' });
   if (!/^\d{8}$/.test(ncm)) return res.status(400).json({ error: 'NCM deve ter 8 dígitos.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     await client.query('BEGIN');
     const maxRes = await client.query('SELECT COALESCE(MAX(id),0)+1 AS next_id FROM dbclassificacao_fiscal');

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 interface IndiceInfo {
   indexname: string;
@@ -46,7 +46,7 @@ export default async function verificarEstruturaBanco(
   const { acao = 'verificar' } = req.method === 'POST' ? req.body : req.query;
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     const verificacao: VerificacaoBanco = {
       tabela_dbfatura: {

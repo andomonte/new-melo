@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 const LIMITE = 20000; // teto de segurança para "selecionar tudo"
 
@@ -17,7 +17,7 @@ export default async function handle(
   const status =
     typeof req.query.status === 'string' ? req.query.status : 'ativo';
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const params: any[] = [];
     const conds: string[] = [];

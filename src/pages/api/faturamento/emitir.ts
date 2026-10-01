@@ -13,7 +13,8 @@ import { gerarNotaFiscalValida } from '@/utils/gerarPreviewNF';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { create } from 'xmlbuilder2';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
+import type { Pool } from 'pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
 import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
@@ -22,11 +23,12 @@ import { obterCRTEmpresa } from '@/utils/consultarCRTReceita';
  
 // Função para registrar erros/mensagens da emissão
 async function registrarMensagemFatura(
+  pool: Pool,
   codfat: string,
   codigo: string,
   mensagem: string,
 ) {
-  const client = await getPgPool().connect();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
@@ -117,7 +119,7 @@ export default async function handler(
     try {
       const codfatRef = dados?.codfat || dados?.dbfatura?.codfat || null;
       if (codfatRef) {
-        const faturaCli = await getPgPool().query(
+        const faturaCli = await (await getPgPoolFilial(req)).query(
           `SELECT c.*
              FROM dbfatura f
              JOIN dbclien c ON c.codcli = f.codcli
@@ -151,7 +153,7 @@ export default async function handler(
     if (dados?.dbvenda?.codvenda) {
       console.log('🔍 Buscando dados da venda para identificar a empresa...');
       try {
-        const vendaQuery = await getPgPool().query(
+        const vendaQuery = await (await getPgPoolFilial(req)).query(
           `SELECT cnpj_empresa, ie_empresa FROM dbvenda WHERE codvenda = $1`,
           [dados.dbvenda.codvenda]
         );
@@ -189,7 +191,7 @@ export default async function handler(
       console.log(`🎯 Filtrando empresa por IE da venda: ${ieEmpresaVenda}`);
     }
 
-    const empresasQuery = await getPgPool().query(query, params);
+    const empresasQuery = await (await getPgPoolFilial(req)).query(query, params);
 
     console.log(
       'Empresas encontradas com certificados:',
@@ -246,7 +248,7 @@ export default async function handler(
     let cMun = '1302603'; // Default: Manaus
     if (emitenteRaw.municipio && emitenteRaw.uf) {
       try {
-        const municipioQuery = await getPgPool().query(
+        const municipioQuery = await (await getPgPoolFilial(req)).query(
           'SELECT codmunicipio FROM dbmunicipio WHERE LOWER(descricao) = LOWER($1) AND uf = $2 LIMIT 1',
           [emitenteRaw.municipio.trim(), emitenteRaw.uf],
         );
@@ -267,7 +269,7 @@ export default async function handler(
     {
       const serieFat = String(dados?.dbfatura?.serie ?? '').trim();
       if (serieFat) {
-        const clientIE = await getPgPool().connect();
+        const clientIE = await (await getPgPoolFilial(req)).connect();
         try {
           const ieCorreta = await ieEmitentePorSerie(clientIE, emitenteRaw.cgc, serieFat);
           const ieAtual = String(emitenteRaw.inscricaoestadual || '').replace(/\D/g, '');
@@ -360,7 +362,7 @@ export default async function handler(
     // SEFAZ 997 "Série já vinculada a outra IE". Aqui garantimos série↔IE consistentes
     // com a série que será realmente emitida (fiel ao emitir-faturado da Consulta).
     if (serieEmissao) {
-      const clientIE2 = await getPgPool().connect();
+      const clientIE2 = await (await getPgPoolFilial(req)).connect();
       try {
         const ieCorreta = await ieEmitentePorSerie(clientIE2, emitenteRaw.cgc, serieEmissao);
         const ieAtual = String(emitenteRaw.inscricaoestadual || '').replace(/\D/g, '');
@@ -376,7 +378,7 @@ export default async function handler(
 
     if (!nroformEmissao || nroformEmissao === '') {
       console.log('⚠️ nroform ausente no payload — calculando (escopado por série + insc07)...');
-      const client = await getPgPool().connect();
+      const client = await (await getPgPoolFilial(req)).connect();
       try {
         nroformEmissao = await proximoNroForm(client, { serie: serieEmissao, insc07: insc07Fatura });
       } finally {
@@ -683,7 +685,7 @@ export default async function handler(
       const codfatLimpar = dados?.codfat || dados?.dbfatura?.codfat || null;
       if (codfatLimpar) {
         try {
-          const client = await getPgPool().connect();
+          const client = await (await getPgPoolFilial(req)).connect();
           try {
             await client.query(
               `UPDATE dbfatura SET denegada = NULL WHERE codfat = $1`,
@@ -801,6 +803,11 @@ export default async function handler(
       console.log('- Produtos:', dados.dbitvenda?.slice(0, 2)); // Primeiros 2 produtos
 
       let pdfBuffer: Buffer;
+      // Declaradas FORA do try para ficarem visíveis também no catch (fallback jsPDF).
+      let produtosParaPdf: any;
+      let vendaParaPdf: any;
+      let empresaParaPdf: any;
+      let faturaParaPdf: any;
       try {
         console.log('📄 Tentando gerar PDF customizado...');
 
@@ -892,9 +899,9 @@ export default async function handler(
         };
 
         // Primeiro definir os dados para o PDF
-        const produtosParaPdf = dados.dbitvenda || dados.produtos || [];
-        const vendaParaPdf = dados.dbvenda || {};
-        const empresaParaPdf = {
+        produtosParaPdf = dados.dbitvenda || dados.produtos || [];
+        vendaParaPdf = dados.dbvenda || {};
+        empresaParaPdf = {
           nomecontribuinte: dados.emitente?.xNome || '',
           cgc: dados.emitente?.cnpj || '',
           inscricaoestadual: dados.emitente?.ie || '',
@@ -917,7 +924,7 @@ export default async function handler(
         try {
           const codfatDup = dados?.codfat || dados?.dbfatura?.codfat;
           if (codfatDup) {
-            const q = await getPgPool().query(
+            const q = await (await getPgPoolFilial(req)).query(
               `SELECT r.dt_venc,
                       (SELECT frmfat FROM dbfatura WHERE codfat = $1) AS frmfat
                  FROM dbreceb r
@@ -942,7 +949,7 @@ export default async function handler(
         }
 
         // Usar os dados corretos do payload
-        const faturaParaPdf = {
+        faturaParaPdf = {
           ...dados.dbfatura,
           // Adicionar dados do cliente se não estão na fatura
           nomefant:
@@ -1136,7 +1143,7 @@ export default async function handler(
           throw new Error('Campos essenciais para salvar a NF-e estão faltando: ' + JSON.stringify({ codfat, nrodoc_fiscal, chave, serie }));
         }
 
-        const client = await getPgPool().connect();
+        const client = await (await getPgPoolFilial(req)).connect();
 
         try {
           const result = await client.query(
@@ -1316,7 +1323,7 @@ export default async function handler(
       });
 
       if (codfat && chaveAcesso) {
-        const client = await getPgPool().connect();
+        const client = await (await getPgPoolFilial(req)).connect();
         try {
           const baseRandom = Math.floor(Math.random() * 1e6);
           const timestamp = Date.now().toString().slice(-3);
@@ -1374,6 +1381,7 @@ export default async function handler(
 
     if (codfat) {
       await registrarMensagemFatura(
+        await getPgPoolFilial(req),
         codfat,
         status, // código do erro (ex: 610, 539, etc)
         motivo || 'Erro não especificado pela SEFAZ',
@@ -1382,7 +1390,7 @@ export default async function handler(
       // CORREÇÃO: Atualizar campo 'denegada' para 'S' se status for 301, 302 ou 303
       if (status === '301' || status === '302' || status === '303') {
         try {
-          const client = await getPgPool().connect();
+          const client = await (await getPgPoolFilial(req)).connect();
           try {
             await client.query(
               `UPDATE dbfatura SET denegada = 'S' WHERE codfat = $1`,
@@ -1441,6 +1449,7 @@ export default async function handler(
     const codfat = req.body?.dbfatura?.codfat;
     if (codfat) {
       await registrarMensagemFatura(
+        await getPgPoolFilial(req),
         codfat,
         'ERRO_GERAL',
         `Erro no processamento: ${error.message || 'Erro desconhecido'}`,

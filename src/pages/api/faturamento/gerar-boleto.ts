@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
 import { gerarBoletoHtml, type BoletoData } from '@/lib/titulo/gerarBoletoHtml';
 import {
@@ -35,7 +35,7 @@ export default async function handler(
     });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // Títulos da cobrança (individual por cod_fat; grupo por codgp). Só boleto ('2') ou
     // carteira ('4'), ativos (cancel<>'S') — exclui recibo/promissória e legados.

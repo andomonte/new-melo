@@ -7,7 +7,7 @@ import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assina
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { decrypt } from '@/utils/crypto';
 import { getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // ESTORNO — FASE 2: emite a NF-e de DEVOLUÇÃO da DI (Documento Interno) gerada na fase 1.
 // Emite a partir da FATURA (dbfatura + dbprodfat), como o Delphi (sem venda), com
@@ -22,7 +22,7 @@ export default async function handler(
   const { codfat } = req.body || {}; // codfat da DI (fatura de devolução)
   if (!codfat) return res.status(400).json({ erro: 'codfat (da DI) é obrigatório.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   try {
     // 1. DI (fatura de devolução) + validação de que é uma DI e ainda não foi emitida.
     const fatRes = await pool.query('SELECT * FROM dbfatura WHERE codfat = $1', [String(codfat)]);

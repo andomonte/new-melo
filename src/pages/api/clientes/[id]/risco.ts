@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { parseCookies } from 'nookies';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo;
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
 
   try {
     const client = await pool.connect();

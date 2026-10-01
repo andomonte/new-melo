@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -21,7 +21,7 @@ export default async function handler(
       .json({ error: "Parâmetro 'codfat' (ou 'codgp') é obrigatório." });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     // 1. Buscar os boletos e o código do cliente (codcli).

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
@@ -39,7 +39,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Filial não definida no cookie.' });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   let client: PoolClient | undefined;
   const { page = 1, perPage = 10, filtros = [] } = req.body;
   const offset = (Number(page) - 1) * Number(perPage);

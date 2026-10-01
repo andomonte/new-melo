@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -17,7 +17,7 @@ export default async function handler(
 
     let client: PoolClient | undefined;
     try {
-      const pool = getPgPool(filial);
+      const pool = await getPgPoolPorNomeFilial(filial);
       client = await pool.connect();
 
       // Buscar todos os armazéns ativos ordenados por nome

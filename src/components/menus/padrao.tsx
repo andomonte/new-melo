@@ -108,7 +108,7 @@ const CentralVendasV2 = lazy(() => import('@/components/corpo/vendas/centralVend
 const Promocoes = lazy(() => import('@/components/corpo/vendas/promocoes'));
 const VendasDashboard = lazy(() => import('../corpo/vendas/dashboard'));
 const VendasBloqueadasPage = lazy(() => import('../corpo/vendas/bloqueadas'));
-const LocaisPecasPage = lazy(() => import('../corpo/vendas/locaisPecas'));
+// const LocaisPecasPage = lazy(() => import('../corpo/vendas/locaisPecas')); // removido do menu (tela legada/solta)
 // Garantias de Produtos — porte do TFrmGarantiaProd do Delphi
 const GarantiasPage = lazy(() => import('../corpo/vendas/garantias'));
 const SeparacaoPage = lazy(() => import('../corpo/separacao'));
@@ -535,12 +535,15 @@ export const menus = [
             icon: ShieldIcon,
             corpo: GarantiasPage,
           },
-          {
-            name: 'Locais',
-            href: '/vendas/locaisPecas',
-            icon: WarehouseIcon,
-            corpo: LocaisPecasPage,
-          },
+          // Removido do menu: "Locais de Peças" (dblocal) — tela solta/legada,
+          // só dado de teste (1 registro por schema) e não referenciada em nenhum
+          // fluxo. Código/API mantidos. Reativar reinserindo o item abaixo.
+          // {
+          //   name: 'Locais',
+          //   href: '/vendas/locaisPecas',
+          //   icon: WarehouseIcon,
+          //   corpo: LocaisPecasPage,
+          // },
           {
             name: 'Separação',
             href: '/vendas/separacao',

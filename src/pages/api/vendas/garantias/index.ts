@@ -3,7 +3,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import {
   ErroGarantia,
   STATUS_INCLUSAO,
@@ -42,7 +42,7 @@ async function listar(req: NextApiRequest, res: NextApiResponse) {
 
   let client: PoolClient | undefined;
   try {
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     const params: any[] = [];
     const where: string[] = [];
@@ -127,7 +127,7 @@ async function incluir(req: NextApiRequest, res: NextApiResponse) {
 
     const itens = normalizarItens(req.body?.itens);
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
     await client.query('BEGIN');
 
     const existeCli = await client.query(

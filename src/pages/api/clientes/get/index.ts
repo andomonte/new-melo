@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 export default async function handle(
   req: NextApiRequest,
@@ -19,7 +19,7 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const offset = (Number(page) - 1) * Number(perPage);

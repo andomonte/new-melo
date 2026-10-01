@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import { serializeBigInt } from '@/utils/serializeBigInt';
@@ -24,7 +24,7 @@ export default async function handle(
   const fornecedorData: Fornecedor = req.body;
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     // ✅ PASSO 1: Buscar o próximo código disponível (ignora 99999 se já existir)

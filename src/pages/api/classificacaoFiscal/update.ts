@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 const num = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -11,7 +11,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   if (!id) return res.status(400).json({ error: 'ID é obrigatório.' });
   if (!ncm) return res.status(400).json({ error: 'NCM é obrigatório.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query(
       `UPDATE dbclassificacao_fiscal

@@ -15,8 +15,11 @@ export default async function handle(
     const pool = getPgPool();
     client = await pool.connect();
 
+    // Nunca expor db_conn_enc (segredo) — só o flag tem_conn.
     const filiaisQuery = `
-      SELECT * FROM tb_filial
+      SELECT codigo_filial, nome_filial, timezone, codigo_acesso, schema_db,
+             (db_conn_enc IS NOT NULL) AS tem_conn
+      FROM tb_filial
       WHERE nome_filial ILIKE $1;
     `;
 

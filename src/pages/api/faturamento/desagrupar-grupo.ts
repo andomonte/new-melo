@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * POST /api/faturamento/desagrupar-grupo  { codgp }  (ou { codfat } de uma fatura do grupo)
@@ -20,7 +20,7 @@ import { getPgPool } from '@/lib/pg';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     let { codgp, codfat, usuario } = req.body || {};

@@ -2,7 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 /* ---------------- Logger ---------------- */
 function mkLogger(tag: string) {
@@ -40,7 +40,7 @@ export default async function handler(
   let client: PoolClient | null = null;
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     if (req.method !== 'GET') {

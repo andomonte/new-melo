@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * GET /api/faturamento/emails-cliente?codcli=   (ou ?codfat=)
@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const codfat = String(req.query.codfat || '').trim();
   if (!codcli && !codfat) return res.status(400).json({ erro: 'Informe codcli ou codfat.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     if (!codcli && codfat) {
       const r = await client.query(`SELECT codcli FROM dbfatura WHERE codfat=$1`, [codfat]);

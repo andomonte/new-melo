@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * POST /api/faturamento/fechar-fatura  { codfat, usuario }
@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const usuarioTxt = String(usuario ?? '').trim() || 'DESCONHECIDO';
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // Fatura existe e não está cancelada?
     const fat = await client.query(

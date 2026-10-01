@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
@@ -11,7 +11,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   if (!cod_id) return res.status(400).json({ error: 'Código é obrigatório.' });
   if (!referencia || !codmarca) return res.status(400).json({ error: 'Referência e Marca são obrigatórias.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query(
       `UPDATE dbref_fabrica SET referencia=$2, codmarca=$3, codcredor=$4 WHERE cod_id=$1

@@ -16,7 +16,7 @@ import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { decrypt } from '@/utils/crypto';
 import { extrairCNPJDoCertificado } from '@/utils/certificadoExtractor';
 import { create } from 'xmlbuilder2';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { DOMParser } from 'xmldom';
@@ -46,11 +46,11 @@ export default async function handler(
     console.log('🔄 [emitir-faturado] Iniciando re-emissão para codfat:', codfat);
 
     // 1️⃣ BUSCAR DADOS COMPLETOS DO BANCO
-    if (!getPgPool()) {
+    if (!(await getPgPoolFilial(req))) {
       throw new Error('Database connection pool is not initialized.');
     }
     
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
     let dbfatura: any, dbvenda: any, dbclien: any, produtos: any[];
     
     try {
@@ -142,7 +142,7 @@ export default async function handler(
     // 3️⃣ BUSCAR DADOS DA EMPRESA E CERTIFICADOS
     console.log('🔐 Buscando dados da empresa e certificados...');
     
-    const empresaQuery = await getPgPool().query(`
+    const empresaQuery = await (await getPgPoolFilial(req)).query(`
       SELECT * FROM dadosempresa
       WHERE "certificadoKey" IS NOT NULL
         AND "certificadoCrt" IS NOT NULL
@@ -418,7 +418,7 @@ export default async function handler(
       // série 1/3 → IE tipo 04. A série vem da dbfatura (definida no salvar a partir do
       // armazém da venda). Mantém série↔IE consistentes e evita a rejeição SEFAZ 615.
       try {
-        const ieCorreta = await ieEmitentePorSerie(getPgPool(), emitente.cgc, dbfatura.serie || '1');
+        const ieCorreta = await ieEmitentePorSerie((await getPgPoolFilial(req)), emitente.cgc, dbfatura.serie || '1');
         const ieAtual = String(emitente.ie || '').replace(/\D/g, '');
         if (ieCorreta && ieCorreta !== ieAtual) {
           console.log(`🎯 IE do emitente ajustada pela série ${dbfatura.serie}: ${ieAtual} → ${ieCorreta}`);
@@ -528,7 +528,7 @@ export default async function handler(
     if (status === '100') {
       // Limpar campo denegada
       try {
-        const updateClient = await getPgPool().connect();
+        const updateClient = await (await getPgPoolFilial(req)).connect();
         try {
           await updateClient.query(
             `UPDATE dbfatura SET denegada = NULL WHERE codfat = $1`,
@@ -552,7 +552,7 @@ export default async function handler(
       // (dbreceb, filtrando órfãos legados por dt_emissao mais recente).
       let dupTextoFatura = '';
       try {
-        const parcRes = await getPgPool().query(
+        const parcRes = await (await getPgPoolFilial(req)).query(
           `SELECT dt_venc FROM dbreceb
             WHERE cod_fat = $1 AND (cancel IS NULL OR cancel <> 'S')
               AND (nro_doc IS NULL OR substr(nro_doc, 1, 2) <> 'GP')
@@ -628,7 +628,7 @@ export default async function handler(
 
       // Salvar no banco
       try {
-        const saveClient = await getPgPool().connect();
+        const saveClient = await (await getPgPoolFilial(req)).connect();
         try {
           const codnumerico = Math.floor(Math.random() * 1e9).toString().padStart(9, '0');
           
@@ -701,7 +701,7 @@ export default async function handler(
     // 🔟 SE REJEITADO - ATUALIZAR DENEGADA SE NECESSÁRIO
     if (status === '301' || status === '302' || status === '303') {
       try {
-        const updateClient = await getPgPool().connect();
+        const updateClient = await (await getPgPoolFilial(req)).connect();
         try {
           await updateClient.query(
             `UPDATE dbfatura SET denegada = 'S' WHERE codfat = $1`,
@@ -719,7 +719,7 @@ export default async function handler(
     // Salvar a NF-e REJEITADA no histórico — assim o status da fatura vira "Rejeitada"
     // e a rejeição fica visível. Antes ficava sem registro e a fatura seguia "Pendente".
     try {
-      const rejClient = await getPgPool().connect();
+      const rejClient = await (await getPgPoolFilial(req)).connect();
       try {
         const codnumerico = Math.floor(Math.random() * 1e9).toString().padStart(9, '0');
         await rejClient.query(

@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 interface requestBodyDTO {
@@ -160,7 +160,7 @@ export default async function Sec(
   }
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const params: any[] = [like, tipoCliente, armNum];

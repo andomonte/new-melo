@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * API para consultar histórico de pedidos/compras de um produto
@@ -24,7 +24,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Código do produto é obrigatório' });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
 
   try {
     // 1. Buscar últimas entradas recebidas (últimos 12 meses)

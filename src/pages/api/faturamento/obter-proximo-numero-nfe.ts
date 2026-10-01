@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -13,7 +13,7 @@ export default async function handler(
     const { serie, numeroAtual, insc07 } = req.body;
     const insc07Norm = String(insc07 ?? 'N').toUpperCase() === 'S' ? 'S' : 'N';
 
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     try {
       // Número = 1 + MAIOR entre: (a) MAX(nroform) em dbfatura escopado por (serie,insc07)

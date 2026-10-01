@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { inserirCobrancaGP } from '@/lib/faturamento/inserirCobrancaGP';
 import { dropdownDeBancoInterno } from '@/lib/faturamento/bancoCobranca';
 
@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     const codgp = String(req.query.codgp || '').trim();
     if (!codgp) return res.status(400).json({ erro: 'Informe o codgp.' });
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
     try {
       const tit = await client.query(
         `SELECT banco, forma_fat, to_char(dt_venc,'YYYY-MM-DD') AS dt_venc, valor_pgto,
@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const usuarioTxt = String(usuario ?? '').trim() || 'DESCONHECIDO';
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const membrosRow = await client.query(
       `SELECT codfat, codcli FROM dbfatura WHERE codgp = $1 AND codfat NOT LIKE 'GP%'`,

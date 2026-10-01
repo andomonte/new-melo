@@ -1,10 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
-
-const pool = getPgPool();
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -35,6 +33,18 @@ function groupByCliente(rows: any[]): Map<string, any[]> {
   // Sort keys ascending
   const sorted = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   return new Map(sorted);
+}
+
+// Agrupa por dia de vencimento — é o que o GeraRxReceberPeriodo do Delphi faz
+// (cabeçalho "DIA: dd/mm/aaaa", subtotal "TOTAL DIA" e "TOTAL GERAL" no fim).
+function groupByDia(rows: any[]): Map<string, any[]> {
+  const map = new Map<string, any[]>();
+  for (const row of rows) {
+    const key = row.dt_venc ? String(row.dt_venc).slice(0, 10) : 'SEM VENCIMENTO';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(row);
+  }
+  return new Map(Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])));
 }
 
 // ─── Colunas do relatório (selecionáveis + reordenáveis) ─────────────────────
@@ -69,11 +79,12 @@ function parseColunas(param?: string): string[] {
 // layout: 'geral' (lista) ou 'por_cliente' (agrupado). fonte: dbreceb (títulos) ou dbfreceb (recebimentos).
 export const TIPO_CONFIG: Record<
   string,
-  { layout: 'geral' | 'por_cliente'; titulo: string; extraWhere: string; dateField: string; fonte: 'dbreceb' | 'dbfreceb' }
+  { layout: 'geral' | 'por_cliente' | 'por_dia'; titulo: string; extraWhere: string; dateField: string; fonte: 'dbreceb' | 'dbfreceb' }
 > = {
   geral:                { layout: 'geral',       titulo: 'RELATÓRIO DE CONTAS A RECEBER', extraWhere: '',                                                            dateField: 'dt_venc',    fonte: 'dbreceb' },
-  por_cliente:          { layout: 'por_cliente', titulo: 'CONTAS A RECEBER POR CLIENTE',  extraWhere: '',                                                            dateField: 'dt_venc',    fonte: 'dbreceb' },
-  receber_periodo:      { layout: 'geral',       titulo: 'RECEBER NO PERÍODO',            extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
+  // Oracle (CONTASR.DADOS_RECEBIMENTO): "Where r.cancel='N' and r.rec='N'".
+  por_cliente:          { layout: 'por_cliente', titulo: 'CONTAS A RECEBER POR CLIENTE',  extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
+  receber_periodo:      { layout: 'por_dia',     titulo: 'RECEBER NO PERÍODO',            extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
   em_atraso:            { layout: 'geral',       titulo: 'TÍTULOS EM ATRASO NO PERÍODO',  extraWhere: ` AND r.rec IS DISTINCT FROM 'S' AND r.dt_venc < CURRENT_DATE`,  dateField: 'dt_venc',    fonte: 'dbreceb' },
   diario_avista:        { layout: 'geral',       titulo: 'TÍTULOS DIÁRIO À VISTA',        extraWhere: '',                                                            dateField: 'dt_emissao', fonte: 'dbreceb' },
   recebimento_clientes: { layout: 'geral',       titulo: 'RECEBIMENTO DE CLIENTES',       extraWhere: ` AND fr.tipo <> 'E'`,                                          dateField: 'dt_pgto',    fonte: 'dbfreceb' },
@@ -94,14 +105,26 @@ function buildQuery(
     uf?: string;
     rec_filtro?: string; // 'S' = pago, 'N' = não pago (diário à vista)
     orgaos?: string; // 'S' = só órgãos públicos (claspgto='O')
+    /** "Com juros até" (dtpJuros do Delphi → vDia). Vazio = hoje. */
+    dia_juros?: string;
+    /** Tarifa bancária por título (meCli_TarifaBanc do Delphi). */
+    tarifa?: string;
   } = {},
-): { sql: string; params: any[]; countSql: string; layout: 'geral' | 'por_cliente'; titulo: string } {
+): { sql: string; params: any[]; countSql: string; layout: 'geral' | 'por_cliente' | 'por_dia'; titulo: string } {
   const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG.geral;
   const params: any[] = [];
   let idx = 1;
   let whereClause = '';
   // Taxa de juros (número seguro — interpolada direto no SQL do juros projetado).
   const tx = Number(String(extra.tx_juros ?? '').replace(',', '.')) || 0;
+  // Tarifa bancária por título. No Delphi é o meCli_TarifaBanc: entra na coluna
+  // TARIFA e soma no valor em aberto de cada título.
+  const tarifa = Number(String(extra.tarifa ?? '').replace(',', '.')) || 0;
+  // Data-base do juros. No Delphi é o vDia do RELATO.RECEBER: a aba "Receber do
+  // Cliente" manda a data do campo "Com juros até"; a do período manda hoje.
+  const diaJuros = /^\d{4}-\d{2}-\d{2}$/.test(String(extra.dia_juros ?? ''))
+    ? `DATE '${extra.dia_juros}'`
+    : 'CURRENT_DATE';
 
   // Período: dbreceb usa r.<campo> (dt_venc/dt_emissao); dbfreceb usa fr.dt_pgto.
   const campoData = cfg.fonte === 'dbfreceb' ? `fr.${cfg.dateField}` : `r.${cfg.dateField}`;
@@ -225,7 +248,12 @@ function buildQuery(
     whereClause += ` AND r.cancel != 'S'`;
   }
 
-  const orderBy = 'cliente ASC, dt_venc ASC';
+  // No Oracle o cursor sai ordenado por nome do cliente e o Delphi quebra o dia
+  // quando a data muda entre linhas vizinhas — o que só funciona se vier por
+  // data. Aqui ordenamos por vencimento, que é o que a tela dele quer mostrar.
+  const orderBy = cfg.layout === 'por_dia'
+    ? 'dt_venc ASC, cliente ASC, nro_doc ASC'
+    : 'cliente ASC, dt_venc ASC';
 
   const sql = `
     WITH base AS (
@@ -238,22 +266,35 @@ function buildQuery(
             (SELECT COUNT(*) FROM dbreceb rr WHERE rr.nro_doc LIKE split_part(r.nro_doc, '/', 1) || '/%')::text
           ELSE ''
         END AS parcela,
-        GREATEST(0, CAST(CURRENT_DATE AS DATE) - CAST(r.dt_venc AS DATE)) AS dias,
+        -- "Atraso" do grid: no Oracle é o campo datraso, simples (data-base − vencimento).
+        GREATEST(0, CAST(${diaJuros} AS DATE) - CAST(r.dt_venc AS DATE)) AS dias,
         COALESCE(c.codcli::text, '') || ' ' || COALESCE(c.nome, '') AS cliente,
         r.cod_conta,
         COALESCE(r.valor_pgto, 0) AS valor_pgto,
-        ${
-          tx > 0
-            ? `CASE WHEN r.rec IS DISTINCT FROM 'S' AND r.dt_venc < CURRENT_DATE
-                 THEN ROUND((GREATEST(0, CURRENT_DATE - r.dt_venc) * COALESCE(r.valor_pgto,0) * (${tx}/3000.0))::numeric, 2)
-                 ELSE GREATEST(0, COALESCE(r.valor_rec, 0) - COALESCE(r.valor_pgto, 0)) END`
-            : `GREATEST(0, COALESCE(r.valor_rec, 0) - COALESCE(r.valor_pgto, 0))`
-        } AS valor_juros,
+        -- Juros: porte de CAIXA.CALULAR_JUROS(doc, taxa, diasAtraso) do Oracle.
+        --   principal   = valor_pgto − max(0, valor_rec − juros já recebidos)
+        --   juros       = (taxa/3000) × (principal + juros em aberto) × diasAtraso
+        --   resultado   = max(0, round(juros,2)) + juros em aberto
+        -- Antes o web calculava sobre o valor_pgto cheio, ignorando recebimento
+        -- parcial e juros já lançados.
+        GREATEST(0, ROUND(
+          (${tx}/3000.0)
+          * ((COALESCE(r.valor_pgto, 0) - GREATEST(0, COALESCE(r.valor_rec, 0) - jr.recebido))
+             + jr.aberto)
+          * jt.dias_juros, 2)) + jr.aberto AS valor_juros,
         COALESCE(r.valor_rec, 0) AS valor_rec,
-        COALESCE(r.valor_pgto, 0) - COALESCE(r.valor_rec, 0) AS valor_aberto,
+        -- ValorReceber do Oracle (+ tarifa bancária, como faz a tela do Delphi).
+        ROUND(
+          COALESCE(r.valor_pgto, 0) - (COALESCE(r.valor_rec, 0) - jr.recebido)
+          + GREATEST(0, ROUND(
+              (${tx}/3000.0)
+              * ((COALESCE(r.valor_pgto, 0) - GREATEST(0, COALESCE(r.valor_rec, 0) - jr.recebido))
+                 + jr.aberto)
+              * jt.dias_juros, 2)) + jr.aberto
+          + ${tarifa}, 2) AS valor_aberto,
         r.dt_emissao,
         r.dt_venc,
-        0 AS tarifa,
+        ${tarifa}::numeric AS tarifa,
         r.dt_pgto,
         CASE
           WHEN r.cancel = 'S' THEN 'cancelado'
@@ -265,6 +306,48 @@ function buildQuery(
       FROM dbreceb r
       LEFT JOIN dbclien c ON c.codcli = r.codcli
       LEFT JOIN cad_conta_financeira cf ON cf.cof_id = r.rec_cof_id
+      -- CAIXA.JUROS_RECEBIDO e CAIXA.JUROS_ABERTO do Oracle.
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE((
+            SELECT SUM(fr.valor) FROM dbfreceb fr
+            WHERE fr.cod_receb = r.cod_receb
+              AND fr.tipo IN ('18','20','21','22','23','25','26')
+              AND COALESCE(fr.sf, '') <> 'C'
+          ), 0) AS recebido,
+          COALESCE((
+            SELECT GREATEST(0, COALESCE(cj.rcj_juros, 0) - COALESCE(cj.rcj_juros_recebido, 0))
+            FROM fin_receb_controle_juros cj
+            WHERE cj.rcj_cod_receb = r.cod_receb
+            ORDER BY cj.rcj_data DESC
+            LIMIT 1
+          ), 0) AS aberto
+      ) jr ON TRUE
+      -- diasAtraso do Oracle: só conta a partir de
+      -- fluxocxx3.RETORNA_DIA_ATRASO(dt_venc,0,0) — o primeiro dia útil a partir
+      -- do vencimento, mais um — e parte de dt_pgto quando este é posterior ao
+      -- vencimento. Difere do "Atraso" exibido, que é a subtração simples.
+      LEFT JOIN LATERAL (
+        SELECT CASE
+          WHEN ${diaJuros} > r.dt_venc AND ${diaJuros} >= (
+            SELECT MIN(g.d)::date + 1
+            FROM generate_series(r.dt_venc::date, r.dt_venc::date + 20, interval '1 day') g(d)
+            WHERE EXTRACT(ISODOW FROM g.d) < 6
+              AND NOT EXISTS (
+                SELECT 1 FROM dbferiado f
+                WHERE f.tipo = 'N' AND (
+                  (f.fixo = 'S'
+                    AND EXTRACT(DAY FROM f.data) = EXTRACT(DAY FROM g.d)
+                    AND EXTRACT(MONTH FROM f.data) = EXTRACT(MONTH FROM g.d))
+                  OR (f.fixo = 'N' AND f.data = g.d::date)
+                )
+              )
+          )
+          THEN (${diaJuros}::date
+                - GREATEST(r.dt_venc::date, COALESCE(r.dt_pgto, r.dt_venc)::date))
+          ELSE 0
+        END AS dias_juros
+      ) jt ON TRUE
       WHERE 1=1 ${whereClause}
     )
     SELECT * FROM base
@@ -287,7 +370,7 @@ function buildQuery(
 
 function gerarPDF(
   rows: any[],
-  layout: 'geral' | 'por_cliente',
+  layout: 'geral' | 'por_cliente' | 'por_dia',
   titulo: string,
   colunas: string[],
   data_inicio?: string,
@@ -374,6 +457,19 @@ function gerarPDF(
       const sub = addRows(grupo);
       allBody.push(linhaTotal(`Subtotal ${clienteKey}`, sub));
     }
+  } else if (layout === 'por_dia') {
+    const grouped = groupByDia(rows);
+    for (const [dia, grupo] of Array.from(grouped.entries())) {
+      allBody.push([
+        {
+          content: `DIA: ${fmtDate(dia)}`,
+          colSpan: cols.length,
+          styles: { fontStyle: 'bold' as const, fillColor: [220, 230, 241] as [number, number, number], fontSize: 7 },
+        },
+      ]);
+      const sub = addRows(grupo);
+      allBody.push(linhaTotal(`-----TOTAL DIA: ${fmtDate(dia)}`, sub));
+    }
   } else {
     addRows(rows);
   }
@@ -408,7 +504,7 @@ function gerarPDF(
 
 async function gerarExcel(
   rows: any[],
-  layout: 'geral' | 'por_cliente',
+  layout: 'geral' | 'por_cliente' | 'por_dia',
   titulo: string,
   colunas: string[],
   data_inicio?: string,
@@ -526,6 +622,24 @@ async function gerarExcel(
       }
       linhaTotal(`Subtotal ${clienteKey}`, sub, 'FFEAF1F8', true);
     }
+  } else if (layout === 'por_dia') {
+    const grouped = groupByDia(rows);
+    for (const [dia, grupo] of Array.from(grouped.entries())) {
+      const sepRow = ws.addRow([`DIA: ${fmtDate(dia)}`]);
+      ws.mergeCells(sepRow.number, 1, sepRow.number, NUM_COLS);
+      sepRow.font = { bold: true, size: 9 };
+      sepRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } };
+      sepRow.alignment = { horizontal: 'left', vertical: 'middle' };
+      sepRow.height = 16;
+
+      const sub: Record<string, number> = {};
+      moneyKeys.forEach((k) => (sub[k] = 0));
+      for (const r of grupo) {
+        addData(r);
+        moneyKeys.forEach((k) => (sub[k] += fmtMoneyNum(r[COLS_REL[k].campo])));
+      }
+      linhaTotal(`-----TOTAL DIA: ${fmtDate(dia)}`, sub, 'FFEAF1F8', true);
+    }
   } else {
     for (const r of rows) addData(r);
   }
@@ -542,11 +656,12 @@ async function gerarExcel(
 // ─── Handler ────────────────────────────────────────────────────────────────
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const pool = await getPgPoolFilial(req);
   if (req.method !== 'GET') {
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, codvend, uf, rec_filtro, orgaos, colunas } = req.query;
+  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, codvend, uf, rec_filtro, orgaos, dia_juros, tarifa, colunas } = req.query;
   const colunasSel = parseColunas(colunas as string | undefined);
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel' && formato !== 'json')) {
@@ -584,6 +699,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         uf: uf as string | undefined,
         rec_filtro: rec_filtro as string | undefined,
         orgaos: orgaos as string | undefined,
+        dia_juros: dia_juros as string | undefined,
+        tarifa: tarifa as string | undefined,
       },
     );
 

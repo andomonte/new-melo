@@ -1,7 +1,7 @@
 // pages/api/vendas/dashboard/recent-sales.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { RecentSale } from './dashboardUtils';
 import { Meta } from '@/data/vendas/dashboard';
@@ -28,7 +28,7 @@ export default async function handle(
     const perPage = parseInt(req.query.perPage as string) || 10;
     const offset = (page - 1) * perPage;
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     // 2. EXECUTAMOS A CONTAGEM TOTAL E A BUSCA DE DADOS EM PARALELO
     const [totalResult, salesResult] = await Promise.all([

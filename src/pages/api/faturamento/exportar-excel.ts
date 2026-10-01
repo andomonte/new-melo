@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import ExcelJS from 'exceljs';
 
 export default async function handler(
@@ -63,7 +63,7 @@ export default async function handler(
     LIMIT 1000
   `;
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const result = await client.query(query, values);
 

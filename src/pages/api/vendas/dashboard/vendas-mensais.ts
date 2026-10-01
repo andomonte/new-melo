@@ -1,6 +1,6 @@
 // pages/api/vendas/dashboard/vendas-mensais.ts
 
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { DateRange } from '@/data/vendas/dashboard';
@@ -74,7 +74,7 @@ export default async function handler(
   }
 
   const range = (req.query.range as DateRange) || 'ultimos_30_dias';
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   let client;
 
   try {

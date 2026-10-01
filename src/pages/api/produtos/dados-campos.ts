@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Retorna os valores atuais dos campos usados pela tela "Alterar Campos Lista"
@@ -24,7 +24,7 @@ export default async function handle(
 
   const ids = codprods.map((c) => String(c));
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query(
       `SELECT codprod, ref, descr,

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // Dados para o Termo de Compromisso de Baterias: cliente + produtos da fatura.
 // O usuário marca na tela quais itens são baterias; o termo é gerado só com esses.
@@ -13,7 +13,7 @@ export default async function handler(
   const codfat = String(req.query.codfat || '').trim();
   if (!codfat) return res.status(400).json({ error: 'codfat é obrigatório.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query(
       `SELECT f.nroform, f.serie,

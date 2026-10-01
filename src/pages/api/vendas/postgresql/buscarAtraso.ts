@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient'; // Import your getPgPool function
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Import your getPgPool function
 import { serializeBigInt } from '@/utils/serializeBigInt'; // Keep if you need to serialize BigInts
 
 export default async function Sec(
@@ -20,7 +20,7 @@ export default async function Sec(
   const { codClient } = req.body; // 'codClient' comes from the request body
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const querySql = `

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
@@ -9,7 +9,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
   if (!descr) return res.status(400).json({ error: 'Descrição é obrigatória.' });
   if (simbolo.length > 2) return res.status(400).json({ error: 'Símbolo deve ter no máximo 2 caracteres.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const existe = await client.query('SELECT 1 FROM dbinformativo WHERE simbolo = $1', [simbolo]);
     if (existe.rowCount) return res.status(409).json({ error: `Já existe o informativo "${simbolo}".` });

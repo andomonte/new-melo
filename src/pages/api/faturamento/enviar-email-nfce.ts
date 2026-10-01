@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { enviarDocumentoFiscal } from '@/lib/nfeEmailService';
 //validar
 
@@ -20,7 +20,7 @@ export default async function handler(
   }
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     // Buscar dados da fatura e NFC-e
     const queryFatura = `

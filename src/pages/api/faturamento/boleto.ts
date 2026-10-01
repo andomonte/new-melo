@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
 import { gerarBoletoHtml, type BoletoData } from '@/lib/titulo/gerarBoletoHtml';
 import { digitoNossoNumero } from '@/lib/boleto/nossoNumero';
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ erro: 'Informe cod_fat, cod_receb ou codgp.' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // GP (grupo): títulos em dbreceb.codgp (cod_fat NULL). Individual: cod_fat/cod_receb.
     const filtro = codGp

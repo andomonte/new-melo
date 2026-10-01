@@ -1,7 +1,7 @@
 // pages/api/vendas/dashboard/vendas-cards.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 export type VendasCardsData = {
@@ -29,7 +29,7 @@ export default async function handle(
 
   let client: PoolClient | undefined;
   try {
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     const hoje = new Date();
     const inicioSemana = new Date(hoje);

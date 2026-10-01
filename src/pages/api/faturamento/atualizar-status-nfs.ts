@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function atualizarStatusNFS(
   req: NextApiRequest,
@@ -19,7 +19,7 @@ export default async function atualizarStatusNFS(
     return res.status(400).json({ error: 'Status NFS deve ser S ou N' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     // Atualizar o status NFS da fatura

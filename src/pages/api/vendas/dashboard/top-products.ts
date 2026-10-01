@@ -2,7 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { getDateRange } from './dashboardUtils';
 
@@ -44,7 +44,7 @@ export default async function handle(
     const orderByClause =
       sortBy === 'quantidade' ? 'SUM(i.qtd)' : 'SUM(i.qtd * i.prunit)';
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     const sqlQuery = `
       SELECT

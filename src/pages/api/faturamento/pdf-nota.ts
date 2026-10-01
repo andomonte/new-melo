@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { pool } from '@/lib/db';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // Configuração para aumentar limite de resposta (PDFs podem ser grandes)
 export const config = {
@@ -22,6 +22,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Código da fatura é obrigatório' });
   }
 
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // Buscar o PDF da nota na tabela dbfat_nfe

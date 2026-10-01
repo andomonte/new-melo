@@ -2,7 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { getDateRange } from './dashboardUtils';
 
@@ -37,7 +37,7 @@ export default async function handle(
       // filterType = `predefinido: ${range || 'ultimos_30_dias'}`;
     }
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     const sqlQuery = `
       SELECT

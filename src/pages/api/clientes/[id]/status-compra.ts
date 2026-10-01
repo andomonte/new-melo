@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 /**
  * "Status Compra Cliente" — consulta (igual ao Delphi).
@@ -29,7 +29,7 @@ export default async function handler(
     return res.status(405).json({ error: `Método ${req.method} não permitido` });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
 
   try {
     // Data da última compra faturada

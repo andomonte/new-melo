@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { parseCookies } from 'nookies';
 import { VendedorGruposProduto } from '@/data/vendedores/vendedores';
@@ -32,7 +32,7 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
     await client.query('BEGIN');
 

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Salva o resultado de "Atualizar Custo da Mercadoria" (migração da procedure
@@ -42,7 +42,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Nenhuma linha para salvar' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     await client.query('BEGIN');
     let atualizados = 0;

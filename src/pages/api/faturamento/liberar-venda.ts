@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // Libera a reserva de vendas (release). Só remove reservas do PRÓPRIO usuário — assim
 // um usuário não derruba a reserva de outro. Chamado ao desmarcar a venda, fechar o
@@ -22,9 +22,8 @@ export default async function handler(
     return res.status(200).json({ liberadas: 0 });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
-    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
     const r = await client.query(
       `DELETE FROM fat_reserva_venda
         WHERE codvenda = ANY($1) AND usuario = $2`,

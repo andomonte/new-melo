@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { GetParams } from '@/data/common/getParams';
 import { serializeBigInt } from '@/utils/serializeBigInt';
@@ -13,7 +13,7 @@ export default async function handle(
   const filial = cookies.filial_melo || 'manaus';
 
   const { page = 1, perPage = 10, search = '' }: GetParams = req.query;
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   let client: PoolClient | undefined;
 
   try {

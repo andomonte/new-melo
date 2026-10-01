@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 /**
  * Consulta de compras por período (igual ao Delphi "Consulta Intervalo de Comprar").
@@ -31,7 +31,7 @@ export default async function handler(
       .json({ error: 'Data início e data fim são obrigatórias' });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
 
   try {
     // Igual ao Delphi: dbvenda, cancel='N', no intervalo (comparando só a data).

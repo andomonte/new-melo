@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 /* ------------------------------------------------
  * Logger
@@ -87,6 +87,9 @@ type ItemPayload = {
   ibs_e?: number | null; // IBS Estadual (substitui ICMS)
   ibs_m?: number | null; // IBS Municipal (substitui ISS)
 
+  // id da promoção (cabeçalho). Aceita as duas grafias que o front pode enviar.
+  id_promocao?: number | null;
+  promocao_id?: number | null;
   id_promocao_item?: number | null;
   promoQty?: number | null;
   quantidade_promocional?: number | null;
@@ -835,7 +838,7 @@ export default async function handler(
 
   try {
     // Conexão Postgres
-    const pgPool = getPgPool(filial);
+    const pgPool = await getPgPoolPorNomeFilial(filial);
     pgClient = await pgPool.connect();
 
     // Transação

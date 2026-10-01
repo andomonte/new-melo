@@ -1,7 +1,7 @@
 // pages/api/vendas/dashboard/get.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 
 // ============================================================================
@@ -113,7 +113,7 @@ export default async function handle(
     // A variável 'finalTrunc' será a que efetivamente usaremos na query
     let finalTrunc = initialTrunc;
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     // LÓGICA DE AGRUPAMENTO DINÂMICO (APENAS PARA 'todo_periodo')
     if (range === 'todo_periodo') {

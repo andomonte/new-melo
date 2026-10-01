@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * API para consultar produtos relacionados
@@ -27,7 +27,7 @@ export default async function handle(
     return res.status(400).json({ error: 'Código do produto é obrigatório' });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
 
   try {
     // Buscar produtos relacionados ao produto informado

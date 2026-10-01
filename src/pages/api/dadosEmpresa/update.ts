@@ -2,7 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { parseCookies } from 'nookies';
 import { encrypt } from '@/utils/crypto'; // Mantemos a importação e uso da função de criptografia
 import {
@@ -59,7 +59,7 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     await client.query('BEGIN');

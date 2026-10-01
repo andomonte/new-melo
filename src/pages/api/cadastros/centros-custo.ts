@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { pool } from '@/lib/db';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -9,8 +9,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let client;
 
   try {
+    const pool = await getPgPoolFilial(req);
     client = await pool.connect();
-    await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
 
     const { search } = req.query;
 

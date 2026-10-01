@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { parseCookies } from 'nookies';
 import formidable from 'formidable';
 import * as XLSX from 'xlsx';
@@ -36,7 +36,7 @@ export default async function handler(
   }
 
   // 3. Obter conexão do pool
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   const client = await pool.connect();
 
   try {

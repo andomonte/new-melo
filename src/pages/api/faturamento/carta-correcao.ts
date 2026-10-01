@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import https from 'https';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { parseStringPromise } from 'xml2js';
 
 import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assinarXml';
@@ -90,7 +90,7 @@ export default async function handler(
 
   try {
     // 1. Buscar a NF-e autorizada da fatura (mesma lógica do cancelamento).
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
     let nota: any;
     let cceAnterior: { xcorrecao: string; nseqevento: number } | null = null;
     try {
@@ -181,7 +181,7 @@ export default async function handler(
     let cadeiaCrt: string | null = null;
     let cnpjEmitente = '18053139000169';
     {
-      const cliCert = await getPgPool().connect();
+      const cliCert = await (await getPgPoolFilial(req)).connect();
       try {
         const emp = await cliCert.query(
           `SELECT "certificadoKey", "certificadoCrt", "cadeiaCrt", cgc
@@ -298,7 +298,7 @@ export default async function handler(
 
     // Registra a CC-e (aceita ou não) para histórico/depuração.
     {
-      const cliSave = await getPgPool().connect();
+      const cliSave = await (await getPgPoolFilial(req)).connect();
       try {
         await cliSave.query(
           `INSERT INTO fat_cce

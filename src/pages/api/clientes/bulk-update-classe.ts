@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 
 interface BulkUpdateClasseRequest {
@@ -40,7 +40,7 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     await client.query('BEGIN');

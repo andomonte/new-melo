@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Cadastro de Conta Financeira (cad_conta_financeira).
@@ -9,7 +9,7 @@ import { getPgPool } from '@/lib/pg';
  * POST { cof_descricao, cof_cec_id?, cof_operacional? } → cria (cof_id = MAX+1, status 'ativo').
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     if (req.method === 'GET') {

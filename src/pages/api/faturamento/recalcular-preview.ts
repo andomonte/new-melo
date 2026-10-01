@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 // PREVIEW do recálculo de imposto do faturamento — NÃO salva nada.
 // Usa a MESMA função PG calcular_imposto_item que o salvar.ts usa em
@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const mov = String(tipoMovimentacao ?? 'SAIDA').toUpperCase();
   const op = String(tipoOperacao ?? 'VENDA').toUpperCase();
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     const out: any[] = [];

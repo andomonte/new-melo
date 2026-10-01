@@ -1,7 +1,7 @@
 // pages/api/empresa/dados.ts
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,7 +16,7 @@ export default async function handler(
   const { cgc, inscricaoestadual } = req.query;
 
   // 3. Conectar ao pool
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     // Se foi fornecida IE, primeiro buscar o CNPJ associado na tabela db_ie

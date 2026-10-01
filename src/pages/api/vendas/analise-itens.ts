@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * API para gerenciar itens de uma venda na análise de liberação.
@@ -48,7 +48,7 @@ async function getStatusVenda(client: any, codvenda: string): Promise<string | n
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
 
   try {

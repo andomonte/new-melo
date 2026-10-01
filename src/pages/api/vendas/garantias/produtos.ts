@@ -23,7 +23,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 const LIMITE = 30;
 
@@ -41,7 +41,7 @@ export default async function handle(
 
   let client: PoolClient | undefined;
   try {
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     // 1ª tentativa: referência começando pelo texto — o filtro do Delphi.
     let produtos = await buscar(client, `p.ref ILIKE $1`, [`${search}%`]);

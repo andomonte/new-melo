@@ -1,7 +1,7 @@
 // pages/api/tipoOperacaoFiscal/index.ts
 // Catálogo GLOBAL (banco central db_manaus) — usa @/lib/pg (search_path db_manaus,public).
 import { NextApiRequest, NextApiResponse } from 'next';
-import { queryWithRelease } from '@/lib/pg';
+import { queryWithReleaseFilial } from '@/lib/pg';
 
 const TABLE = '"cad_tipo_operacao_fiscal"';
 
@@ -80,11 +80,11 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
 
     const whereString = whereGroups.length ? `WHERE ${whereGroups.join(' AND ')}` : '';
 
-    const totalResult = await queryWithRelease(`SELECT COUNT(*) FROM ${TABLE} ${whereString}`, params);
+    const totalResult = await queryWithReleaseFilial(req, `SELECT COUNT(*) FROM ${TABLE} ${whereString}`, params);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     const offset = (page - 1) * perPage;
-    const dataResult = await queryWithRelease(
+    const dataResult = await queryWithReleaseFilial(req, 
       `SELECT * FROM ${TABLE} ${whereString}
        ORDER BY "tipo_movimentacao" ASC, "ordem" ASC
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -108,7 +108,7 @@ const handleCreate = async (req: NextApiRequest, res: NextApiResponse) => {
     return res.status(400).json({ error: 'Código, descrição e movimentação são obrigatórios.' });
   }
   try {
-    const result = await queryWithRelease(
+    const result = await queryWithReleaseFilial(req, 
       `INSERT INTO ${TABLE} ("codigo","descricao","tipo_movimentacao","ordem","ativo")
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [

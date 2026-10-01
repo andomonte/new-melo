@@ -4,7 +4,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
 import { ItemPromocao } from '@/data/promocoes/promocoes';
-import { getPgPool } from '@/lib/pgClient'; // Importe sua função getPgPool
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Importe sua função getPgPool
 
 // ✨ DEFINIÇÕES DE INTERFACES PARA O PAYLOAD DO REQ.BODY
 // Estas interfaces refletem as Promocao e ProdutoCarrinhoTemp do frontend,
@@ -92,7 +92,7 @@ export default async function handler(
   }
 
   try {
-    const pool = getPgPool(filial); // Obtém o pool de conexão para a filial
+    const pool = await getPgPoolPorNomeFilial(filial); // Obtém o pool de conexão para a filial
     client = await pool.connect(); // Obtém uma conexão do pool
 
     await client.query('BEGIN'); // INICIA A TRANSAÇÃO: Tudo a partir daqui será atômico.

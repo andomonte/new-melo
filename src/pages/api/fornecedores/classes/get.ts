@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pgClient'; // ← troca para pool por filial
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // ← troca para pool por filial
 import { PoolClient } from 'pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { parseCookies } from 'nookies'; // ← ler a filial do cookie
@@ -19,7 +19,7 @@ export default async function handle(
         .json({ error: 'Cookie "filial_melo" ausente ou inválido.' });
     }
 
-    const pool = getPgPool(filial_melo);
+    const pool = await getPgPoolPorNomeFilial(filial_melo);
     client = await pool.connect();
 
     const pageNumber = Number(page);

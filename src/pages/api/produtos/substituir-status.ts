@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Espelha o spVALIDAR_SUBSTITUICAO do Delphi: informa se um produto já está
@@ -27,7 +27,7 @@ export default async function handle(
     typeof req.query.codprod === 'string' ? req.query.codprod.trim() : '';
   if (!codprod) return res.status(400).json({ error: 'codprod é obrigatório' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     // dados canônicos do próprio produto (codmarca "cru", para comparações)
     const atualRes = await client.query(SEL_PROD, [codprod]);

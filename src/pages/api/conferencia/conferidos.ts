@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 
 // Strict typing with readonly interfaces
@@ -110,7 +110,7 @@ export default async function handler(
   }
 
   // Get optimized multi-tenant connection pool
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   let client: PoolClient | null = null;
 
   try {

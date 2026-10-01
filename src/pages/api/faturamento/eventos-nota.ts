@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * GET /api/faturamento/eventos-nota?codfat=XXXX
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const codfat = String(req.query.codfat || '').trim();
   if (!codfat) return res.status(400).json({ erro: 'codfat é obrigatório.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const eventos: any[] = [];
 

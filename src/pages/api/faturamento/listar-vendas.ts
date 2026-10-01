@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 function getCampoSQL(campo: string): string {
   switch (campo) {
@@ -160,7 +160,7 @@ export default async function handler(
 
   const whereSQL = whereAND.length ? `WHERE ${whereAND.join(' AND ')}` : '';
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     const countResult = await client.query(

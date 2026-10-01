@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Lista de produtos para o "Localizar Produto..." da tela Substituir (espelha o
@@ -18,7 +18,7 @@ export default async function handle(
   const termo = typeof req.query.termo === 'string' ? req.query.termo.trim() : '';
   if (!termo) return res.status(400).json({ error: 'Informe a referência.' });
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const like = `%${termo}%`;
     const r = await client.query(

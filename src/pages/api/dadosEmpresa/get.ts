@@ -2,7 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient'; // Importe sua função getPgPool
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Importe sua função getPgPool
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { parseCookies } from 'nookies';
 import { DBDadosEmpresa } from '@/data/dadosEmpresa/dadosEmpresas';
@@ -37,7 +37,7 @@ export default async function handle(
 
   try {
     // Usar a filial do cookie para obter o pool de conexão
-    const pool = getPgPool(filial);
+    const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
     const pageNum = parseInt(page as string, 10);

@@ -2,7 +2,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { parseCookies } from 'nookies';
 
 interface DBArmazem {
@@ -60,7 +60,7 @@ export default async function handle(
   let client: PoolClient | undefined;
 
   try {
-    const pool = getPgPool(filialDoCookie); // Usa filialDoCookie APENAS AQUI
+    const pool = await getPgPoolPorNomeFilial(filialDoCookie); // Usa filialDoCookie APENAS AQUI
     client = await pool.connect();
 
     const updates: string[] = [];

@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg'; // Importe PoolClient do 'pg'
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient'; // Importe sua função getPgPool
+import { getPgPoolPorNomeFilial } from '@/lib/pg'; // Importe sua função getPgPool
 import { serializeBigInt } from '@/utils/serializeBigInt'; // Mantenha se precisar serializar BigInts
 
 export default async function handle(
@@ -29,7 +29,7 @@ export default async function handle(
   let client: PoolClient | undefined; // Declare client aqui para garantir que ele esteja disponível no bloco finally
 
   try {
-    const pool = getPgPool(filial); // Obtém o pool de conexão baseado na filial
+    const pool = await getPgPoolPorNomeFilial(filial); // Obtém o pool de conexão baseado na filial
     client = await pool.connect(); // Obtém um cliente de conexão do pool
 
     // Consulta para buscar o último limite de cliente para um dado codcli

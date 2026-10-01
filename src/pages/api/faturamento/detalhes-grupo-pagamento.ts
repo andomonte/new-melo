@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -32,7 +32,7 @@ export default async function handler(
   }
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     // Verificar se a tabela grupo_pagamento_fatura existe
     let hasRelationshipTable = false;

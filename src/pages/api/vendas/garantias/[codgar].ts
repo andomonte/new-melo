@@ -3,7 +3,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import {
   STATUS_GARANTIA,
   devolverEstoque,
@@ -19,7 +19,7 @@ export default async function handle(
 
   let client: PoolClient | undefined;
   try {
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     if (req.method === 'GET') return obter(client, codgar, res);
     if (req.method === 'PUT') return alterarSituacao(client, codgar, req, res);

@@ -1,7 +1,7 @@
 // pages/api/vendas/dashboard/kpis.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PoolClient } from 'pg';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { getDateRange, KpiData } from './dashboardUtils';
 
@@ -19,7 +19,7 @@ export default async function handle(
     const { range = 'ultimos_30_dias' } = req.query as { range?: string };
     const { startDate, endDate } = getDateRange(range);
 
-    client = await getPgPool().connect();
+    client = await (await getPgPoolFilial(req)).connect();
 
     const kpiResult = await client.query(
       `

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Handler da API para buscar um cliente pelo seu codcli.
@@ -26,7 +26,7 @@ export default async function handler(
   }
 
   // 3. Conectar ao banco de dados
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     // 4. Executar a query para buscar os dados do cliente de forma segura

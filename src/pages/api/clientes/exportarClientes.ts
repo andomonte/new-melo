@@ -1,7 +1,7 @@
 // pages/api/cliente/exportar.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import ExcelJS from 'exceljs';
 import { serializeBigInt } from '@/utils/serializeBigInt';
@@ -40,7 +40,7 @@ export default async function handler(
     return res.status(400).json({ error: 'Filial não informada no cookie' });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   let client: PoolClient | undefined;
   const { colunas = [], filtros = {}, busca = '' } = req.body;
 

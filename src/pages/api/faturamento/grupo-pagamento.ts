@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { inserirCobrancaGP } from '@/lib/faturamento/inserirCobrancaGP';
 
 export default async function handler(
@@ -51,7 +51,7 @@ async function criarGrupoPagamento(req: NextApiRequest, res: NextApiResponse) {
     }
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     await client.query('BEGIN');
@@ -212,7 +212,7 @@ async function listarGruposPagamento(
   const { codcli } = req.query;
 
   try {
-    const client = await getPgPool().connect();
+    const client = await (await getPgPoolFilial(req)).connect();
 
     let query = `
       SELECT DISTINCT codgp
@@ -253,7 +253,7 @@ async function atualizarGrupoPagamento(
       .json({ error: 'Código do grupo de pagamento é obrigatório.' });
   }
 
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
 
   try {
     await client.query('BEGIN');
