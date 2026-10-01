@@ -137,7 +137,7 @@ export interface ServicoNfs {
   sen_excluido?: number;
 }
 
-/** tb_user_perfil.cod_conta */
+/** tb_user_perfil.cod_conta (+ dados da conta dbconta vinculada) */
 export interface OperadorCaixa {
   id?: string; // usuario|perfil|codigo_filial
   usuario: string;
@@ -147,6 +147,23 @@ export interface OperadorCaixa {
   cod_conta: string;
   nro_conta?: string;
   digito?: string;
+  /** dbconta.bloqueio — 0 libera, 1 bloqueia abrir/receber caixa. */
+  bloqueio?: number | string;
+  /** Marcado no form: cria uma conta nova em dbconta em vez de vincular existente. */
+  nova_conta?: boolean;
+  /** Usado só na criação de conta nova. */
+  oficial?: string;
+}
+
+/** Bloqueia/libera a conta (dbconta.bloqueio) do operador, sem abrir o modal de edição. */
+export async function setBloqueioOperador(
+  id: string,
+  bloquear: boolean,
+): Promise<void> {
+  await api.patch(
+    `/api/financeiro/arquivos/operador-caixa/${encodeURIComponent(id)}`,
+    { bloqueio: bloquear ? 1 : 0 },
+  );
 }
 
 // ---------------------------------------------------------------------------

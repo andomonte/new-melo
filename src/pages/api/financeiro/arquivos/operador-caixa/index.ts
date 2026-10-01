@@ -36,12 +36,24 @@ async function listar(req: NextApiRequest, res: NextApiResponse) {
     const params: any[] = [];
     // Só as linhas com conta preenchida são "operadores de caixa" — é o que a
     // tela do Delphi lista (spNavega_operador).
-    let where = 'WHERE p.cod_conta IS NOT NULL';
+    const conds: string[] = ['p.cod_conta IS NOT NULL'];
     if (search) {
       params.push(`%${search}%`);
-      where += ` AND (p.user_login_id ILIKE $1 OR p.cod_conta ILIKE $1
-                      OR c.nro_conta ILIKE $1 OR p.nome_filial ILIKE $1)`;
+      const i = params.length;
+      conds.push(
+        `(p.user_login_id ILIKE $${i} OR p.cod_conta ILIKE $${i}
+          OR c.nro_conta ILIKE $${i} OR p.nome_filial ILIKE $${i})`,
+      );
     }
+    // Filtro de situação (Todos/Desbloqueados/Bloqueados) vindo do statusFilter.
+    const filtros = Array.isArray(source.filtros) ? source.filtros : [];
+    for (const f of filtros) {
+      if (f?.campo === 'bloqueio' && f.valor != null && f.valor !== '') {
+        params.push(Number(f.valor) ? 1 : 0);
+        conds.push(`COALESCE(c.bloqueio,0) = $${params.length}`);
+      }
+    }
+    const where = `WHERE ${conds.join(' AND ')}`;
 
     const total = Number(
       (
@@ -87,24 +99,53 @@ async function vincular(req: NextApiRequest, res: NextApiResponse) {
   const usuario = String(req.body?.usuario ?? '').trim();
   const perfil = String(req.body?.perfil ?? '').trim();
   const filial = Number(req.body?.codigo_filial);
-  const conta = String(req.body?.cod_conta ?? '').trim();
+  const novaConta = Boolean(req.body?.nova_conta);
+  const bloqueio = Number(req.body?.bloqueio) ? 1 : 0;
 
   // btnSalvarClick do Delphi valida conta e usuário antes de chamar a procedure.
   if (!usuario) return res.status(400).json({ error: 'Usuário inválido.' });
   if (!perfil) return res.status(400).json({ error: 'Perfil do usuário inválido.' });
   if (!Number.isFinite(filial)) return res.status(400).json({ error: 'Filial inválida.' });
-  if (!conta) return res.status(400).json({ error: 'Conta inválida.' });
 
   let client: PoolClient | undefined;
   try {
     client = await getPgPool().connect();
 
-    const existe = await client.query(
-      'SELECT 1 FROM dbconta WHERE cod_conta = $1 LIMIT 1',
-      [conta],
-    );
-    if (!existe.rows.length) {
-      return res.status(400).json({ error: 'Conta inválida.' });
+    let conta = String(req.body?.cod_conta ?? '').trim();
+
+    if (novaConta) {
+      // Cadastro que o Delphi não tinha aqui: cria a conta operador em dbconta.
+      // nro_conta guarda o NOME do operador (padrão dessa tabela).
+      const nome = String(req.body?.nro_conta ?? '').trim();
+      if (!nome) return res.status(400).json({ error: 'Informe o nome da conta/operador.' });
+      const mx = await client.query(
+        `SELECT COALESCE(MAX(NULLIF(regexp_replace(cod_conta,'[^0-9]','','g'),'')::int),0) + 1 AS prox
+           FROM dbconta`,
+      );
+      conta = String(mx.rows[0].prox).padStart(4, '0');
+      await client.query(
+        `INSERT INTO dbconta (cod_conta, cod_banco, nro_conta, digito, oficial, bloqueio)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          conta,
+          req.body?.cod_banco ? String(req.body.cod_banco).trim().slice(0, 4) : null,
+          nome.slice(0, 15), // dbconta.nro_conta é varchar(15)
+          req.body?.digito ? String(req.body.digito).trim().slice(0, 1) : null, // varchar(1)
+          req.body?.oficial ? String(req.body.oficial).trim().toUpperCase().slice(0, 1) : 'N',
+          bloqueio,
+        ],
+      );
+    } else {
+      if (!conta) return res.status(400).json({ error: 'Conta inválida.' });
+      const existe = await client.query(
+        'SELECT 1 FROM dbconta WHERE cod_conta = $1 LIMIT 1',
+        [conta],
+      );
+      if (!existe.rows.length) {
+        return res.status(400).json({ error: 'Conta inválida.' });
+      }
+      // Em conta existente, o bloqueio também pode ser ajustado aqui.
+      await client.query('UPDATE dbconta SET bloqueio = $2 WHERE cod_conta = $1', [conta, bloqueio]);
     }
 
     const { rows } = await client.query(

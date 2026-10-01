@@ -75,7 +75,7 @@ export const TIPO_CONFIG: Record<
   por_cliente:          { layout: 'por_cliente', titulo: 'CONTAS A RECEBER POR CLIENTE',  extraWhere: '',                                                            dateField: 'dt_venc',    fonte: 'dbreceb' },
   receber_periodo:      { layout: 'geral',       titulo: 'RECEBER NO PERÍODO',            extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
   em_atraso:            { layout: 'geral',       titulo: 'TÍTULOS EM ATRASO NO PERÍODO',  extraWhere: ` AND r.rec IS DISTINCT FROM 'S' AND r.dt_venc < CURRENT_DATE`,  dateField: 'dt_venc',    fonte: 'dbreceb' },
-  diario_avista:        { layout: 'geral',       titulo: 'TÍTULOS DIÁRIO À VISTA',        extraWhere: ` AND UPPER(COALESCE(c.claspgto,'')) = 'V'`,                    dateField: 'dt_emissao', fonte: 'dbreceb' },
+  diario_avista:        { layout: 'geral',       titulo: 'TÍTULOS DIÁRIO À VISTA',        extraWhere: '',                                                            dateField: 'dt_emissao', fonte: 'dbreceb' },
   recebimento_clientes: { layout: 'geral',       titulo: 'RECEBIMENTO DE CLIENTES',       extraWhere: ` AND fr.tipo <> 'E'`,                                          dateField: 'dt_pgto',    fonte: 'dbfreceb' },
 };
 
@@ -85,7 +85,16 @@ function buildQuery(
   data_fim?: string,
   status?: string,
   colFiltros: { cod_receb?: string; cliente?: string; nro_doc?: string; cod_fat?: string; search?: string } = {},
-  extra: { codcli?: string; cod_conta?: string; classe_pgto?: string; tx_juros?: string } = {},
+  extra: {
+    codcli?: string;
+    cod_conta?: string;
+    classe_pgto?: string;
+    tx_juros?: string;
+    codvend?: string;
+    uf?: string;
+    rec_filtro?: string; // 'S' = pago, 'N' = não pago (diário à vista)
+    orgaos?: string; // 'S' = só órgãos públicos (claspgto='O')
+  } = {},
 ): { sql: string; params: any[]; countSql: string; layout: 'geral' | 'por_cliente'; titulo: string } {
   const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG.geral;
   const params: any[] = [];
@@ -138,9 +147,29 @@ function buildQuery(
     whereClause += ` AND ${contaCol} = $${idx}`;
     params.push(String(extra.cod_conta)); idx++;
   }
-  if (extra.classe_pgto === 'V' || extra.classe_pgto === 'I') {
+  // Classe de pagamento (dbclien.claspgto). Valores reais no banco (mapeamento Delphi):
+  //   I = À VISTA · V = INATIVO · A/B/C = classes · O = ÓRGÃOS PÚBLICOS · 'T' = todos.
+  if (extra.classe_pgto && extra.classe_pgto !== 'T') {
     whereClause += ` AND UPPER(COALESCE(c.claspgto,'')) = $${idx}`;
-    params.push(extra.classe_pgto); idx++;
+    params.push(String(extra.classe_pgto).toUpperCase()); idx++;
+  }
+  // Vendedor do cliente (Em atraso → escopo Vendedor).
+  if (extra.codvend) {
+    whereClause += ` AND LTRIM(CAST(c.codvend AS TEXT), '0') = LTRIM($${idx}, '0')`;
+    params.push(String(extra.codvend)); idx++;
+  }
+  // Órgãos públicos (Em atraso → escopo Órgãos): claspgto='O'.
+  if (extra.orgaos === 'S') {
+    whereClause += ` AND UPPER(COALESCE(c.claspgto,'')) = 'O'`;
+  }
+  // UF do cliente (Títulos Diário à Vista).
+  if (extra.uf) {
+    whereClause += ` AND UPPER(COALESCE(c.uf,'')) = $${idx}`;
+    params.push(String(extra.uf).toUpperCase()); idx++;
+  }
+  // Pago / Não pago (Títulos Diário à Vista → dbreceb.rec).
+  if (cfg.fonte === 'dbreceb' && (extra.rec_filtro === 'S' || extra.rec_filtro === 'N')) {
+    whereClause += extra.rec_filtro === 'S' ? ` AND r.rec = 'S'` : ` AND r.rec IS DISTINCT FROM 'S'`;
   }
 
   // Filtro específico do tipo de relatório.
@@ -517,7 +546,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, colunas } = req.query;
+  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, codvend, uf, rec_filtro, orgaos, colunas } = req.query;
   const colunasSel = parseColunas(colunas as string | undefined);
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel' && formato !== 'json')) {
@@ -551,6 +580,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cod_conta: cod_conta as string | undefined,
         classe_pgto: classe_pgto as string | undefined,
         tx_juros: tx_juros as string | undefined,
+        codvend: codvend as string | undefined,
+        uf: uf as string | undefined,
+        rec_filtro: rec_filtro as string | undefined,
+        orgaos: orgaos as string | undefined,
       },
     );
 

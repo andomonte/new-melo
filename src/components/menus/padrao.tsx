@@ -77,6 +77,7 @@ import KickbackBosch from '@/components/corpo/gerenciamento/produtos/kickback';
 import DadosEmpresa from '@/components/corpo/admin/cadastro/dadosEmpresa';
 import TransportadorasPage from '../corpo/admin/cadastro/transportadoras';
 import CfopPage from '../corpo/admin/cadastro/cfop';
+import OperadorasPage from '../corpo/admin/cadastro/operadoras';
 import FormaPgtoPage from '../corpo/admin/cadastro/formaPgto';
 import LocacoesProdutoPage from '../corpo/admin/cadastro/locacoes';
 import TipoOperacaoFiscalPage from '../corpo/admin/cadastro/tipoOperacaoFiscal';
@@ -258,6 +259,12 @@ export const menus = [
             href: '/admin/cadastros/cfop',
             icon: ListCheckIcon,
             corpo: CfopPage,
+          },
+          {
+            name: 'Operadoras de Cartão',
+            href: '/admin/cadastros/operadoras',
+            icon: ListCheckIcon,
+            corpo: OperadorasPage,
           },
           {
             name: 'Forma de Pagamento',

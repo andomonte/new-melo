@@ -9,6 +9,7 @@ import Modal from '@/components/common/Modal';
 import { Button } from '@/components/ui/button';
 import { mascaraInputBRL, desmascarar, formatarBRL, formatarDecimalBR } from '@/utils/monetario';
 import { Trash2, Loader2, Landmark } from 'lucide-react';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 
 /**
  * Modal de Recebimento (baixa) de vários títulos do Contas a Receber.
@@ -67,7 +68,7 @@ interface Props {
   /** Conta do operador (tb_user_perfil.cod_conta da filial). Se vazia, o modal tenta buscar. */
   codContaInicial?: string;
   /** Dados do usuário logado para fallback da conta do operador. */
-  user?: { usuario?: string; filial?: string; cod_conta?: string | number; codusr?: string | number } | null;
+  user?: { usuario?: string; filial?: string; cod_conta?: string | number; codusr?: string | number; funcoes?: any[] } | null;
   onClose: () => void;
   /** Chamado após confirmar o recebimento (real) — o pai recarrega o grid. */
   onSuccess: () => void;
@@ -129,7 +130,13 @@ export default function ModalRecebimentoTitulos({
   const [codConta, setCodConta] = useState(String(codContaInicial ?? ''));
   const [deposito, setDeposito] = useState(false);
   const [dataPgto, setDataPgto] = useState(hojeISO);
-  const [simular, setSimular] = useState(true);
+  // Modo simulação removido — o recebimento é sempre REAL (pede confirmação antes).
+  const simular = false;
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  // "Baixar juros (liberar taxa)" é função liberada por usuário (sigla LIBERAR_JUROS).
+  const podeLiberarJuros = (user?.funcoes || []).some(
+    (f: any) => (typeof f === 'string' ? f : f?.sigla) === 'LIBERAR_JUROS',
+  );
   const [previa, setPrevia] = useState<any | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [refetchDados, setRefetchDados] = useState(0); // bump p/ recarregar juros após liberar
@@ -820,7 +827,8 @@ export default function ModalRecebimentoTitulos({
               </div>
             )}
 
-            {/* Baixar Juros (liberar taxa) — porte do Delphi UniContasR.BaixarJuros */}
+            {/* Baixar Juros (liberar taxa) — função LIBERAR_JUROS (liberada por usuário) */}
+            {podeLiberarJuros && (
             <div className="mt-3">
               {!liberarAberto ? (
                 <button
@@ -913,6 +921,7 @@ export default function ModalRecebimentoTitulos({
                 </div>
               )}
             </div>
+            )}
 
             {/* Conta operador + depósito + simulação */}
             <div className="mt-4 grid grid-cols-3 gap-3 items-end">
@@ -947,18 +956,9 @@ export default function ModalRecebimentoTitulos({
                   className="font-mono disabled:opacity-50"
                 />
               </div>
-              <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 cursor-pointer select-none">
-                <input type="checkbox" checked={simular} onChange={(e) => setSimular(e.target.checked)} />
-                <span className="text-sm font-medium">Modo simulação</span>
-              </label>
             </div>
 
-            <div className="mt-3 text-xs text-gray-600 dark:text-gray-300 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg px-3 py-2.5">
-              Com <b>Modo simulação</b> ligado, nada é gravado — mostra só a prévia. A baixa é{' '}
-              <b>independente</b> do caixa físico.
-            </div>
-
-            {/* Prévia da simulação */}
+            {/* Prévia (desativada — sem modo simulação) */}
             {previa?.simulado && (
               <div className="mt-3 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-3 text-sm">
                 <div className="font-bold text-emerald-700 dark:text-emerald-400 mb-2">
@@ -981,14 +981,27 @@ export default function ModalRecebimentoTitulos({
               <Button type="button" variant="outline" onClick={onClose} disabled={salvando}>
                 Fechar
               </Button>
-              <Button type="button" onClick={receberEDarBaixa} disabled={salvando || passadas.length === 0}>
+              <Button
+                type="button"
+                onClick={() =>
+                  pedirConfirmacao(receberEDarBaixa, {
+                    title: 'Confirmar recebimento',
+                    message: `Confirmar o recebimento de ${formatarBRL(totalReceber)} (${titulos.length} título(s))? A baixa será efetivada.`,
+                    type: 'info',
+                    confirmText: 'Sim, receber',
+                    cancelText: 'Cancelar',
+                  })
+                }
+                disabled={salvando || passadas.length === 0}
+              >
                 {salvando && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-                {simular ? 'Simular Recebimento' : 'Confirmar Recebimento'}
+                Confirmar Recebimento
               </Button>
             </div>
           </div>
         </section>
       </div>
+      {ConfirmacaoSalvarModal}
     </Modal>
   );
 }

@@ -40,6 +40,7 @@ import GrupoDeProdutos from '@/components/corpo/admin/cadastro/grupoDeProdutos';
 import BancosContas from '@/components/corpo/admin/cadastro/bancosContas';
 import ContaFinanceira from '@/components/corpo/admin/cadastro/contaFinanceira';
 import Cfop from '@/components/corpo/admin/cadastro/cfop';
+import Operadoras from '@/components/corpo/admin/cadastro/operadoras';
 import Informativos from '@/components/corpo/admin/cadastro/informativos';
 import GruposFuncao from '@/components/corpo/admin/cadastro/gruposFuncao';
 import ClassificacaoFiscal from '@/components/corpo/admin/cadastro/classificacaoFiscal';
@@ -137,6 +138,12 @@ const menus = [
             href: '/admin/cadastros/cfop',
             icon: FileTextIcon,
             corpo: Cfop,
+          },
+          {
+            name: 'Operadoras de Cartão',
+            href: '/admin/cadastros/operadoras',
+            icon: FileTextIcon,
+            corpo: Operadoras,
           },
           {
             name: 'Grupos de Função',

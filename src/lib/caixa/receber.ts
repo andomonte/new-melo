@@ -86,21 +86,18 @@ const TIPOS_TARIFA = new Set(['06', '07', '08', '15', '32', '44']);
 const COF_TARIFA = 161;
 const COF_JUROS = 160;
 
-// Contas bloqueadas para recebimento — porte da lista hardcoded do SysCaixa (bbtnSalvarClick).
-// São contas de operadores desativados. TODO: mover para um flag em dbconta/config no futuro.
-export const CONTAS_BLOQUEADAS = new Set([
-  112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 125, 126, 127, 128, 129, 130, 131, 132,
-  135, 136, 137, 138, 139, 143, 144, 145, 146, 148, 149, 151, 152, 153, 154, 155, 159, 161, 162, 163,
-  164, 165, 166, 167, 170, 171, 172, 173, 174, 176, 177, 178,
-]);
-
-/** Valida a conta do operador: precisa existir em dbconta e não estar bloqueada (regra Delphi). */
+/** Valida a conta do operador: precisa existir em dbconta e não estar bloqueada.
+ * Bloqueio agora é dado pelo campo dbconta.bloqueio (mantido na tela Operador de Caixa),
+ * substituindo a antiga lista fixa portada do SysCaixa. */
 async function validarContaOperador(c: PoolClient, codConta: string): Promise<void> {
   const cod = String(codConta || '').trim();
   if (!cod) throw new Error('Informe a conta do operador.');
-  const r = await c.query('SELECT nro_conta FROM dbconta WHERE cod_conta=$1', [cod.padStart(4, '0')]);
+  const r = await c.query(
+    'SELECT nro_conta, COALESCE(bloqueio,0) AS bloqueio FROM dbconta WHERE cod_conta=$1',
+    [cod.padStart(4, '0')],
+  );
   if (r.rows.length === 0) throw new Error(`Conta do operador "${cod}" inválida.`);
-  if (CONTAS_BLOQUEADAS.has(Number(cod))) {
+  if (Number(r.rows[0].bloqueio) !== 0) {
     throw new Error(`Conta "${cod}" (${r.rows[0].nro_conta}) bloqueada para recebimento.`);
   }
 }

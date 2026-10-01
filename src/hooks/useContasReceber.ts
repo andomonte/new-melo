@@ -140,6 +140,9 @@ export interface EditarContaReceberData {
   nro_doc?: string; // Número do documento
   codcli?: number; // Código do cliente
   rec_cof_id?: number; // Conta financeira (dbconta)
+  banco?: string; // Código do banco de cobrança
+  forma_fat?: string; // Forma de faturamento (numérico: 1=recibo, 2=boleto, 3=promissória, 4=carteira...)
+  tipo?: string; // Tipo (R=recebimento, D=devolução)
 }
 
 export interface NovaContaReceberData {

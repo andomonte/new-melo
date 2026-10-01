@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Lock, Unlock, ArrowUp, ArrowDown, X, Printer } from 'lucide-react';
 import { mascaraInputBRL, desmascarar, formatarBRL } from '@/utils/monetario';
@@ -210,7 +210,7 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
             Operador <b>{operador}</b> · Conta <b className="font-mono">{codConta || '—'}</b>
           </p>
           <Campo label="Data">
-            <input type="date" className="fld" value={dataMov} onChange={(e) => setDataMov(e.target.value)} />
+            <CalendarioMovimento conta={codConta} valor={dataMov} onChange={setDataMov} />
           </Campo>
           <Rodape>
             <Btn onClick={() => setMovAberto(false)}>Fechar</Btn>
@@ -318,6 +318,94 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
         :global(.dark .input-money) { background:#0f172a; border-color:#334155; color:#e2e8f0; }
       `}</style>
     </>
+  );
+}
+
+/**
+ * Calendário do "Movimento do Caixa": destaca (negrito + ponto verde) os dias
+ * que têm movimento para a conta, para o usuário saber qual data selecionar.
+ * Fonte: /api/caixa/datas-movimento (mesma do comprovante).
+ */
+function CalendarioMovimento({ conta, valor, onChange }: { conta: string; valor: string; onChange: (iso: string) => void }) {
+  const base = valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor : hojeISO();
+  const [ym, setYm] = useState(base.slice(0, 7)); // YYYY-MM
+  const [comDados, setComDados] = useState<Set<string>>(new Set());
+  const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => {
+    if (!conta) return;
+    let ativo = true;
+    setCarregando(true);
+    fetch(`/api/caixa/datas-movimento?conta=${encodeURIComponent(conta)}&mes=${ym}`)
+      .then((r) => r.json())
+      .then((j) => { if (ativo && j.ok) setComDados(new Set<string>(j.datas || [])); })
+      .catch(() => {})
+      .finally(() => { if (ativo) setCarregando(false); });
+    return () => { ativo = false; };
+  }, [conta, ym]);
+
+  const [ano, mes] = ym.split('-').map(Number); // mes 1-12
+  const inicioSemana = new Date(ano, mes - 1, 1).getDay(); // 0=Dom
+  const diasNoMes = new Date(ano, mes, 0).getDate();
+  const iso = (d: number) => `${ym}-${String(d).padStart(2, '0')}`;
+  const nomeMes = new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const hoje = hojeISO();
+
+  const navegar = (delta: number) => {
+    const nd = new Date(ano, mes - 1 + delta, 1);
+    setYm(`${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  const celulas: (number | null)[] = [];
+  for (let i = 0; i < inicioSemana; i++) celulas.push(null);
+  for (let d = 1; d <= diasNoMes; d++) celulas.push(d);
+
+  return (
+    <div className="rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={() => navegar(-1)} className="h-7 w-7 rounded hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500">‹</button>
+        <span className="text-sm font-semibold capitalize">{nomeMes}{carregando ? ' …' : ''}</span>
+        <button type="button" onClick={() => navegar(1)} className="h-7 w-7 rounded hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500">›</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-gray-400 mb-1">
+        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((w, i) => <span key={i}>{w}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {celulas.map((d, i) => {
+          if (d == null) return <span key={i} />;
+          const dia = iso(d);
+          const tem = comDados.has(dia);
+          const sel = dia === valor;
+          const eHoje = dia === hoje;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onChange(dia)}
+              title={tem ? 'Há movimento neste dia' : 'Sem movimento'}
+              className={[
+                'relative h-8 rounded text-sm flex items-center justify-center transition',
+                sel
+                  ? 'bg-emerald-600 text-white font-bold'
+                  : tem
+                  ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                  : 'text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800',
+                eHoje && !sel ? 'ring-1 ring-blue-400' : '',
+              ].join(' ')}
+            >
+              {d}
+              {tem && !sel && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-emerald-500" />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between mt-2 text-[11px] text-gray-500">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" /> Dia com movimento
+        </span>
+        <span>Selecionado: <b>{/^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor.split('-').reverse().join('/') : '—'}</b></span>
+      </div>
+    </div>
   );
 }
 

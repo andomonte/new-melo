@@ -41,8 +41,6 @@ export async function imprimirMovimentoCaixa(opts: { data: string; conta?: strin
   const supr = Number(mov.totalSuprimento || 0);
   const sang = Number(mov.totalSangria || 0);
   const din = Number(mov.recebidoDinheiro || 0);
-  // Saldo do fechamento (todas as formas) = troco + entradas (recebido + suprimentos) − saídas (sangrias/vales)
-  const saldoFechamento = Math.round((troco + totalReceb + supr - sang) * 100) / 100;
 
   const w = window.open('', '_blank', 'width=900,height=1000');
   if (!w) throw new Error('Não foi possível abrir a janela (pop-up bloqueado pelo navegador).');
@@ -58,12 +56,12 @@ export async function imprimirMovimentoCaixa(opts: { data: string; conta?: strin
     @page { size: A4; margin: 14mm; }
     body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;max-width:720px;margin:0 auto}
     h1{font-size:16px;text-align:center;margin:0 0 2px}
-    h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
+    h2{font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px;border-bottom:1px solid #999;padding-bottom:2px}
     .sub{text-align:center;color:#444;margin-bottom:10px}
     .hdr{display:flex;flex-wrap:wrap;gap:4px 24px;margin-bottom:8px}
     .hdr div{min-width:200px}
-    table{border-collapse:collapse;width:100%}
-    th,td{border:1px solid #bbb;padding:4px 8px}
+    table{border-collapse:collapse;width:100%;font-size:10px}
+    th,td{border:1px solid #bbb;padding:2px 6px;line-height:1.25}
     th{background:#1e40af;color:#fff;text-align:left}
     .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     .forte{background:#eef2ff;font-weight:bold}
@@ -92,31 +90,18 @@ export async function imprimirMovimentoCaixa(opts: { data: string; conta?: strin
 
     ${caixaAberto ? `<div class="aviso"><b>Atenção:</b> ainda há caixa <b>aberto</b> neste dia. O saldo informado e a diferença só são apurados quando todas as aberturas do dia estiverem fechadas.</div>` : ''}
 
-    <div class="cols">
-      <div class="bloco">
-        <h2>Recebimentos por forma (vendas do dia)</h2>
-        <table class="resumo">
-          <thead><tr><th>Forma</th><th class="num">Valor recebido</th></tr></thead>
-          <tbody>${recebForma.length ? recebForma.map((c) => `<tr><td>${rot(c.forma)}</td><td class="num">${brl(c.valor)}</td></tr>`).join('') : '<tr><td colspan="2">Sem recebimentos no dia.</td></tr>'}</tbody>
-          <tfoot><tr class="forte"><td>Total recebido</td><td class="num">${brl(totalReceb)}</td></tr></tfoot>
-        </table>
-      </div>
-
-      <div class="bloco">
-        <h2>Resumo do fechamento (todas as formas)</h2>
-        <table class="resumo"><tbody>
-          ${linha('Saldo Abertura (fundo de troco)', brl(troco))}
-          ${linha('(+) Total recebido (vendas do dia)', brl(totalReceb))}
-          ${linha('(+) Suprimentos', brl(supr))}
-          ${linha('(−) Sangrias / Vales', brl(sang))}
-          ${linha('= Saldo do fechamento', brl(saldoFechamento), true)}
-        </tbody></table>
-      </div>
+    <div class="bloco">
+      <h2>Recebimentos por forma (vendas do dia)</h2>
+      <table class="resumo">
+        <thead><tr><th>Forma</th><th class="num">Valor recebido</th></tr></thead>
+        <tbody>${recebForma.length ? recebForma.map((c) => `<tr><td>${rot(c.forma)}</td><td class="num">${brl(c.valor)}</td></tr>`).join('') : '<tr><td colspan="2">Sem recebimentos no dia.</td></tr>'}</tbody>
+        <tfoot><tr class="forte"><td>Total recebido</td><td class="num">${brl(totalReceb)}</td></tr></tfoot>
+      </table>
     </div>
 
     <div class="bloco">
       <h2>Conferência do dinheiro na gaveta</h2>
-      <table class="resumo" style="max-width:420px"><tbody>
+      <table class="resumo"><tbody>
         ${linha('Saldo Abertura (fundo de troco)', brl(troco))}
         ${linha('(+) Recebido em dinheiro', brl(din))}
         ${linha('(+) Suprimentos', brl(supr))}

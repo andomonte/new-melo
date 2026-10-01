@@ -8,7 +8,6 @@
  */
 
 import type { PoolClient } from 'pg';
-import { CONTAS_BLOQUEADAS } from './receber';
 import {
   calcularSaldoDinheiro,
   totaisPorForma,
@@ -83,14 +82,18 @@ function mapSessao(row: any): Sessao {
   };
 }
 
-/** Valida a conta: existe em dbconta do schema e não está bloqueada (regra Delphi). */
+/** Valida a conta: existe em dbconta do schema e não está bloqueada.
+ * Bloqueio vem do campo dbconta.bloqueio (tela Operador de Caixa), não mais de lista fixa. */
 async function validarConta(c: PoolClient, schema: string, codConta: string): Promise<string> {
   const cod = String(codConta || '').trim();
   if (!cod) throw new CaixaError('VALOR_INVALIDO', 'Informe a conta do caixa.');
   const padded = cod.padStart(4, '0');
-  const r = await c.query(`SELECT nro_conta FROM ${schema}.dbconta WHERE cod_conta=$1`, [padded]);
+  const r = await c.query(
+    `SELECT nro_conta, COALESCE(bloqueio,0) AS bloqueio FROM ${schema}.dbconta WHERE cod_conta=$1`,
+    [padded],
+  );
   if (r.rows.length === 0) throw new CaixaError('VALOR_INVALIDO', `Conta "${cod}" inválida.`, 422);
-  if (CONTAS_BLOQUEADAS.has(Number(cod))) {
+  if (Number(r.rows[0].bloqueio) !== 0) {
     throw new CaixaError('CONTA_BLOQUEADA', `Conta "${cod}" (${r.rows[0].nro_conta}) bloqueada.`, 422);
   }
   return padded;

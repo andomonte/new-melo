@@ -37,7 +37,7 @@ export default async function handle(
 
     if (req.method === 'PUT') {
       // btnAlterarClick do Delphi só troca a conta — o usuário fica travado
-      // (meAltCodUsuario.ReadOnly := True).
+      // (meAltCodUsuario.ReadOnly := True). Aqui também ajustamos o bloqueio.
       const conta = String(req.body?.cod_conta ?? '').trim();
       if (!conta) return res.status(400).json({ error: 'Conta inválida.' });
 
@@ -49,6 +49,13 @@ export default async function handle(
         return res.status(400).json({ error: 'Conta inválida.' });
       }
 
+      if (req.body?.bloqueio != null) {
+        await client.query('UPDATE dbconta SET bloqueio = $2 WHERE cod_conta = $1', [
+          conta,
+          Number(req.body.bloqueio) ? 1 : 0,
+        ]);
+      }
+
       const { rowCount } = await client.query(
         `UPDATE tb_user_perfil p SET cod_conta = $4 WHERE ${filtro}`,
         [...params, conta],
@@ -57,6 +64,24 @@ export default async function handle(
         return res.status(404).json({ error: 'Operador não encontrado.' });
       }
       return res.status(200).json({ ok: true });
+    }
+
+    if (req.method === 'PATCH') {
+      // Bloquear/desbloquear a conta do operador sem abrir o modal de edição.
+      const bloqueio = Number(req.body?.bloqueio) ? 1 : 0;
+      const atual = await client.query(
+        `SELECT cod_conta FROM tb_user_perfil p WHERE ${filtro}`,
+        params,
+      );
+      const conta = atual.rows[0]?.cod_conta;
+      if (!conta) {
+        return res.status(404).json({ error: 'Operador sem conta vinculada.' });
+      }
+      await client.query('UPDATE dbconta SET bloqueio = $2 WHERE cod_conta = $1', [
+        conta,
+        bloqueio,
+      ]);
+      return res.status(200).json({ ok: true, bloqueio });
     }
 
     if (req.method === 'DELETE') {
@@ -72,7 +97,7 @@ export default async function handle(
       return res.status(204).end();
     }
 
-    res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
+    res.setHeader('Allow', ['GET', 'PUT', 'PATCH', 'DELETE']);
     return res.status(405).end(`Method ${req.method} Not Allowed`);
   } catch (erro: any) {
     console.error('Erro no operador de caixa:', erro);

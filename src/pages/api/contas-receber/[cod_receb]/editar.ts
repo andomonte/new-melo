@@ -16,7 +16,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       valor_pgto,
       nro_doc,
       codcli,
-      rec_cof_id
+      rec_cof_id,
+      banco,
+      forma_fat,
+      tipo
     } = req.body;
 
     if (!cod_receb) {
@@ -97,6 +100,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (rec_cof_id !== undefined) {
       updates.push(`rec_cof_id = $${paramIndex}`);
       params.push(rec_cof_id);
+      paramIndex++;
+    }
+
+    if (banco !== undefined) {
+      updates.push(`banco = $${paramIndex}`);
+      params.push(banco);
+      paramIndex++;
+    }
+
+    if (forma_fat !== undefined) {
+      updates.push(`forma_fat = $${paramIndex}`);
+      params.push(forma_fat);
+      paramIndex++;
+    }
+
+    if (tipo !== undefined) {
+      updates.push(`tipo = $${paramIndex}`);
+      params.push(tipo);
       paramIndex++;
     }
 

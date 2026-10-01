@@ -7,6 +7,7 @@ import { GoPencil } from 'react-icons/go';
 import { PlusIcon, CircleChevronDown, Trash2 } from 'lucide-react';
 
 import DataTable from '@/components/common/DataTableFiltro';
+import DataTablePadrao from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { GenericFormModal, FormComponentProps } from './GenericFormModal';
@@ -68,6 +69,23 @@ interface GenericCrudPageProps<T> {
    * coluna do banco (chave = nome da coluna vinda da API).
    */
   columnLabels?: Record<string, string>;
+  /** Filtro de situação (ex.: Ativos/Inativos/Todos). Injeta um filtro no `campo`. */
+  statusFilter?: {
+    campo: string;
+    opcoes: { label: string; valor: string | null }[];
+    defaultValor?: string | null;
+  };
+  /** Ações extras no dropdown de cada linha (ex.: Ativar/Inativar). */
+  rowActions?: (item: T, reload: () => void) => React.ReactNode;
+  /**
+   * Qual DataTable usar. 'filtro' (padrão) = DataTableFiltro (histórico, só
+   * "Qtd. Colunas"). 'padrao' = DataTablePadrao, que traz o gerenciador de
+   * colunas (escolher quais exibir + arrastar para reordenar) e persiste as
+   * preferências por `screenKey`/usuário.
+   */
+  dataTableVariant?: 'filtro' | 'padrao';
+  /** Chave de persistência das preferências de coluna (só no variant 'padrao'). */
+  screenKey?: string;
 }
 
 export function GenericCrudPage<T extends { [key: string]: any }>({
@@ -81,6 +99,10 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
   validationSchema,
   emptyState,
   columnLabels,
+  statusFilter,
+  rowActions,
+  dataTableVariant = 'filtro',
+  screenKey,
 }: GenericCrudPageProps<T>) {
   const [data, setData] = useState<ListApiResponse<T>>({
     data: [],
@@ -91,6 +113,9 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
   const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [filtros, setFiltros] = useState<Filtro[]>([]);
+  const [statusValor, setStatusValor] = useState<string | null>(
+    statusFilter ? statusFilter.defaultValor ?? null : null,
+  );
   const [limiteColunas, setLimiteColunas] = useState<number>(() => {
     const savedLimit = localStorage.getItem(`limiteColunas_${entityName}`);
     return savedLimit ? parseInt(savedLimit, 10) : 7;
@@ -124,7 +149,16 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.list({ page, perPage, search: '', filtros });
+      const statusFiltros: Filtro[] =
+        statusFilter && statusValor != null
+          ? [{ campo: statusFilter.campo, tipo: 'igual', valor: statusValor }]
+          : [];
+      const response = await api.list({
+        page,
+        perPage,
+        search: '',
+        filtros: [...filtros, ...statusFiltros],
+      });
       // Se a resposta for válida, atualiza o estado.
       // Se a resposta for undefined, o estado não muda, prevenindo erros.
       if (response && response.data) {
@@ -159,12 +193,16 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
     } finally {
       setLoading(false);
     }
-  }, [api, page, perPage, filtros, entityName, limiteColunas]);
+  }, [api, page, perPage, filtros, entityName, limiteColunas, statusValor, statusFilter]);
 
   const fetchDataWithSearch = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.list({ page, perPage, search, filtros: [] });
+      const statusFiltros: Filtro[] =
+        statusFilter && statusValor != null
+          ? [{ campo: statusFilter.campo, tipo: 'igual', valor: statusValor }]
+          : [];
+      const response = await api.list({ page, perPage, search, filtros: statusFiltros });
       // Se a resposta for válida, atualiza o estado.
       if (response && response.data) {
         setData(response);
@@ -192,7 +230,7 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
     } finally {
       setLoading(false);
     }
-  }, [api, page, perPage, search, entityName, limiteColunas]);
+  }, [api, page, perPage, search, entityName, limiteColunas, statusValor, statusFilter]);
 
   const debouncedSearchData = useDebouncedCallback(() => {
     setPage(1);
@@ -391,13 +429,18 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
 
   // ✅ CORREÇÃO SEGURA: Usamos (data?.data || []) para garantir que `.map` sempre opere sobre um array.
   // Isso previne o erro se `data` ou `data.data` estiverem temporariamente `undefined`.
+  // No variant 'padrao', o gerenciador de colunas decide o que exibir, então a
+  // linha precisa ter TODAS as colunas (colunasDb), não só as fatiadas (headers).
+  const colsParaLinha =
+    dataTableVariant === 'padrao' && colunasDb.length ? colunasDb : headers;
+
   const tableRows = (data?.data || []).map((item, index) => {
     const originalId = item[idKey];
     const uiKey = index;
     const rowData: { [key: string]: React.ReactNode } = {};
 
     // Usar headers dinâmicos em vez de visibleColumns fixas
-    headers.forEach((headerName) => {
+    colsParaLinha.forEach((headerName) => {
       if (headerName !== 'ações' && headerName !== 'Ações') {
         // Verificar se existe uma coluna correspondente na configuração
         const column = columns.find((col) => col.header === headerName);
@@ -455,6 +498,11 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
                       <GoPencil className="mr-2" size={16} /> Editar
                     </button>
                   )}
+                  {rowActions &&
+                    rowActions(item, () => {
+                      closeAllDropdowns();
+                      fetchData();
+                    })}
                   {permissions.canDelete && (
                     <button
                       onClick={() => handleOpenDelete(originalId)}
@@ -473,6 +521,16 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
     };
   });
 
+  // No variant 'padrao' entregamos TODAS as colunas e deixamos o gerenciador de
+  // colunas do DataTablePadrao escolher/ordenar; no 'filtro' mantemos o corte
+  // por `limiteColunas` (comportamento histórico).
+  const DataTableComp: any =
+    dataTableVariant === 'padrao' ? DataTablePadrao : DataTable;
+  const headersEfetivos =
+    dataTableVariant === 'padrao' && colunasDb.length
+      ? ['Ações', ...colunasDb.filter((c) => c !== 'Ações')]
+      : headers;
+
   return (
     <div className="h-full flex flex-col flex-grow bg-white dark:bg-slate-900">
       <main className="p-4 w-full">
@@ -481,26 +539,46 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
             <h1 className="text-2xl font-bold text-slate-800 dark:text-gray-100">
               {title}
             </h1>
-            {permissions.canCreate && api.create && (
-              <DefaultButton
-                onClick={handleOpenCreate}
-                variant="primary"
-                text="Novo"
-                icon={<PlusIcon size={16} />}
-              />
-            )}
+            <div className="flex items-center gap-3">
+              {statusFilter && (
+                <select
+                  value={statusValor ?? '__todos'}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPage(1);
+                    setStatusValor(v === '__todos' ? null : v);
+                  }}
+                  className="border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 bg-white dark:bg-slate-800 text-sm text-slate-800 dark:text-gray-100"
+                  title="Filtrar por situação"
+                >
+                  {statusFilter.opcoes.map((op) => (
+                    <option key={op.label} value={op.valor ?? '__todos'}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {permissions.canCreate && api.create && (
+                <DefaultButton
+                  onClick={handleOpenCreate}
+                  variant="primary"
+                  text="Novo"
+                  icon={<PlusIcon size={16} />}
+                />
+              )}
+            </div>
           </div>
         </header>
 
-        <DataTable
+        <DataTableComp
           carregando={loading}
-          headers={headers}
+          headers={headersEfetivos}
           rows={tableRows}
           semColunaDeAcaoPadrao={true}
           columnLabels={columnLabels}
           onColunaSubstituida={handleColunaSubstituida}
           meta={data.meta}
-          onPageChange={(newPage) => {
+          onPageChange={(newPage: number) => {
             setPage(newPage);
             if (search) {
               // Se há busca ativa, usar função de busca
@@ -510,7 +588,7 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
               fetchData();
             }
           }}
-          onPerPageChange={(newPerPage) => {
+          onPerPageChange={(newPerPage: number) => {
             setPage(1);
             setPerPage(newPerPage);
             if (search) {
@@ -519,28 +597,34 @@ export function GenericCrudPage<T extends { [key: string]: any }>({
               fetchData();
             }
           }}
-          onSearch={(e) => setSearch(e.target.value)}
+          onSearch={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setSearch(e.target.value)
+          }
           onSearchBlur={() => debouncedSearchData()}
-          onSearchKeyDown={(e) => {
+          onSearchKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
             if (e.key === 'Enter') debouncedSearchData();
           }}
           searchInputPlaceholder={`Pesquisar em ${entityName}...`}
           colunasFiltro={colunasDb}
-          onFiltroChange={(novosFiltros) => {
+          onFiltroChange={(novosFiltros: Filtro[]) => {
             setPage(1);
             setFiltros(novosFiltros);
             // Ao aplicar filtros, limpar a busca e usar função de filtros
             setSearch('');
             fetchData();
           }}
-          limiteColunas={limiteColunas}
-          onLimiteColunasChange={(novoLimite) => {
-            setLimiteColunas(novoLimite);
-            localStorage.setItem(
-              `limiteColunas_${entityName}`,
-              novoLimite.toString(),
-            );
-          }}
+          {...(dataTableVariant === 'padrao'
+            ? { screenKey: screenKey ?? `crud_${entityName}` }
+            : {
+                limiteColunas,
+                onLimiteColunasChange: (novoLimite: number) => {
+                  setLimiteColunas(novoLimite);
+                  localStorage.setItem(
+                    `limiteColunas_${entityName}`,
+                    novoLimite.toString(),
+                  );
+                },
+              })}
         />
       </main>
 

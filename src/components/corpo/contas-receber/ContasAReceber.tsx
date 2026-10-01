@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useContext, useRef, ChangeEvent } from 'react';
 import { useContasReceber, ContaReceber, FiltrosContasReceber } from '@/hooks/useContasReceber';
+import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
 import { AuthContext } from '@/contexts/authContexts';
 import DropdownContasReceber from '@/components/common/DropdownContasReceber';
@@ -79,6 +80,9 @@ export default function ContasAReceber() {
     editarConta,
     cancelarConta,
   } = useContasReceber();
+
+  // Confirmação estilizada padrão (modal central) — substitui window.confirm.
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
 
   // Controle de primeiro carregamento
   const [primeiroCarregamento, setPrimeiroCarregamento] = useState(true);
@@ -176,17 +180,29 @@ export default function ContasAReceber() {
     { value: 'receber_periodo', label: 'Receber no Período', desc: 'Títulos em aberto por vencimento no período' },
     { value: 'por_cliente', label: 'Receber por Cliente', desc: 'Agrupado por cliente, com subtotais' },
     { value: 'em_atraso', label: 'Em Atraso no Período', desc: 'Títulos vencidos (em aberto) no período' },
-    { value: 'diario_avista', label: 'Títulos Diário à Vista', desc: 'Clientes à vista (claspgto=V), por emissão' },
-    { value: 'recebimento_clientes', label: 'Recebimento de Clientes', desc: 'O que foi recebido no período (por pagamento)' },
+    { value: 'diario_avista', label: 'Títulos Diário à Vista', desc: 'Por emissão, com pago/não pago e UF (igual ao Delphi)' },
+    { value: 'recebimento_clientes', label: 'Recebimento de Clientes', desc: 'O que foi recebido no período (cliente obrigatório)' },
     { value: 'geral', label: 'Geral (lista)', desc: 'Todos os títulos do período' },
   ];
-  // Quais parâmetros cada relatório mostra (fiel ao TFrmRelContasR do Delphi).
-  const CAMPOS_RELATORIO: Record<TipoRelatorio, { datas: boolean; cliente: boolean; conta: boolean; classe: boolean; juros: boolean }> = {
+  // Quais parâmetros cada relatório mostra (fiel aos forms do Delphi).
+  type CamposRel = {
+    datas: boolean;
+    periodoOpcional?: boolean; // Receber por Cliente: período é opcional
+    cliente: boolean;
+    clienteObrig?: boolean; // Recebimento de Clientes: cliente obrigatório
+    conta: boolean;
+    classe: boolean;
+    juros: boolean;
+    escopo?: boolean; // Em atraso: Todos/Cliente/Vendedor/Órgãos
+    pagoNaoPago?: boolean; // Diário à vista
+    uf?: boolean; // Diário à vista
+  };
+  const CAMPOS_RELATORIO: Record<TipoRelatorio, CamposRel> = {
     receber_periodo:      { datas: true, cliente: false, conta: true,  classe: true,  juros: true },
-    por_cliente:          { datas: true, cliente: true,  conta: false, classe: false, juros: true },
-    em_atraso:            { datas: true, cliente: false, conta: false, classe: false, juros: true },
-    diario_avista:        { datas: true, cliente: false, conta: false, classe: false, juros: false },
-    recebimento_clientes: { datas: true, cliente: true,  conta: true,  classe: false, juros: false },
+    por_cliente:          { datas: true, periodoOpcional: true, cliente: true, conta: false, classe: false, juros: true },
+    em_atraso:            { datas: true, cliente: false, conta: false, classe: false, juros: true, escopo: true },
+    diario_avista:        { datas: true, cliente: false, conta: false, classe: false, juros: false, pagoNaoPago: true, uf: true },
+    recebimento_clientes: { datas: true, cliente: true, clienteObrig: true, conta: false, classe: false, juros: false },
     geral:                { datas: true, cliente: false, conta: false, classe: false, juros: false },
   };
   const hojeStr = () => new Date().toISOString().split('T')[0];
@@ -197,6 +213,11 @@ export default function ContasAReceber() {
     cod_conta: '',
     classe_pgto: 'T',
     tx_juros: '8,00',
+    codvend: '' as string | null,
+    uf: '',
+    rec_filtro: '' as '' | 'S' | 'N', // diário à vista: ''=todos, S=pago, N=não pago
+    escopo: 'T' as 'T' | 'C' | 'V' | 'O', // em atraso: Todos/Cliente/Vendedor/Órgãos
+    periodoAtivo: true, // Receber por Cliente: período é opcional
   });
   // Colunas do relatório (selecionáveis + reordenáveis, persistidas em localStorage).
   const COLS_RELATORIO_DEF: { key: string; label: string }[] = [
@@ -353,7 +374,10 @@ export default function ContasAReceber() {
     valor_pgto: '',
     nro_doc: '',
     codcli: '',
-    rec_cof_id: ''
+    rec_cof_id: '',
+    banco: '',
+    forma_fat: '',
+    tipo: ''
   });
 
   // Estados para modal de importação de cartão
@@ -759,9 +783,12 @@ export default function ContasAReceber() {
       valor_pgto: mascaraInputBRL(String(Math.round(Number(conta.valor_original || 0) * 100))),
       nro_doc: conta.nro_doc || '',
       codcli: conta.codcli?.toString() || '',
-      rec_cof_id: conta.rec_cof_id?.toString() || ''
+      rec_cof_id: conta.rec_cof_id?.toString() || '',
+      banco: conta.banco?.toString() || '',
+      forma_fat: conta.forma_fat?.toString() || '',
+      tipo: conta.tipo?.toString() || ''
     });
-    
+
     setModalEditarAberto(true);
   };
 
@@ -775,7 +802,10 @@ export default function ContasAReceber() {
         valor_pgto: desmascarar(dadosEdicao.valor_pgto) || undefined,
         nro_doc: dadosEdicao.nro_doc || undefined,
         codcli: dadosEdicao.codcli ? parseInt(dadosEdicao.codcli) : undefined,
-        rec_cof_id: dadosEdicao.rec_cof_id ? parseInt(dadosEdicao.rec_cof_id) : undefined
+        rec_cof_id: dadosEdicao.rec_cof_id ? parseInt(dadosEdicao.rec_cof_id) : undefined,
+        banco: dadosEdicao.banco || undefined,
+        forma_fat: dadosEdicao.forma_fat || undefined,
+        tipo: dadosEdicao.tipo || undefined
       });
 
       toast.success('Título atualizado com sucesso!', {
@@ -828,20 +858,26 @@ export default function ContasAReceber() {
     toast.info(`Transação de cartão: ${conta.car_nrodocumento || 'N/A'}`);
   };
 
-  const handleRetirarBaixa = async (conta: ContaReceber) => {
-    if (!confirm(`Deseja realmente retirar a baixa do título ${conta.cod_receb}?`)) {
-      return;
-    }
-
-    try {
-      await retirarBaixa(conta.cod_receb, 'Reversão solicitada pelo usuário');
-      toast.success('Baixa retirada com sucesso!');
-      
-      // Recarregar dados
-      await consultarContasReceber(paginaAtual, itensPorPagina, filtros);
-    } catch (error: any) {
-      toast.error(`Erro ao retirar baixa: ${error.message}`);
-    }
+  const handleRetirarBaixa = (conta: ContaReceber) => {
+    pedirConfirmacao(
+      async () => {
+        try {
+          await retirarBaixa(conta.cod_receb, 'Reversão solicitada pelo usuário');
+          toast.success('Baixa retirada com sucesso!');
+          // Recarregar dados
+          await consultarContasReceber(paginaAtual, itensPorPagina, filtros);
+        } catch (error: any) {
+          toast.error(`Erro ao retirar baixa: ${error.message}`);
+        }
+      },
+      {
+        title: 'Retirar baixa',
+        message: `Deseja realmente retirar a baixa do título ${conta.cod_receb}?`,
+        type: 'warning',
+        confirmText: 'Sim, retirar',
+        cancelText: 'Cancelar',
+      },
+    );
   };
 
   const handleDarBaixa = async () => {
@@ -1001,26 +1037,51 @@ export default function ContasAReceber() {
   };
 
   // Função para gerar relatório (PDF ou Excel)
+  // Monta os parâmetros próprios do relatório (fiel aos forms do Delphi).
+  // Usado tanto no download (PDF/Excel) quanto no preview — fonte única.
+  const anexarParamsRelatorio = (params: URLSearchParams) => {
+    const campos = CAMPOS_RELATORIO[tipoRelatorio];
+    // Datas — em "Receber por Cliente" o período é opcional (checkbox).
+    const enviaDatas = campos.datas && (!campos.periodoOpcional || relatParams.periodoAtivo);
+    if (enviaDatas) {
+      if (relatParams.data_inicio) params.append('data_inicio', relatParams.data_inicio);
+      if (relatParams.data_fim) params.append('data_fim', relatParams.data_fim);
+    }
+    if (campos.cliente && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
+    if (campos.conta && relatParams.cod_conta.trim()) params.append('cod_conta', relatParams.cod_conta.trim());
+    if (campos.classe && relatParams.classe_pgto && relatParams.classe_pgto !== 'T') {
+      params.append('classe_pgto', relatParams.classe_pgto);
+    }
+    if (campos.juros && relatParams.tx_juros.trim()) params.append('tx_juros', relatParams.tx_juros.trim());
+    // Em atraso: escopo Todos/Cliente/Vendedor/Órgãos.
+    if (campos.escopo) {
+      if (relatParams.escopo === 'C' && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
+      else if (relatParams.escopo === 'V' && relatParams.codvend) params.append('codvend', String(relatParams.codvend));
+      else if (relatParams.escopo === 'O') params.append('orgaos', 'S');
+    }
+    // Diário à vista: pago/não pago + UF.
+    if (campos.pagoNaoPago && relatParams.rec_filtro) params.append('rec_filtro', relatParams.rec_filtro);
+    if (campos.uf && relatParams.uf.trim()) params.append('uf', relatParams.uf.trim().toUpperCase());
+  };
+
+  // Validação dos parâmetros obrigatórios (ex.: Recebimento de Clientes exige cliente).
+  const validarParamsRelatorio = (): boolean => {
+    const campos = CAMPOS_RELATORIO[tipoRelatorio];
+    if (campos.clienteObrig && !relatParams.codcli) {
+      toast.error('Selecione o cliente para este relatório.');
+      return false;
+    }
+    return true;
+  };
+
   const handleGerarRelatorio = async (formato: 'pdf' | 'excel') => {
     try {
+      if (!validarParamsRelatorio()) return;
       setGerandoRelatorio(true);
       const params = new URLSearchParams();
       params.append('formato', formato);
       params.append('tipo', tipoRelatorio);
-
-      // Parâmetros PRÓPRIOS do relatório (fiel ao TFrmRelContasR do Delphi).
-      const campos = CAMPOS_RELATORIO[tipoRelatorio];
-      if (campos.datas) {
-        if (relatParams.data_inicio) params.append('data_inicio', relatParams.data_inicio);
-        if (relatParams.data_fim) params.append('data_fim', relatParams.data_fim);
-      }
-      if (campos.cliente && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
-      if (campos.conta && relatParams.cod_conta.trim()) params.append('cod_conta', relatParams.cod_conta.trim());
-      if (campos.classe && relatParams.classe_pgto && relatParams.classe_pgto !== 'T') {
-        params.append('classe_pgto', relatParams.classe_pgto);
-      }
-      if (campos.juros && relatParams.tx_juros.trim()) params.append('tx_juros', relatParams.tx_juros.trim());
-      // Obs.: "Receber por Cliente" sem cliente selecionado = todos os clientes (agrupado).
+      anexarParamsRelatorio(params);
 
       // Colunas selecionadas (na ordem escolhida).
       const colunasSel = relatColunas.filter((c) => c.visivel).map((c) => c.key);
@@ -1095,20 +1156,13 @@ export default function ContasAReceber() {
 
   const gerarPreviewRelatorio = async () => {
     try {
+      if (!validarParamsRelatorio()) return;
       setGerandoRelatorio(true);
       setRelatResultado(null);
       const params = new URLSearchParams();
       params.append('formato', 'json');
       params.append('tipo', tipoRelatorio);
-      const campos = CAMPOS_RELATORIO[tipoRelatorio];
-      if (campos.datas) {
-        if (relatParams.data_inicio) params.append('data_inicio', relatParams.data_inicio);
-        if (relatParams.data_fim) params.append('data_fim', relatParams.data_fim);
-      }
-      if (campos.cliente && relatParams.codcli) params.append('codcli', String(relatParams.codcli));
-      if (campos.conta && relatParams.cod_conta.trim()) params.append('cod_conta', relatParams.cod_conta.trim());
-      if (campos.classe && relatParams.classe_pgto && relatParams.classe_pgto !== 'T') params.append('classe_pgto', relatParams.classe_pgto);
-      if (campos.juros && relatParams.tx_juros.trim()) params.append('tx_juros', relatParams.tx_juros.trim());
+      anexarParamsRelatorio(params);
       const colunasSel = relatColunas.filter((c) => c.visivel).map((c) => c.key);
       if (colunasSel.length === 0) { toast.error('Selecione ao menos uma coluna.'); setGerandoRelatorio(false); return; }
       params.append('colunas', colunasSel.join(','));
@@ -2338,6 +2392,81 @@ export default function ContasAReceber() {
                 placeholder="Ex: 12345"
               />
             </div>
+
+            {/* Banco / Forma / Tipo — na EDIÇÃO mostramos TODAS as opções e sempre
+                incluímos o valor JÁ SALVO (dado legado pode estar fora do conjunto do
+                Novo Título — ex.: forma '6'=cartão, tipo 'F'=fatura/'G'=agrupado). Sem a
+                trava banco↔forma, para não esconder o valor gravado. */}
+            <div>
+              <Label>Banco</Label>
+              <Select
+                value={dadosEdicao.banco}
+                onValueChange={(value) => setDadosEdicao((prev) => ({ ...prev, banco: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o banco" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const opts = [...bancosNovoTitulo];
+                    if (dadosEdicao.banco && !opts.some((b) => b.value === dadosEdicao.banco))
+                      opts.push({ value: dadosEdicao.banco, label: dadosEdicao.banco } as any);
+                    return opts.map((b) => (
+                      <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Forma de Faturamento</Label>
+              <Select
+                value={dadosEdicao.forma_fat}
+                onValueChange={(value) => setDadosEdicao((prev) => ({ ...prev, forma_fat: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a forma" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const opts = [...OPCOES_FORMA_FATURA];
+                    if (dadosEdicao.forma_fat && !opts.some((o) => o.value === dadosEdicao.forma_fat))
+                      opts.push({ value: dadosEdicao.forma_fat, label: dadosEdicao.forma_fat } as any);
+                    return opts.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Tipo</Label>
+              <Select
+                value={dadosEdicao.tipo}
+                onValueChange={(value) => setDadosEdicao((prev) => ({ ...prev, tipo: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const base = [
+                      { value: 'F', label: 'Fatura' },
+                      { value: 'R', label: 'Recebimento' },
+                      { value: 'D', label: 'Devolução' },
+                      { value: 'G', label: 'Agrupado' },
+                    ];
+                    if (dadosEdicao.tipo && !base.some((o) => o.value === dadosEdicao.tipo))
+                      base.push({ value: dadosEdicao.tipo, label: dadosEdicao.tipo });
+                    return base.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex gap-2 justify-end pt-3 border-t">
@@ -3395,27 +3524,48 @@ export default function ContasAReceber() {
           <div className="grid grid-cols-2 gap-3">
             {CAMPOS_RELATORIO[tipoRelatorio].datas && (
               <>
-                <div>
-                  <Label>Data início</Label>
-                  <Input
-                    type="date"
-                    value={relatParams.data_inicio}
-                    onChange={(e) => setRelatParams((p) => ({ ...p, data_inicio: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>Data fim</Label>
-                  <Input
-                    type="date"
-                    value={relatParams.data_fim}
-                    onChange={(e) => setRelatParams((p) => ({ ...p, data_fim: e.target.value }))}
-                  />
-                </div>
+                {CAMPOS_RELATORIO[tipoRelatorio].periodoOpcional && (
+                  <label className="col-span-2 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={relatParams.periodoAtivo}
+                      onChange={(e) => setRelatParams((p) => ({ ...p, periodoAtivo: e.target.checked }))}
+                    />
+                    Filtrar por período (desmarcado = todos)
+                  </label>
+                )}
+                {(!CAMPOS_RELATORIO[tipoRelatorio].periodoOpcional || relatParams.periodoAtivo) && (
+                  <>
+                    <div>
+                      <Label>Data início</Label>
+                      <Input
+                        type="date"
+                        value={relatParams.data_inicio}
+                        onChange={(e) => setRelatParams((p) => ({ ...p, data_inicio: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label>Data fim</Label>
+                      <Input
+                        type="date"
+                        value={relatParams.data_fim}
+                        onChange={(e) => setRelatParams((p) => ({ ...p, data_fim: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
             {CAMPOS_RELATORIO[tipoRelatorio].cliente && (
               <div className="col-span-2">
-                <Label>Cliente {tipoRelatorio === 'por_cliente' ? '(vazio = todos)' : '(opcional)'}</Label>
+                <Label>
+                  Cliente{' '}
+                  {CAMPOS_RELATORIO[tipoRelatorio].clienteObrig
+                    ? '(obrigatório)'
+                    : tipoRelatorio === 'por_cliente'
+                    ? '(vazio = todos)'
+                    : '(opcional)'}
+                </Label>
                 <Autocomplete
                   placeholder="Buscar cliente..."
                   apiUrl="/api/contas-receber/clientes"
@@ -3423,6 +3573,46 @@ export default function ContasAReceber() {
                   onChange={(value) => setRelatParams((p) => ({ ...p, codcli: value }))}
                   mapResponse={(data) => data.clientes || []}
                 />
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].escopo && (
+              <div className="col-span-2">
+                <Label>Escopo</Label>
+                <div className="flex flex-wrap gap-4 text-sm mt-1">
+                  {([['T', 'Todos'], ['C', 'Cliente'], ['V', 'Vendedor'], ['O', 'Órgãos Públicos']] as const).map(([v, l]) => (
+                    <label key={v} className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="escopo_rel"
+                        checked={relatParams.escopo === v}
+                        onChange={() => setRelatParams((p) => ({ ...p, escopo: v }))}
+                      />
+                      {l}
+                    </label>
+                  ))}
+                </div>
+                {relatParams.escopo === 'C' && (
+                  <div className="mt-2">
+                    <Label>Cliente</Label>
+                    <Autocomplete
+                      placeholder="Buscar cliente..."
+                      apiUrl="/api/contas-receber/clientes"
+                      value={relatParams.codcli}
+                      onChange={(value) => setRelatParams((p) => ({ ...p, codcli: value }))}
+                      mapResponse={(data) => data.clientes || []}
+                    />
+                  </div>
+                )}
+                {relatParams.escopo === 'V' && (
+                  <div className="mt-2">
+                    <Label>Vendedor (código)</Label>
+                    <Input
+                      placeholder="Ex.: 12"
+                      value={relatParams.codvend ?? ''}
+                      onChange={(e) => setRelatParams((p) => ({ ...p, codvend: e.target.value }))}
+                    />
+                  </div>
+                )}
               </div>
             )}
             {CAMPOS_RELATORIO[tipoRelatorio].conta && (
@@ -3449,10 +3639,42 @@ export default function ContasAReceber() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="T">Todos</SelectItem>
-                    <SelectItem value="V">À vista</SelectItem>
-                    <SelectItem value="I">Inadimplente</SelectItem>
+                    <SelectItem value="I">À vista</SelectItem>
+                    <SelectItem value="V">Inativo</SelectItem>
+                    <SelectItem value="A">Classe A</SelectItem>
+                    <SelectItem value="B">Classe B</SelectItem>
+                    <SelectItem value="C">Classe C</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].pagoNaoPago && (
+              <div>
+                <Label>Situação</Label>
+                <Select
+                  value={relatParams.rec_filtro || 'T'}
+                  onValueChange={(v) => setRelatParams((p) => ({ ...p, rec_filtro: (v === 'T' ? '' : v) as '' | 'S' | 'N' }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="T">Todos</SelectItem>
+                    <SelectItem value="N">Não pago</SelectItem>
+                    <SelectItem value="S">Pago</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {CAMPOS_RELATORIO[tipoRelatorio].uf && (
+              <div>
+                <Label>UF (opcional)</Label>
+                <Input
+                  placeholder="Ex.: AM"
+                  maxLength={2}
+                  value={relatParams.uf}
+                  onChange={(e) => setRelatParams((p) => ({ ...p, uf: e.target.value.toUpperCase() }))}
+                />
               </div>
             )}
             {CAMPOS_RELATORIO[tipoRelatorio].juros && (
@@ -3565,6 +3787,8 @@ export default function ContasAReceber() {
           )}
         </div>
       </Modal>
+
+      {ConfirmacaoSalvarModal}
     </div>
   );
 }

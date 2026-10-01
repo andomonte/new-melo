@@ -36,5 +36,6 @@ export const SELECT_OPERADOR = `
   p.nome_filial    AS filial,
   p.cod_conta      AS cod_conta,
   c.nro_conta      AS nro_conta,
-  c.digito         AS digito
+  c.digito         AS digito,
+  COALESCE(c.bloqueio,0) AS bloqueio
 `;

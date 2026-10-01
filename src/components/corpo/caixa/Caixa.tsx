@@ -189,8 +189,21 @@ export default function Caixa() {
   const [codConta, setCodConta] = useState(''); // conta do operador — vem do login (user.cod_conta)
   const [deposito, setDeposito] = useState(false); // flag Depósito (Delphi): data ≤ hoje + bloqueia dinheiro
   const [dataPgto, setDataPgto] = useState(hojeISO); // data de pagamento/depósito (≤ hoje) — base do juros
-  const [simular, setSimular] = useState(true); // começa em simulação (seguro)
+  // Modo simulação removido — o recebimento é sempre REAL (já pede confirmação no botão).
+  const simular = false;
   const [previa, setPrevia] = useState<any | null>(null); // resultado do dry-run
+
+  // ---- Baixar Juros (liberar taxa) — função LIBERAR_JUROS, liberada por usuário ----
+  const podeLiberarJuros = ((user as any)?.funcoes || []).some(
+    (f: any) => (typeof f === 'string' ? f : f?.sigla) === 'LIBERAR_JUROS',
+  );
+  const [liberarAberto, setLiberarAberto] = useState(false);
+  const [liberarTaxa, setLiberarTaxa] = useState('');
+  const [liberarMotivo, setLiberarMotivo] = useState('');
+  const [liberando, setLiberando] = useState(false);
+  const [liberarData, setLiberarData] = useState(hojeISO);
+  const [liberarPreview, setLiberarPreview] = useState<{ juros: number; total: number; dias: number } | null>(null);
+  const [refetchDados, setRefetchDados] = useState(0); // força recalcular dadosMap após liberar juros
 
   const ehCartao = forma === 'credito' || forma === 'debito';
   const formaBucket = bucketDaForma(codFpgt); // 'principal' | 'tarifa' | 'juros'
@@ -223,7 +236,7 @@ export default function Caixa() {
 
   // Carregar operadoras de cartão
   useEffect(() => {
-    fetch('/api/operadoras')
+    fetch('/api/operadoras', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setOperadoras(data);
@@ -279,7 +292,79 @@ export default function Caixa() {
         setDadosMap(m);
       })
       .catch(() => setDadosMap({}));
-  }, [selecionados, dataPgto]);
+  }, [selecionados, dataPgto, refetchDados]);
+
+  // ---- Baixar Juros (liberar taxa) — porte do CR (UniContasR.BaixarJuros) ----
+  const abrirLiberarJuros = () => {
+    const taxaAtual = selecionados.map((t) => dadosMap[t.cod_receb]?.taxa).find((x) => x != null);
+    setLiberarTaxa(taxaAtual != null ? String(taxaAtual) : '');
+    setLiberarMotivo('');
+    setLiberarData(dataPgto || hojeISO);
+    setLiberarPreview(null);
+    setLiberarAberto(true);
+  };
+
+  // Prévia ao vivo: juros só incide sobre atraso até a data prevista.
+  useEffect(() => {
+    if (!liberarAberto || selecionados.length === 0) return;
+    const taxa = Number(String(liberarTaxa).replace(',', '.'));
+    if (!Number.isFinite(taxa) || taxa < 0 || !liberarData) {
+      setLiberarPreview(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const tmr = setTimeout(() => {
+      fetch('/api/caixa/dados-recebimento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cod_receb: selecionados.map((t) => t.cod_receb), dataPgto: liberarData, taxaOverride: taxa }),
+        signal: ctrl.signal,
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!d?.totais) { setLiberarPreview(null); return; }
+          const dias = (d.titulos || []).reduce((m: number, t: any) => Math.max(m, Number(t.diasAtraso || 0)), 0);
+          setLiberarPreview({ juros: Number(d.totais.juros || 0), total: Number(d.totais.aReceber || 0), dias });
+        })
+        .catch(() => {});
+    }, 300);
+    return () => { clearTimeout(tmr); ctrl.abort(); };
+  }, [liberarAberto, liberarTaxa, liberarData, selecionados]);
+
+  const confirmarLiberarJuros = async () => {
+    const taxa = Number(String(liberarTaxa).replace(',', '.'));
+    if (!Number.isFinite(taxa) || taxa < 0) {
+      toast.error('Informe uma taxa de juros válida (0 = isentar).');
+      return;
+    }
+    if (liberarMotivo.trim().length < 15) {
+      toast.error('O motivo é obrigatório (mínimo 15 caracteres).');
+      return;
+    }
+    setLiberando(true);
+    try {
+      const r = await fetch('/api/contas-receber/liberar-juros', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cod_receb: selecionados.map((t) => t.cod_receb),
+          taxa,
+          motivo: liberarMotivo.trim(),
+          usuario: username,
+          codusr: (user as any)?.codusr ?? null,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'Erro ao liberar juros');
+      toast.success(`Juros liberado em ${d.liberados} título(s) à taxa ${taxa}%.`);
+      setLiberarAberto(false);
+      setRefetchDados((x) => x + 1); // recalcula o juros com a taxa liberada
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setLiberando(false);
+    }
+  };
 
   const estaSelecionado = (t: Titulo) => selecionados.some((x) => x.cod_receb === t.cod_receb);
   const toggleTitulo = (t: Titulo) => {
@@ -1484,7 +1569,88 @@ export default function Caixa() {
                   )}
                 </div>
 
-                {/* Conta do operador + modo simulação */}
+                {/* Baixar Juros (liberar taxa) — função LIBERAR_JUROS (liberada por usuário) */}
+                {podeLiberarJuros && selecionados.length > 0 && (
+                  <div className="mt-3">
+                    {!liberarAberto ? (
+                      <button
+                        type="button"
+                        onClick={abrirLiberarJuros}
+                        className="text-xs font-medium text-blue-700 dark:text-blue-300 hover:underline"
+                        title="Autoriza uma taxa de juros (0 = isentar) para os títulos selecionados"
+                      >
+                        Baixar juros (liberar taxa)…
+                      </button>
+                    ) : (
+                      <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/20 p-3 space-y-2">
+                        <div className="text-xs font-bold text-blue-900 dark:text-blue-100">
+                          Baixar juros — {selecionados.length} título(s)
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 items-end">
+                          <div>
+                            <Label className="text-[11px]">Taxa liberada (% a.m.) — 0 isenta</Label>
+                            <Input value={liberarTaxa} onChange={(e) => setLiberarTaxa(e.target.value)} inputMode="decimal" placeholder="ex: 0" className="font-mono h-9" />
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Data prevista de pagamento</Label>
+                            <Input type="date" value={liberarData} onChange={(e) => setLiberarData(e.target.value)} className="font-mono h-9" />
+                          </div>
+                        </div>
+                        <div className="text-[11px] rounded bg-white/70 dark:bg-slate-900/50 border border-blue-200 dark:border-blue-900 px-2 py-1.5">
+                          {liberarPreview ? (
+                            liberarPreview.dias > 0 ? (
+                              <>
+                                Nessa taxa, pagando em {fmtData(liberarData)}: <b>{liberarPreview.dias}</b> dia(s) de atraso → juros{' '}
+                                <b className="text-amber-600">{formatarBRL(liberarPreview.juros)}</b> · total <b>{formatarBRL(liberarPreview.total)}</b>
+                              </>
+                            ) : (
+                              <span className="text-gray-500">
+                                Título <b>em dia</b> nessa data (0 dia de atraso) → <b>sem juros</b>. O juros só incide após o vencimento.
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-gray-400">Informe taxa e data para ver a prévia do juros.</span>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-[11px]">Motivo (mín. 15 caracteres)</Label>
+                          <textarea
+                            value={liberarMotivo}
+                            onChange={(e) => setLiberarMotivo(e.target.value)}
+                            rows={2}
+                            className="w-full text-xs rounded-md border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1.5"
+                            placeholder="Justificativa da liberação de juros…"
+                          />
+                          <div className={`text-[10px] mt-0.5 ${liberarMotivo.trim().length < 15 ? 'text-red-600' : 'text-gray-400'}`}>
+                            {liberarMotivo.trim().length}/15
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setLiberarAberto(false)}
+                            className="text-xs px-3 h-8 rounded-md bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={confirmarLiberarJuros}
+                            disabled={liberando}
+                            className="text-xs px-3 h-8 rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                          >
+                            {liberando ? 'Liberando…' : 'Confirmar liberação'}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-gray-500">
+                          Autoriza a taxa para o próximo recebimento (registra usuário, data e motivo). Não recebe o título.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Conta do operador */}
                 <div className="mt-4 grid grid-cols-3 gap-3 items-end">
                   <div>
                     <Label>Conta (operador)</Label>
@@ -1527,16 +1693,11 @@ export default function Caixa() {
                       className="font-mono disabled:opacity-50"
                     />
                   </div>
-                  <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-gray-200 dark:border-slate-700 cursor-pointer select-none">
-                    <input type="checkbox" checked={simular} onChange={(e) => setSimular(e.target.checked)} />
-                    <span className="text-sm font-medium">Modo simulação</span>
-                  </label>
                 </div>
 
                 <div className="mt-3 text-xs text-gray-600 dark:text-gray-300 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-lg px-3 py-2.5">
                   💳 No cartão, gera as <b>parcelas a receber da operadora</b> (venc. pelo prazo da operadora, valor
-                  líquido) e dá <b>baixa</b> no título. Com <b>Modo simulação</b> ligado, nada é gravado — mostra só a
-                  prévia.
+                  líquido) e dá <b>baixa</b> no título.
                 </div>
 
                 {/* Prévia da simulação (por título) */}
@@ -1590,8 +1751,6 @@ export default function Caixa() {
                       ? 'Processando...'
                       : preVendaSel
                       ? 'Faturar e receber'
-                      : simular
-                      ? 'Simular recebimento'
                       : parcial
                       ? 'Receber parcial'
                       : 'Receber e dar baixa'
@@ -1606,8 +1765,6 @@ export default function Caixa() {
                           )}?`,
                           type: 'info',
                         })
-                      : simular
-                      ? receberEDarBaixa()
                       : pedirConfirmacao(receberEDarBaixa, {
                           title: parcial ? 'Confirmar recebimento PARCIAL' : 'Confirmar recebimento',
                           message: parcial
@@ -1618,7 +1775,7 @@ export default function Caixa() {
                           type: parcial ? 'warning' : 'info',
                         })
                   }
-                  variant={preVendaSel ? 'confirm' : simular ? 'primary' : 'confirm'}
+                  variant={preVendaSel ? 'confirm' : 'confirm'}
                   disabled={
                     salvando ||
                     (selecionados.length === 0 && !preVendaSel) ||

@@ -34,13 +34,23 @@ export async function buscaCnpj(cnpj: string): Promise<BrasilApiCnpjResponse> {
     throw new Error('CNPJ inválido. Deve conter 14 caracteres.');
   }
 
-  const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjLimpo}`);
+  // Passa pelo NOSSO servidor (proxy) em vez de chamar a brasilapi direto do
+  // navegador — em produção (https) o browser bloqueia por CORS. Server-to-server
+  // não tem CORS. Ver src/pages/api/cnpj/[cnpj].ts.
+  const response = await fetch(`/api/cnpj/${cnpjLimpo}`);
 
   if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error('CNPJ não encontrado na base da Receita Federal');
+    let msg =
+      response.status === 404
+        ? 'CNPJ não encontrado na base da Receita Federal'
+        : 'Erro ao consultar CNPJ. Tente novamente.';
+    try {
+      const j = await response.json();
+      if (j?.erro) msg = j.erro;
+    } catch {
+      /* mantém msg padrão */
     }
-    throw new Error('Erro ao consultar CNPJ. Tente novamente.');
+    throw new Error(msg);
   }
 
   const data = await response.json();
