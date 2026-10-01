@@ -9,6 +9,7 @@
 //   node scripts/migrar-tabela-oracle.cjs --tabela=dbfatura --coluna-data=data --meses=24
 //   node scripts/migrar-tabela-oracle.cjs --tabela=dbfatura --coluna-data=data --meses=24 --dry-run
 //   node scripts/migrar-tabela-oracle.cjs --tabela=dbfatura --coluna-data=data --meses=24 --schema=db_manaus
+//   node scripts/migrar-tabela-oracle.cjs --tabela=dbusuario --destino=dbusuario_delphi --sem-data
 //
 // Conflito de chave: por padrão o que já existe no destino é PRESERVADO
 // (ON CONFLICT DO NOTHING na PK) — as linhas criadas pelo próprio web ficam
@@ -27,6 +28,9 @@ const args = Object.fromEntries(
 );
 
 const TABELA = String(args.tabela || '').toLowerCase();
+// Quando o destino tem outro nome (ex.: DBUSUARIO -> dbusuario_delphi, que é
+// espelho de leitura e não pode se misturar com a tabela em uso).
+const DESTINO = String(args.destino || args.tabela || '').toLowerCase();
 const COLUNA_DATA = String(args['coluna-data'] || 'data').toLowerCase();
 const MESES = Number(args.meses || 24);
 const SCHEMA = String(args.schema || 'db_manaus');
@@ -67,15 +71,16 @@ for (const dir of ['C:/oracle/instantclient/instantclient_23_4', 'C:/instantclie
   const { rows: colsPg } = await pg.query(
     `SELECT column_name FROM information_schema.columns
      WHERE table_schema=$1 AND table_name=$2 ORDER BY ordinal_position`,
-    [SCHEMA, TABELA],
+    [SCHEMA, DESTINO],
   );
-  if (!colsPg.length) throw new Error(`${SCHEMA}.${TABELA} não existe no Postgres`);
+  if (!colsPg.length) throw new Error(`${SCHEMA}.${DESTINO} não existe no Postgres`);
 
   const comuns = colsPg.map((r) => r.column_name).filter((c) => setOra.has(c.toLowerCase()));
   const soPg = colsPg.map((r) => r.column_name).filter((c) => !setOra.has(c.toLowerCase()));
   const soOra = [...setOra].filter((c) => !colsPg.some((r) => r.column_name.toLowerCase() === c));
 
-  console.log(`tabela : ${TABELA}  (Oracle ${setOra.size} colunas | Postgres ${colsPg.length})`);
+  console.log(`tabela : ${TABELA}` + (DESTINO !== TABELA ? ` -> ${DESTINO}` : '') +
+    `  (Oracle ${setOra.size} colunas | Postgres ${colsPg.length})`);
   console.log(`comuns : ${comuns.length}`);
   if (soPg.length) console.log(`só no Postgres (ficam nulas): ${soPg.join(', ')}`);
   if (soOra.length) console.log(`só no Oracle (ignoradas)   : ${soOra.join(', ')}`);
@@ -89,7 +94,7 @@ for (const dir of ['C:/oracle/instantclient/instantclient_23_4', 'C:/instantclie
   const { rows: [[total]] } = await ora.execute(
     `SELECT COUNT(*) FROM GERAL.${TABELA} WHERE ${whereOra}`,
   );
-  const atual = await pg.query(`SELECT COUNT(*) n FROM ${TABELA} WHERE ${wherePg}`);
+  const atual = await pg.query(`SELECT COUNT(*) n FROM ${DESTINO} WHERE ${wherePg}`);
   console.log(`janela : ${SEM_DATA ? 'tabela inteira' : `últimos ${MESES} meses`}`);
   console.log(`origem : ${Number(total).toLocaleString('pt-BR')} linha(s)`);
   console.log(`destino: ${Number(atual.rows[0].n).toLocaleString('pt-BR')} linha(s) na mesma janela` +
@@ -103,11 +108,11 @@ for (const dir of ['C:/oracle/instantclient/instantclient_23_4', 'C:/instantclie
        JOIN unnest(c.conkey) k(attnum) ON TRUE
        JOIN pg_attribute a ON a.attrelid = r.oid AND a.attnum = k.attnum
      WHERE n.nspname = $1 AND r.relname = $2 AND c.contype = 'p'`,
-    [SCHEMA, TABELA],
+    [SCHEMA, DESTINO],
   );
   const chave = pk.map((r) => `"${r.attname}"`).join(', ');
   if (!SUBSTITUIR && !chave) {
-    throw new Error(`${TABELA} não tem chave primária — rode com --substituir.`);
+    throw new Error(`${DESTINO} não tem chave primária — rode com --substituir.`);
   }
   if (chave) console.log(`chave  : ${chave}`);
 
@@ -115,7 +120,7 @@ for (const dir of ['C:/oracle/instantclient/instantclient_23_4', 'C:/instantclie
   if (!total) { console.log('nada a migrar.'); await ora.close(); await pg.end(); return; }
 
   if (SUBSTITUIR) {
-    const del = await pg.query(`DELETE FROM ${TABELA} WHERE ${wherePg}`);
+    const del = await pg.query(`DELETE FROM ${DESTINO} WHERE ${wherePg}`);
     if (del.rowCount) console.log(`removidas ${del.rowCount.toLocaleString('pt-BR')} linha(s) da janela`);
   }
 
@@ -151,7 +156,7 @@ for (const dir of ['C:/oracle/instantclient/instantclient_23_4', 'C:/instantclie
         params.push(...l);
       });
       const ins = await pg.query(
-        `INSERT INTO ${TABELA} (${listaPg}) VALUES ${valores.join(',')}` +
+        `INSERT INTO ${DESTINO} (${listaPg}) VALUES ${valores.join(',')}` +
         (SUBSTITUIR || !chave ? '' : ` ON CONFLICT (${chave}) DO NOTHING`),
         params,
       );
@@ -165,8 +170,8 @@ for (const dir of ['C:/oracle/instantclient/instantclient_23_4', 'C:/instantclie
 
   const conf = await pg.query(
     SEM_DATA
-      ? `SELECT COUNT(*) n FROM ${TABELA}`
-      : `SELECT COUNT(*) n, MIN(${COLUNA_DATA})::date de, MAX(${COLUNA_DATA})::date ate FROM ${TABELA} WHERE ${wherePg}`,
+      ? `SELECT COUNT(*) n FROM ${DESTINO}`
+      : `SELECT COUNT(*) n, MIN(${COLUNA_DATA})::date de, MAX(${COLUNA_DATA})::date ate FROM ${DESTINO} WHERE ${wherePg}`,
   );
   console.log(`no destino: ${conf.rows[0].n} linha(s)` +
     (SEM_DATA ? '' : `, de ${conf.rows[0].de} a ${conf.rows[0].ate}`));
