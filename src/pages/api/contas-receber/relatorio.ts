@@ -217,15 +217,26 @@ function buildQuery(
   // Os dois marcados mandam vazio e não filtram nada — é o padrão da tela.
   if (extra.ramo === 'A' || extra.ramo === 'F') {
     const USUARIOS_FERRAMENTAS = `('0030','0044','0104','0007','0050','0140','0141','0160','0182','0215','0164','0209','0246')`;
+    // Duas diferenças em relação ao SQL do Oracle, ambas deliberadas:
+    //
+    // 1. A ligação com o dbacao é por igualdade em substring(obs FROM 5) em vez
+    //    de "obs LIKE 'COD:'||f.codfat". O conteúdo é o mesmo (as 177.286
+    //    linhas de DBFATURA/INCLUIR seguem o padrão 'COD:<número>'), mas o LIKE
+    //    com concatenação não usa índice e varre o dbacao inteiro por fatura —
+    //    a consulta não terminava. Índice em migrations/060.
+    //
+    // 2. Sem o JOIN com dbusuario. No Oracle ele só resolve U.CODUSR, que é
+    //    igual a A.CODUSR — não filtra nada. Aqui a dbusuario do Postgres tem
+    //    48 linhas (21 códigos) contra 712 no Oracle, e nenhum dos 26 códigos
+    //    que aparecem no dbacao migrado existe nela: o join zeraria o filtro.
     const emitente = `
       SELECT 1
       FROM dbfatura f
-      JOIN dbacao a ON UPPER(a.tabela) = 'DBFATURA' AND UPPER(a.acao) = 'INCLUIR'
-                   AND a.obs LIKE 'COD:' || f.codfat || '%'
-      JOIN dbusuario u ON u.codusr = a.codusr
+      JOIN dbacao a ON a.tabela = 'DBFATURA' AND a.acao = 'INCLUIR'
+                   AND substring(a.obs FROM 5) = f.codfat
       WHERE ((r.cod_fat = f.codfat AND f.codgp IS NULL)
           OR (r.codgp = f.codgp AND f.codfat IS NULL))
-        AND u.codusr ${extra.ramo === 'F' ? 'IN' : 'NOT IN'} ${USUARIOS_FERRAMENTAS}`;
+        AND a.codusr ${extra.ramo === 'F' ? 'IN' : 'NOT IN'} ${USUARIOS_FERRAMENTAS}`;
     // Como no Oracle, os dois lados exigem o registro de inclusão: lá o
     // subselect vira NULL sem ele e tanto o IN quanto o NOT IN descartam a linha.
     whereClause += ` AND EXISTS (${emitente})`;
