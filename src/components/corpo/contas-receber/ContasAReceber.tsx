@@ -233,6 +233,7 @@ export default function ContasAReceber() {
     { key: 'cod_conta', label: 'COD_CONTA' }, { key: 'valor_pgto', label: 'VALOR_PGTO' }, { key: 'valor_juros', label: 'VALOR_JUROS' },
     { key: 'valor_rec', label: 'VALOR_REC' }, { key: 'valor_aberto', label: 'VALOR_ABERTO' }, { key: 'dt_emissao', label: 'DT_EMISSAO' },
     { key: 'dt_venc', label: 'DT_VENC' }, { key: 'parcela', label: 'PARCELA' }, { key: 'tarifa', label: 'TARIFA' }, { key: 'dt_pgto', label: 'DT_PGTO' },
+    { key: 'forma_pgto', label: 'FORMA PGTO' }, { key: 'tipo_pgto', label: 'TIPO' },
   ];
   const [relatColunas, setRelatColunas] = useState<{ key: string; label: string; visivel: boolean }[]>(
     COLS_RELATORIO_DEF.map((c) => ({ ...c, visivel: true })),

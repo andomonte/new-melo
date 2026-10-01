@@ -62,6 +62,10 @@ export const COLS_REL: Record<string, { label: string; tipo: ColTipo; campo: str
   dt_venc:      { label: 'DT_VENC',      tipo: 'date',  campo: 'dt_venc' },
   parcela:      { label: 'PARCELA',      tipo: 'text',  campo: 'parcela' },
   tarifa:       { label: 'TARIFA',       tipo: 'money', campo: 'tarifa' },
+  // Só o "Recebimento de Clientes" preenche estas duas (FORMA_PGTO / FTIPO do
+  // CONSULTA_RECEBIMENTO_CLIENTE); nos demais vêm vazias.
+  forma_pgto:   { label: 'FORMA PGTO',   tipo: 'text',  campo: 'forma_pgto' },
+  tipo_pgto:    { label: 'TIPO',         tipo: 'text',  campo: 'tipo_pgto' },
   dt_pgto:      { label: 'DT_PGTO',      tipo: 'date',  campo: 'dt_pgto' },
 };
 export const COLS_ORDER_DEFAULT = Object.keys(COLS_REL);
@@ -212,36 +216,82 @@ function buildQuery(
   // Filtro específico do tipo de relatório.
   whereClause += cfg.extraWhere;
 
-  // ── Fonte dbfreceb: "Recebimento de Clientes" (o que foi recebido no período) ──
+  // ── Fonte dbfreceb: "Recebimento de Clientes" ───────────────────────────────
+  // Porte do CONTASR.CONSULTA_RECEBIMENTO_CLIENTE: os lançamentos de dbfreceb
+  // UNION dbfprereceb (pré-recebimentos), agrupados por título + conta + forma,
+  // somando valor e juros. Os códigos dos lançamentos agrupados vão juntos num
+  // campo só (LISTAGG lá, string_agg aqui).
   if (cfg.fonte === 'dbfreceb') {
+    // Tipos que o Oracle considera juros (os mesmos do CAIXA.JUROS_RECEBIDO).
+    const TIPOS_JUROS = `('18','20','21','22','23','25','26')`;
+    // FORMA_PGTO / FTIPO do procedure; fora da lista cai na descrição da
+    // dbforma_pagto (o "else f.descricao" de lá).
+    const formaPgto = `CASE fr.tipo
+        WHEN '18' THEN 'DINHEIRO'
+        WHEN '20' THEN 'CHEQUE A VISTA'
+        WHEN '21' THEN 'DEPOSITO'
+        WHEN '22' THEN 'ACERTO'
+        WHEN '23' THEN 'CARTAO'
+        WHEN '25' THEN 'BAIXA AUTOMATICA BANCO'
+        WHEN '26' THEN 'CHEQUE PRE-DATADO'
+        ELSE COALESCE(f.descricao, '')
+      END`;
+    const tipoPgto = `CASE fr.tipo
+        WHEN '18' THEN '01' WHEN '20' THEN '02' WHEN '21' THEN '09'
+        WHEN '22' THEN '12' WHEN '23' THEN '04' WHEN '25' THEN '24'
+        WHEN '26' THEN '03' ELSE COALESCE(fr.tipo, '')
+      END`;
+    const lancamentos = `
+      SELECT fr.cod_receb, fr.cod_freceb::text AS cod_lanc, fr.valor, fr.tipo,
+             fr.cod_conta, fr.dt_emissao, fr.dt_pgto, fr.sf
+      FROM dbfreceb fr
+      UNION ALL
+      SELECT pr.cod_receb, pr.cod_fprereceb::text, pr.valor, pr.tipo,
+             '   ' AS cod_conta, pr.dt_emissao, pr.dt_pgto, pr.sf
+      FROM dbfprereceb pr`;
+    const deJoins = `
+      FROM (${lancamentos}) fr
+      JOIN dbreceb r ON r.cod_receb = fr.cod_receb
+      LEFT JOIN dbclien c ON c.codcli = r.codcli
+      -- INNER como no Oracle ("and f.codfpgt = p.tipo"): descarta lançamento com
+      -- tipo que não é forma de pagamento (E/C/D — 11 de 61.871 nesta base).
+      JOIN dbforma_pagto f ON f.codfpgt = fr.tipo`;
+      // Obs.: o Oracle também faz INNER com dbusuario (p.CodUsr = u.CodUsr) só
+      // para trazer o nome do usuário. Aqui dbfreceb.codusr guarda o código do
+      // Delphi e dbusuario é a tabela de usuários do web — nenhum dos 61.871
+      // lançamentos casa, então esse join zeraria o relatório. Fica de fora; a
+      // coluna do nome do usuário não é usada nesta tela.
+    const grupo = `
+      GROUP BY fr.cod_receb, fr.cod_conta, r.nro_doc, c.codcli, c.nome,
+               fr.tipo, f.descricao, fr.dt_emissao, r.dt_venc, fr.dt_pgto,
+               r.valor_pgto, r.valor_rec`;
     const sqlFr = `
       SELECT
         fr.cod_receb,
         r.nro_doc,
-        '' AS parcela,
+        string_agg(fr.cod_lanc, ',' ORDER BY fr.cod_lanc) AS parcela,
         0 AS dias,
         COALESCE(c.codcli::text, '') || ' ' || COALESCE(c.nome, '') AS cliente,
         fr.cod_conta,
-        0 AS valor_pgto,
-        CASE WHEN fr.tipo = 'J' THEN COALESCE(fr.valor,0) ELSE 0 END AS valor_juros,
-        COALESCE(fr.valor, 0) AS valor_rec,
+        COALESCE(r.valor_pgto, 0) AS valor_pgto,
+        SUM(CASE WHEN fr.tipo IN ${TIPOS_JUROS} THEN COALESCE(fr.valor, 0) ELSE 0 END) AS valor_juros,
+        SUM(COALESCE(fr.valor, 0)) AS valor_rec,
         0 AS valor_aberto,
-        r.dt_emissao,
+        fr.dt_emissao,
         r.dt_venc,
         0 AS tarifa,
-        fr.dt_pgto
-      FROM dbfreceb fr
-      JOIN dbreceb r ON r.cod_receb = fr.cod_receb
-      LEFT JOIN dbclien c ON c.codcli = r.codcli
+        fr.dt_pgto,
+        ${formaPgto} AS forma_pgto,
+        ${tipoPgto} AS tipo_pgto
+      ${deJoins}
       WHERE 1=1 ${whereClause}
+      ${grupo}
       ORDER BY fr.dt_emissao ASC, cliente ASC, r.nro_doc ASC
     `;
     const countFr = `
-      SELECT COUNT(*) AS total
-      FROM dbfreceb fr
-      JOIN dbreceb r ON r.cod_receb = fr.cod_receb
-      LEFT JOIN dbclien c ON c.codcli = r.codcli
-      WHERE 1=1 ${whereClause}
+      SELECT COUNT(*) AS total FROM (
+        SELECT 1 ${deJoins} WHERE 1=1 ${whereClause} ${grupo}
+      ) x
     `;
     return { sql: sqlFr, params, countSql: countFr, layout: cfg.layout, titulo: cfg.titulo };
   }
@@ -309,6 +359,8 @@ function buildQuery(
         r.dt_emissao,
         r.dt_venc,
         ${tarifa}::numeric AS tarifa,
+        '' AS forma_pgto,
+        '' AS tipo_pgto,
         r.dt_pgto,
         CASE
           WHEN r.cancel = 'S' THEN 'cancelado'
