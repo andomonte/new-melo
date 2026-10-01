@@ -222,9 +222,22 @@ export default function ContasAReceber() {
     rec_filtro: '' as '' | 'S' | 'N', // diário à vista: ''=todos, S=pago, N=não pago
     escopo: 'T' as 'T' | 'C' | 'V' | 'O', // em atraso: Todos/Cliente/Vendedor/Órgãos
     periodoAtivo: true, // Receber por Cliente: período é opcional
+    ufAtiva: false, // Diário à vista: o combo de UF só vale quando marcado
+    autoPecas: true, // Diário à vista: os dois marcados = todos (padrão do Delphi)
+    ferramentas: true,
     dia_juros: '',
     tarifa: '',
   });
+  // UFs do cadastro (dbuf_n). No Delphi a lista é fixa no formulário.
+  const [ufsRelat, setUfsRelat] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => {
+    if (!modalRelatorioAberto || ufsRelat.length > 0) return;
+    fetch('/api/contas-receber/ufs')
+      .then((r) => r.json())
+      .then((d) => setUfsRelat(d.ufs || []))
+      .catch(() => setUfsRelat([]));
+  }, [modalRelatorioAberto, ufsRelat.length]);
+
   // Checkbox da tarifa — no Delphi, ao marcar já sugere 1,57 (ckCli_TarifaBancClick).
   const [relatTarifaAtiva, setRelatTarifaAtiva] = useState(false);
   // Colunas do relatório (selecionáveis + reordenáveis, persistidas em localStorage).
@@ -1070,7 +1083,15 @@ export default function ContasAReceber() {
     }
     // Diário à vista: pago/não pago + UF.
     if (campos.pagoNaoPago && relatParams.rec_filtro) params.append('rec_filtro', relatParams.rec_filtro);
-    if (campos.uf && relatParams.uf.trim()) params.append('uf', relatParams.uf.trim().toUpperCase());
+    if (campos.uf && relatParams.ufAtiva && relatParams.uf.trim()) {
+      params.append('uf', relatParams.uf.trim().toUpperCase());
+    }
+    // Auto Peças / Ferramentas: os dois marcados (ou nenhum) = todos.
+    if (campos.pagoNaoPago) {
+      const { autoPecas, ferramentas } = relatParams;
+      if (autoPecas && !ferramentas) params.append('ramo', 'A');
+      else if (!autoPecas && ferramentas) params.append('ramo', 'F');
+    }
     // Receber do Cliente: "Com juros até" (vDia) e tarifa bancária.
     if (campos.dia_juros && relatParams.dia_juros) params.append('dia_juros', relatParams.dia_juros);
     if (campos.tarifa && relatTarifaAtiva && relatParams.tarifa.trim()) {
@@ -3695,15 +3716,60 @@ export default function ContasAReceber() {
                 </Select>
               </div>
             )}
+            {CAMPOS_RELATORIO[tipoRelatorio].pagoNaoPago && (
+              <div>
+                <Label>Ramo</Label>
+                {/* ckbAutoPecas / ckbFerramentas do Delphi: os dois marcados
+                    mandam vazio (todos); só um marcado manda 'A' ou 'F'. */}
+                <div className="flex items-center gap-4 mt-1">
+                  {([
+                    ['autoPecas', 'Auto Peças'],
+                    ['ferramentas', 'Ferramentas'],
+                  ] as const).map(([campo, rotulo]) => (
+                    <label key={campo} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={relatParams[campo]}
+                        onChange={(e) =>
+                          setRelatParams((p) => ({ ...p, [campo]: e.target.checked }))
+                        }
+                      />
+                      {rotulo}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  O ramo vem de quem emitiu a fatura (registro de inclusão em dbacao);
+                  títulos migrados do Oracle não têm esse registro.
+                </p>
+              </div>
+            )}
             {CAMPOS_RELATORIO[tipoRelatorio].uf && (
               <div>
-                <Label>UF (opcional)</Label>
-                <Input
-                  placeholder="Ex.: AM"
-                  maxLength={2}
+                <label className="flex items-center gap-2 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={relatParams.ufAtiva}
+                    onChange={(e) =>
+                      setRelatParams((p) => ({ ...p, ufAtiva: e.target.checked, uf: '' }))
+                    }
+                  />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                    UF
+                  </span>
+                </label>
+                {/* Como no Delphi: o combo só habilita com o check marcado. */}
+                <select
+                  disabled={!relatParams.ufAtiva}
                   value={relatParams.uf}
-                  onChange={(e) => setRelatParams((p) => ({ ...p, uf: e.target.value.toUpperCase() }))}
-                />
+                  onChange={(e) => setRelatParams((p) => ({ ...p, uf: e.target.value }))}
+                  className="flex h-9 w-full rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white px-3 text-sm disabled:opacity-50"
+                >
+                  <option value="">Selecione...</option>
+                  {ufsRelat.map((u) => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </select>
               </div>
             )}
             {CAMPOS_RELATORIO[tipoRelatorio].juros && (

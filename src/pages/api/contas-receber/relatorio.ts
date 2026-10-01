@@ -125,6 +125,8 @@ function buildQuery(
     dia_juros?: string;
     /** Tarifa bancária por título (meCli_TarifaBanc do Delphi). */
     tarifa?: string;
+    /** Diário à Vista: 'A' = Auto Peças, 'F' = Ferramentas, vazio = os dois. */
+    ramo?: string;
   } = {},
 ): { sql: string; params: any[]; countSql: string; layout: 'geral' | 'por_cliente' | 'por_dia'; titulo: string } {
   const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG.geral;
@@ -208,6 +210,27 @@ function buildQuery(
     whereClause += ` AND UPPER(COALESCE(c.uf,'')) = $${idx}`;
     params.push(String(extra.uf).toUpperCase()); idx++;
   }
+  // Auto Peças / Ferramentas (Títulos Diário à Vista → vUsuario do
+  // PRERECEB.CONSULTA_AVISTA_DIARIO). Lá o ramo é deduzido de QUEM EMITIU a
+  // fatura: o código do usuário que registrou a inclusão no dbacao, comparado
+  // com uma lista fixa (dentro da lista = Ferramentas, fora = Auto Peças).
+  // Os dois marcados mandam vazio e não filtram nada — é o padrão da tela.
+  if (extra.ramo === 'A' || extra.ramo === 'F') {
+    const USUARIOS_FERRAMENTAS = `('0030','0044','0104','0007','0050','0140','0141','0160','0182','0215','0164','0209','0246')`;
+    const emitente = `
+      SELECT 1
+      FROM dbfatura f
+      JOIN dbacao a ON UPPER(a.tabela) = 'DBFATURA' AND UPPER(a.acao) = 'INCLUIR'
+                   AND a.obs LIKE 'COD:' || f.codfat || '%'
+      JOIN dbusuario u ON u.codusr = a.codusr
+      WHERE ((r.cod_fat = f.codfat AND f.codgp IS NULL)
+          OR (r.codgp = f.codgp AND f.codfat IS NULL))
+        AND u.codusr ${extra.ramo === 'F' ? 'IN' : 'NOT IN'} ${USUARIOS_FERRAMENTAS}`;
+    // Como no Oracle, os dois lados exigem o registro de inclusão: lá o
+    // subselect vira NULL sem ele e tanto o IN quanto o NOT IN descartam a linha.
+    whereClause += ` AND EXISTS (${emitente})`;
+  }
+
   // Pago / Não pago (Títulos Diário à Vista → dbreceb.rec).
   if (cfg.fonte === 'dbreceb' && (extra.rec_filtro === 'S' || extra.rec_filtro === 'N')) {
     whereClause += extra.rec_filtro === 'S' ? ` AND r.rec = 'S'` : ` AND r.rec IS DISTINCT FROM 'S'`;
@@ -727,7 +750,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
 
-  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, codvend, uf, rec_filtro, orgaos, dia_juros, tarifa, colunas } = req.query;
+  const { formato, tipo, data_inicio, data_fim, status, cod_receb, cliente, nro_doc, cod_fat, search, codcli, cod_conta, classe_pgto, tx_juros, codvend, uf, rec_filtro, orgaos, ramo, dia_juros, tarifa, colunas } = req.query;
   const colunasSel = parseColunas(colunas as string | undefined);
 
   if (!formato || (formato !== 'pdf' && formato !== 'excel' && formato !== 'json')) {
@@ -767,6 +790,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         orgaos: orgaos as string | undefined,
         dia_juros: dia_juros as string | undefined,
         tarifa: tarifa as string | undefined,
+        ramo: ramo as string | undefined,
       },
     );
 
