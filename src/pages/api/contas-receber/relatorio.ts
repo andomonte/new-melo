@@ -86,8 +86,20 @@ export const TIPO_CONFIG: Record<
   por_cliente:          { layout: 'por_cliente', titulo: 'CONTAS A RECEBER POR CLIENTE',  extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
   receber_periodo:      { layout: 'por_dia',     titulo: 'RECEBER NO PERÍODO',            extraWhere: ` AND r.rec IS DISTINCT FROM 'S'`,                              dateField: 'dt_venc',    fonte: 'dbreceb' },
   em_atraso:            { layout: 'geral',       titulo: 'TÍTULOS EM ATRASO NO PERÍODO',  extraWhere: ` AND r.rec IS DISTINCT FROM 'S' AND r.dt_venc < CURRENT_DATE`,  dateField: 'dt_venc',    fonte: 'dbreceb' },
-  diario_avista:        { layout: 'geral',       titulo: 'TÍTULOS DIÁRIO À VISTA',        extraWhere: '',                                                            dateField: 'dt_emissao', fonte: 'dbreceb' },
-  recebimento_clientes: { layout: 'geral',       titulo: 'RECEBIMENTO DE CLIENTES',       extraWhere: ` AND fr.tipo <> 'E'`,                                          dateField: 'dt_pgto',    fonte: 'dbfreceb' },
+  // Critério do Oracle (PRERECEB.CONSULTA_AVISTA_DIARIO): "à vista" é o título
+  // cujo VENCIMENTO É IGUAL À EMISSÃO, com fatura de tipo 1 ou 3 — não tem nada
+  // a ver com dbclien.claspgto, que é a classe de pagamento do cliente.
+  //
+  // Desvio deliberado no tipofat: lá o INNER JOIN com dbfatura descarta quem não
+  // tem fatura; aqui a dbfatura só tem as faturas emitidas pelo próprio web
+  // (2.153 linhas contra 1,98 mi de títulos — o histórico não foi migrado), e o
+  // join literal zeraria o relatório. Então excluímos apenas quem TEM fatura de
+  // outro tipo. Quando a dbfatura estiver completa, basta trocar o NOT EXISTS
+  // (tipofat NOT IN) por EXISTS (tipofat IN) para ficar idêntico ao Oracle.
+  diario_avista:        { layout: 'geral',       titulo: 'TÍTULOS DIÁRIO À VISTA',        extraWhere: ` AND r.cancel = 'N' AND r.dt_venc = r.dt_emissao AND NOT EXISTS (SELECT 1 FROM dbfatura f WHERE ((r.cod_fat = f.codfat AND f.codgp IS NULL) OR (r.codgp = f.codgp AND f.codfat IS NULL)) AND f.tipofat NOT IN ('1','3'))`,                                                            dateField: 'dt_emissao', fonte: 'dbreceb' },
+  // CONTASR.CONSULTA_RECEBIMENTO_CLIENTE: filtra por p.dt_emissao (a data do
+  // lançamento do recebimento), com r.cancel='N' e p.SF<>'C'.
+  recebimento_clientes: { layout: 'geral',       titulo: 'RECEBIMENTO DE CLIENTES',       extraWhere: ` AND r.cancel = 'N' AND COALESCE(fr.sf, '') <> 'C'`,            dateField: 'dt_emissao', fonte: 'dbfreceb' },
 };
 
 function buildQuery(
@@ -183,7 +195,9 @@ function buildQuery(
   }
   // Órgãos públicos (Em atraso → escopo Órgãos): claspgto='O'.
   if (extra.orgaos === 'S') {
-    whereClause += ` AND UPPER(COALESCE(c.claspgto,'')) = 'O'`;
+    // CONTASR.DADOS_RECEBIMENTO, tipo 'OP': "and c.codcc in ('00005','00006','00007')".
+    // É a classe de cliente (codcc), não o claspgto.
+    whereClause += ` AND c.codcc IN ('00005','00006','00007')`;
   }
   // UF do cliente (Títulos Diário à Vista).
   if (extra.uf) {
@@ -220,7 +234,7 @@ function buildQuery(
       JOIN dbreceb r ON r.cod_receb = fr.cod_receb
       LEFT JOIN dbclien c ON c.codcli = r.codcli
       WHERE 1=1 ${whereClause}
-      ORDER BY cliente ASC, fr.dt_pgto ASC
+      ORDER BY fr.dt_emissao ASC, cliente ASC, r.nro_doc ASC
     `;
     const countFr = `
       SELECT COUNT(*) AS total
