@@ -573,6 +573,34 @@ export function useImportacaoDetalhe(importacaoId?: number) {
     }
   }, [importacaoId, fetchData]);
 
+  // Preview da NF-e de nacionalização (NÃO transmite — só monta o XML)
+  const [gerandoNacionalizacao, setGerandoNacionalizacao] = useState(false);
+  const [previewNacionalizacaoResult, setPreviewNacionalizacaoResult] = useState<any>(null);
+
+  const previewNacionalizacao = useCallback(
+    async (modo: 'POR_DI' | 'POR_EXPORTADOR' = 'POR_DI') => {
+      if (!importacaoId) return;
+      setGerandoNacionalizacao(true);
+      setError('');
+      try {
+        const response = await api.post(
+          `/api/importacao/${importacaoId}/preview-nacionalizacao`,
+          { modo },
+        );
+        if (response.data?.success) {
+          setPreviewNacionalizacaoResult(response.data);
+        } else {
+          setError(response.data?.message || 'Erro ao gerar preview da nota de nacionalização');
+        }
+      } catch (err: any) {
+        setError(err?.response?.data?.message || err.message || 'Erro ao gerar preview da nota de nacionalização');
+      } finally {
+        setGerandoNacionalizacao(false);
+      }
+    },
+    [importacaoId],
+  );
+
   // Importar itens do pedido de compra (manual, via modal)
   const importarDoPedido = useCallback((faturaIdx: number, itensImportados: ItemImportacao[]) => {
     setFaturas((prev) => {
@@ -702,6 +730,10 @@ export function useImportacaoDetalhe(importacaoId?: number) {
     calculandoCustos,
     gerarEntradas,
     gerandoEntradas,
+    previewNacionalizacao,
+    gerandoNacionalizacao,
+    previewNacionalizacaoResult,
+    setPreviewNacionalizacaoResult,
     importarDoPedido,
     dividirItem,
     moverItens,

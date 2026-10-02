@@ -52,9 +52,11 @@ export const ItensTable: React.FC<ItensTableProps> = ({
       return aAssociado - bAssociado;
     });
 
-  const totalProforma = itens.reduce((s, i) => s + (i.proforma_total || 0), 0);
-  const totalInvoice = itens.reduce((s, i) => s + (i.invoice_total || 0), 0);
-  const totalCusto = itens.reduce((s, i) => s + (i.custo_total_real || 0), 0);
+  // Number(...) porque os valores voltam do Postgres como string após salvar a DI
+  // (numeric → string); sem isso, 0 + "3.5" concatena e .toFixed quebra.
+  const totalProforma = itens.reduce((s, i) => s + (Number(i.proforma_total) || 0), 0);
+  const totalInvoice = itens.reduce((s, i) => s + (Number(i.invoice_total) || 0), 0);
+  const totalCusto = itens.reduce((s, i) => s + (Number(i.custo_total_real) || 0), 0);
 
   const handleAssociar = (idx: number) => {
     setItemSelecionadoIdx(idx);

@@ -26,6 +26,13 @@ Cada regra tem um ID para ser citado no relatório de gaps.
 - **B7** CST ICMS com origem **1** (estrangeira — importação direta).
 - **B8** A origem do produto é derivada da entrada e propagada para as vendas (não digitada manualmente na venda).
 - **B9** Totais: vNF segue a fórmula do leiaute (vProd − vDesc − vICMSDeson + vST + vFrete + vSeg + vOutro + vII + vIPI + vServ). PIS, COFINS, Siscomex e ICMS são lançados em vOutro conforme padrão definido com a contabilidade. **Verificar se o padrão está parametrizável.**
+- **B10** **DI com múltiplos exportadores → emissão da nota** (padrão confirmado pelo Delphi; pontos fiscais finos a confirmar com a contabilidade):
+  - **Padrão `POR_DI` (= legado MELO)**: uma única NF-e para a DI; **`cExportador`, nº da adição e seq. do item vão POR ITEM** (confirmado em `UniFrmFaturamentoUnificado.pas` → proc Oracle `INC_PRODFAT_IMPORTACAO_AUX`, que grava os dados da DI por produto da nota). Cada item com CFOP série 3 exige seus dados de DI (grupo DI + grupo II por item).
+  - **Alternativa `POR_EXPORTADOR`**: uma NF-e por **exportador da adição** — bate 1:1 com invoice/contrato de câmbio (contas a pagar) e referencia a adição certa em devolução/avaria. Opção parametrizável, não é como o MELO opera hoje.
+  - **Parâmetro de empresa** `modo_emissao_importacao` = `POR_DI` (default) | `POR_EXPORTADOR`. O modelo de dados suporta os dois **sem retrabalho** (ver seção de modelo de dados).
+  - **Rateio é sempre no nível da DI, por item, ANTES do agrupamento em notas** (C7). O resíduo de arredondamento (C8) fecha com o **total da DI** (soma de todas as NF-e geradas), nunca nota a nota.
+  - **Validação C9 na soma das NF-e da mesma DI** = valores da DI (não por nota isolada).
+  - **Limite de 990 itens por NF-e**: se um exportador (ou a DI inteira no modo `POR_DI`) passar de 990 itens, **quebrar automaticamente** em notas adicionais, mantendo o vínculo com a mesma DI e o mesmo critério de rateio/validação.
 
 ## C. Cálculo
 
@@ -69,3 +76,73 @@ Cada regra tem um ID para ser citado no relatório de gaps.
 - **F4** **Custo do estoque** = VA + II + IPI (quando não recuperável) + despesas rateadas. Tributos recuperáveis (crédito de ICMS, PIS/COFINS, IBS/CBS) **não** entram no custo.
 - **F5** Importação por conta e ordem / encomenda: tratamento e vínculo com o terceiro (CNPJ, UF).
 - **F6** Testes automatizados com pelo menos um caso numérico completo de importação (VA → tributos → rateio → totais → custo).
+
+## G. Modelo de dados proposto para emissão (B10)
+
+> Proposta de modelo, **não implementada**. Objetivo: suportar `POR_EXPORTADOR` e `POR_DI` sem retrabalho, com a **adição** como unidade canônica de quebra. Aproveita as tabelas atuais (`dbent_importacao`, `dbent_importacao_entrada`, `dbent_importacao_it_ent` — esta já tem `numero_adicao`).
+
+### G1. O que já existe
+
+| Tabela | Papel hoje | Observação |
+|---|---|---|
+| `dbent_importacao` | Cabeçalho da DI | tem `qtd_adicoes`, mas as adições **não** são persistidas como linhas |
+| `dbent_importacao_contratos` | Contratos de câmbio | 1:N com a DI |
+| `dbent_importacao_entrada` | "Faturas" (agrupamento por fornecedor de negócio) | `fornecedor_nome`, `cod_credor` |
+| `dbent_importacao_it_ent` | Itens | já tem `numero_adicao`, `id_fatura`, `codprod`, custos rateados |
+
+### G2. Novas tabelas propostas
+
+**`dbent_importacao_adicao`** — a adição como entidade (resolve A2/A3 e dá o `cExportador` canônico para o agrupamento B10):
+```
+id                 (PK)
+id_importacao      (FK dbent_importacao)
+numero_adicao      (bate com dbent_importacao_it_ent.numero_adicao)
+seq_adicao
+ncm
+cod_exportador     -- código/identificador do exportador (cExportador)
+exportador_nome
+exportador_pais    -- cPais
+exportador_id_estr -- idEstrangeiro (sem CNPJ/CPF)
+fabricante_cod     -- cFabricante
+valor_adicao       -- base da validação C9 por adição
+```
+Item passa a referenciar a adição por `id_adicao` (além de manter `numero_adicao`), para `nAdicao/nSeqAdic/cFabricante` por item (A3).
+
+**`dbent_importacao_nfe`** — cada NF-e de nacionalização gerada (N por DI):
+```
+id                 (PK)
+id_importacao      (FK)
+modo               -- 'POR_EXPORTADOR' | 'POR_DI' (congela o modo usado na geração)
+cod_exportador     -- preenchido no modo POR_EXPORTADOR; NULL no POR_DI
+seq_nota           -- 1,2,3... quando um exportador/DI estoura 990 itens (quebra automática)
+chave_nfe
+numero / serie
+cfop_padrao        -- 3.102 etc
+status             -- rascunho / autorizada / rejeitada / cancelada
+vnf, vprod, vii, vipi, vpis, vcofins, vicms, vsiscomex, voutro
+```
+
+**`dbent_importacao_nfe_item`** — vínculo item ⇄ nota emitida (quem entrou em qual nota):
+```
+id                 (PK)
+id_nfe             (FK dbent_importacao_nfe)
+id_item            (FK dbent_importacao_it_ent)
+id_adicao          (FK dbent_importacao_adicao)
+n_item_nf          -- nº do item dentro da NF-e (1..990)
+```
+
+### G3. Parâmetro de empresa
+```
+parametro_empresa.modo_emissao_importacao = 'POR_DI' (default, = Delphi) | 'POR_EXPORTADOR'
+```
+Guardado também em `dbent_importacao_nfe.modo` no momento da geração (histórico imutável do que foi emitido).
+
+### G4. Como os dois modos caem no mesmo modelo
+- **POR_DI (default)**: 1 `dbent_importacao_nfe` com `cod_exportador = NULL`; `cExportador` resolvido **por item** (via `id_adicao`); destinatário parametrizável. É o comportamento do Delphi (dados da DI por item da nota).
+- **POR_EXPORTADOR**: `GROUP BY cod_exportador` (via `id_adicao → dbent_importacao_adicao.cod_exportador`) → 1 `dbent_importacao_nfe` por exportador. Destinatário = exportador da adição (B2).
+- **Quebra de 990**: dentro de cada grupo, particionar os itens em lotes de ≤990 → cada lote vira uma `dbent_importacao_nfe` com `seq_nota` incremental, mesma DI e mesmo exportador.
+
+### G5. Rateio e validação (reforço do B10 / C7–C9)
+- O rateio continua em `dbent_importacao_it_ent` (**nível DI, por item, antes do agrupamento**). As tabelas `*_nfe*` **não** recalculam custo — apenas **somam** os itens que entraram em cada nota.
+- **C8 (resíduo)** fecha com o total da DI = `SUM(dbent_importacao_nfe.*)` de todas as notas da DI.
+- **C9 (validação)** roda na **soma das notas da mesma DI** e na soma por adição (`dbent_importacao_adicao.valor_adicao`), nunca por nota isolada.

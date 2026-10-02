@@ -1,7 +1,7 @@
 import { create } from 'xmlbuilder2';
 
 // Função para calcular o dígito verificador (Módulo 11)
-function calcularDV(chave: string): number {
+export function calcularDV(chave: string): number {
   let soma = 0;
   let peso = 2;
   for (let i = chave.length - 1; i >= 0; i--) {
@@ -21,7 +21,7 @@ function calcularDV(chave: string): number {
 // Emitir o CST dentro da tag errada causa "cvc-enumeration-valid".
 // O payload traz apenas os campos básicos (base, alíquota, valor); campos de ST
 // retido (CST 60) são opcionais no schema — só entram se vierem no payload.
-function montarGrupoICMS(icms: any, vProdStr: string): Record<string, any> {
+export function montarGrupoICMS(icms: any, vProdStr: string): Record<string, any> {
   const orig = String(icms?.origem ?? '0');
   const cst = String(icms?.cstICMS ?? '00').padStart(2, '0').slice(-2);
   const modBC = String(icms?.modBC ?? '3');
@@ -77,7 +77,7 @@ function montarGrupoICMS(icms: any, vProdStr: string): Record<string, any> {
 
 // Monta o grupo de IPI conforme o CST. Tributado (00,49,50,99) -> <IPITrib> com
 // base/alíquota/valor; demais (não tributado/isento/suspenso) -> <IPINT> só com CST.
-function montarGrupoIPI(ipi: any, vProdStr: string): Record<string, any> {
+export function montarGrupoIPI(ipi: any, vProdStr: string): Record<string, any> {
   const cst = String(ipi?.cstIPI ?? '50').padStart(2, '0').slice(-2);
   const tributado = ['00', '49', '50', '99'].includes(cst);
   if (tributado) {
@@ -96,7 +96,7 @@ function montarGrupoIPI(ipi: any, vProdStr: string): Record<string, any> {
 
 // Monta o grupo de PIS conforme o CST. Tributado por alíquota (01,02) -> <PISAliq>;
 // não tributado (04..09) -> <PISNT> só com CST; demais (49..99) -> <PISOutr>.
-function montarGrupoPIS(pis: any, vProdStr: string): Record<string, any> {
+export function montarGrupoPIS(pis: any, vProdStr: string): Record<string, any> {
   const cst = String(pis?.cstPIS ?? '01').padStart(2, '0').slice(-2);
   const vBC = Number(vProdStr).toFixed(2);
   const pPIS = Number(pis?.pPIS ?? 0).toFixed(4);
@@ -107,7 +107,7 @@ function montarGrupoPIS(pis: any, vProdStr: string): Record<string, any> {
 }
 
 // Monta o grupo de COFINS conforme o CST (mesma lógica do PIS).
-function montarGrupoCOFINS(cofins: any, vProdStr: string): Record<string, any> {
+export function montarGrupoCOFINS(cofins: any, vProdStr: string): Record<string, any> {
   const cst = String(cofins?.cstCOFINS ?? '01').padStart(2, '0').slice(-2);
   const vBC = Number(vProdStr).toFixed(2);
   const pCOFINS = Number(cofins?.pCOFINS ?? 0).toFixed(4);
@@ -119,7 +119,7 @@ function montarGrupoCOFINS(cofins: any, vProdStr: string): Record<string, any> {
 
 // Monta o grupo IBS/CBS por item (Reforma Tributária 2026 — NT 2025.002).
 // O IBS é dividido em estadual (gIBSUF) e municipal (gIBSMun); vIBS = vIBSUF + vIBSMun.
-function montarGrupoIBSCBS(ibs: any, vProdStr: string): Record<string, any> {
+export function montarGrupoIBSCBS(ibs: any, vProdStr: string): Record<string, any> {
   const vBC = Number(ibs?.vBC ?? vProdStr).toFixed(2);
   const pIBSUF = Number(ibs?.pIBSUF ?? 0).toFixed(4);
   const vIBSUF = Number(ibs?.vIBSUF ?? 0).toFixed(2);
@@ -142,7 +142,7 @@ function montarGrupoIBSCBS(ibs: any, vProdStr: string): Record<string, any> {
 }
 
 // Função para formatar a data/hora no padrão exigido pela Sefaz (com fuso horário)
-function formatarDataSefaz(data: Date): string {
+export function formatarDataSefaz(data: Date): string {
   const pad = (num: number) => num.toString().padStart(2, '0');
 
   // Converter para o horário de Manaus (UTC-4)

@@ -5,8 +5,10 @@
  */
 
 import React from 'react';
-import { X, Save, Calculator, Package, Loader2, AlertCircle } from 'lucide-react';
+import { X, Save, Calculator, Loader2, AlertCircle, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import useConfirmarSalvar from '@/hooks/useConfirmarSalvar';
+import { NacionalizacaoPreviewModal } from './NacionalizacaoPreviewModal';
 import { STATUS_LABELS } from '../types/importacao';
 import { TABS } from '../constants';
 import { useImportacaoDetalhe } from '../hooks/useImportacaoDetalhe';
@@ -59,12 +61,16 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     associarEVincularStats,
     calcularCustos,
     calculandoCustos,
-    gerarEntradas,
-    gerandoEntradas,
+    previewNacionalizacao,
+    gerandoNacionalizacao,
+    previewNacionalizacaoResult,
+    setPreviewNacionalizacaoResult,
     importarDoPedido,
     dividirItem,
     moverItens,
   } = useImportacaoDetalhe(importacaoId);
+
+  const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
 
   if (!isOpen) return null;
 
@@ -75,6 +81,32 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   const handleSalvar = async () => {
     await salvar();
   };
+
+  const handleCalcularCustos = () => {
+    pedirConfirmacao(() => void calcularCustos(), {
+      title: 'Calcular custos',
+      message:
+        'O custo de cada item será recalculado: rateio de frete, impostos e despesas da DI por item ' +
+        '(pela taxa do dólar da DI). Os custos atuais serão sobrescritos. Deseja continuar?',
+      type: 'info',
+      confirmText: 'Calcular',
+      cancelText: 'Cancelar',
+    });
+  };
+
+  const handlePreviewNacionalizacao = () => {
+    pedirConfirmacao(() => void previewNacionalizacao('POR_DI'), {
+      title: 'Nota de Nacionalização (preview)',
+      message:
+        'Será montado o XML da NF-e de nacionalização (tpNF=0, destinatário exterior, CFOP 3.102, ' +
+        'grupo DI + adição + II por item) a partir dos itens associados. É apenas PREVIEW em homologação — ' +
+        'NÃO transmite ao SEFAZ. Deseja continuar?',
+      type: 'info',
+      confirmText: 'Gerar preview',
+      cancelText: 'Cancelar',
+    });
+  };
+
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
@@ -99,7 +131,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                   variant="outline"
                   size="sm"
                   disabled={calculandoCustos || !faturas.some(f => f.itens?.some(i => !!i.codprod))}
-                  onClick={calcularCustos}
+                  onClick={handleCalcularCustos}
                   className="flex items-center gap-1"
                 >
                   {calculandoCustos ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
@@ -108,12 +140,13 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={gerandoEntradas || !faturas.some(f => f.itens?.some(i => !!i.custo_unit_dolar))}
-                  onClick={gerarEntradas}
+                  disabled={gerandoNacionalizacao || !faturas.some(f => f.itens?.some(i => !!i.codprod))}
+                  onClick={handlePreviewNacionalizacao}
+                  title="Monta o XML da NF-e de nacionalização (tpNF=0, exterior, CFOP 3.x, grupo DI/II) — preview, não transmite"
                   className="flex items-center gap-1"
                 >
-                  {gerandoEntradas ? <Loader2 size={16} className="animate-spin" /> : <Package size={16} />}
-                  {gerandoEntradas ? 'Gerando...' : 'Gerar Entradas'}
+                  {gerandoNacionalizacao ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                  {gerandoNacionalizacao ? 'Gerando...' : 'Nota de Nacionalização'}
                 </Button>
                 <Button
                   size="sm"
@@ -244,6 +277,14 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
           )}
         </div>
       </div>
+      {ConfirmacaoSalvarModal}
+      <NacionalizacaoPreviewModal
+        aberto={!!previewNacionalizacaoResult}
+        resultado={previewNacionalizacaoResult}
+        carregando={gerandoNacionalizacao}
+        onTrocarModo={(modo) => void previewNacionalizacao(modo)}
+        onFechar={() => setPreviewNacionalizacaoResult(null)}
+      />
     </div>
   );
 };
