@@ -58,6 +58,7 @@ interface ItemAdicionado {
       codvend?: string | null;
       codcomprador?: string | null;
       cod_conta?: string | null;
+      codusr_delphi?: string | null;
       armazens?: Armazem[];
       funcoesDoUsuario: Funcao[];
     }[];
@@ -208,6 +209,10 @@ export default function FormEditarUsuario({
             codcomprador: filial.codcomprador ?? null,
             cod_conta:
               (filial as { cod_conta?: string | null }).cod_conta ?? null,
+            // Sem repassar isto, salvar a edição apagaria o código: o update
+            // apaga as linhas de tb_user_perfil e reinsere a partir do payload.
+            codusr_delphi:
+              (filial as { codusr_delphi?: string | null }).codusr_delphi ?? null,
             armazens: filial.armazens ?? [],
             funcoesDoUsuario: filial.funcoesDoUsuario ?? [],
           })),

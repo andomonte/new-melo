@@ -10,7 +10,9 @@ export default async function handle(
   res: NextApiResponse,
 ): Promise<void> {
   const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'manaus';
+  // ?filial= tem precedência: o cadastro de usuário monta a linha de uma filial
+  // que pode não ser a do admin logado.
+  const filial = String(req.query.filial || cookies.filial_melo || 'manaus').trim();
 
   const { page = 1, perPage = 10, search = '' }: GetParams = req.query;
   const pool = await getPgPoolPorNomeFilial(filial);

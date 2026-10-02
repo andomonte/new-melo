@@ -76,7 +76,7 @@ export default async function handle(
     const resposta = await Promise.all(
       usuarios.map(async (usuario) => {
         // Query para obter os perfis do usuário, já ordenada por perfil_name
-        const userPerfisQuery = `SELECT perfil_name, codigo_filial, nome_filial, codvend, codcomprador, cod_conta
+        const userPerfisQuery = `SELECT perfil_name, codigo_filial, nome_filial, codvend, codcomprador, cod_conta, codusr_delphi
           FROM tb_user_perfil
           WHERE user_login_id = $1
           ORDER BY perfil_name; 
@@ -106,6 +106,7 @@ export default async function handle(
                   codvend: userPerfil.codvend ?? null,
                   codcomprador: userPerfil.codcomprador ?? null,
                   cod_conta: userPerfil.cod_conta ?? null,
+                  codusr_delphi: userPerfil.codusr_delphi ?? null,
                 },
               ],
 
@@ -136,6 +137,7 @@ export default async function handle(
                       codvend: userPerfil.codvend ?? null,
                       codcomprador: userPerfil.codcomprador ?? null,
                       cod_conta: userPerfil.cod_conta ?? null,
+                  codusr_delphi: userPerfil.codusr_delphi ?? null,
                     },
                   ],
 
@@ -199,6 +201,7 @@ export default async function handle(
                       codvend: userPerfil.codvend ?? null,
                       codcomprador: userPerfil.codcomprador ?? null,
                       cod_conta: userPerfil.cod_conta ?? null,
+                  codusr_delphi: userPerfil.codusr_delphi ?? null,
                     },
                   ],
 

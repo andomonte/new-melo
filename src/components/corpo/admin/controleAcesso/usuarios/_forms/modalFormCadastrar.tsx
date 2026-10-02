@@ -102,6 +102,7 @@ export default function FormCadastrarUsuario({
   const [codvendInput, setCodvendInput] = useState<string | null>(null);
   const [compradorInput, setCompradorInput] = useState<string | null>(null);
   const [contaInput, setContaInput] = useState<string | null>(null);
+  const [codusrDelphiInput, setCodusrDelphiInput] = useState<string | null>(null);
 
   // Comprador por perfil/filial (igual ao Vendedor). Opções do select ao lado
   // do Vendedor; o valor escolhido é adicionado à linha.
@@ -110,11 +111,17 @@ export default function FormCadastrarUsuario({
   >([]);
   const [loadingCompradores, setLoadingCompradores] = useState(false);
 
-  const buscarCompradores = useCallback(async (termo: string) => {
+  // As listas abaixo são POR FILIAL: cada filial tem seu próprio cadastro
+  // (dbvend, dbcompradores, dbconta e dbusuario_delphi vivem em cada schema).
+  // Antes a busca usava a filial do cookie — a do admin logado —, então quem
+  // cadastrava um usuário de Roraima estando em Manaus via a lista de Manaus.
+  const buscarCompradores = useCallback(async (termo: string, filial: string) => {
+    if (!filial) { setCompradoresOpts([]); return; }
     setLoadingCompradores(true);
     try {
       const resp = await fetch(
-        `/api/compradores/get?page=1&perPage=500&search=${encodeURIComponent(termo)}`,
+        `/api/compradores/get?page=1&perPage=500&search=${encodeURIComponent(termo)}` +
+          `&filial=${encodeURIComponent(filial)}`,
       );
       const json = await resp.json();
       const lista = (json.data ?? []).map((c: any) => ({
@@ -130,8 +137,8 @@ export default function FormCadastrarUsuario({
   }, []);
 
   useEffect(() => {
-    buscarCompradores('');
-  }, [buscarCompradores]);
+    buscarCompradores('', filialSelecionada);
+  }, [buscarCompradores, filialSelecionada]);
 
   const labelComprador = useCallback(
     (cod?: string | null) => {
@@ -148,11 +155,13 @@ export default function FormCadastrarUsuario({
   >([]);
   const [loadingContas, setLoadingContas] = useState(false);
 
-  const buscarContas = useCallback(async (termo: string) => {
+  const buscarContas = useCallback(async (termo: string, filial: string) => {
+    if (!filial) { setContasOpts([]); return; }
     setLoadingContas(true);
     try {
       const resp = await fetch(
-        `/api/contas-caixa/get?search=${encodeURIComponent(termo)}`,
+        `/api/contas-caixa/get?search=${encodeURIComponent(termo)}` +
+          `&filial=${encodeURIComponent(filial)}`,
       );
       const json = await resp.json();
       const lista = (json.data ?? []).map((c: any) => ({
@@ -168,8 +177,64 @@ export default function FormCadastrarUsuario({
   }, []);
 
   useEffect(() => {
-    buscarContas('');
-  }, [buscarContas]);
+    buscarContas('', filialSelecionada);
+  }, [buscarContas, filialSelecionada]);
+
+  // Vendedores da filial escolhida. A lista que vem por prop é carregada uma vez,
+  // com a filial do cookie; aqui ela é recarregada a cada troca de filial.
+  const [vendedoresOpts, setVendedoresOpts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const buscarVendedores = useCallback(async (filial: string) => {
+    if (!filial) { setVendedoresOpts([]); return; }
+    try {
+      const resp = await fetch(
+        `/api/vendedores/get?page=1&perPage=9999&search=&filial=${encodeURIComponent(filial)}`,
+      );
+      const json = await resp.json();
+      setVendedoresOpts(
+        (json.data ?? []).map((v: any) => ({
+          value: String(v.codvend),
+          label: `${v.codvend} - ${v.nome}`,
+        })),
+      );
+    } catch (e) {
+      console.error('Erro ao buscar vendedores da filial:', e);
+      setVendedoresOpts([]);
+    }
+  }, []);
+  useEffect(() => {
+    buscarVendedores(filialSelecionada);
+  }, [buscarVendedores, filialSelecionada]);
+
+  // Código do usuário no Delphi (dbusuario_delphi daquela filial). É o que
+  // permite classificar a autoria registrada no dbacao — por exemplo o ramo
+  // Auto Peças/Ferramentas do relatório Títulos Diário à Vista, que compara
+  // com uma lista de códigos do Delphi e nunca casaria com um login do web.
+  const [codigosDelphiOpts, setCodigosDelphiOpts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [loadingCodigosDelphi, setLoadingCodigosDelphi] = useState(false);
+  const buscarCodigosDelphi = useCallback(async (termo: string, filial: string) => {
+    if (!filial) { setCodigosDelphiOpts([]); return; }
+    setLoadingCodigosDelphi(true);
+    try {
+      const resp = await fetch(
+        `/api/usuarios/codigos-delphi?filial=${encodeURIComponent(filial)}` +
+          `&search=${encodeURIComponent(termo)}`,
+      );
+      const json = await resp.json();
+      setCodigosDelphiOpts(json.usuarios ?? []);
+    } catch (e) {
+      console.error('Erro ao buscar códigos do Delphi:', e);
+      setCodigosDelphiOpts([]);
+    } finally {
+      setLoadingCodigosDelphi(false);
+    }
+  }, []);
+  useEffect(() => {
+    buscarCodigosDelphi('', filialSelecionada);
+  }, [buscarCodigosDelphi, filialSelecionada]);
 
   const labelConta = useCallback(
     (cod?: string | null) => {
@@ -328,6 +393,7 @@ export default function FormCadastrarUsuario({
         codvend: codvendInput ?? null,
         codcomprador: compradorInput ?? null,
         cod_conta: contaInput ?? null,
+        codusr_delphi: codusrDelphiInput ?? null,
         armazens: armazensSelecionados[filialSelecionada] ?? [],
         funcoesDoUsuario: funcoesSelecionadas,
       };
@@ -974,7 +1040,10 @@ export default function FormCadastrarUsuario({
                         disabled
                       >{`Erro: ${errorVendedores}`}</SelectItem>
                     ) : (
-                      vendedores.map((vendedor) => (
+                      (vendedoresOpts.length > 0
+                        ? vendedoresOpts.map((v) => ({ codvend: v.value, nome: v.label.split(' - ').slice(1).join(' - ') }))
+                        : vendedores
+                      ).map((vendedor: any) => (
                         <SelectItem
                           key={String(vendedor.codvend)}
                           value={String(vendedor.codvend)}
@@ -1006,7 +1075,7 @@ export default function FormCadastrarUsuario({
                   options={compradoresOpts}
                   value={compradorInput ?? ''}
                   onValueChange={(v) => setCompradorInput(v || null)}
-                  onInputChange={(termo) => buscarCompradores(termo)}
+                  onInputChange={(termo) => buscarCompradores(termo, filialSelecionada)}
                   loading={loadingCompradores}
                 />
               </div>
@@ -1024,8 +1093,32 @@ export default function FormCadastrarUsuario({
                   options={contasOpts}
                   value={contaInput ?? ''}
                   onValueChange={(v) => setContaInput(v || null)}
-                  onInputChange={(termo) => buscarContas(termo)}
+                  onInputChange={(termo) => buscarContas(termo, filialSelecionada)}
                   loading={loadingContas}
+                />
+              </div>
+
+              {/* Código do usuário no Delphi, por filial. É ele que liga o autor
+                  registrado no dbacao às classificações do ERP (ex.: o ramo
+                  Auto Peças/Ferramentas, que compara com uma lista de códigos).
+                  A lista vem da dbusuario_delphi DAQUELA filial. */}
+              <div className="w-[25%]">
+                <label className="block mb-1 text-sm font-medium">
+                  Código Delphi <span className="ml-1">(opcional)</span>
+                </label>
+                <SelectPadrao
+                  searchable
+                  name="codusr_delphi"
+                  placeholder={
+                    filialSelecionada
+                      ? 'Selecione o usuário do Delphi'
+                      : 'Selecione a filial primeiro'
+                  }
+                  options={codigosDelphiOpts}
+                  value={codusrDelphiInput ?? ''}
+                  onValueChange={(v) => setCodusrDelphiInput(v || null)}
+                  onInputChange={(termo) => buscarCodigosDelphi(termo, filialSelecionada)}
+                  loading={loadingCodigosDelphi}
                 />
               </div>
 

@@ -1,13 +1,20 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
+import { parseCookies } from 'nookies';
 
 /**
  * Lista as contas de caixa (dbconta) para o select de "Operador" no cadastro de usuário
  * — equivalente ao /api/compradores/get, mas para a conta do operador de caixa.
+ *
+ * A filial vem por parâmetro (?filial=) e, na falta dele, do cookie. Quem
+ * cadastra pode estar logado numa filial e montando a linha de outra, e a
+ * dbconta é por schema — sem isso, o select oferece as contas da filial errada.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const search = String(req.query.search || '').trim();
-  const pool = getPgPool();
+  const cookies = parseCookies({ req });
+  const filial = String(req.query.filial || cookies.filial_melo || '').trim();
+  const pool = await getPgPoolPorNomeFilial(filial);
   const client = await pool.connect();
   try {
     const params: any[] = [];

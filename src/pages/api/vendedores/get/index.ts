@@ -95,7 +95,8 @@ export default async function handle(
     const { page = '1', perPage = '10', search = '' }: GetParams = req.query;
 
     const cookies = parseCookies({ req });
-    const filial = cookies.filial_melo;
+    // ?filial= tem precedência (cadastro de usuário monta a linha de outra filial).
+    const filial = String(req.query.filial || cookies.filial_melo || '').trim();
 
     if (!filial) {
       return res.status(400).json({ error: 'Filial não informada no cookie' });
@@ -183,7 +184,8 @@ export default async function handle(
     const { page = 1, perPage = 10, search = '', filtros = [] } = req.body;
 
     const cookies = parseCookies({ req });
-    const filial = cookies.filial_melo;
+    // ?filial= tem precedência (cadastro de usuário monta a linha de outra filial).
+    const filial = String(req.query.filial || cookies.filial_melo || '').trim();
 
     if (!filial) {
       return res.status(400).json({ error: 'Filial não informada no cookie' });
