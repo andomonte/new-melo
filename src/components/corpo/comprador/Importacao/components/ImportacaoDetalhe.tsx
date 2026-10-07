@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { X, Save, Calculator, Loader2, AlertCircle, FileText } from 'lucide-react';
+import { X, Save, Calculator, Loader2, AlertCircle, FileText, Eye, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import useConfirmarSalvar from '@/hooks/useConfirmarSalvar';
 import { NacionalizacaoPreviewModal } from './NacionalizacaoPreviewModal';
@@ -74,6 +74,30 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   } = useImportacaoDetalhe(importacaoId);
 
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
+  const [gerandoDanfe, setGerandoDanfe] = React.useState(false);
+
+  const handleGerarPreviewDanfe = async () => {
+    if (!importacaoId) return;
+    try {
+      setGerandoDanfe(true);
+      const resp = await fetch(`/api/importacao/${importacaoId}/preview-danfe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        window.alert(j.message || 'Erro ao gerar a prévia do DANFE');
+        return;
+      }
+      const blob = await resp.blob();
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (e: any) {
+      window.alert(e?.message || 'Erro ao gerar a prévia do DANFE');
+    } finally {
+      setGerandoDanfe(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -97,15 +121,15 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     });
   };
 
-  const handlePreviewNacionalizacao = () => {
+  const handleEmitirNota = () => {
     pedirConfirmacao(() => void previewNacionalizacao('POR_DI'), {
-      title: 'Nota de Nacionalização (preview)',
+      title: 'Emitir Nota de Nacionalização',
       message:
-        'Será montado o XML da NF-e de nacionalização (tpNF=0, destinatário exterior, CFOP 3.102, ' +
-        'grupo DI + adição + II por item) a partir dos itens associados. É apenas PREVIEW em homologação — ' +
-        'NÃO transmite ao SEFAZ. Deseja continuar?',
+        'Etapas: (1) calcular custos (valor NF por item); (2) montar o XML (tpNF=0, destinatário exterior, ' +
+        'CFOP 3.102, grupo DI/adição/II, ICMS60, IBS/CBS) particionado por grupo de pedidos. ' +
+        'Nesta fase é HOMOLOGAÇÃO — monta e exibe o XML, NÃO transmite ainda ao SEFAZ. Deseja continuar?',
       type: 'info',
-      confirmText: 'Gerar preview',
+      confirmText: 'Montar XML (homologação)',
       cancelText: 'Cancelar',
     });
   };
@@ -155,13 +179,24 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={gerandoNacionalizacao || !!bloqueioNacionalizacao}
-                  onClick={handlePreviewNacionalizacao}
-                  title={bloqueioNacionalizacao || 'Monta o XML da NF-e de nacionalização (tpNF=0, exterior, CFOP 3.x, grupo DI/II) — preview, não transmite'}
+                  disabled={gerandoDanfe || !!bloqueioNacionalizacao}
+                  onClick={handleGerarPreviewDanfe}
+                  title={bloqueioNacionalizacao || 'Gera a prévia do DANFE (PDF) da nota de nacionalização — SEM VALOR FISCAL'}
                   className="flex items-center gap-1"
                 >
-                  {gerandoNacionalizacao ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
-                  {gerandoNacionalizacao ? 'Gerando...' : 'Nota de Nacionalização'}
+                  {gerandoDanfe ? <Loader2 size={16} className="animate-spin" /> : <Eye size={16} />}
+                  {gerandoDanfe ? 'Gerando...' : 'Gerar Preview'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={gerandoNacionalizacao || !!bloqueioNacionalizacao}
+                  onClick={handleEmitirNota}
+                  title={bloqueioNacionalizacao || 'Monta o XML da NF-e de nacionalização (homologação) — transmissão SEFAZ no próximo passo'}
+                  className="flex items-center gap-1"
+                >
+                  {gerandoNacionalizacao ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {gerandoNacionalizacao ? 'Gerando...' : 'Emitir Nota'}
                 </Button>
                 <Button
                   size="sm"

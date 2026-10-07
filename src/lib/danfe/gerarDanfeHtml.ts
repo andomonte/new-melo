@@ -43,6 +43,7 @@ export interface DanfeHtmlOpts {
   marcaDagua?: string; // tarja diagonal (ex.: 'SEM VALIDADE'); auto quando sem protocolo
   homologacao?: boolean; // ambiente de homologação → força "SEM VALOR FISCAL"
   cancelada?: boolean; // nota cancelada → tarja "CANCELADA" (mantém os dados originais)
+  entrada?: boolean; // nota de ENTRADA (tpNF=0) → marca "0" na caixa E/S (ex.: nacionalização)
 }
 
 const HOMOLOG_NOME = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -280,7 +281,7 @@ export function gerarDanfeHtmlNFe(
       <div class="danfe-box">
         <div class="t1">DANFE</div>
         <div class="t2">DOCUMENTO AUXILIAR DE<br>NOTA FISCAL ELETRÔNICA</div>
-        <div class="es"><div>0 - ENTRADA<br>1 - SAÍDA</div><div class="box1">1</div></div>
+        <div class="es"><div>0 - ENTRADA<br>1 - SAÍDA</div><div class="box1">${opts.entrada ? '0' : '1'}</div></div>
         <div class="nsf"><span>Nº <b>${esc(numeroNota)}</b></span></div>
         <div class="nsf"><span>SÉRIE <b>${esc(serie)}</b></span><span>FOLHA <b>1/1</b></span></div>
       </div>

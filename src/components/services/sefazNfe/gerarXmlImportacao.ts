@@ -48,6 +48,10 @@ export interface AdicaoImportacao {
 export interface ItemImportacaoNfe {
   codprod: string;
   descricao: string;
+  ref?: string;        // dbprod.ref → xProd = "ref - descr"
+  cest?: string;       // dbprod.cest (quando houver)
+  cEAN?: string;       // GTIN; default SEM GTIN
+  vOutro?: number;     // rateio flat de outros_valores (vOutro por item)
   ncm?: string;
   cfop?: string; // série 3; default 3102
   unidade?: string;
@@ -104,11 +108,17 @@ export interface DadosNacionalizacao {
   destExterior?: {
     idEstrangeiro?: string;
     nome?: string;
+    xLgr?: string;    // endereço real do exportador (dbclien)
+    nro?: string;
+    xBairro?: string;
+    cep?: string;     // default 99999999
     cPais?: string;
     xPais?: string;
   };
   /** Informações complementares (infAdic/infCpl) — lista de fornecedores/faturas da DI. */
   infCpl?: string;
+  /** Responsável técnico (infRespTec). Default MELO. */
+  respTec?: { cnpj?: string; contato?: string; email?: string; fone?: string };
 }
 
 export interface NotaNacionalizacaoGerada {
@@ -231,12 +241,13 @@ function montarUmaNota(
         ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
         : dest.nome || codExportador || 'EXPORTADOR EXTERIOR',
     enderDest: {
-      xLgr: 'EXTERIOR',
-      nro: 'S/N',
-      xBairro: 'EXTERIOR',
+      xLgr: dest.xLgr || 'EXTERIOR',
+      nro: dest.nro || 'S/N',
+      xBairro: dest.xBairro || 'EXTERIOR',
       cMun: '9999999',
       xMun: 'EXTERIOR',
       UF: 'EX',
+      CEP: (dest.cep || '99999999').replace(/\D/g, ''),
       cPais: dest.cPais || '9999',
       xPais: dest.xPais || 'EXTERIOR',
     },
@@ -244,18 +255,33 @@ function montarUmaNota(
   };
 
   // Totais acumulados a partir do que cada item realmente grava
-  const tot = { vProd: 0, vII: 0, vIPI: 0, vPIS: 0, vCOFINS: 0, vBC: 0, vICMS: 0 };
+  const tot = {
+    vProd: 0, vII: 0, vIPI: 0, vPIS: 0, vCOFINS: 0, vBC: 0, vICMS: 0, vOutro: 0,
+    vBCIBS: 0, vIBSUF: 0, vIBSMun: 0, vIBS: 0, vCBS: 0,
+  };
 
   const det = itens.map((item, index) => {
     const qtde = Number(item.qtd ?? 1);
     const preco = Number(item.vUnit ?? 0);
     const vProd = Math.round(preco * qtde * 100) / 100;
+    // cProd zero-pad 14; cEAN = GTIN válido ou SEM GTIN; xProd = "ref - descr"
+    const cProd = ('00000000000000' + String(item.codprod ?? '').replace(/\D/g, '')).slice(-14);
+    const ean = String(item.cEAN ?? '').replace(/[^0-9A-Za-z]/g, '');
+    const cEAN = /^\d{8,14}$/.test(ean) ? ean : 'SEM GTIN';
+    const xProd = (item.ref ? `${item.ref} - ${item.descricao ?? ''}` : (item.descricao ?? '')).trim() || `Produto ${index + 1}`;
+    const vOutroItem = Number(item.vOutro ?? 0);
     const icms = { ...(item.icms ?? {}), origem: '1' }; // estrangeira — importação direta
     const grupoICMS: any = montarGrupoICMS(icms, vProd.toFixed(2));
     const subICMS: any = Object.values(grupoICMS)[0] || {};
 
     const ii = montarGrupoII(item.adicao);
     tot.vProd += vProd;
+    tot.vOutro += vOutroItem;
+    tot.vBCIBS += Number(item.ibscbs?.vBC ?? vProd);
+    tot.vIBSUF += Number(item.ibscbs?.vIBSUF ?? 0);
+    tot.vIBSMun += Number(item.ibscbs?.vIBSMun ?? 0);
+    tot.vIBS += Number(item.ibscbs?.vIBS ?? 0);
+    tot.vCBS += Number(item.ibscbs?.vCBS ?? 0);
     tot.vII += Number(ii.vII);
     tot.vIPI += Number(item.ipi?.vIPI ?? 0);
     tot.vPIS += Number(item.pis?.vPIS ?? 0);
@@ -266,19 +292,21 @@ function montarUmaNota(
     return {
       '@nItem': `${index + 1}`,
       prod: {
-        cProd: item.codprod,
-        cEAN: 'SEM GTIN',
-        xProd: item.descricao?.trim() || `Produto ${index + 1}`,
+        cProd,
+        cEAN,
+        xProd,
         NCM: (item.ncm ?? '').replace(/\D/g, '') || '00000000',
+        ...(item.cest ? { CEST: String(item.cest).replace(/\D/g, '') } : {}),
         CFOP: item.cfop ?? dados.cfopPadrao ?? '3102',
         uCom: item.unidade ?? 'UN',
         qCom: qtde.toFixed(4),
         vUnCom: preco.toFixed(4),
         vProd: vProd.toFixed(2),
-        cEANTrib: 'SEM GTIN',
+        cEANTrib: cEAN,
         uTrib: item.unidade ?? 'UN',
         qTrib: qtde.toFixed(4),
         vUnTrib: preco.toFixed(4),
+        ...(vOutroItem > 0 ? { vOutro: vOutroItem.toFixed(2) } : {}),
         indTot: '1',
         DI: montarDI(dados.di, item.adicao),
       },
@@ -294,7 +322,8 @@ function montarUmaNota(
     };
   });
 
-  const vNF = tot.vProd + tot.vII + tot.vIPI; // demais despesas (vOutro) entram na Fase 3 (contabilidade)
+  // Gabarito: vNF = vProd + vOutro (+ vII/vIPI, zerados na ZFM). IBSCBSTot/vNFTot ficam no P2.
+  const vNF = tot.vProd + tot.vII + tot.vIPI + tot.vOutro;
 
   const xmlObj = {
     NFe: {
@@ -305,7 +334,7 @@ function montarUmaNota(
         ide: {
           cUF,
           cNF,
-          natOp: String(dados.naturezaOperacao || 'IMPORTACAO P/ COMERCIALIZACAO'),
+          natOp: String(dados.naturezaOperacao || 'COMPRA PARA COMERCIALIZACAO'),
           mod,
           serie: serieNF,
           nNF: numeroNF,
@@ -313,15 +342,15 @@ function montarUmaNota(
           tpNF: '0', // entrada
           idDest: '3', // operação com exterior
           cMunFG: '1302603',
-          tpImp: '1',
+          tpImp: '2', // DANFE paisagem (gabarito Delphi)
           tpEmis,
           cDV: chave.slice(-1),
           tpAmb,
           finNFe: '1',
           indFinal: '0',
-          indPres: '9',
+          indPres: '1', // gabarito Delphi
           procEmi: '0',
-          verProc: '1.0',
+          verProc: 'MELOSYS NFe 4.00',
         },
         emit: {
           CNPJ: cnpj,
@@ -363,12 +392,40 @@ function montarUmaNota(
             vIPIDevol: '0.00',
             vPIS: tot.vPIS.toFixed(2),
             vCOFINS: tot.vCOFINS.toFixed(2),
-            vOutro: '0.00',
+            vOutro: tot.vOutro.toFixed(2),
             vNF: vNF.toFixed(2),
           },
+          // Reforma 2026: totais IBS/CBS + vNFTot (vNF + vIBS + vCBS).
+          IBSCBSTot: {
+            vBCIBSCBS: tot.vBCIBS.toFixed(2),
+            gIBS: {
+              gIBSUF: { vDif: '0.00', vDevTrib: '0.00', vIBSUF: tot.vIBSUF.toFixed(2) },
+              gIBSMun: { vDif: '0.00', vDevTrib: '0.00', vIBSMun: tot.vIBSMun.toFixed(2) },
+              vIBS: tot.vIBS.toFixed(2),
+              vCredPres: '0.00',
+              vCredPresCondSus: '0.00',
+            },
+            gCBS: {
+              vDif: '0.00', vDevTrib: '0.00', vCBS: tot.vCBS.toFixed(2),
+              vCredPres: '0.00', vCredPresCondSus: '0.00',
+            },
+            gMono: {
+              vIBSMono: '0.00', vCBSMono: '0.00', vIBSMonoReten: '0.00',
+              vCBSMonoReten: '0.00', vIBSMonoRet: '0.00', vCBSMonoRet: '0.00',
+            },
+            gEstornoCred: { vIBSEstCred: '0.00', vCBSEstCred: '0.00' },
+          },
+          vNFTot: (vNF + tot.vIBS + tot.vCBS).toFixed(2),
         },
         transp: { modFrete: '9' }, // sem frete (importação)
+        pag: { detPag: { tPag: '90', vPag: '0.00' } }, // sem pagamento
         ...(dados.infCpl ? { infAdic: { infCpl: dados.infCpl } } : {}),
+        infRespTec: {
+          CNPJ: (dados.respTec?.cnpj || cnpj).replace(/\D/g, ''),
+          xContato: dados.respTec?.contato || 'MARIO CESAR FERNANDES',
+          email: dados.respTec?.email || 'mario.fernandes@melopecas.com.br',
+          fone: (dados.respTec?.fone || '9221214044').replace(/\D/g, ''),
+        },
       },
     },
   };
