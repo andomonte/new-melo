@@ -253,7 +253,9 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                   faturas={faturas}
                   adicoes={adicoes}
                   importacaoId={cabecalho.id}
+                  principalNome={cabecalho.fornecedor_principal}
                   onVincularCliente={vincularClienteFornecedor}
+                  onPrincipalChange={(nome) => setCabecalho((c) => ({ ...c, fornecedor_principal: nome }))}
                   onAddFatura={addFatura}
                   onRemoveFatura={removeFatura}
                   onAddItem={addItem}

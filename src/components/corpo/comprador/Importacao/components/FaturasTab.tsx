@@ -12,7 +12,7 @@
  */
 
 import React, { useState } from 'react';
-import { Plus, ShoppingCart, Wand2, Loader2, CheckCircle2, Link, Users } from 'lucide-react';
+import { Plus, ShoppingCart, Wand2, Loader2, CheckCircle2, Link, Users, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { FaturaImportacao, ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { FaturaCard } from './FaturaCard';
@@ -25,7 +25,9 @@ interface FaturasTabProps {
   faturas: FaturaImportacao[];
   adicoes?: AdicaoImportacao[];
   importacaoId?: number;
+  principalNome?: string;
   onVincularCliente?: (nomeDie: string, codCliente: string) => void;
+  onPrincipalChange?: (nomeDie: string) => void;
   onAddFatura: (dados?: Partial<FaturaImportacao>) => void;
   onRemoveFatura: (index: number) => void;
   onAddItem: (faturaIndex: number, item: ItemImportacao) => void;
@@ -50,7 +52,9 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
   faturas,
   adicoes = [],
   importacaoId,
+  principalNome,
   onVincularCliente,
+  onPrincipalChange,
   onAddFatura,
   onRemoveFatura,
   onAddItem,
@@ -98,6 +102,9 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
   const faturasOrdenadas = faturas
     .map((fatura, idx) => ({ fatura, idx }))
     .sort((a, b) => menorAdicao(a.fatura) - menorAdicao(b.fatura) || a.idx - b.idx);
+
+  // Fornecedor principal (destinatário da nota): manual ou, por padrão, o da menor adição.
+  const principalEfetivo = principalNome || faturasOrdenadas[0]?.fatura?.fornecedor_nome || '';
 
   return (
     <div className="space-y-4">
@@ -175,10 +182,22 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
       )}
 
       {/* Header + ações */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-          Faturas / Pedidos de Compra
-        </h3>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 shrink-0">
+            Faturas / Pedidos de Compra
+          </h3>
+          {principalEfetivo && (
+            <span
+              title="Fornecedor principal — destinatário da Nota de Nacionalização (altere em Vincular Fornecedores)"
+              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 max-w-full"
+            >
+              <Star size={12} className="fill-amber-400 text-amber-400 shrink-0" />
+              <span className="shrink-0">Principal:</span>
+              <span className="font-medium truncate">{principalEfetivo}</span>
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           {!readOnly && importacaoId && fornecedoresComItens.length > 0 && onVincularCliente && (
             <Button
@@ -275,8 +294,10 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
         <VincularFornecedoresModal
           aberto={modalVincularAberto}
           importacaoId={importacaoId}
+          principalNome={principalEfetivo}
           onFechar={() => setModalVincularAberto(false)}
           onVinculado={onVincularCliente}
+          onPrincipalChange={onPrincipalChange}
         />
       )}
 

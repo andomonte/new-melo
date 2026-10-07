@@ -57,6 +57,11 @@ export interface ImportacaoCabecalho {
   contrato_cambio: number; // Valor total contratos (USD)
   taxa_dolar_medio?: number; // Calculado a partir dos contratos
 
+  // Nota de nacionalização: fornecedor principal (destinatário) escolhido à mão.
+  // Null → vale a regra (ADICAO_001 = menor adição | MAIOR_FOB).
+  fornecedor_principal?: string;
+  fornecedor_principal_regra?: 'ADICAO_001' | 'MAIOR_FOB';
+
   // Despesas
   despachante: number;
   freteorigem_total: number;

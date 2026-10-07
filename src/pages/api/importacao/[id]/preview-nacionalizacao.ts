@@ -129,7 +129,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const forns = montarHierarquia(adicoesHier);
     const ordem = ordemItensNota(forns);
     const regra: RegraPrincipal = di.fornecedor_principal_regra === 'MAIOR_FOB' ? 'MAIOR_FOB' : 'ADICAO_001';
-    const principal = fornecedorPrincipal(forns, regra);
+    // Principal manual (escolhido na tela) tem prioridade sobre a regra.
+    let principal = fornecedorPrincipal(forns, regra);
+    if (di.fornecedor_principal) {
+      const manual = forns.find((f) => f.nome === di.fornecedor_principal);
+      if (manual) principal = manual;
+    }
 
     // Destinatário exterior = cliente do fornecedor PRINCIPAL (adição 001 por padrão)
     let destExterior: NonNullable<DadosNacionalizacao['destExterior']> = {

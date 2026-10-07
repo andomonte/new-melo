@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Plus, Trash2, Package, Link2, ShoppingCart, Scissors } from 'lucide-react';
+import { Plus, Trash2, Package, Link2, ShoppingCart, Scissors, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { fmtDecimal } from '../utils/formatters';
@@ -44,6 +44,14 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   const [modalDividirAberto, setModalDividirAberto] = useState(false);
   const [itemSelecionadoIdx, setItemSelecionadoIdx] = useState<number>(-1);
   const [itemDividirIdx, setItemDividirIdx] = useState<number>(-1);
+  const [filtro, setFiltro] = useState('');
+
+  // Busca dentro da fatura: referência, marca, descrição, código ou nº do item.
+  const q = filtro.trim().toLowerCase();
+  const casa = (item: ItemImportacao) =>
+    q === '' ||
+    [item.referencia, item.marca, item.descricao, item.codprod, item.num_item != null ? String(item.num_item) : '']
+      .some((v) => (v || '').toLowerCase().includes(q));
 
   // Hierarquia Fornecedor → Adição → Item:
   // agrupa os itens por numero_adicao (asc) e, dentro de cada adição,
@@ -55,11 +63,13 @@ export const ItensTable: React.FC<ItensTableProps> = ({
 
   const grupos = new Map<number, { item: ItemImportacao; originalIdx: number }[]>();
   itens.forEach((item, originalIdx) => {
+    if (!casa(item)) return; // filtro da busca (preserva originalIdx)
     const na = Number(item.numero_adicao);
     const key = Number.isFinite(na) && na > 0 ? na : SEM_ADICAO;
     if (!grupos.has(key)) grupos.set(key, []);
     grupos.get(key)!.push({ item, originalIdx });
   });
+  const totalFiltrado = [...grupos.values()].reduce((s, a) => s + a.length, 0);
   const chavesOrdenadas = [...grupos.keys()].sort((a, b) => {
     if (a === SEM_ADICAO) return 1;
     if (b === SEM_ADICAO) return -1;
@@ -193,12 +203,31 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   return (
     <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-          Itens ({itens.length})
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 shrink-0">
+          Itens ({q ? `${totalFiltrado}/${itens.length}` : itens.length})
         </span>
+        {/* Busca dentro da fatura */}
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <input
+            type="text"
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            placeholder="Buscar referência, marca, descrição..."
+            className="w-full pl-8 pr-7 py-1.5 border border-gray-300 dark:border-zinc-600 rounded-md text-xs bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#347AB6]/40 focus:border-[#347AB6]"
+          />
+          {filtro && (
+            <button
+              onClick={() => setFiltro('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
         {!readOnly && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             {(codCredor || fornecedorNome) && onImportarDoPedido && (
               <Button
                 variant="outline"
@@ -245,8 +274,12 @@ export const ItensTable: React.FC<ItensTableProps> = ({
               <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item nesta fatura</p>
             </div>
           </div>
+        ) : totalFiltrado === 0 ? (
+          <div className="flex items-center justify-center h-20">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item para “{filtro}”</p>
+          </div>
         ) : !mostrarAdicoes ? (
-          grupos.get(SEM_ADICAO)!.map(renderLinha)
+          (grupos.get(SEM_ADICAO) || []).map(renderLinha)
         ) : (
           chavesOrdenadas.map((key) => {
             const linhas = grupos.get(key)!;

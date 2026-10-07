@@ -11,7 +11,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Search, Loader2, Check, AlertTriangle, Link2 } from 'lucide-react';
+import { X, Search, Loader2, Check, AlertTriangle, Link2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import api from '@/components/services/api';
 
@@ -38,8 +38,10 @@ interface FornecedorVinculo {
 interface Props {
   aberto: boolean;
   importacaoId: number;
+  principalNome?: string;
   onFechar: () => void;
   onVinculado: (nomeDie: string, codCliente: string) => void;
+  onPrincipalChange?: (nomeDie: string) => void;
 }
 
 const STATUS_BADGE: Record<FornecedorVinculo['status'], { label: string; cls: string }> = {
@@ -140,20 +142,43 @@ const BuscaClienteX: React.FC<{ onPick: (c: ClienteX) => void }> = ({ onPick }) 
   );
 };
 
-export const VincularFornecedoresModal: React.FC<Props> = ({ aberto, importacaoId, onFechar, onVinculado }) => {
+export const VincularFornecedoresModal: React.FC<Props> = ({
+  aberto,
+  importacaoId,
+  principalNome,
+  onFechar,
+  onVinculado,
+  onPrincipalChange,
+}) => {
   const [lista, setLista] = useState<FornecedorVinculo[]>([]);
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState<string | null>(null);
+  const [principal, setPrincipal] = useState<string | null>(principalNome || null);
 
   useEffect(() => {
     if (!aberto) return;
     setLoading(true);
     api
       .get(`/api/importacao/${importacaoId}/fornecedores`)
-      .then((r) => setLista(r.data?.fornecedores || []))
+      .then((r) => {
+        setLista(r.data?.fornecedores || []);
+        setPrincipal(r.data?.principal_nome || principalNome || null);
+      })
       .catch(() => setLista([]))
       .finally(() => setLoading(false));
+    // principalNome é só fallback inicial; o servidor devolve o principal efetivo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, importacaoId]);
+
+  const definirPrincipal = async (nomeDie: string) => {
+    setPrincipal(nomeDie); // otimista
+    try {
+      await api.post(`/api/importacao/${importacaoId}/fornecedores`, { acao: 'set_principal', nome_die: nomeDie });
+      onPrincipalChange?.(nomeDie);
+    } catch {
+      /* mantém o otimista; recarrega ao reabrir */
+    }
+  };
 
   const vincular = async (nomeDie: string, c: ClienteX) => {
     setSalvando(nomeDie);
@@ -219,9 +244,22 @@ export const VincularFornecedoresModal: React.FC<Props> = ({ aberto, importacaoI
                       Adição {String(f.primeira_adicao).padStart(3, '0')}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{f.nome_die}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${badge.cls}`}>{badge.label}</span>
+                        {principal === f.nome_die ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border shrink-0 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800">
+                            <Star size={10} className="fill-amber-400 text-amber-400" /> Principal
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => definirPrincipal(f.nome_die)}
+                            title="Definir como fornecedor principal (destinatário da nota)"
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border shrink-0 border-gray-300 dark:border-zinc-600 text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:border-amber-300 dark:hover:text-amber-400 transition-colors"
+                          >
+                            <Star size={10} /> Definir principal
+                          </button>
+                        )}
                       </div>
 
                       {/* Vinculado */}

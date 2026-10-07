@@ -30,9 +30,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (req.method === 'GET') {
+      // 0) regra + principal manual do cabeçalho
+      const diRes = await pool.query(
+        `SELECT fornecedor_principal, fornecedor_principal_regra FROM dbent_importacao WHERE id = $1`,
+        [importacaoId],
+      );
+      const principalManual: string | null = diRes.rows[0]?.fornecedor_principal || null;
+      const regra: string = diRes.rows[0]?.fornecedor_principal_regra === 'MAIOR_FOB' ? 'MAIOR_FOB' : 'ADICAO_001';
+
       // 1) fornecedores da DI (pela adição), ordenados pela menor adição
       const fornRes = await pool.query(
-        `SELECT fornecedor_nome, MIN(numero_adicao) AS primeira_adicao, COUNT(*) AS qtd_adicoes
+        `SELECT fornecedor_nome, MIN(numero_adicao) AS primeira_adicao, COUNT(*) AS qtd_adicoes,
+                SUM(COALESCE(vl_fob,0)) AS fob
            FROM dbent_importacao_adicao
           WHERE id_importacao = $1 AND COALESCE(fornecedor_nome,'') <> ''
           GROUP BY fornecedor_nome
@@ -82,14 +91,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           nome_die: nomeDie,
           primeira_adicao: Number(r.primeira_adicao),
           qtd_adicoes: Number(r.qtd_adicoes),
+          fob: Number(r.fob) || 0,
           cod_cliente: codCliente,
           status,
           vinculado: !!codCliente,
           candidatos: resolvido.candidatos,
           cliente,
           avisos: codCliente ? avisosDestinatarioExterior(cliente) : [],
+          principal: false,
         };
       });
+
+      // Define o principal: manual (se existe entre os fornecedores) ou pela regra
+      let principalNome: string | null =
+        principalManual && fornecedores.some((f) => f.nome_die === principalManual) ? principalManual : null;
+      if (!principalNome && fornecedores.length > 0) {
+        principalNome =
+          regra === 'MAIOR_FOB'
+            ? fornecedores.reduce((a, b) => (b.fob > a.fob ? b : a)).nome_die
+            : fornecedores[0].nome_die; // ADICAO_001 = menor adição (já ordenado)
+      }
+      fornecedores.forEach((f) => { f.principal = f.nome_die === principalNome; });
 
       const todosVinculados = fornecedores.length > 0 && fornecedores.every((f) => f.vinculado);
       return res.status(200).json({
@@ -97,11 +119,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         total: fornecedores.length,
         vinculados: fornecedores.filter((f) => f.vinculado).length,
         todos_vinculados: todosVinculados,
+        principal_nome: principalNome,
+        principal_regra: regra,
+        principal_manual: !!principalManual,
       });
     }
 
     if (req.method === 'POST') {
       const nomeDie = String(req.body?.nome_die || '').trim();
+
+      // Ação: definir fornecedor principal (destinatário da nota)
+      if (req.body?.acao === 'set_principal') {
+        if (!nomeDie) return res.status(400).json({ message: 'nome_die é obrigatório' });
+        await pool.query(`UPDATE dbent_importacao SET fornecedor_principal = $1 WHERE id = $2`, [nomeDie, importacaoId]);
+        return res.status(200).json({ success: true, principal_nome: nomeDie });
+      }
+
       const codCliente = String(req.body?.cod_cliente || '').trim();
       if (!nomeDie || !codCliente)
         return res.status(400).json({ message: 'nome_die e cod_cliente são obrigatórios' });
