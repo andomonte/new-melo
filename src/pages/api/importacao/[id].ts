@@ -6,6 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
+import { getFilialCidadeUf } from '@/lib/filialLocal';
 import type { PoolClient } from 'pg';
 
 // --- GET Queries ---
@@ -31,10 +32,21 @@ const QUERY_ENTRADAS = `
 `;
 
 const QUERY_ITENS = `
+  SELECT it.*,
+         COALESCE(p.ref, '') AS referencia,
+         COALESCE(m.descr, '') AS marca
+  FROM dbent_importacao_it_ent it
+  LEFT JOIN dbprod p ON p.codprod = it.codprod
+  LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
+  WHERE it.id_importacao = $1
+  ORDER BY it.numero_adicao, it.num_item, it.codprod
+`;
+
+const QUERY_ADICOES = `
   SELECT *
-  FROM dbent_importacao_it_ent
+  FROM dbent_importacao_adicao
   WHERE id_importacao = $1
-  ORDER BY numero_adicao, codprod
+  ORDER BY numero_adicao
 `;
 
 // --- PUT Queries ---
@@ -72,6 +84,15 @@ const UPDATE_CABECALHO = `
     navio = $30,
     data_entrada_brasil = $31,
     inscricao_suframa = $32,
+    local_desembaraco = $33,
+    uf_desembaraco = $34,
+    data_desembaraco = $35,
+    via_transporte = $36,
+    forma_importacao = $37,
+    valor_afrmm = $38,
+    outros_valores = $39,
+    peso_bruto = $40,
+    especie = $41,
     updated_at = NOW()
   WHERE id = $1 AND status = 'N'
   RETURNING id
@@ -84,8 +105,9 @@ const DELETE_CONTRATOS = `
 
 const INSERT_CONTRATO = `
   INSERT INTO dbent_importacao_contratos (
-    id_importacao, contrato, data, taxa_dolar, vl_merc_dolar, vl_reais, moeda, id_titulo_pagar
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    id_importacao, contrato, data, taxa_dolar, vl_merc_dolar, vl_reais, moeda, id_titulo_pagar,
+    taxa_usd, vl_usd, origem_taxa, origem_cambio
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `;
 
 const UPDATE_ENTRADA = `
@@ -113,8 +135,8 @@ const INSERT_ITEM = `
   INSERT INTO dbent_importacao_it_ent (
     id_importacao, id_fatura, codprod, descricao, qtd,
     proforma_unit, proforma_total, invoice_unit, invoice_total,
-    ncm, unidade, numero_adicao, id_orc
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    ncm, unidade, numero_adicao, id_orc, num_item
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 `;
 
 export default async function handler(
@@ -131,7 +153,7 @@ export default async function handler(
   const pool = getPgPool(filial);
 
   if (req.method === 'GET') {
-    return handleGet(pool, id, res);
+    return handleGet(pool, id, filial, res);
   }
 
   if (req.method === 'PUT') {
@@ -141,26 +163,38 @@ export default async function handler(
   return res.status(405).json({ message: 'Método não permitido' });
 }
 
-async function handleGet(pool: any, id: number, res: NextApiResponse) {
+async function handleGet(pool: any, id: number, filial: string, res: NextApiResponse) {
   try {
-    const [cabResult, contratosResult, entradasResult, itensResult] = await Promise.all([
+    const [cabResult, contratosResult, entradasResult, itensResult, adicoesResult] = await Promise.all([
       pool.query(QUERY_CABECALHO, [id]),
       pool.query(QUERY_CONTRATOS, [id]),
       pool.query(QUERY_ENTRADAS, [id]),
       pool.query(QUERY_ITENS, [id]),
+      pool.query(QUERY_ADICOES, [id]),
     ]);
 
     if (cabResult.rows.length === 0) {
       return res.status(404).json({ message: `Importação #${id} não encontrada` });
     }
 
+    const cab = cabResult.rows[0];
+
+    // Local/UF de desembaraço: DIs antigas não têm — prefill com cidade/UF da filial
+    // (não persiste; só aparece preenchido na tela para o usuário salvar).
+    if (!cab.local_desembaraco || !cab.uf_desembaraco) {
+      const loc = await getFilialCidadeUf(pool, filial);
+      if (!cab.local_desembaraco) cab.local_desembaraco = loc.cidade || null;
+      if (!cab.uf_desembaraco) cab.uf_desembaraco = loc.uf || 'AM';
+    }
+
     return res.status(200).json({
       success: true,
       data: {
-        ...cabResult.rows[0],
+        ...cab,
         contratos: contratosResult.rows,
         entradas: entradasResult.rows,
         itens: itensResult.rows,
+        adicoes: adicoesResult.rows,
       },
     });
   } catch (error: any) {
@@ -230,6 +264,15 @@ async function handlePut(pool: any, id: number, req: NextApiRequest, res: NextAp
       body.navio || null,
       body.data_entrada_brasil || null,
       body.inscricao_suframa || null,
+      body.local_desembaraco || null,
+      body.uf_desembaraco || null,
+      body.data_desembaraco || null,
+      body.via_transporte ?? null,
+      body.forma_importacao ?? null,
+      body.valor_afrmm || 0,
+      body.outros_valores || 0,
+      body.peso_bruto ?? null,
+      body.especie || null,
     ]);
 
     if (result.rows.length === 0) {
@@ -241,17 +284,31 @@ async function handlePut(pool: any, id: number, req: NextApiRequest, res: NextAp
     if (body.contratos !== undefined) {
       await client.query(DELETE_CONTRATOS, [id]);
 
+      const taxaDolarDI = parseFloat(body.taxa_dolar) || 0;
       const contratos = body.contratos || [];
       for (const c of contratos) {
+        const moeda = c.moeda || 'USD';
+        const vlMoeda = parseFloat(c.vl_merc_dolar) || 0;
+        const taxaMoeda = parseFloat(c.taxa_dolar) || (moeda === 'USD' ? taxaDolarDI : 0);
+        const vlReais = parseFloat(c.vl_reais) || (vlMoeda * taxaMoeda);
+        const taxaUsd = parseFloat(c.taxa_usd) || taxaDolarDI || taxaMoeda;
+        let vlUsd = parseFloat(c.vl_usd);
+        if (!vlUsd || isNaN(vlUsd)) {
+          vlUsd = moeda === 'USD' ? vlMoeda : (taxaUsd > 0 ? vlReais / taxaUsd : 0);
+        }
         await client.query(INSERT_CONTRATO, [
           id,
           c.contrato || '',
           c.data || null,
-          c.taxa_dolar || 0,
-          c.vl_merc_dolar || 0,
-          c.vl_reais || ((c.vl_merc_dolar || 0) * (c.taxa_dolar || 0)),
-          c.moeda || 'USD',
-          c.id_titulo_pagar || null,
+          taxaMoeda,
+          vlMoeda,
+          vlReais,
+          moeda,
+          c.id_titulo_pagar != null ? String(c.id_titulo_pagar) : null,
+          taxaUsd || null,
+          vlUsd || null,
+          c.origem_taxa || null,
+          c.origem_cambio || null,
         ]);
       }
     }
@@ -307,6 +364,7 @@ async function handlePut(pool: any, id: number, req: NextApiRequest, res: NextAp
             item.unidade || null,
             item.numero_adicao || null,
             item.id_orc || null,
+            item.num_item ?? null,
           ]);
         }
       }

@@ -107,6 +107,8 @@ export interface DadosNacionalizacao {
     cPais?: string;
     xPais?: string;
   };
+  /** Informações complementares (infAdic/infCpl) — lista de fornecedores/faturas da DI. */
+  infCpl?: string;
 }
 
 export interface NotaNacionalizacaoGerada {
@@ -366,6 +368,7 @@ function montarUmaNota(
           },
         },
         transp: { modFrete: '9' }, // sem frete (importação)
+        ...(dados.infCpl ? { infAdic: { infCpl: dados.infCpl } } : {}),
       },
     },
   };

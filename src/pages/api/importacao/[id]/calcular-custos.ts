@@ -9,6 +9,8 @@ import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import type { PoolClient } from 'pg';
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -67,35 +69,54 @@ export default async function handler(
     const carreteiroMelo = parseFloat(String(cab.carreteiro_melo || 0));
     const eadi = parseFloat(String(cab.eadi || 0));
 
-    // 2. Calcular TxDolarMedio dos contratos: SUM(taxa * vl_merc) / SUM(vl_merc)
+    // 2. Calcular TxDolarMedio dos contratos = Σ(valor em R$) / Σ(valor em US$).
+    // Tudo convertido para dólar (contratos podem estar em EUR/CNY): usa vl_reais e
+    // vl_usd já calculados na aba Contratos. Para 100% USD, equivale a
+    // Σ(taxa×vl_merc)/Σ(vl_merc) — o mesmo do Oracle ATUALIZAR_CUSTO.
     const contratosResult = await client.query(`
-      SELECT taxa_dolar, vl_merc_dolar
+      SELECT taxa_dolar, vl_merc_dolar, vl_reais, vl_usd, taxa_usd, moeda
       FROM dbent_importacao_contratos
       WHERE id_importacao = $1
     `, [id]);
 
     let txDolarMedio = taxaDolar; // fallback se não houver contratos
     if (contratosResult.rows.length > 0) {
-      let sumTaxaVlMerc = 0;
-      let sumVlMerc = 0;
+      let sumReais = 0;
+      let sumUsd = 0;
       for (const c of contratosResult.rows) {
-        const taxa = parseFloat(String(c.taxa_dolar || 0));
-        const vlMerc = parseFloat(String(c.vl_merc_dolar || 0));
-        sumTaxaVlMerc += taxa * vlMerc;
-        sumVlMerc += vlMerc;
+        const moeda = (c.moeda || 'USD').toUpperCase();
+        const valor = parseFloat(String(c.vl_merc_dolar || 0));
+        const taxaCambio = parseFloat(String(c.taxa_dolar || 0));
+        const taxaUsd = c.taxa_usd != null ? parseFloat(String(c.taxa_usd)) : 0;
+        const reais = c.vl_reais != null ? parseFloat(String(c.vl_reais)) : valor * taxaCambio;
+        let usd: number | null = c.vl_usd != null ? parseFloat(String(c.vl_usd)) : null;
+        if (usd == null) {
+          usd = moeda === 'USD' ? valor : (taxaUsd > 0 ? reais / taxaUsd : null);
+        }
+        if (usd != null && usd > 0) {
+          sumReais += reais;
+          sumUsd += usd;
+        }
       }
-      if (sumVlMerc > 0) {
-        txDolarMedio = sumTaxaVlMerc / sumVlMerc;
+      if (sumUsd > 0) {
+        txDolarMedio = sumReais / sumUsd;
       }
     }
 
-    // 3. Calcular DespesaCusto total
+    // 3. Despesas rateáveis.
+    // Custo: todas as despesas EXCETO ICMS-ST (o ICMS-ST entra por item via icmsUnit).
     const despesaCusto = pisCofins + ii + ipi + anuencia + siscomex
-      + (taxaDolar * contratoCambio)
+      + round2(taxaDolar * contratoCambio)
       + despachante + freteorigemTotal + infraeroPorto
       + carreteiroEadi + carreteiroMelo + eadi;
 
-    console.log(`[calcular-custos] DI #${id}: TxDolarMedio=${txDolarMedio.toFixed(4)}, DespesaCusto=${despesaCusto.toFixed(2)}`);
+    // NF (nota): inclui ICMS-ST e NÃO inclui Frete de Origem (igual Oracle vDESPESA_NOTA).
+    const despesaNota = pisCofins + ii + ipi + icmsSt + anuencia + siscomex
+      + round2(taxaDolar * contratoCambio)
+      + despachante + infraeroPorto
+      + carreteiroEadi + carreteiroMelo + eadi;
+
+    console.log(`[calcular-custos] DI #${id}: TxDolarMedio=${txDolarMedio.toFixed(4)}, DespesaCusto=${despesaCusto.toFixed(2)}, DespesaNota=${despesaNota.toFixed(2)}`);
 
     // 4. Buscar itens com codprod
     const itensResult = await client.query(`
@@ -137,23 +158,25 @@ export default async function handler(
       const icmsTotal = icmsSt * icmsPerc;
       const icmsUnit = icmsTotal / qtd;
 
-      // PIS/COFINS rateado
-      const pisCofinsTotal = pisCofins * (totalMercadoria > 0 ? invoiceTotal / totalMercadoria : 0);
-      const pisCofinsUnit = pisCofinsTotal / qtd;
+      // PIS/COFINS já está dentro de DespesaCusto (não soma de novo — igual Oracle, que
+      // mantém PIS_COFINS_UNIT = 0 para não duplicar).
+      const pisCofinsTotal = 0;
+      const pisCofinsUnit = 0;
 
-      // Custo final
+      // Custo final (REAL_UNIT + rateio de despesa de custo + ICMS-ST rateado)
       const custoUnitReal = realUnit + despesaUnit + icmsUnit + pisCofinsUnit;
       const custoTotalReal = custoUnitReal * qtd;
       const custoUnitDolar = txEfetiva > 0 ? custoUnitReal / txEfetiva : 0;
 
-      // Valores para NF
+      // Valores para NF (fiscal): base = PROFORMA grossada p/ CIF × taxa DÓLAR DA DI,
+      // mais o rateio da DESPESA DA NOTA (com ICMS-ST, sem Frete de Origem).
       const nfCifUnit = totalMercadoria > 0
         ? proformaUnit * ((thc + frete) / totalMercadoria + 1)
         : proformaUnit;
-      const nfUnit = qtd > 0
-        ? (nfCifUnit * taxaDolar * qtd + despesaTotal) / qtd
-        : 0;
-      const nfTotal = nfUnit * qtd;
+      const nfRealTotal = nfCifUnit * taxaDolar * qtd;
+      const nfDespTotal = despesaPerc * despesaNota;
+      const nfTotal = nfRealTotal + nfDespTotal;
+      const nfUnit = qtd > 0 ? nfTotal / qtd : 0;
 
       // 5. UPDATE item com campos calculados
       await client.query(`

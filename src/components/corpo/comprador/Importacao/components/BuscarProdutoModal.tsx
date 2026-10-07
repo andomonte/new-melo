@@ -13,6 +13,7 @@ import api from '@/components/services/api';
 interface Produto {
   id: string;
   referencia: string;
+  ref?: string; // Referência de fábrica (dbprod.ref)
   descricao: string;
   codigoBarras?: string;
   marca: string;
@@ -22,7 +23,7 @@ interface Produto {
 interface BuscarProdutoModalProps {
   aberto: boolean;
   onFechar: () => void;
-  onSelecionar: (codprod: string, descricao: string) => void;
+  onSelecionar: (codprod: string, descricao: string, referencia?: string, marca?: string) => void;
   descricaoItem?: string;
 }
 
@@ -84,7 +85,7 @@ export const BuscarProdutoModal: React.FC<BuscarProdutoModalProps> = ({
   };
 
   const handleSelecionar = (produto: Produto) => {
-    onSelecionar(produto.id, produto.descricao);
+    onSelecionar(produto.id, produto.descricao, produto.ref || produto.referencia, produto.marca);
     onFechar();
   };
 

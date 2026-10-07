@@ -6,13 +6,14 @@
 
 import React from 'react';
 import { ChevronDown, ChevronRight, Trash2, ArrowRightLeft } from 'lucide-react';
-import type { FaturaImportacao, ItemImportacao } from '../types/importacao';
+import type { FaturaImportacao, ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { ItensTable } from './ItensTable';
 import type { ItemPedidoSelecionado } from './ImportarPedidoModal';
 
 interface FaturaCardProps {
   fatura: FaturaImportacao;
   index: number;
+  adicoes?: AdicaoImportacao[];
   onRemove: () => void;
   onAddItem: (item: ItemImportacao) => void;
   onRemoveItem: (itemIndex: number) => void;
@@ -26,6 +27,7 @@ interface FaturaCardProps {
 export const FaturaCard: React.FC<FaturaCardProps> = ({
   fatura,
   index,
+  adicoes = [],
   onRemove,
   onAddItem,
   onRemoveItem,
@@ -142,6 +144,7 @@ export const FaturaCard: React.FC<FaturaCardProps> = ({
           {/* Itens */}
           <ItensTable
             itens={fatura.itens || []}
+            adicoes={adicoes}
             onAddItem={onAddItem}
             onRemoveItem={onRemoveItem}
             onUpdateItem={onUpdateItem}

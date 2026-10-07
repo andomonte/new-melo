@@ -40,16 +40,19 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     setCabecalho,
     contratos,
     faturas,
+    adicoes,
     resumoCustos,
     readOnly,
     salvar,
     addContrato,
     removeContrato,
+    updateContrato,
     addFatura,
     removeFatura,
     addItem,
     removeItem,
     updateItem,
+    vincularClienteFornecedor,
     autoAssociar,
     autoAssociando,
     autoAssociadoStats,
@@ -108,6 +111,18 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   };
 
 
+  // A Nota de Nacionalização exige todos os fornecedores (com itens) vinculados
+  // a um cliente do cadastro (destinatário exterior da NF-e).
+  const fornecedoresComItens = faturas.filter((f) => (f.itens?.length || 0) > 0);
+  const temItensAssociados = faturas.some((f) => f.itens?.some((i) => !!i.codprod));
+  const todosFornecedoresVinculados =
+    fornecedoresComItens.length > 0 && fornecedoresComItens.every((f) => !!f.cod_cliente);
+  const bloqueioNacionalizacao = !temItensAssociados
+    ? 'Associe os itens a produtos antes de gerar a nota.'
+    : !todosFornecedoresVinculados
+      ? 'Vincule todos os fornecedores a um cliente (aba Faturas) antes de gerar a nota.'
+      : '';
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
       <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg shadow-lg w-full max-w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
@@ -140,9 +155,9 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={gerandoNacionalizacao || !faturas.some(f => f.itens?.some(i => !!i.codprod))}
+                  disabled={gerandoNacionalizacao || !!bloqueioNacionalizacao}
                   onClick={handlePreviewNacionalizacao}
-                  title="Monta o XML da NF-e de nacionalização (tpNF=0, exterior, CFOP 3.x, grupo DI/II) — preview, não transmite"
+                  title={bloqueioNacionalizacao || 'Monta o XML da NF-e de nacionalização (tpNF=0, exterior, CFOP 3.x, grupo DI/II) — preview, não transmite'}
                   className="flex items-center gap-1"
                 >
                   {gerandoNacionalizacao ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
@@ -227,6 +242,8 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                   contratos={contratos}
                   onAdd={addContrato}
                   onRemove={removeContrato}
+                  onUpdate={updateContrato}
+                  dataDi={cabecalho.data_di}
                   readOnly={readOnly}
                 />
               )}
@@ -234,6 +251,9 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
               {activeTab === 'faturas' && (
                 <FaturasTab
                   faturas={faturas}
+                  adicoes={adicoes}
+                  importacaoId={cabecalho.id}
+                  onVincularCliente={vincularClienteFornecedor}
                   onAddFatura={addFatura}
                   onRemoveFatura={removeFatura}
                   onAddItem={addItem}

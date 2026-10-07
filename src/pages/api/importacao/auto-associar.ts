@@ -38,6 +38,8 @@ interface Resultado {
   descricao_produto: string;
   estrategia: 'ref_descricao' | 'aprendizado' | 'similaridade';
   confianca: 'alta' | 'media' | 'baixa';
+  referencia?: string;
+  marca?: string;
 }
 
 // Resolve o codmarca a partir do nome da marca extraído da descrição
@@ -279,6 +281,27 @@ export default async function handler(
     }
 
     console.log(`[auto-associar] Final: ${resultados.length}/${itens.length} associados`);
+
+    // Enriquecer cada resultado com Referência (dbprod.ref) e Marca (dbmarcas.descr)
+    // para a tela mostrar essas infos do produto associado (todas as estratégias).
+    const codprods = Array.from(new Set(resultados.map(r => r.codprod).filter(Boolean)));
+    if (codprods.length > 0) {
+      const info = await client.query(
+        `SELECT p.codprod, p.ref, COALESCE(m.descr, '') AS marca
+           FROM dbprod p
+           LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
+          WHERE p.codprod = ANY($1::varchar[])`,
+        [codprods],
+      );
+      const mapInfo = new Map(info.rows.map((x: any) => [String(x.codprod), x]));
+      for (const r of resultados) {
+        const x = mapInfo.get(String(r.codprod));
+        if (x) {
+          r.referencia = x.ref || undefined;
+          r.marca = x.marca || undefined;
+        }
+      }
+    }
 
     // Estatísticas por estratégia
     const stats = {

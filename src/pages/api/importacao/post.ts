@@ -14,6 +14,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
+import { getFilialCidadeUf } from '@/lib/filialLocal';
 import type { PoolClient } from 'pg';
 
 const INSERT_IMPORTACAO = `
@@ -25,6 +26,8 @@ const INSERT_IMPORTACAO = `
     carreteiro_eadi, carreteiro_melo, eadi, contrato_cambio,
     peso_liquido, recinto_aduaneiro, pais_procedencia, qtd_adicoes,
     navio, data_entrada_brasil, inscricao_suframa,
+    local_desembaraco, uf_desembaraco, data_desembaraco, via_transporte,
+    forma_importacao, valor_afrmm, outros_valores, peso_bruto, especie,
     xml_original, codusr, data_cad
   ) VALUES (
     $1, $2, 'N', $3, $4,
@@ -34,14 +37,17 @@ const INSERT_IMPORTACAO = `
     $18, $19, $20, $21,
     $22, $23, $24, $25,
     $26, $27, $28,
-    $29, $30, NOW()
+    $29, $30, $31, $32,
+    $33, $34, $35, $36, $37,
+    $38, $39, NOW()
   ) RETURNING id
 `;
 
 const INSERT_CONTRATO = `
   INSERT INTO dbent_importacao_contratos (
-    id_importacao, contrato, vl_merc_dolar, moeda, taxa_dolar, vl_reais, data
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    id_importacao, contrato, vl_merc_dolar, moeda, taxa_dolar, vl_reais, data,
+    taxa_usd, vl_usd, origem_taxa, id_titulo_pagar, origem_cambio
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 `;
 
 const INSERT_ENTRADA = `
@@ -55,8 +61,19 @@ const INSERT_ITEM = `
   INSERT INTO dbent_importacao_it_ent (
     id_importacao, id_fatura, descricao, qtd,
     proforma_unit, proforma_total, invoice_unit, invoice_total,
-    ncm, unidade, numero_adicao
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ncm, unidade, numero_adicao, num_item
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`;
+
+const INSERT_ADICAO = `
+  INSERT INTO dbent_importacao_adicao (
+    id_importacao, numero_adicao, fornecedor_nome, ncm,
+    vl_fob, vl_frete, vl_pis_cofins, vl_icms
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  ON CONFLICT (id_importacao, numero_adicao) DO UPDATE SET
+    fornecedor_nome = EXCLUDED.fornecedor_nome, ncm = EXCLUDED.ncm,
+    vl_fob = EXCLUDED.vl_fob, vl_frete = EXCLUDED.vl_frete,
+    vl_pis_cofins = EXCLUDED.vl_pis_cofins, vl_icms = EXCLUDED.vl_icms
 `;
 
 export default async function handler(
@@ -106,6 +123,11 @@ export default async function handler(
       });
     }
 
+    // Local/UF de desembaraço: do corpo (se já veio editado) ou da cidade/UF da filial.
+    const filialLoc = await getFilialCidadeUf(client, filial);
+    const localDesemb = (body.local_desembaraco || filialLoc.cidade || null);
+    const ufDesemb = (body.uf_desembaraco || filialLoc.uf || 'AM');
+
     // Inserir cabeçalho
     const result = await client.query(INSERT_IMPORTACAO, [
       body.nro_di,
@@ -136,26 +158,51 @@ export default async function handler(
       body.navio || null,
       body.data_entrada_brasil || null,
       body.inscricao_suframa || null,
+      localDesemb,
+      ufDesemb,
+      body.data_desembaraco || null,
+      body.via_transporte ?? null,
+      body.forma_importacao ?? 1,   // tpIntermedio padrão 1 (conta própria)
+      body.valor_afrmm || 0,
+      body.outros_valores || 0,
+      body.peso_bruto ?? null,
+      body.especie || null,
       body.xml_original || null,
       codusr,
     ]);
 
     const importacaoId = result.rows[0].id;
 
-    // Inserir contratos de câmbio
+    // Inserir contratos de câmbio (cada contrato pode estar em moeda diferente;
+    // tudo é convertido para dólar via BRL — ver migration 066).
     const taxaDolarDI = parseFloat(body.taxa_dolar) || 0;
     const contratos = body.contratos || [];
     for (const contrato of contratos) {
-      const vlMercDolar = parseFloat(contrato.vl_merc_dolar) || 0;
-      const vlReais = vlMercDolar * taxaDolarDI;
+      const moeda = contrato.moeda || 'USD';
+      const vlMoeda = parseFloat(contrato.vl_merc_dolar) || 0;
+      // taxa da MOEDA do contrato -> BRL (p/ USD = dólar->BRL)
+      const taxaMoeda = parseFloat(contrato.taxa_dolar) || (moeda === 'USD' ? taxaDolarDI : 0);
+      const vlReais = parseFloat(contrato.vl_reais) || (vlMoeda * taxaMoeda);
+      // taxa do dólar -> BRL usada na conversão
+      const taxaUsd = parseFloat(contrato.taxa_usd) || taxaDolarDI || taxaMoeda;
+      // valor convertido em dólar
+      let vlUsd = parseFloat(contrato.vl_usd);
+      if (!vlUsd || isNaN(vlUsd)) {
+        vlUsd = moeda === 'USD' ? vlMoeda : (taxaUsd > 0 ? vlReais / taxaUsd : 0);
+      }
       await client.query(INSERT_CONTRATO, [
         importacaoId,
         contrato.contrato,
-        vlMercDolar,
-        contrato.moeda || 'USD',
-        taxaDolarDI,
+        vlMoeda,
+        moeda,
+        taxaMoeda,
         vlReais,
         contrato.data || null,
+        taxaUsd || null,
+        vlUsd || null,
+        contrato.origem_taxa || null,
+        contrato.id_titulo_pagar != null ? String(contrato.id_titulo_pagar) : null,
+        contrato.origem_cambio || null,
       ]);
     }
 
@@ -187,8 +234,24 @@ export default async function handler(
           item.ncm || null,
           item.unidade || null,
           item.numero_adicao || null,
+          item.num_item ?? null,
         ]);
       }
+    }
+
+    // Inserir adições (grupo DI por adição: fornecedor + NCM + totais da adição)
+    const adicoes = body.adicoes || [];
+    for (const a of adicoes) {
+      await client.query(INSERT_ADICAO, [
+        importacaoId,
+        a.numero_adicao,
+        a.fornecedor_nome || null,
+        a.ncm || null,
+        a.vl_fob || 0,
+        a.vl_frete || 0,
+        a.vl_pis_cofins || 0,
+        a.vl_icms || 0,
+      ]);
     }
 
     await client.query('COMMIT');

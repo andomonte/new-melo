@@ -16,7 +16,6 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { DOMParser } from '@xmldom/xmldom';
 import { getPgPool } from '@/lib/pgClient';
 import type { PoolClient } from 'pg';
 import {
@@ -25,47 +24,13 @@ import {
   ItemImportacaoNfe,
   ModoEmissaoImportacao,
 } from '@/components/services/sefazNfe/gerarXmlImportacao';
-
-/** "1.234,56" (pt) ou "1234.56" → number. O XML federal usa vírgula decimal. */
-function moneyBR(v: string | null | undefined): number {
-  if (!v) return 0;
-  const s = String(v).trim();
-  if (s.includes(',')) return Number(s.replace(/\./g, '').replace(',', '.')) || 0;
-  return Number(s) || 0;
-}
-
-function tagText(parent: Element, tag: string): string {
-  const el = parent.getElementsByTagName(tag)[0];
-  return el?.textContent?.trim() ?? '';
-}
-
-interface AdicaoParsed {
-  numAdicao: number;
-  fornecedorNome: string;
-  fabricanteNome: string;
-  bc_ii: number;
-  valor_ii: number;
-  ncm: string;
-}
-
-/** Extrai as adições do XML da DI (formato Siscomex federal). */
-function parseAdicoes(xml: string): AdicaoParsed[] {
-  const doc = new DOMParser().parseFromString(xml, 'text/xml');
-  const ads = doc.getElementsByTagName('adicao');
-  const out: AdicaoParsed[] = [];
-  for (let i = 0; i < ads.length; i++) {
-    const ad = ads[i] as unknown as Element;
-    out.push({
-      numAdicao: parseInt(tagText(ad, 'numeroAdicao') || '0', 10),
-      fornecedorNome: tagText(ad, 'fornecedorNome'),
-      fabricanteNome: tagText(ad, 'fabricanteNome'),
-      bc_ii: moneyBR(tagText(ad, 'iiBaseCalculo')),
-      valor_ii: moneyBR(tagText(ad, 'iiAliquotaValorRecolher')), // ZFM = 0
-      ncm: tagText(ad, 'dadosMercadoriaCodigoNcm'),
-    });
-  }
-  return out;
-}
+import {
+  montarHierarquia,
+  ordemItensNota,
+  fornecedorPrincipal,
+  type AdicaoHier,
+  type RegraPrincipal,
+} from '@/lib/compras/importacaoHierarquia';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Método não permitido' });
@@ -96,48 +61,109 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          FROM dbent_importacao_it_ent it
          LEFT JOIN dbprod p ON p.codprod = it.codprod
         WHERE it.id_importacao = $1 AND it.codprod IS NOT NULL
-        ORDER BY it.numero_adicao, it.id`,
+        ORDER BY it.numero_adicao, it.num_item, it.id`,
       [importacaoId],
     );
     if (itensRes.rows.length === 0) {
       return res.status(422).json({ message: 'Nenhum item associado a produto — associe os itens antes de gerar a nota.' });
     }
 
-    // 3) Adições do XML → persistir
-    const adicoes: AdicaoParsed[] = di.xml_original ? parseAdicoes(di.xml_original) : [];
-    const adicaoPorNum = new Map<number, AdicaoParsed>();
-    for (const a of adicoes) adicaoPorNum.set(a.numAdicao, a);
+    // 3) Adições PERSISTIDAS (hierarquia Fornecedor→Adição→Item) — não re-parseia o XML.
+    //    A importação (post.ts) e o backfill já gravam fornecedor_nome/NCM/FOB por adição.
+    const adRes = await client.query(
+      `SELECT numero_adicao, COALESCE(fornecedor_nome,'') AS fornecedor_nome, COALESCE(ncm,'') AS ncm,
+              COALESCE(vl_fob,0) AS vl_fob, COALESCE(bc_ii,0) AS bc_ii, COALESCE(valor_ii,0) AS valor_ii
+         FROM dbent_importacao_adicao WHERE id_importacao = $1 ORDER BY numero_adicao`,
+      [importacaoId],
+    );
+    const fornecedorPorAdicao = new Map<number, string>();
+    const dadosAdicao = new Map<number, any>();
+    adRes.rows.forEach((a: any) => {
+      const n = Number(a.numero_adicao);
+      fornecedorPorAdicao.set(n, a.fornecedor_nome);
+      dadosAdicao.set(n, a);
+    });
 
-    await client.query('BEGIN');
-    for (const a of adicoes) {
-      await client.query(
-        `INSERT INTO dbent_importacao_adicao
-           (id_importacao, numero_adicao, ncm, cod_exportador, exportador_nome, cod_fabricante, bc_ii, valor_ii)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT (id_importacao, numero_adicao) DO UPDATE SET
-           ncm = EXCLUDED.ncm, exportador_nome = EXCLUDED.exportador_nome,
-           cod_fabricante = EXCLUDED.cod_fabricante, bc_ii = EXCLUDED.bc_ii, valor_ii = EXCLUDED.valor_ii`,
-        [importacaoId, a.numAdicao, a.ncm, null, a.fornecedorNome, a.fabricanteNome, a.bc_ii, a.valor_ii],
-      );
-    }
-    await client.query('COMMIT');
+    // Vínculo fornecedor(DIe) → cliente (cadastro tipo X), gravado na fatura
+    const entRes = await client.query(
+      `SELECT COALESCE(fornecedor_nome,'') AS fornecedor_nome, cod_cliente, nro_invoice
+         FROM dbent_importacao_entrada WHERE id_importacao = $1`,
+      [importacaoId],
+    );
+    const codClientePorForn = new Map<string, string>();
+    const invoicePorForn = new Map<string, string>();
+    entRes.rows.forEach((r: any) => {
+      if (r.cod_cliente) codClientePorForn.set(r.fornecedor_nome, String(r.cod_cliente));
+      if (r.nro_invoice) invoicePorForn.set(r.fornecedor_nome, String(r.nro_invoice));
+    });
 
-    // 4) Rateio do II por item: soma do invoice por adição → participação do item
-    const somaInvoicePorAdicao = new Map<number, number>();
+    // 4) Monta a hierarquia a partir dos itens associados + adições persistidas
+    const itensPorAdicao = new Map<number, any[]>();
     for (const it of itensRes.rows) {
       const n = Number(it.numero_adicao) || 0;
-      const inv = Number(it.invoice_total) || Number(it.proforma_total) || 0;
-      somaInvoicePorAdicao.set(n, (somaInvoicePorAdicao.get(n) || 0) + inv);
+      if (!itensPorAdicao.has(n)) itensPorAdicao.set(n, []);
+      itensPorAdicao.get(n)!.push(it);
+    }
+    const adicoesHier: AdicaoHier[] = adRes.rows
+      .filter((a: any) => itensPorAdicao.has(Number(a.numero_adicao)))
+      .map((a: any) => {
+        const n = Number(a.numero_adicao);
+        return {
+          numAdicao: n,
+          nomeFornecedor: a.fornecedor_nome,
+          ncm: a.ncm,
+          vlFob: Number(a.vl_fob) || 0,
+          itens: (itensPorAdicao.get(n) || []).map((it: any) => ({
+            numItem: Number(it.num_item) || 0,
+            numAdicao: n,
+            ncm: it.ncm || a.ncm || '',
+            codprod: it.codprod,
+            _row: it,
+          })),
+        };
+      });
+    if (adicoesHier.length === 0) {
+      return res.status(422).json({ message: 'Hierarquia de adições vazia — reimporte a DI para gerar fornecedor/adição/item.' });
     }
 
-    const itens: ItemImportacaoNfe[] = itensRes.rows.map((it: any) => {
-      const n = Number(it.numero_adicao) || 0;
-      const ad = adicaoPorNum.get(n);
-      const invItem = Number(it.invoice_total) || Number(it.proforma_total) || 0;
-      const somaInv = somaInvoicePorAdicao.get(n) || 0;
-      const share = somaInv > 0 ? invItem / somaInv : 0;
+    const forns = montarHierarquia(adicoesHier);
+    const ordem = ordemItensNota(forns);
+    const regra: RegraPrincipal = di.fornecedor_principal_regra === 'MAIOR_FOB' ? 'MAIOR_FOB' : 'ADICAO_001';
+    const principal = fornecedorPrincipal(forns, regra);
+
+    // Destinatário exterior = cliente do fornecedor PRINCIPAL (adição 001 por padrão)
+    let destExterior: NonNullable<DadosNacionalizacao['destExterior']> = {
+      idEstrangeiro: (principal?.nome || 'EXTERIOR').slice(0, 20),
+      nome: principal?.nome,
+      cPais: '9999',
+      xPais: 'EXTERIOR',
+    };
+    const codPrincipal = principal ? codClientePorForn.get(principal.nome) : undefined;
+    if (codPrincipal) {
+      const cli = await client.query(`SELECT nome, cpfcgc, codpais FROM dbclien WHERE codcli = $1`, [codPrincipal]);
+      const c = cli.rows[0];
+      if (c) {
+        let xPais = 'EXTERIOR';
+        if (c.codpais) {
+          const p = await client.query(`SELECT descricao FROM dbpais WHERE codpais = $1`, [c.codpais]);
+          xPais = p.rows[0]?.descricao || xPais;
+        }
+        destExterior = {
+          idEstrangeiro: String(c.cpfcgc || 'EXTERIOR').slice(0, 20),
+          nome: c.nome,
+          cPais: c.codpais ? String(c.codpais) : '9999',
+          xPais,
+        };
+      }
+    }
+
+    // 5) Itens da nota na ORDEM da listagem (fornecedor→adição→numItem)
+    const itens: ItemImportacaoNfe[] = ordem.map((o) => {
+      const it: any = (o.item as any)._row;
+      const fornItem = fornecedorPorAdicao.get(o.numAdicao) || '';
+      const codExp = codClientePorForn.get(fornItem) || ''; // cExportador = cliente do fornecedor do item
+      const ad = dadosAdicao.get(o.numAdicao);
       const qtd = Number(it.qtd) || 0;
-      // vUnit da nota: custo real por unidade (fallback invoice*taxa / proforma)
       const vUnit =
         Number(it.custo_unit_real) ||
         (Number(it.invoice_unit) ? Number(it.invoice_unit) * (Number(di.taxa_dolar) || 1) : Number(it.real_unit) || 0);
@@ -153,23 +179,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         qtd,
         vUnit,
         adicao: {
-          numero_adicao: n,
-          seq_adicao: 1,
-          cod_fabricante: ad?.fabricanteNome ? ad.fabricanteNome.slice(0, 60) : '',
-          cod_exportador: ad?.fornecedorNome ? ad.fornecedorNome.slice(0, 60) : '',
-          exportador_nome: ad?.fornecedorNome,
-          bc_ii: Math.round((ad?.bc_ii || 0) * share * 100) / 100,
+          numero_adicao: o.numAdicao,     // nAdicao
+          seq_adicao: o.numItem,          // nSeqAdic = numItem da DIe
+          cod_exportador: codExp,         // cExportador = cliente do fornecedor do item
+          cod_fabricante: codExp,         // cFabricante = cliente do fornecedor da adição (placeholder = exportador)
+          exportador_nome: fornItem,
+          bc_ii: Number(ad?.bc_ii) || 0,
           despesa_aduaneira: 0,
-          valor_ii: Math.round((ad?.valor_ii || 0) * share * 100) / 100,
+          valor_ii: Number(ad?.valor_ii) || 0, // ZFM = 0
           valor_iof: 0,
         },
-        // Imposto mínimo p/ preview (origem 1 é forçada no builder):
         icms: { cstICMS: '00', baseICMS: vProd, pICMS: aliqIcms, vICMS: Math.round(vProd * aliqIcms) / 100 },
         ipi: { cstIPI: '50' }, // ZFM suspenso
         pis: { cstPIS: '01', vPIS: 0 },
         cofins: { cstCOFINS: '01', vCOFINS: 0 },
       };
     });
+
+    // infCpl: lista todos os fornecedores (cliente vinculado + adições + fatura)
+    const infCpl =
+      `DI ${di.nro_di} - NACIONALIZACAO. FORNECEDORES: ` +
+      forns
+        .map((f) => {
+          const cod = codClientePorForn.get(f.nome) || 'S/VINCULO';
+          const inv = invoicePorForn.get(f.nome);
+          const ads = f.adicoes.map((a) => String(a.numAdicao).padStart(3, '0')).join(',');
+          return `${f.nome} (cliente ${cod}${inv ? `, fatura ${inv}` : ''}, adicoes ${ads})`;
+        })
+        .join(' | ');
+    const adicoes = adRes.rows; // p/ contagem na resposta
 
     // 5) Emitente (empresa MELO)
     const empRes = await client.query(`SELECT * FROM dadosempresa LIMIT 1`);
@@ -188,8 +226,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       crt: String(emp.crt || '3'),
     };
 
-    // Destinatário exterior (POR_DI): primeiro fornecedor da DI
-    const primeiraAd = adicoes[0];
     const dados: DadosNacionalizacao = {
       modo,
       ambiente: 2, // preview sempre homologação
@@ -207,7 +243,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         forma_importacao: di.forma_importacao ?? 1,
         valor_afrmm: Number(di.valor_afrmm) || 0,
       },
-      destExterior: { idEstrangeiro: (primeiraAd?.fornecedorNome || 'EXTERIOR').slice(0, 20), nome: primeiraAd?.fornecedorNome, cPais: '9999', xPais: 'EXTERIOR' },
+      destExterior,
+      infCpl,
       itens,
     };
 
@@ -216,9 +253,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       success: true,
       modo,
+      regra_principal: regra,
       di: { id: importacaoId, nro_di: di.nro_di },
+      principal: principal ? { fornecedor: principal.nome, cod_cliente: codPrincipal || null } : null,
       qtd_itens: itens.length,
       qtd_adicoes: adicoes.length,
+      qtd_fornecedores: forns.length,
       notas: notas.map((n) => ({
         modo: n.modo,
         cod_exportador: n.cod_exportador,

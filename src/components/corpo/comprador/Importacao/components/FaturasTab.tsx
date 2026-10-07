@@ -12,16 +12,20 @@
  */
 
 import React, { useState } from 'react';
-import { Plus, ShoppingCart, Wand2, Loader2, CheckCircle2, Link } from 'lucide-react';
+import { Plus, ShoppingCart, Wand2, Loader2, CheckCircle2, Link, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { FaturaImportacao, ItemImportacao } from '../types/importacao';
+import type { FaturaImportacao, ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { FaturaCard } from './FaturaCard';
 import { AdicionarFaturaModal } from './AdicionarFaturaModal';
+import { VincularFornecedoresModal } from './VincularFornecedoresModal';
 import { MoverItensModal } from './MoverItensModal';
 import type { ItemPedidoSelecionado } from './ImportarPedidoModal';
 
 interface FaturasTabProps {
   faturas: FaturaImportacao[];
+  adicoes?: AdicaoImportacao[];
+  importacaoId?: number;
+  onVincularCliente?: (nomeDie: string, codCliente: string) => void;
   onAddFatura: (dados?: Partial<FaturaImportacao>) => void;
   onRemoveFatura: (index: number) => void;
   onAddItem: (faturaIndex: number, item: ItemImportacao) => void;
@@ -44,6 +48,9 @@ interface FaturasTabProps {
 
 export const FaturasTab: React.FC<FaturasTabProps> = ({
   faturas,
+  adicoes = [],
+  importacaoId,
+  onVincularCliente,
   onAddFatura,
   onRemoveFatura,
   onAddItem,
@@ -64,12 +71,33 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
   readOnly = false,
 }) => {
   const [modalFaturaAberto, setModalFaturaAberto] = useState(false);
+  const [modalVincularAberto, setModalVincularAberto] = useState(false);
   const [moverFaturaIdx, setMoverFaturaIdx] = useState<number>(-1);
+
+  // Vínculo fornecedor↔cliente: fornecedores (com itens) e quantos têm cod_cliente.
+  const fornecedoresComItens = faturas.filter((f) => (f.itens?.length || 0) > 0);
+  const fornVinculados = fornecedoresComItens.filter((f) => !!f.cod_cliente).length;
+  const faltamVinculos = fornecedoresComItens.length > 0 && fornVinculados < fornecedoresComItens.length;
 
   const totalItens = faturas.reduce((s, f) => s + (f.itens?.length || 0), 0);
   const totalAssociados = faturas.reduce((s, f) => s + (f.itens?.filter((i) => !!i.codprod).length || 0), 0);
   const totalComPedido = faturas.reduce((s, f) => s + (f.itens?.filter((i) => !!i.codprod && !!i.id_orc).length || 0), 0);
-  const totalFornecedores = new Set(faturas.map((f) => f.cod_credor)).size;
+  // Fornecedores reais (1 fatura por fornecedor); cod_credor fica null até vincular,
+  // então conta por nome do fornecedor (fallback: nº de faturas).
+  const totalFornecedores =
+    new Set(faturas.map((f) => (f.fornecedor_nome || '').trim()).filter(Boolean)).size || faturas.length;
+
+  // Fornecedor é ordenado pela MENOR adição que possui (regra da DI);
+  // mantém o índice original para os callbacks (remover/add/mover item).
+  const menorAdicao = (f: FaturaImportacao): number => {
+    const nums = (f.itens || [])
+      .map((i) => Number(i.numero_adicao))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    return nums.length ? Math.min(...nums) : Number.MAX_SAFE_INTEGER;
+  };
+  const faturasOrdenadas = faturas
+    .map((fatura, idx) => ({ fatura, idx }))
+    .sort((a, b) => menorAdicao(a.fatura) - menorAdicao(b.fatura) || a.idx - b.idx);
 
   return (
     <div className="space-y-4">
@@ -152,6 +180,17 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
           Faturas / Pedidos de Compra
         </h3>
         <div className="flex gap-2">
+          {!readOnly && importacaoId && fornecedoresComItens.length > 0 && onVincularCliente && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setModalVincularAberto(true)}
+              className={`flex items-center gap-1 ${faltamVinculos ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'}`}
+            >
+              <Users size={14} />
+              Vincular Fornecedores ({fornVinculados}/{fornecedoresComItens.length})
+            </Button>
+          )}
           {!readOnly && totalItens > 0 && (totalAssociados < totalItens || totalComPedido < totalAssociados) && onAssociarEVincular && (
             <Button
               size="sm"
@@ -198,11 +237,12 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
         </div>
       ) : (
         <div className="space-y-2">
-          {faturas.map((fatura, idx) => (
+          {faturasOrdenadas.map(({ fatura, idx }) => (
             <FaturaCard
               key={idx}
               fatura={fatura}
               index={idx}
+              adicoes={adicoes}
               onRemove={() => onRemoveFatura(idx)}
               onAddItem={(item) => onAddItem(idx, item)}
               onRemoveItem={(itemIdx) => onRemoveItem(idx, itemIdx)}
@@ -229,6 +269,16 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
           setModalFaturaAberto(false);
         }}
       />
+
+      {/* Modal de vínculo fornecedor↔cliente */}
+      {importacaoId && onVincularCliente && (
+        <VincularFornecedoresModal
+          aberto={modalVincularAberto}
+          importacaoId={importacaoId}
+          onFechar={() => setModalVincularAberto(false)}
+          onVinculado={onVincularCliente}
+        />
+      )}
 
       {/* Modal de mover itens entre faturas */}
       {moverFaturaIdx >= 0 && moverFaturaIdx < faturas.length && onMoverItens && (

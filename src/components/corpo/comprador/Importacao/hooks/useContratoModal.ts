@@ -44,16 +44,26 @@ export function useContratoModal(onAdd: (contrato: ContratoCambio) => void) {
 }
 
 export function useContratosTotais(contratos: ContratoCambio[], taxaDolarMedio?: number) {
-  const totalUSD = contratos.reduce((s, c) => s + (c.vl_merc_dolar || 0), 0);
-  // Calcular BRL: usa vl_reais se existir, senão calcula taxa × valor
-  const totalBRL = contratos.reduce((s, c) => {
-    const brl = c.vl_reais || (c.vl_merc_dolar || 0) * (c.taxa_dolar || 0);
-    return s + brl;
-  }, 0);
+  // USD por contrato: usa vl_usd (já convertido via BRL). Contrato estrangeiro sem
+  // taxa do dólar ainda não contribui para o total em dólar (fica pendente de taxa).
+  const totalUSD = contratos.reduce(
+    (s, c) => s + (c.vl_usd ?? (c.moeda && c.moeda !== 'USD' ? 0 : c.vl_merc_dolar || 0)),
+    0,
+  );
+  // BRL: usa vl_reais se existir, senão calcula taxa (moeda→BRL) × valor
+  const totalBRL = contratos.reduce(
+    (s, c) => s + (c.vl_reais ?? (c.vl_merc_dolar || 0) * (c.taxa_dolar || 0)),
+    0,
+  );
 
   const dolarMedio =
     taxaDolarMedio ??
     (contratos.length > 0 && totalUSD > 0 ? totalBRL / totalUSD : 0);
 
-  return { totalUSD, totalBRL, dolarMedio };
+  // Contratos que ainda precisam de taxa do dólar p/ converter em USD
+  const pendentesTaxa = contratos.filter(
+    (c) => (c.moeda && c.moeda !== 'USD') && (c.vl_usd == null || !c.taxa_usd),
+  ).length;
+
+  return { totalUSD, totalBRL, dolarMedio, pendentesTaxa };
 }

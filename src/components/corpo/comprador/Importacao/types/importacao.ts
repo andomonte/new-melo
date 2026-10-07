@@ -71,6 +71,17 @@ export interface ImportacaoCabecalho {
   inscricao_suframa?: string;
   forma_pagamento?: string;
 
+  // Nota de nacionalização (grupo DI da NF-e de entrada)
+  local_desembaraco?: string;   // xLocDesemb — cidade da filial
+  uf_desembaraco?: string;      // UFDesemb — UF da filial
+  data_desembaraco?: string;    // dDesemb — do XML (dataDesembaraco)
+  via_transporte?: number;      // tpViaTransp (1 Marítima .. 10)
+  forma_importacao?: number;    // tpIntermedio (1 própria / 2 c.ordem / 3 encomenda)
+  valor_afrmm?: number;         // vAFRMM (Marinha Mercante, só marítimo)
+  outros_valores?: number;      // vOutro livre (compõe a nota)
+  peso_bruto?: number;          // cargaPesoBruto (kg) — do XML
+  especie?: string;             // espécie de volume (nomeEmbalagem) — do XML
+
   // Metadados
   created_at?: string;
   updated_at?: string;
@@ -79,17 +90,42 @@ export interface ImportacaoCabecalho {
 
 // --- CONTRATOS DE CÂMBIO ---
 
+// Origem da Taxa Dólar de um contrato de câmbio:
+//   CAP    = taxa do título no Contas a Pagar (por nº do contrato)
+//   XML    = taxa do dólar que veio no XML da DI (TAXA DOLAR EUA)
+//   PTAX   = cotação do Banco Central na data da DI (botão buscar)
+//   MERCADO= cotação de mercado (AwesomeAPI) — moedas sem PTAX, ex.: CNY
+//   MANUAL = digitada pelo usuário
+export type OrigemTaxa = 'CAP' | 'XML' | 'PTAX' | 'MERCADO' | 'MANUAL';
+
 export interface ContratoCambio {
   id?: number;
   id_importacao: number;
   data: string;
-  taxa_dolar: number;
-  vl_merc_dolar: number; // Valor em USD coberto pelo contrato
-  vl_reais?: number; // Valor em reais
-  contrato: string; // Número do contrato
-  moeda?: string; // USD, EUR, CNY, JPY
-  // Vinculação com Contas a Pagar (melhoria futura)
+  taxa_dolar: number;      // taxa da MOEDA do contrato -> BRL (p/ USD = dólar->BRL)
+  vl_merc_dolar: number;   // valor NA MOEDA do contrato (nome histórico)
+  vl_reais?: number;       // vl_merc_dolar * taxa_dolar (BRL)
+  contrato: string;        // Número do contrato
+  moeda?: string;          // USD, EUR, CNY, JPY...
+  // Conversão para dólar (tudo o motor de custo usa em USD)
+  taxa_usd?: number;       // taxa do DÓLAR -> BRL usada p/ converter em USD
+  vl_usd?: number;         // valor do contrato convertido para dólar = vl_reais / taxa_usd
+  origem_taxa?: OrigemTaxa;   // de onde veio a Taxa Dólar (p/ o usuário saber)
+  origem_cambio?: OrigemTaxa; // de onde veio a Taxa Câmbio (moeda->BRL)
+  // Vinculação com Contas a Pagar
   id_titulo_pagar?: number;
+}
+
+// --- ADIÇÃO DA DI (grupo Fornecedor → Adição → Item) ---
+
+export interface AdicaoImportacao {
+  numero_adicao: number;
+  fornecedor_nome: string;
+  ncm: string;
+  vl_fob: number;        // US$
+  vl_frete: number;      // US$
+  vl_pis_cofins: number; // R$
+  vl_icms: number;       // R$
 }
 
 // --- FATURAS / PEDIDOS DE COMPRA (dentro da DI) ---
@@ -115,6 +151,9 @@ export interface ItemImportacao {
   id_importacao: number;
   id_fatura?: number;
   codprod: string;
+  referencia?: string; // dbprod.ref do produto associado (exibição)
+  marca?: string;      // dbmarcas.descr do produto associado (exibição)
+  num_item?: number;   // nSeqAdic (numItem da DIe) — ordem na adição
   descricao?: string;
   ncm?: string;
   numero_adicao?: number;
@@ -221,7 +260,14 @@ export interface DieXmlItem {
 
 export interface DieXmlContrato {
   numero: string;
-  valorUsd: number;
+  valorUsd: number;      // valor NA MOEDA do contrato (nome histórico; p/ USD = USD)
+  moeda: string;         // USD, EUR, CNY... (do XML)
+  taxaMoeda?: number;    // moeda do contrato -> BRL (TAXA EURO/CNY ou dólar p/ USD)
+  vlReais?: number;      // valorUsd * taxaMoeda
+  taxaUsd?: number;      // dólar -> BRL (TAXA DOLAR EUA / vlTaxaDolar da DI)
+  vlUsd?: number;        // valor convertido para dólar
+  origemTaxa?: OrigemTaxa;   // 'XML' quando a taxa do dólar veio do próprio XML
+  origemCambio?: OrigemTaxa; // 'XML' quando a taxa da moeda veio do próprio XML
 }
 
 export interface DieXmlParsed {
@@ -242,6 +288,11 @@ export interface DieXmlParsed {
   cdPaisProcedencia: string;
   qtdeAdicoes: number;
   txInfoCompl: string;
+  // Nota de nacionalização (quando disponível no XML da DI)
+  pesoBruto?: number;          // cargaPesoBruto (kg)
+  dataDesembaraco?: string;    // dataDesembaraco (YYYY-MM-DD)
+  viaTransporte?: number;      // tpViaTransp mapeado (1 Marítima / 4 Aérea …) ou undefined
+  especie?: string;            // nomeEmbalagem (1º volume)
   // Extraídos do txInfoCompl
   navio?: string;
   dataEntradaBrasil?: string;

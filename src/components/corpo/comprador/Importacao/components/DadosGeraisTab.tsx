@@ -55,6 +55,50 @@ export const DadosGeraisTab: React.FC<DadosGeraisTabProps> = ({
     />
   );
 
+  const select = (
+    campo: keyof ImportacaoCabecalho,
+    opcoes: { v: number; l: string }[],
+    placeholder = '—',
+  ) => (
+    <select
+      value={(dados[campo] as number | undefined) ?? ''}
+      onChange={(e) =>
+        onChange({
+          ...dados,
+          [campo]: e.target.value === '' ? undefined : parseInt(e.target.value, 10),
+        })
+      }
+      disabled={readOnly}
+      className="h-8 w-full rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 text-sm text-gray-800 dark:text-gray-100 disabled:opacity-60"
+    >
+      <option value="">{placeholder}</option>
+      {opcoes.map((o) => (
+        <option key={o.v} value={o.v}>
+          {o.l}
+        </option>
+      ))}
+    </select>
+  );
+
+  const VIA_TRANSPORTE_OPCOES = [
+    { v: 1, l: '1 - Marítima' },
+    { v: 2, l: '2 - Fluvial' },
+    { v: 3, l: '3 - Lacustre' },
+    { v: 4, l: '4 - Aérea' },
+    { v: 5, l: '5 - Postal' },
+    { v: 6, l: '6 - Ferroviária' },
+    { v: 7, l: '7 - Rodoviária' },
+    { v: 8, l: '8 - Conduto / Rede Transmissão' },
+    { v: 9, l: '9 - Meios próprios' },
+    { v: 10, l: '10 - Entrada / Saída ficta' },
+  ];
+
+  const TIPO_INTERMEDIO_OPCOES = [
+    { v: 1, l: '1 - Conta própria' },
+    { v: 2, l: '2 - Conta e ordem' },
+    { v: 3, l: '3 - Encomenda' },
+  ];
+
   return (
     <div className="space-y-6">
       <SectionPanel titulo="Dados do Documento">
@@ -98,6 +142,26 @@ export const DadosGeraisTab: React.FC<DadosGeraisTabProps> = ({
         <FormField label="Entrada no Brasil">{date('data_entrada_brasil')}</FormField>
         <FormField label="Inscrição SUFRAMA">{text('inscricao_suframa', 'XX.XXXX.XX-X')}</FormField>
         <FormField label="Recinto Aduaneiro">{text('recinto_aduaneiro', 'Código')}</FormField>
+      </SectionPanel>
+
+      <SectionPanel titulo="Nota de Nacionalização (grupo DI)" gridCols="grid-cols-3">
+        <FormField label="Local Desembaraço">{text('local_desembaraco', 'Ex: MANAUS')}</FormField>
+        <FormField label="UF Desembaraço">{text('uf_desembaraco', 'AM')}</FormField>
+        <FormField label="Data Desembaraço">{date('data_desembaraco')}</FormField>
+
+        <FormField label="Via Transporte">
+          {select('via_transporte', VIA_TRANSPORTE_OPCOES, 'Selecione…')}
+        </FormField>
+        <FormField label="Tipo Intermédio">
+          {select('forma_importacao', TIPO_INTERMEDIO_OPCOES, 'Selecione…')}
+        </FormField>
+        <FormField label="Valor Marinha Mercante (AFRMM)">{num('valor_afrmm')}</FormField>
+
+        <FormField label="Outros Valores">{num('outros_valores')}</FormField>
+        <FormField label="Peso Bruto (kg)">{num('peso_bruto', '0.001')}</FormField>
+        <FormField label="Peso Líquido (kg)">{num('peso_liquido', '0.001')}</FormField>
+
+        <FormField label="Espécie (volume)">{text('especie', 'Ex: PALLETS / CAIXA DE PAPELAO')}</FormField>
       </SectionPanel>
     </div>
   );

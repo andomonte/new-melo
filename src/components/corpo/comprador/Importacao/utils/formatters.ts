@@ -28,7 +28,13 @@ export const fmtTaxa = (valor: number | string | undefined): string =>
 
 export const fmtDate = (data: string): string => {
   if (!data) return '-';
-  return new Date(data).toLocaleDateString('pt-BR');
+  // Formata a partir da parte YYYY-MM-DD (ignora hora/UTC) para não deslocar o dia.
+  // `new Date('2026-09-08')` é meia-noite UTC → em fuso -3/-4 voltava para 07/09.
+  const s = String(data).slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(data);
+  return isNaN(d.getTime()) ? data : d.toLocaleDateString('pt-BR');
 };
 
 export const fmtDecimal = (valor: number | string | undefined, casas = 2): string => {

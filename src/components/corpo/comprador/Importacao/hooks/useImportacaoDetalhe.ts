@@ -12,7 +12,9 @@ import type {
   ImportacaoTab,
   ResumoCustos,
   ItemImportacao,
+  AdicaoImportacao,
 } from '../types/importacao';
+import { buscarTaxasContrato, aplicarTaxasCap } from '../utils/taxaContrato';
 
 export function useImportacaoDetalhe(importacaoId?: number) {
   const isNovo = !importacaoId;
@@ -26,6 +28,7 @@ export function useImportacaoDetalhe(importacaoId?: number) {
   });
   const [contratos, setContratos] = useState<ContratoCambio[]>([]);
   const [faturas, setFaturas] = useState<FaturaImportacao[]>([]);
+  const [adicoes, setAdicoes] = useState<AdicaoImportacao[]>([]);
   const [resumoCustos, setResumoCustos] = useState<ResumoCustos | null>(null);
 
   const readOnly = cabecalho.status === 'E' || cabecalho.status === 'C';
@@ -45,8 +48,8 @@ export function useImportacaoDetalhe(importacaoId?: number) {
       if (response.data?.success) {
         const d = response.data.data;
 
-        // Separar contratos, entradas e itens do cabeçalho
-        const { contratos: ctrs, entradas, itens, ...cab } = d;
+        // Separar contratos, entradas, itens e adições do cabeçalho
+        const { contratos: ctrs, entradas, itens, adicoes: adics, ...cab } = d;
 
         // Converter campos numéricos que vêm como string do PostgreSQL
         const numFields = [
@@ -56,6 +59,8 @@ export function useImportacaoDetalhe(importacaoId?: number) {
           'despachante', 'freteorigem_total', 'infraero_porto',
           'carreteiro_eadi', 'carreteiro_melo', 'eadi',
           'peso_liquido', 'qtd_adicoes',
+          // Nota de nacionalização
+          'via_transporte', 'forma_importacao', 'valor_afrmm', 'outros_valores', 'peso_bruto',
         ];
         for (const f of numFields) {
           if (cab[f] !== undefined && cab[f] !== null) {
@@ -64,7 +69,7 @@ export function useImportacaoDetalhe(importacaoId?: number) {
         }
 
         // Converter campos date que vêm como ISO timestamp para YYYY-MM-DD
-        const dateFields = ['data_di', 'data_entrada_brasil'];
+        const dateFields = ['data_di', 'data_entrada_brasil', 'data_desembaraco'];
         for (const f of dateFields) {
           if (cab[f]) {
             cab[f] = String(cab[f]).slice(0, 10);
@@ -74,12 +79,28 @@ export function useImportacaoDetalhe(importacaoId?: number) {
         setCabecalho(cab);
 
         // Contratos - converter numerics
-        const contratosFormatados = (ctrs || []).map((c: any) => ({
+        let contratosFormatados = (ctrs || []).map((c: any) => ({
           ...c,
           taxa_dolar: parseFloat(String(c.taxa_dolar || 0)),
           vl_merc_dolar: parseFloat(String(c.vl_merc_dolar || 0)),
           vl_reais: c.vl_reais ? parseFloat(String(c.vl_reais)) : undefined,
-        }));
+          taxa_usd: c.taxa_usd != null ? parseFloat(String(c.taxa_usd)) : undefined,
+          vl_usd: c.vl_usd != null ? parseFloat(String(c.vl_usd)) : undefined,
+          id_titulo_pagar: c.id_titulo_pagar != null ? parseInt(String(c.id_titulo_pagar)) || undefined : undefined,
+          origem_taxa: c.origem_taxa || undefined,
+          origem_cambio: c.origem_cambio || undefined,
+        })) as ContratoCambio[];
+
+        // Fonte primária da Taxa Dólar: Contas a Pagar pelo nº do contrato.
+        // Não sobrescreve taxa marcada como MANUAL/PTAX (respeitarUsuario=true).
+        try {
+          const nums = contratosFormatados.map((c) => c.contrato).filter(Boolean);
+          if (nums.length > 0) {
+            const capMap = await buscarTaxasContrato(nums);
+            contratosFormatados = aplicarTaxasCap(contratosFormatados, capMap, true);
+          }
+        } catch { /* mantém o que veio do banco */ }
+
         setContratos(contratosFormatados);
 
         // Montar faturas a partir de entradas + itens
@@ -97,14 +118,36 @@ export function useImportacaoDetalhe(importacaoId?: number) {
               invoice_unit: parseFloat(String(it.invoice_unit || 0)),
               invoice_total: parseFloat(String(it.invoice_total || 0)),
               id_orc: it.id_orc ? parseInt(String(it.id_orc)) : undefined,
+              numero_adicao: it.numero_adicao != null ? parseInt(String(it.numero_adicao)) : undefined,
+              num_item: it.num_item != null ? parseInt(String(it.num_item)) : undefined,
             })),
         }));
         setFaturas(faturasFormatadas);
 
+        // Adições (grupo DI por adição) — para a listagem hierárquica
+        setAdicoes(
+          (adics || []).map((a: any) => ({
+            numero_adicao: a.numero_adicao != null ? parseInt(String(a.numero_adicao)) : 0,
+            fornecedor_nome: a.fornecedor_nome || '',
+            ncm: a.ncm || '',
+            vl_fob: a.vl_fob != null ? parseFloat(String(a.vl_fob)) : 0,
+            vl_frete: a.vl_frete != null ? parseFloat(String(a.vl_frete)) : 0,
+            vl_pis_cofins: a.vl_pis_cofins != null ? parseFloat(String(a.vl_pis_cofins)) : 0,
+            vl_icms: a.vl_icms != null ? parseFloat(String(a.vl_icms)) : 0,
+          })),
+        );
+
         // Resumo de custos - calcular a partir dos dados carregados
         if (contratosFormatados.length > 0) {
-          const totalUSD = contratosFormatados.reduce((s: number, c: ContratoCambio) => s + (c.vl_merc_dolar || 0), 0);
-          const totalBRL = contratosFormatados.reduce((s: number, c: ContratoCambio) => s + ((c.vl_merc_dolar || 0) * (c.taxa_dolar || 0)), 0);
+          // USD por contrato: usa vl_usd (já convertido); fallback p/ valor na moeda se USD.
+          const totalUSD = contratosFormatados.reduce(
+            (s: number, c: ContratoCambio) => s + (c.vl_usd ?? (c.moeda && c.moeda !== 'USD' ? 0 : c.vl_merc_dolar || 0)),
+            0,
+          );
+          const totalBRL = contratosFormatados.reduce(
+            (s: number, c: ContratoCambio) => s + (c.vl_reais ?? ((c.vl_merc_dolar || 0) * (c.taxa_dolar || 0))),
+            0,
+          );
           const dolarMedio = totalUSD > 0 ? totalBRL / totalUSD : 0;
 
           const totalImpostos = (cab.pis || 0) + (cab.cofins || 0) + (cab.pis_cofins || 0) + (cab.ii || 0) + (cab.ipi || 0) + (cab.icms_st || 0);
@@ -144,6 +187,7 @@ export function useImportacaoDetalhe(importacaoId?: number) {
       setCabecalho({ status: 'N' });
       setContratos([]);
       setFaturas([]);
+      setAdicoes([]);
       setResumoCustos(null);
     }
   }, [importacaoId, fetchData]);
@@ -165,6 +209,10 @@ export function useImportacaoDetalhe(importacaoId?: number) {
           vl_merc_dolar: c.vl_merc_dolar || 0,
           vl_reais: c.vl_reais || ((c.vl_merc_dolar || 0) * (c.taxa_dolar || 0)),
           moeda: c.moeda || 'USD',
+          taxa_usd: c.taxa_usd ?? null,
+          vl_usd: c.vl_usd ?? null,
+          origem_taxa: c.origem_taxa ?? null,
+          origem_cambio: c.origem_cambio ?? null,
           id_titulo_pagar: c.id_titulo_pagar || null,
         })),
         faturas: faturas.map((f) => ({
@@ -182,6 +230,7 @@ export function useImportacaoDetalhe(importacaoId?: number) {
             ncm: item.ncm || null,
             unidade: item.unidade || null,
             numero_adicao: item.numero_adicao || null,
+            num_item: item.num_item ?? null,
             id_orc: item.id_orc || null,
           })),
         })),
@@ -213,6 +262,43 @@ export function useImportacaoDetalhe(importacaoId?: number) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [faturas, pendingSave]);
 
+  // Enriquecer Referência/Marca dos itens associados (qualquer caminho de associação).
+  // Itens novos ganham codprod sem referencia (undefined); busca ref/marca por codprod.
+  // No load a referencia já vem '' (join no GET), então não re-busca.
+  useEffect(() => {
+    const faltando = new Set<string>();
+    faturas.forEach((f) =>
+      (f.itens || []).forEach((it) => {
+        if (it.codprod && it.referencia == null) faltando.add(String(it.codprod));
+      }),
+    );
+    if (faltando.size === 0) return;
+
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await api.get(
+          `/api/importacao/produtos-info?codprods=${encodeURIComponent(Array.from(faltando).join(','))}`,
+        );
+        const map = res.data?.map || {};
+        if (cancelado) return;
+        setFaturas((prev) =>
+          prev.map((f) => ({
+            ...f,
+            itens: (f.itens || []).map((it) => {
+              if (!it.codprod || it.referencia != null) return it;
+              const info = map[String(it.codprod)];
+              // Marca como buscado (''), evitando novo disparo do efeito.
+              return { ...it, referencia: info?.referencia ?? '', marca: info?.marca ?? '' };
+            }),
+          })),
+        );
+      } catch { /* mantém '-' na tela */ }
+    })();
+    return () => { cancelado = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faturas]);
+
   // Contratos
   const addContrato = (contrato: ContratoCambio) => {
     setContratos((prev) => [...prev, contrato]);
@@ -220,6 +306,28 @@ export function useImportacaoDetalhe(importacaoId?: number) {
 
   const removeContrato = (index: number) => {
     setContratos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Atualiza um contrato (taxa câmbio/dólar manual ou por data) e recalcula vl_reais/vl_usd.
+  const updateContrato = (index: number, patch: Partial<ContratoCambio>) => {
+    setContratos((prev) =>
+      prev.map((c, i) => {
+        if (i !== index) return c;
+        const next = { ...c, ...patch };
+        const moeda = next.moeda || 'USD';
+        // vl_reais sempre vem da Taxa Câmbio (moeda -> BRL)
+        const vlReais = (next.vl_merc_dolar || 0) * (next.taxa_dolar || 0);
+        next.vl_reais = vlReais;
+        if (moeda === 'USD') {
+          next.vl_usd = next.vl_merc_dolar || 0;
+        } else if (next.taxa_usd && next.taxa_usd > 0) {
+          next.vl_usd = vlReais / next.taxa_usd;
+        } else {
+          next.vl_usd = undefined;
+        }
+        return next;
+      }),
+    );
   };
 
   // Faturas
@@ -321,6 +429,8 @@ export function useImportacaoDetalhe(importacaoId?: number) {
               itens[mapeamento.itemIdx] = {
                 ...itens[mapeamento.itemIdx],
                 codprod: resultado.codprod,
+                referencia: resultado.referencia,
+                marca: resultado.marca,
               };
             }
           }
@@ -695,6 +805,16 @@ export function useImportacaoDetalhe(importacaoId?: number) {
     });
   };
 
+  // Reflete o vínculo fornecedor→cliente (já persistido pelo endpoint) nas
+  // faturas em memória, para liberar o botão de Nacionalização sem recarregar.
+  const vincularClienteFornecedor = (nomeDie: string, codCliente: string) => {
+    setFaturas((prev) =>
+      prev.map((f) =>
+        (f.fornecedor_nome || '') === nomeDie ? { ...f, cod_cliente: codCliente } : f,
+      ),
+    );
+  };
+
   return {
     isNovo,
     loading,
@@ -706,17 +826,20 @@ export function useImportacaoDetalhe(importacaoId?: number) {
     setCabecalho,
     contratos,
     faturas,
+    adicoes,
     resumoCustos,
     readOnly,
     salvar,
     fetchData,
     addContrato,
     removeContrato,
+    updateContrato,
     addFatura,
     removeFatura,
     addItem,
     removeItem,
     updateItem,
+    vincularClienteFornecedor,
     autoAssociar,
     autoAssociando,
     autoAssociadoStats,

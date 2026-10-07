@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { SectionPanel, FormField } from './SectionPanel';
 import { useXmlUpload } from '../hooks/useXmlUpload';
 import { fmtUSD, fmtBRL, fmtTaxa } from '../utils/formatters';
+import { buscarTaxasContrato, aplicarTaxasCap } from '../utils/taxaContrato';
+import type { ContratoCambio } from '../types/importacao';
 import api from '@/components/services/api';
 
 interface NovaImportacaoModalProps {
@@ -88,7 +90,9 @@ export const NovaImportacaoModal: React.FC<NovaImportacaoModalProps> = ({
 
     try {
       // Agrupar itens por fornecedor a partir das adições do XML
-      const fornecedorMap = new Map<string, { descricao: string; qtd: number; proforma_unit: number; invoice_unit: number; ncm: string; unidade: string; numero_adicao: number }[]>();
+      const fornecedorMap = new Map<string, { descricao: string; qtd: number; proforma_unit: number; invoice_unit: number; ncm: string; unidade: string; numero_adicao: number; num_item: number }[]>();
+      // Adições (grupo DI por adição): fornecedor + NCM + totais (FOB/frete/PIS-COFINS/ICMS)
+      const adicoesPayload: { numero_adicao: number; fornecedor_nome: string; ncm: string; vl_fob: number; vl_frete: number; vl_pis_cofins: number; vl_icms: number }[] = [];
       for (const adicao of xmlParsed?.adicoes || []) {
         const nome = adicao.nomeFornecedor || '';
         if (!fornecedorMap.has(nome)) {
@@ -103,8 +107,18 @@ export const NovaImportacaoModal: React.FC<NovaImportacaoModalProps> = ({
             ncm: item.cdNcm,
             unidade: item.unidade,
             numero_adicao: item.numAdicao,
+            num_item: item.numItem,
           });
         }
+        adicoesPayload.push({
+          numero_adicao: adicao.numAdicao,
+          fornecedor_nome: nome,
+          ncm: adicao.itens[0]?.cdNcm || '',
+          vl_fob: adicao.vlFob || 0,
+          vl_frete: adicao.vlFrete || 0,
+          vl_pis_cofins: adicao.vlPisCofins || 0,
+          vl_icms: adicao.vlIcms || 0,
+        });
       }
 
       const fornecedores = Array.from(fornecedorMap.entries()).map(([nome, itens]) => ({
@@ -112,16 +126,33 @@ export const NovaImportacaoModal: React.FC<NovaImportacaoModalProps> = ({
         itens,
       }));
 
+      // Contratos do XML; a Taxa Dólar primária é a do Contas a Pagar (por nº do
+      // contrato) — quando não houver título, mantém a do XML (origem XML).
+      let contratosPayload: ContratoCambio[] = (xmlParsed?.contratos || []).map((c) => ({
+        id_importacao: 0,
+        data: '',
+        contrato: c.numero,
+        moeda: c.moeda || 'USD',
+        vl_merc_dolar: c.valorUsd,          // valor na moeda do contrato
+        taxa_dolar: c.taxaMoeda || 0,       // moeda -> BRL
+        vl_reais: c.vlReais,
+        taxa_usd: c.taxaUsd,                // dólar -> BRL
+        vl_usd: c.vlUsd,                    // valor convertido em USD
+        origem_taxa: c.origemTaxa,
+        origem_cambio: c.origemCambio,
+      }));
+      if (contratosPayload.length > 0) {
+        const capMap = await buscarTaxasContrato(contratosPayload.map((c) => c.contrato));
+        contratosPayload = aplicarTaxasCap(contratosPayload, capMap, false);
+      }
+
       const payload = {
         ...cabecalhoFromXml,
         ...extras,
         xml_original: xmlRaw,
-        contratos: xmlParsed?.contratos?.map((c) => ({
-          contrato: c.numero,
-          vl_merc_dolar: c.valorUsd,
-          moeda: 'USD',
-        })) || [],
+        contratos: contratosPayload,
         fornecedores,
+        adicoes: adicoesPayload,
       };
 
       const response = await api.post('/api/importacao/post', payload);
@@ -321,14 +352,28 @@ export const NovaImportacaoModal: React.FC<NovaImportacaoModalProps> = ({
                       <thead className="bg-gray-200 dark:bg-zinc-800">
                         <tr>
                           <th className="px-4 py-2 text-left font-medium">Nº Contrato</th>
-                          <th className="px-4 py-2 text-right font-medium">Valor (USD)</th>
+                          <th className="px-3 py-2 text-center font-medium">Moeda</th>
+                          <th className="px-4 py-2 text-right font-medium">Valor (Moeda)</th>
+                          <th className="px-4 py-2 text-right font-medium">Taxa Dólar</th>
+                          <th className="px-4 py-2 text-right font-medium">Valor (U$$)</th>
                         </tr>
                       </thead>
                       <tbody>
                         {xmlParsed!.contratos.map((c, idx) => (
                           <tr key={idx} className="border-t border-gray-200 dark:border-zinc-700">
                             <td className="px-4 py-2 font-mono">{c.numero}</td>
-                            <td className="px-4 py-2 text-right text-green-600 dark:text-green-400 font-medium">{fmtUSD(c.valorUsd)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium border border-gray-300 dark:border-zinc-600">{c.moeda || 'USD'}</span>
+                            </td>
+                            <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">
+                              {c.valorUsd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">
+                              {c.taxaUsd ? `R$ ${c.taxaUsd.toFixed(4)}` : '—'}
+                            </td>
+                            <td className="px-4 py-2 text-right text-green-600 dark:text-green-400 font-medium">
+                              {c.vlUsd != null ? fmtUSD(c.vlUsd) : (c.moeda && c.moeda !== 'USD' ? '⚠ taxa' : fmtUSD(c.valorUsd))}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

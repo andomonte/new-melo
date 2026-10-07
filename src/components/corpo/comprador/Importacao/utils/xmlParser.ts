@@ -56,6 +56,26 @@ function formatDate(raw: string): string {
   return `${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}`;
 }
 
+/**
+ * Via de transporte → tpViaTransp (NT 2013.005): 1 Marítima, 2 Fluvial, 3 Lacustre,
+ * 4 Aérea, 5 Postal, 6 Ferroviária, 7 Rodoviária, 8 Conduto, 9 Meios próprios, 10 Ficta.
+ * O código do Siscomex já segue essa tabela; se não der p/ alinhar, retorna undefined
+ * (usuário escolhe na tela). Navio→1, Avião→4 por nome, como pediu a regra.
+ */
+function mapViaTransporte(codigo: string, nome: string): number | undefined {
+  const c = parseInt(codigo || '0', 10);
+  if (c >= 1 && c <= 10) return c;
+  const n = (nome || '').toUpperCase();
+  if (/MAR[IÍ]T|NAVIO/.test(n)) return 1;
+  if (/FLUV/.test(n)) return 2;
+  if (/LACUS/.test(n)) return 3;
+  if (/A[EÉ]RE|AVI[AÃ]O/.test(n)) return 4;
+  if (/POST/.test(n)) return 5;
+  if (/FERRO/.test(n)) return 6;
+  if (/RODO/.test(n)) return 7;
+  return undefined;
+}
+
 function extractFromInfoCompl(info: string): {
   navio?: string;
   dataEntradaBrasil?: string;
@@ -86,14 +106,49 @@ function extractFromInfoCompl(info: string): {
     inscricaoSuframa = suframaMatch[1].trim();
   }
 
+  // Mapa de cotações (moeda -> BRL) impressas no txInfoCompl:
+  //   "TAXA DOLAR EUA R$ 5,2204" / "TAXA EURO R$ 5,9546" / "TAXA CNY R$ 0,7527"
+  const taxasMoeda: Record<string, number> = {};
+  const usd = info.match(/TAXA\s+D[OÓ]LAR(?:\s+EUA)?\s+R\$\s*([\d.,]+)/i);
+  if (usd) taxasMoeda.USD = brToNumber(usd[1]);
+  const eur = info.match(/TAXA\s+EURO\s+R\$\s*([\d.,]+)/i);
+  if (eur) taxasMoeda.EUR = brToNumber(eur[1]);
+  const cny = info.match(/TAXA\s+(?:CNY|YUAN|IUAN|RENMINBI)\s+R\$\s*([\d.,]+)/i);
+  if (cny) taxasMoeda.CNY = brToNumber(cny[1]);
+  const jpy = info.match(/TAXA\s+(?:JPY|IENE)\s+R\$\s*([\d.,]+)/i);
+  if (jpy) taxasMoeda.JPY = brToNumber(jpy[1]);
+  const gbp = info.match(/TAXA\s+(?:GBP|LIBRA)\s+R\$\s*([\d.,]+)/i);
+  if (gbp) taxasMoeda.GBP = brToNumber(gbp[1]);
+
+  const taxaUsd = taxasMoeda.USD || 0; // dólar -> BRL (bridge para converter tudo em USD)
+
   // CONTRATO CAMBIO NO. 000529545244 - US$ 17.328,50
-  const contratoRegex = /CONTRATO CAMBIO NO\.\s*(\d+)\s*-\s*US\$\s*([\d.,]+)/gi;
+  // Também captura moedas estrangeiras: "- EUR 6.387,62", "- CNY 122.273,81"
+  const contratoRegex = /CONTRATO CAMBIO NO\.\s*(\d+)\s*-\s*(US\$|R\$|[A-Z]{3})\s*([\d.,]+)/gi;
   let match;
   while ((match = contratoRegex.exec(info)) !== null) {
-    const valorStr = match[2].replace(/\./g, '').replace(',', '.');
+    const token = match[2].toUpperCase();
+    const moeda = token === 'US$' ? 'USD' : token === 'R$' ? 'BRL' : token;
+    const valor = brToNumber(match[3]);
+    const taxaMoeda = taxasMoeda[moeda]; // moeda do contrato -> BRL
+    const vlReais = taxaMoeda ? valor * taxaMoeda : undefined;
+    // Valor em dólar: BRL / dólar. Para contrato já em USD, é o próprio valor.
+    let vlUsd: number | undefined;
+    if (moeda === 'USD') vlUsd = valor;
+    else if (vlReais !== undefined && taxaUsd > 0) vlUsd = vlReais / taxaUsd;
+
     contratos.push({
       numero: match[1],
-      valorUsd: parseFloat(valorStr),
+      valorUsd: valor,
+      moeda,
+      taxaMoeda,
+      vlReais,
+      taxaUsd: taxaUsd || undefined,
+      vlUsd,
+      // Taxas vieram do próprio XML (ficam como XML até serem confirmadas no
+      // Contas a Pagar pelo nº do contrato, ou trocadas por PTAX/manual).
+      origemTaxa: taxaUsd ? 'XML' : undefined,
+      origemCambio: taxaMoeda ? 'XML' : undefined,
     });
   }
 
@@ -222,6 +277,18 @@ function parseSiscomexDi(di: Element): DieXmlParsed {
     extra.taxaDolar ||
     (vaDolares > 0 ? Math.round((vaReais / vaDolares) * 10000) / 10000 : 0);
 
+  // Nota de nacionalização: peso bruto, data de desembaraço, via de transporte, espécie
+  const pesoBruto = toPeso(childText(di, 'cargaPesoBruto'));
+  const dataDesembaraco = formatDate(childText(di, 'dataDesembaraco'));
+  const viaTransporte = mapViaTransporte(
+    childText(di, 'viaTransporteCodigo'),
+    childText(di, 'viaTransporteNome'),
+  );
+  const embalagemEl = di.getElementsByTagName('embalagem')[0];
+  const especie = embalagemEl
+    ? (embalagemEl.getElementsByTagName('nomeEmbalagem')[0]?.textContent?.trim() || '')
+    : '';
+
   return {
     tipoDIe: (childText(di, 'tipoDeclaracaoNome') || childText(di, 'tipoDeclaracaoCodigo')).slice(0, 60),
     nrDocumento: childText(di, 'numeroDI'),
@@ -240,6 +307,10 @@ function parseSiscomexDi(di: Element): DieXmlParsed {
     cdPaisProcedencia: childText(di, 'cargaPaisProcedenciaCodigo'),
     qtdeAdicoes: parseInt(childText(di, 'totalAdicoes') || String(adicoes.length), 10),
     txInfoCompl: info,
+    pesoBruto,
+    dataDesembaraco,
+    viaTransporte,
+    especie,
     navio: base.navio,
     dataEntradaBrasil: base.dataEntradaBrasil,
     inscricaoSuframa: base.inscricaoSuframa,
@@ -343,6 +414,14 @@ export function parseDieXml(xmlString: string): DieXmlParsed {
     cdPaisProcedencia: getTagText(infDIe, 'cdPaisProcedencia'),
     qtdeAdicoes: parseInt(getTagText(infDIe, 'qtdeAdicoes') || '0', 10),
     txInfoCompl,
+    // Nota de nacionalização (best-effort no layout DIe SEFAZ-AM; campos editáveis na tela)
+    pesoBruto: toPeso(getTagText(infDIe, 'cargaPesoBruto') || getTagText(infDIe, 'pesoBruto')),
+    dataDesembaraco: formatDate(getTagText(infDIe, 'dtDesembaraco') || getTagText(infDIe, 'dataDesembaraco')),
+    viaTransporte: mapViaTransporte(
+      getTagText(infDIe, 'cdViaTransporte') || getTagText(infDIe, 'viaTransporteCodigo'),
+      getTagText(infDIe, 'viaTransporte') || getTagText(infDIe, 'viaTransporteNome'),
+    ),
+    especie: getTagText(infDIe, 'nomeEmbalagem') || getTagText(infDIe, 'especie') || '',
     navio: infoExtraida.navio,
     dataEntradaBrasil: infoExtraida.dataEntradaBrasil,
     inscricaoSuframa: infoExtraida.inscricaoSuframa,
@@ -376,5 +455,10 @@ export function xmlToCabecalho(parsed: DieXmlParsed): Record<string, any> {
     navio: parsed.navio,
     data_entrada_brasil: parsed.dataEntradaBrasil,
     inscricao_suframa: parsed.inscricaoSuframa,
+    // Nota de nacionalização (do XML da DI)
+    peso_bruto: parsed.pesoBruto,
+    data_desembaraco: parsed.dataDesembaraco || undefined,
+    via_transporte: parsed.viaTransporte,
+    especie: parsed.especie || undefined,
   };
 }
