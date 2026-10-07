@@ -38,6 +38,18 @@ export default async function handle(
     if (timezone) { sets.push(`timezone = $${i++}`); params.push(timezone); }
     if (temCodigo) { sets.push(`codigo_acesso = $${i++}`); params.push(codigoAcesso); }
 
+    // Cidade / UF da filial. Enviados → atualiza (vazio vira NULL). UF normalizada p/ 2 letras.
+    if (Object.prototype.hasOwnProperty.call(req.body, 'cidade')) {
+      const cidade = String((req.body as any).cidade ?? '').trim() || null;
+      sets.push(`cidade = $${i++}`);
+      params.push(cidade);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'uf')) {
+      const uf = String((req.body as any).uf ?? '').trim().toUpperCase().slice(0, 2) || null;
+      sets.push(`uf = $${i++}`);
+      params.push(uf);
+    }
+
     // schema_db (search_path da filial). Enviado → atualiza (vazio vira NULL = usa central).
     if (Object.prototype.hasOwnProperty.call(req.body, 'schema_db')) {
       const schemaDb = String((req.body as any).schema_db ?? '').trim() || null;
@@ -57,7 +69,7 @@ export default async function handle(
 
     params.push(codigo_filial);
     const updateQuery = `UPDATE tb_filial SET ${sets.join(', ')} WHERE codigo_filial = $${i}
-      RETURNING codigo_filial, nome_filial, timezone, codigo_acesso, schema_db, (db_conn_enc IS NOT NULL) AS tem_conn`;
+      RETURNING codigo_filial, nome_filial, timezone, codigo_acesso, cidade, uf, schema_db, (db_conn_enc IS NOT NULL) AS tem_conn`;
 
     const result = await client.query(updateQuery, params);
 

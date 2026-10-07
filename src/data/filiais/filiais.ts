@@ -8,6 +8,10 @@ export interface Filial {
   timezone?: string;
   /** Código de acesso da filial (segredo do setor) p/ as telas soltas. */
   codigo_acesso?: string | null;
+  /** Cidade da filial (ex.: MANAUS). */
+  cidade?: string | null;
+  /** UF da filial (2 letras, ex.: AM). */
+  uf?: string | null;
   /** search_path das consultas desta filial (ex.: db_rondonia; prod: public). */
   schema_db?: string | null;
   /** String de conexão da filial — SÓ no envio do form (write-only); guardada criptografada. */

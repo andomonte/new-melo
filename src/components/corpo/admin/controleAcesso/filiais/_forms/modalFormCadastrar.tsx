@@ -75,6 +75,31 @@ const FormFilialContainer: React.FC<FormFilialContainerProps> = ({
                 error={error?.nome_filial}
                 required
               />
+              <div className="mt-4 flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cidade</label>
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={(filial as any).cidade || ''}
+                    placeholder="ex.: MANAUS"
+                    onChange={(e) => handleFilialChange({ ...filial, cidade: e.target.value.toUpperCase() } as any)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 uppercase"
+                  />
+                </div>
+                <div className="w-24">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">UF</label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    autoComplete="off"
+                    value={(filial as any).uf || ''}
+                    placeholder="AM"
+                    onChange={(e) => handleFilialChange({ ...filial, uf: e.target.value.toUpperCase().slice(0, 2) } as any)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-800 text-gray-900 dark:text-gray-100 uppercase text-center"
+                  />
+                </div>
+              </div>
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone</label>
                 <select
