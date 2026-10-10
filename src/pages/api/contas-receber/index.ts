@@ -141,19 +141,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       paramIndex++;
     }
 
-    // Busca geral (título, cliente por nome ou código, documento)
+    // Busca geral (documento, nota, nome ou código do cliente).
+    // Fiel ao que o campo promete: NÃO casa no cod_receb (código interno do
+    // título, que o operador não digita) e, quando o termo é só número, NÃO casa
+    // no nome — senão "000178" pegava cod_receb 000178947 e o CPF embutido no
+    // nome ("ALEX ... 01000178277"). Termo numérico → documento (contém) OU
+    // código do cliente (exato, ignorando zeros à esquerda). Com letras →
+    // documento OU nome.
     if (search) {
-      whereClause += ` AND (
-        CAST(r.cod_receb AS TEXT) LIKE $${paramIndex}
-        OR UPPER(c.nome) LIKE UPPER($${paramIndex + 1})
-        OR r.nro_doc LIKE $${paramIndex + 2}
-        OR CAST(r.codcli AS TEXT) LIKE $${paramIndex + 3}
-      )`;
-      params.push(`%${search}%`);
-      params.push(`%${search}%`);
-      params.push(`%${search}%`);
-      params.push(`%${search}%`);
-      paramIndex += 4;
+      const termoBusca = String(search).trim();
+      if (/^\d+$/.test(termoBusca)) {
+        whereClause += ` AND (
+          r.nro_doc LIKE $${paramIndex}
+          OR LTRIM(CAST(r.codcli AS TEXT), '0') = LTRIM($${paramIndex + 1}, '0')
+        )`;
+        params.push(`%${termoBusca}%`);
+        params.push(termoBusca);
+        paramIndex += 2;
+      } else {
+        whereClause += ` AND (
+          r.nro_doc LIKE $${paramIndex}
+          OR UPPER(c.nome) LIKE UPPER($${paramIndex + 1})
+        )`;
+        params.push(`%${termoBusca}%`);
+        params.push(`%${termoBusca}%`);
+        paramIndex += 2;
+      }
     }
 
     // ---- Filtros avançados por coluna (server-side, com operadores) ----
