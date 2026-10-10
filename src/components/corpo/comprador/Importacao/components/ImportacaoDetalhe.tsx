@@ -75,6 +75,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
 
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
   const [gerandoDanfe, setGerandoDanfe] = React.useState(false);
+  const [emitindo, setEmitindo] = React.useState(false);
 
   const handleGerarPreviewDanfe = async () => {
     if (!importacaoId) return;
@@ -121,15 +122,61 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     });
   };
 
+  // Emissão REAL pela via nacional: gera a fatura (aparece na Consulta de Faturas),
+  // emite pelo faturamento padrão (desvio importacao_id → XML de importação) e, no
+  // sucesso, oferece gerar a entrada no estoque.
+  const emitirNacionalizacao = async () => {
+    if (!importacaoId) return;
+    try {
+      setEmitindo(true);
+      // 1) gera/reaproveita a fatura da DI
+      const rf = await fetch(`/api/importacao/${importacaoId}/gerar-fatura-nacionalizacao`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      });
+      const jf = await rf.json().catch(() => ({}));
+      if (!rf.ok || !jf.success) { window.alert(jf.message || 'Erro ao gerar a fatura de nacionalização'); return; }
+
+      // 2) emite pelo faturamento (assina + transmite SEFAZ)
+      const re = await fetch(`/api/faturamento/emitir-faturado`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codfat: jf.codfat }),
+      });
+      const je = await re.json().catch(() => ({}));
+      if (!re.ok || je.sucesso === false) {
+        window.alert(
+          `Fatura ${jf.codfat} criada, mas a emissão não foi autorizada:\n` +
+          `${je.detalhe || je.erro || je.message || 'erro desconhecido'}\n\n` +
+          `Você pode reemitir pela tela de Faturamento (Consulta de Faturas).`,
+        );
+        return;
+      }
+
+      // 3) autorizada → oferece gerar a entrada
+      const chave = je.chaveAcesso || je.chave || '';
+      pedirConfirmacao(() => { window.location.href = '/compras/importacao/gerar-entrada'; }, {
+        title: 'Nota de Nacionalização autorizada',
+        message:
+          `Fatura ${jf.codfat} emitida com sucesso.` + (chave ? `\nChave: ${chave}` : '') +
+          `\n\nDeseja gerar a entrada no estoque agora?`,
+        type: 'info',
+        confirmText: 'Gerar Entrada',
+        cancelText: 'Agora não',
+      });
+    } catch (e: any) {
+      window.alert(e?.message || 'Erro ao emitir a nota de nacionalização');
+    } finally {
+      setEmitindo(false);
+    }
+  };
+
   const handleEmitirNota = () => {
-    pedirConfirmacao(() => void previewNacionalizacao('POR_DI'), {
+    pedirConfirmacao(() => void emitirNacionalizacao(), {
       title: 'Emitir Nota de Nacionalização',
       message:
-        'Etapas: (1) calcular custos (valor NF por item); (2) montar o XML (tpNF=0, destinatário exterior, ' +
-        'CFOP 3.102, grupo DI/adição/II, ICMS60, IBS/CBS) particionado por grupo de pedidos. ' +
-        'Nesta fase é HOMOLOGAÇÃO — monta e exibe o XML, NÃO transmite ainda ao SEFAZ. Deseja continuar?',
-      type: 'info',
-      confirmText: 'Montar XML (homologação)',
+        'Vai gerar a fatura (aparece na Consulta de Faturas), montar o XML de importação ' +
+        '(CFOP 3.102, destinatário exterior, DI/adição/II, ICMS60, IBS/CBS), assinar e TRANSMITIR ' +
+        'à SEFAZ (ambiente conforme a empresa). Em caso de rejeição, reemita pelo Faturamento. Continuar?',
+      type: 'warning',
+      confirmText: 'Emitir Nota',
       cancelText: 'Cancelar',
     });
   };
@@ -190,13 +237,13 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={gerandoNacionalizacao || !!bloqueioNacionalizacao}
+                  disabled={emitindo || !!bloqueioNacionalizacao}
                   onClick={handleEmitirNota}
-                  title={bloqueioNacionalizacao || 'Monta o XML da NF-e de nacionalização (homologação) — transmissão SEFAZ no próximo passo'}
+                  title={bloqueioNacionalizacao || 'Gera a fatura e transmite a NF-e de nacionalização à SEFAZ'}
                   className="flex items-center gap-1"
                 >
-                  {gerandoNacionalizacao ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  {gerandoNacionalizacao ? 'Gerando...' : 'Emitir Nota'}
+                  {emitindo ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {emitindo ? 'Emitindo...' : 'Emitir Nota'}
                 </Button>
                 <Button
                   size="sm"

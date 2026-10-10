@@ -57,21 +57,17 @@ export default async function handler(
     }
 
     // Filtro "só com nota de nacionalização emitida" (tela Gerar Entrada).
-    // Guardado por to_regclass: a tabela dbent_importacao_nfe é o modelo do P4
-    // (emissão) e pode ainda não existir no schema — nesse caso o filtro não
-    // casa nenhuma DI. O modo dev `todas=1` ignora o filtro para permitir testar.
+    // A nota é emitida pela VIA NACIONAL (P4): vira uma dbfatura (importacao_id) e a
+    // NF-e autorizada fica em dbfat_nfe (status '100'). O modo dev `todas=1` ignora
+    // o filtro para permitir testar a entrada antes de haver nota emitida.
     if (comNota && !todas) {
-      const existe = await pool.query(
-        `SELECT to_regclass('dbent_importacao_nfe') IS NOT NULL AS existe`,
+      conditions.push(
+        `EXISTS (SELECT 1 FROM dbfatura f
+                   JOIN dbfat_nfe nf ON nf.codfat = f.codfat
+                  WHERE f.importacao_id = i.id
+                    AND COALESCE(f.cancel,'N') <> 'S'
+                    AND nf.status = '100')`,
       );
-      if (existe.rows[0]?.existe) {
-        conditions.push(
-          `EXISTS (SELECT 1 FROM dbent_importacao_nfe n WHERE n.id_importacao = i.id)`,
-        );
-      } else {
-        // Tabela do P4 ainda não existe → nenhuma DI tem nota emitida.
-        conditions.push('1 = 0');
-      }
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

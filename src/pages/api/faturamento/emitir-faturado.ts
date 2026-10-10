@@ -3,6 +3,11 @@ import axios from 'axios';
 import https from 'https';
 import { parseStringPromise } from 'xml2js';
 import { gerarXMLNFe } from '@/components/services/sefazNfe/gerarXml';
+import {
+  gerarNotasNacionalizacao,
+  type DadosNacionalizacao,
+} from '@/components/services/sefazNfe/gerarXmlImportacao';
+import { construirNotasNacionalizacao } from '@/lib/compras/construirNotasNacionalizacao';
 import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assinarXml';
 import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
 import { adicionarQRCodeNFCe } from '@/utils/adicionarQRCodeNFCe';
@@ -429,12 +434,39 @@ export default async function handler(
         console.warn('⚠️ IE por série (faturado) não pôde ser ajustada (segue):', eIE);
       }
 
-      const dadosNormalizados = await normalizarPayloadNFe(dados);
-      const xmlBruto = gerarXMLNFe({
-        ...dadosNormalizados,
-        ambiente: ambienteEmpresa,
-        naturezaOperacao,
-      });
+      // DESVIO nacionalização: fatura ligada a uma DI (importacao_id) monta o XML
+      // pelo builder de IMPORTAÇÃO (gabarito: DI/adição/II, dest. EXTERIOR, CFOP 3102),
+      // não o nacional — vale tanto p/ 1ª emissão quanto p/ reemissão pelo faturamento.
+      let xmlBruto: string;
+      if (dbfatura.importacao_id) {
+        console.log(`🌎 [emitir-faturado] Nota de nacionalização (importacao_id=${dbfatura.importacao_id}) → XML de importação`);
+        const rc = await construirNotasNacionalizacao(client, Number(dbfatura.importacao_id));
+        if (!rc.ok) throw new Error(rc.message);
+        const notaNac = rc.data.notas[0];
+        if (!notaNac) throw new Error('Sem itens para a nota de nacionalização.');
+        const dadosNac: DadosNacionalizacao = {
+          modo: 'POR_DI',
+          ambiente: Number(ambienteEmpresa) === 1 ? 1 : 2,
+          serie: String(dbfatura.serie || '1'),
+          naturezaOperacao: 'COMPRA PARA COMERCIALIZACAO',
+          cfopPadrao: '3102',
+          emitente: rc.data.emitente,
+          respTec: { cnpj: rc.data.emitente.cnpj },
+          di: rc.data.diHeader,
+          destExterior: notaNac.dest,
+          infCpl: notaNac.infCpl,
+          itens: notaNac.itensNfe,
+        };
+        const geradas = gerarNotasNacionalizacao(dadosNac, String(dbfatura.nroform));
+        xmlBruto = geradas[0].xml;
+      } else {
+        const dadosNormalizados = await normalizarPayloadNFe(dados);
+        xmlBruto = gerarXMLNFe({
+          ...dadosNormalizados,
+          ambiente: ambienteEmpresa,
+          naturezaOperacao,
+        });
+      }
 
       xmlAssinado = await assinarXMLComCertificados(
         xmlBruto,

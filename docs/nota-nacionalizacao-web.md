@@ -113,7 +113,7 @@ Arquivos: [`gerarXmlImportacao.ts`](../src/components/services/sefazNfe/gerarXml
 
 No **detalhe da DI** (`ImportacaoDetalhe`):
 - **[Gerar Preview]**: construirNotasNacionalizacao → DANFE em PDF (puppeteer) **"SEM VALOR FISCAL"**. Não numera/transmite/grava. Endpoint `preview-danfe`. ✅ implementado.
-- **[Emitir Nota]** (1 nota por DI): valida → reserva numeração (série do armazém) → monta XML §1 → assina (A1) → **transmite SEFAZ (homologação → produção)** → grava nota + XML/protocolo. Ao final, **pergunta "deseja gerar a entrada agora?"** (opcional; leva pra tela Gerar Entrada). ⏳ P4.
+- **[Emitir Nota]** (1 nota por DI) ✅ implementado **pela VIA NACIONAL** (decisão travada — fiel ao Delphi): o botão chama `gerar-fatura-nacionalizacao` (cria `dbvenda`+`dbitvenda`+`dbfatura`+`dbprodfat`+`fatura_venda`, marcada com `dbfatura.importacao_id`, série 1, CFOP 3102, dest=exportador) → depois `faturamento/emitir-faturado` (assina A1 + transmite SEFAZ + grava `dbfat_nfe`). O `emitir-faturado` tem **desvio**: quando `importacao_id` está setado, monta o XML pelo `gerarXmlImportacao` (não o nacional) — vale p/ 1ª emissão e **reemissão pelo Faturamento**. A nota aparece na **Consulta de Faturas** como NF-e normal. No sucesso, **pergunta "deseja gerar a entrada agora?"** → tela Gerar Entrada. Transmissão real validada só no deploy **melo** (cert MELO não decripta no localhost).
 
 **Gerar Entrada = opção no MENU** (tela separada, **não** aba da DI, **não** automática): ✅ implementado.
 - Rota `/compras/importacao/gerar-entrada` (menu Compras) · tela registrada na migration `071_tela_gerar_entrada_importacao.sql` (espelha os grants de quem vê "Importação").
@@ -139,7 +139,7 @@ Observações: **nota = 1 por DI**; todo item com ordem; Entrada e Confirmar Pre
 - **P1 — Builder no gabarito:** reescrever `gerarXmlImportacao.ts` para os campos §1 100% determinísticos (ide/dest/prod/DI/total/pag/infRespTec). *(em andamento)*
 - **P2 — Wiring do preview:** `preview-nacionalizacao.ts` alimenta vUnCom=nf_unit, cEAN/xProd/CEST do dbprod, impostos (ICMS60/IPI/PIS/COFINS/IBSCBS) da tributação do produto, vOutro rateado, ordem por referência, partida por grupo de pedidos. Validar byte-a-byte contra os 2 XMLs reais.
 - **P3 — Prévia (DANFE):** render PDF "SEM VALOR FISCAL".
-- **P4 — Emitir (homologação):** numeração + assinatura + transmissão + gravação; depois produção.
+- **P4 — Emitir (homologação):** ✅ implementado pela VIA NACIONAL (migration 072 `dbfatura.importacao_id`; `src/lib/importacao/gerarFaturaNacionalizacao.ts`; endpoint `importacao/[id]/gerar-fatura-nacionalizacao`; desvio em `faturamento/emitir-faturado`; UI no botão "Emitir Nota"). A nota vira `dbfatura` normal; reemissão pelo Faturamento. Falta: validar a transmissão autorizada no deploy melo (cert).
 - **P5 — Tela Gerar Entrada:** ✅ implementado (menu `/compras/importacao/gerar-entrada`): lista DIs com nota emitida → Calcular Custos → Gerar Entrada (estoque) → Confirmar Preço (média/venda). Reusa `calcular-custos` + `gerar-entradas` + `entradas/gerar-por-chave` + `entradas/[id]/confirmar-preco` + `ConfirmarPrecoModal`. Filtro "com nota" depende do P4 (hoje toggle dev "mostrar todas").
 
 > **Checkpoint:** implementar P1–P2 e **validar contra os XMLs reais** antes de transmitir (P4).
