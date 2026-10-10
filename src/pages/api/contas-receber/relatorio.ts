@@ -30,9 +30,10 @@ function groupByCliente(rows: any[]): Map<string, any[]> {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(row);
   }
-  // Sort keys ascending
-  const sorted = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  return new Map(sorted);
+  // As linhas já chegam ordenadas por NOME do cliente (cliente_nome ASC no SQL),
+  // então preservamos a ordem de inserção dos grupos (= ordem alfabética do nome).
+  // Antes reordenava pela chave "cod nome", que ordenava pelo código.
+  return map;
 }
 
 // Agrupa por dia de vencimento — é o que o GeraRxReceberPeriodo do Delphi faz
@@ -258,6 +259,10 @@ function buildQuery(
   if (cfg.fonte === 'dbfreceb') {
     // Tipos que o Oracle considera juros (os mesmos do CAIXA.JUROS_RECEBIDO).
     const TIPOS_JUROS = `('18','20','21','22','23','25','26')`;
+    // Tarifas bancárias lançadas em dbfreceb (não é coluna — são tipos próprios):
+    //   06 TARIFA DINHEIRO · 08 TARIFA CARTAO · 15 TARIFA BANCARIA EM DEPOSITO · 44 TARIFA PIX.
+    // Antes a coluna TARIFA do Recebimento de Clientes ficava fixa em 0.
+    const TIPOS_TARIFA = `('06','08','15','44')`;
     // FORMA_PGTO / FTIPO do procedure; fora da lista cai na descrição da
     // dbforma_pagto (o "else f.descricao" de lá).
     const formaPgto = `CASE fr.tipo
@@ -313,7 +318,7 @@ function buildQuery(
         0 AS valor_aberto,
         fr.dt_emissao,
         r.dt_venc,
-        0 AS tarifa,
+        SUM(CASE WHEN fr.tipo IN ${TIPOS_TARIFA} THEN COALESCE(fr.valor, 0) ELSE 0 END) AS tarifa,
         fr.dt_pgto,
         ${formaPgto} AS forma_pgto,
         ${tipoPgto} AS tipo_pgto
@@ -346,12 +351,19 @@ function buildQuery(
     whereClause += ` AND r.cancel != 'S'`;
   }
 
-  // No Oracle o cursor sai ordenado por nome do cliente e o Delphi quebra o dia
-  // quando a data muda entre linhas vizinhas — o que só funciona se vier por
-  // data. Aqui ordenamos por vencimento, que é o que a tela dele quer mostrar.
-  const orderBy = cfg.layout === 'por_dia'
-    ? 'dt_venc ASC, cliente ASC, nro_doc ASC'
-    : 'cliente ASC, dt_venc ASC';
+  // Layout efetivo (agrupamento), conforme pedido:
+  //  - geral: agrupa por cliente ("Gerar Lista → agrupar cliente e ordenar");
+  //  - em_atraso: agrupa por cliente quando um VENDEDOR foi selecionado
+  //    (escopo Vendedor); sem vendedor segue lista.
+  let layoutEfetivo: 'geral' | 'por_cliente' | 'por_dia' = cfg.layout;
+  if (tipo === 'geral') layoutEfetivo = 'por_cliente';
+  if (tipo === 'em_atraso' && extra.codvend) layoutEfetivo = 'por_cliente';
+
+  // Ordenação alfabética pelo NOME do cliente, já sem o código/CNPJ do prefixo
+  // (cliente_ord). Antes ordenava pela string "cod nome" (pelo código).
+  const orderBy = layoutEfetivo === 'por_dia'
+    ? 'dt_venc ASC, cliente_ord ASC, nro_doc ASC'
+    : 'cliente_ord ASC, dt_venc ASC';
 
   const sql = `
     WITH base AS (
@@ -367,6 +379,10 @@ function buildQuery(
         -- "Atraso" do grid: no Oracle é o campo datraso, simples (data-base − vencimento).
         GREATEST(0, CAST(${diaJuros} AS DATE) - CAST(r.dt_venc AS DATE)) AS dias,
         COALESCE(c.codcli::text, '') || ' ' || COALESCE(c.nome, '') AS cliente,
+        -- Chave de ordenação alfabética: o dbclien.nome vem com código/CNPJ na
+        -- frente (ex.: "32.154.525 RUI OLIVEIRA..."), que jogava a ordem pelo
+        -- número. Removemos o prefixo numérico (dígitos/./-/ /) p/ ordenar pela letra.
+        regexp_replace(COALESCE(c.nome, ''), '^[0-9./ -]+', '') AS cliente_ord,
         r.cod_conta,
         COALESCE(r.valor_pgto, 0) AS valor_pgto,
         -- Juros: porte de CAIXA.CALULAR_JUROS(doc, taxa, diasAtraso) do Oracle.
@@ -463,7 +479,7 @@ function buildQuery(
     WHERE 1=1 ${whereClause}
   `;
 
-  return { sql, params, countSql, layout: cfg.layout, titulo: cfg.titulo };
+  return { sql, params, countSql, layout: layoutEfetivo, titulo: cfg.titulo };
 }
 
 // ─── PDF generator ──────────────────────────────────────────────────────────
