@@ -24,9 +24,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const importacaoId = parseInt(String(req.query.id), 10);
   if (!importacaoId) return res.status(400).json({ message: 'ID de importação inválido' });
 
-  const grupos = Array.isArray(req.body?.grupos)
-    ? (req.body.grupos as Array<Array<number | string>>)
-    : undefined;
   const numeroNFInicial = String(req.body?.numeroNFInicial || '1');
 
   const cookies = parseCookies({ req });
@@ -36,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     client = await pool.connect();
-    const r = await construirNotasNacionalizacao(client, importacaoId, grupos);
+    const r = await construirNotasNacionalizacao(client, importacaoId);
     if (!r.ok) return res.status(r.status).json({ message: r.message });
 
     const { emitente, diHeader, forns, principal, regra, codPrincipal, qtdAdicoes, notas, di } = r.data;

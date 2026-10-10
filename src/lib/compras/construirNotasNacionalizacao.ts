@@ -26,7 +26,6 @@ import {
   type AdicaoHier,
   type RegraPrincipal,
 } from '@/lib/compras/importacaoHierarquia';
-import { particionarNotas, type ItemParticao } from '@/lib/compras/particionarNotasImportacao';
 
 type DestExterior = NonNullable<DadosNacionalizacao['destExterior']>;
 
@@ -62,7 +61,6 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export async function construirNotasNacionalizacao(
   client: PoolClient,
   importacaoId: number,
-  grupos?: Array<Array<number | string>>,
 ): Promise<ResultadoConstrucao> {
   // 1) DI
   const diRes = await client.query(`SELECT * FROM dbent_importacao WHERE id = $1`, [importacaoId]);
@@ -217,25 +215,15 @@ export async function construirNotasNacionalizacao(
     valor_afrmm: Number(di.valor_afrmm) || 0,
   };
 
-  // 6) Partição por grupo de pedidos (id_orc)
+  // 6) NOTA ÚNICA por DI (decisão travada). Destinatário = exportador PRINCIPAL;
+  //    o cExportador real de cada item vai no grupo DI do item. outros_valores
+  //    rateado FLAT por item.
   const outrosTotal = Number(di.outros_valores) || 0;
   const vUnitDe = (it: any) =>
     Number(it.nf_unit) ||
     (Number(it.invoice_unit)
       ? Number(it.invoice_unit) * (Number(di.taxa_dolar_di) || Number(di.taxa_dolar) || 1)
       : Number(it.custo_unit_real) || 0);
-
-  const partItens: ItemParticao[] = itensRes.rows.map((it: any) => {
-    const fornItem = fornecedorPorAdicao.get(Number(it.numero_adicao) || 0) || '';
-    const qtd = Number(it.qtd) || 0;
-    return {
-      id_orc: it.id_orc ?? null,
-      codExportador: codClientePorForn.get(fornItem) || '',
-      vProd: r2(vUnitDe(it) * qtd),
-      row: it,
-    };
-  });
-  const gruposNota = particionarNotas(partItens, grupos, outrosTotal);
 
   const fornResumo = forns
     .map((f) => {
@@ -286,26 +274,27 @@ export async function construirNotasNacionalizacao(
     };
   };
 
-  const notas: NotaConstruida[] = [];
-  for (const g of gruposNota) {
-    const dest = await destDoExportador(g.codExportador);
-    const rowsG = g.itens
-      .map((pi) => pi.row as any)
-      .sort((a, b) => String(a.ref ?? a.codprod ?? '').localeCompare(String(b.ref ?? b.codprod ?? ''), 'en'));
-    const itensNfe = rowsG.map((it) => montarItemNfe(it, g.vOutroItem));
-    const infCpl =
-      `PEDIDO: ${g.pedidos.join(',')} OBSERVACAO: REF. DI ${di.nro_di}` +
-      (fornResumo ? ` FORNECEDORES: ${fornResumo}` : '');
-    notas.push({
-      codExportador: g.codExportador,
-      pedidos: g.pedidos,
-      dest,
-      infCpl,
-      itensNfe,
-      vProd: g.vProd,
-      vOutro: g.vOutro,
-    });
-  }
+  const rowsOrdenados = [...itensRes.rows].sort((a: any, b: any) =>
+    String(a.ref ?? a.codprod ?? '').localeCompare(String(b.ref ?? b.codprod ?? ''), 'en'),
+  );
+  const nItens = rowsOrdenados.length;
+  const vOutroItem = nItens > 0 ? r2(outrosTotal / nItens) : 0;
+  const dest = await destDoExportador(codPrincipal || '');
+  const itensNfe = rowsOrdenados.map((it) => montarItemNfe(it, vOutroItem));
+  const pedidos = [
+    ...new Set(
+      itensRes.rows
+        .map((it: any) => Number(it.id_orc))
+        .filter((n: number) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const vProd = r2(itensNfe.reduce((s, it) => s + r2(it.vUnit * it.qtd), 0));
+  const infCpl =
+    `PEDIDO: ${pedidos.join(',')} OBSERVACAO: REF. DI ${di.nro_di}` +
+    (fornResumo ? ` FORNECEDORES: ${fornResumo}` : '');
+  const notas: NotaConstruida[] = [
+    { codExportador: codPrincipal || '', pedidos, dest, infCpl, itensNfe, vProd, vOutro: r2(outrosTotal) },
+  ];
 
   return {
     ok: true,
