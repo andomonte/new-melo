@@ -10,7 +10,7 @@ Esses XMLs **substituem** as inferências anteriores (feitas do fonte Delphi). O
 
 ## 0. Fatos provados pelo gabarito
 
-- **Uma DI → N notas.** As duas notas são da **mesma DI** (`nDI=2608858944` em todos os itens, `REF. DI 26/0885894-4` nas duas). A partida é por **grupo de pedidos / NRO DOC**: nota 1 = pedidos 83353/83354/83363 (NRO DOC 001713062); nota 2 = 83356/83359/83360 (NRO DOC 001713073). **Mesmo exportador** (32924) nas duas.
+- **No Delphi, uma DI pode virar N notas** (partidas por grupo de pedidos/NRO DOC — ex.: a DI 2608858944 saiu em 2 notas). **Decisão do WEB (travada): 1 nota por DI** — destinatário = exportador **principal**; o `cExportador` real de cada item vai no grupo DI do item. Sem seletor de grupos.
 - **Destinatário = o exportador**, que é um **cliente do cadastro** (`dbclien`, tipo X). `cExportador` = `cFabricante` = **`codcli`** do exportador (NINGBO EBI = `32924`). Confirmado na tela de Clientes.
 - **1 exportador por nota.** Se um grupo tivesse itens de 2 exportadores, parte em 2 notas (destinatário é único).
 - **`vUnCom` = valor fiscal da NF (nf_unit)**, não o custo real.
@@ -111,11 +111,17 @@ Arquivos: [`gerarXmlImportacao.ts`](../src/components/services/sefazNfe/gerarXml
 
 ## 3. Fluxo de telas e botões (decidido)
 
-- Botão **"Nota de Nacionalização"** → **dois**:
-  - **[Prévia da Nota]**: salva DI → calcula custos (gera nf_unit) → monta XML no leiaute §1 → **renderiza DANFE em PDF** (pipeline puppeteer existente) marcado **"SEM VALOR FISCAL"**. Não numera, não transmite, não grava.
-  - **[Emitir Nota]** (por grupo de pedidos): valida pré-requisitos → reserva numeração (série do armazém) → monta XML definitivo → assina (A1 node-forge) → **transmite SEFAZ (homologação primeiro)** → autorizado: grava nota + XML/protocolo → dispara a **Entrada**.
-- **Confirmar Preço** NÃO é aqui — é na tela **Gerar Entrada** (próxima).
-- **Todo item tem ordem** — sem fallback "sem ordem".
+No **detalhe da DI** (`ImportacaoDetalhe`):
+- **[Gerar Preview]**: construirNotasNacionalizacao → DANFE em PDF (puppeteer) **"SEM VALOR FISCAL"**. Não numera/transmite/grava. Endpoint `preview-danfe`. ✅ implementado.
+- **[Emitir Nota]** (1 nota por DI): valida → reserva numeração (série do armazém) → monta XML §1 → assina (A1) → **transmite SEFAZ (homologação → produção)** → grava nota + XML/protocolo. Ao final, **pergunta "deseja gerar a entrada agora?"** (opcional; leva pra tela Gerar Entrada). ⏳ P4.
+
+**Gerar Entrada = opção no MENU** (tela separada, **não** aba da DI, **não** automática): ✅ implementado.
+- Rota `/compras/importacao/gerar-entrada` (menu Compras) · tela registrada na migration `071_tela_gerar_entrada_importacao.sql` (espelha os grants de quem vê "Importação").
+- **Lista as DIs com nota emitida** (`/api/importacao/list?com_nota=1`, guarda `to_regclass` em `dbent_importacao_nfe`) → abre uma. Toggle **"Mostrar todas (dev)"** (`todas=1`) enquanto o P4 (emissão) não grava notas.
+- Painel guiado (espelha o nacional): **Passo 1 Calcular Custos** (`/api/importacao/:id/calcular-custos`) → **Passo 2 Gerar Entrada** (`/api/importacao/:id/gerar-entradas` → staging `dbnfe_ent`; depois `/api/entradas/gerar-por-chave` por NFe → `dbent` + estoque) → **Passo 3 Confirmar Preço** (reusa `ConfirmarPrecoModal` → `/api/entradas/:codent/confirmar-preco`: média ponderada + reprecificação; **fecha** a entrada).
+- Componentes: `GerarEntradaImportacaoMain` / `GerarEntradaList` / `GerarEntradaDetalhe` (em `Importacao/components/`).
+
+Observações: **nota = 1 por DI**; todo item com ordem; Entrada e Confirmar Preço desacoplados da emissão.
 
 ---
 
@@ -134,6 +140,6 @@ Arquivos: [`gerarXmlImportacao.ts`](../src/components/services/sefazNfe/gerarXml
 - **P2 — Wiring do preview:** `preview-nacionalizacao.ts` alimenta vUnCom=nf_unit, cEAN/xProd/CEST do dbprod, impostos (ICMS60/IPI/PIS/COFINS/IBSCBS) da tributação do produto, vOutro rateado, ordem por referência, partida por grupo de pedidos. Validar byte-a-byte contra os 2 XMLs reais.
 - **P3 — Prévia (DANFE):** render PDF "SEM VALOR FISCAL".
 - **P4 — Emitir (homologação):** numeração + assinatura + transmissão + gravação; depois produção.
-- **P5 — Tela Gerar Entrada:** grupo de pedidos → entrada por grupo → Confirmar Preço (média).
+- **P5 — Tela Gerar Entrada:** ✅ implementado (menu `/compras/importacao/gerar-entrada`): lista DIs com nota emitida → Calcular Custos → Gerar Entrada (estoque) → Confirmar Preço (média/venda). Reusa `calcular-custos` + `gerar-entradas` + `entradas/gerar-por-chave` + `entradas/[id]/confirmar-preco` + `ConfirmarPrecoModal`. Filtro "com nota" depende do P4 (hoje toggle dev "mostrar todas").
 
 > **Checkpoint:** implementar P1–P2 e **validar contra os XMLs reais** antes de transmitir (P4).

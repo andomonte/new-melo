@@ -5,6 +5,11 @@
  * Query params:
  * - busca: busca por nro_di ou navio
  * - status: N | E | C
+ * - com_nota: '1' lista só DIs que já têm nota de nacionalização emitida
+ *             (tela "Gerar Entrada"). Guardado por to_regclass: se a tabela
+ *             dbent_importacao_nfe (modelo do P4) ainda não existir, nada casa.
+ * - todas:    '1' (modo dev) ignora o filtro com_nota — permite testar o fluxo
+ *             de entrada antes de o P4 (emissão) existir.
  * - page: número da página (default 1)
  * - limit: itens por página (default 25)
  */
@@ -26,6 +31,8 @@ export default async function handler(
 
   const busca = (req.query.busca as string) || '';
   const status = (req.query.status as string) || '';
+  const comNota = req.query.com_nota === '1';
+  const todas = req.query.todas === '1';
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 25));
   const offset = (page - 1) * limit;
@@ -38,22 +45,40 @@ export default async function handler(
     let paramIdx = 1;
 
     if (busca) {
-      conditions.push(`(nro_di ILIKE $${paramIdx} OR navio ILIKE $${paramIdx})`);
+      conditions.push(`(i.nro_di ILIKE $${paramIdx} OR i.navio ILIKE $${paramIdx})`);
       params.push(`%${busca}%`);
       paramIdx++;
     }
 
     if (status && ['N', 'E', 'C'].includes(status)) {
-      conditions.push(`status = $${paramIdx}`);
+      conditions.push(`i.status = $${paramIdx}`);
       params.push(status);
       paramIdx++;
+    }
+
+    // Filtro "só com nota de nacionalização emitida" (tela Gerar Entrada).
+    // Guardado por to_regclass: a tabela dbent_importacao_nfe é o modelo do P4
+    // (emissão) e pode ainda não existir no schema — nesse caso o filtro não
+    // casa nenhuma DI. O modo dev `todas=1` ignora o filtro para permitir testar.
+    if (comNota && !todas) {
+      const existe = await pool.query(
+        `SELECT to_regclass('dbent_importacao_nfe') IS NOT NULL AS existe`,
+      );
+      if (existe.rows[0]?.existe) {
+        conditions.push(
+          `EXISTS (SELECT 1 FROM dbent_importacao_nfe n WHERE n.id_importacao = i.id)`,
+        );
+      } else {
+        // Tabela do P4 ainda não existe → nenhuma DI tem nota emitida.
+        conditions.push('1 = 0');
+      }
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Count total
     const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM dbent_importacao ${where}`,
+      `SELECT COUNT(*) as total FROM dbent_importacao i ${where}`,
       params,
     );
     const total = parseInt(countResult.rows[0].total, 10);
@@ -61,14 +86,14 @@ export default async function handler(
     // Fetch rows
     const dataResult = await pool.query(
       `SELECT
-        id, nro_di, data_di, status, tipo_die, taxa_dolar,
-        total_mercadoria, frete, seguro, thc, total_cif,
-        pis_cofins, ii, ipi, siscomex, anuencia,
-        peso_liquido, qtd_adicoes, navio,
-        data_entrada_brasil, codusr, data_cad
-      FROM dbent_importacao
+        i.id, i.nro_di, i.data_di, i.status, i.tipo_die, i.taxa_dolar,
+        i.total_mercadoria, i.frete, i.seguro, i.thc, i.total_cif,
+        i.pis_cofins, i.ii, i.ipi, i.siscomex, i.anuencia,
+        i.peso_liquido, i.qtd_adicoes, i.navio,
+        i.data_entrada_brasil, i.codusr, i.data_cad
+      FROM dbent_importacao i
       ${where}
-      ORDER BY data_cad DESC
+      ORDER BY i.data_cad DESC
       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
       [...params, limit, offset],
     );

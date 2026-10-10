@@ -132,6 +132,11 @@ const EntradaXmlMain = lazy(() => import('@/components/corpo/comprador/EntradaXm
 const RecebimentoEntradaPage = lazy(() => import('@/components/corpo/recebimento-entrada'));
 const AlocacaoPage = lazy(() => import('@/components/corpo/alocacao'));
 const ImportacaoMain = lazy(() => import('@/components/corpo/comprador/Importacao'));
+const GerarEntradaImportacaoMain = lazy(() =>
+  import('@/components/corpo/comprador/Importacao/components/GerarEntradaImportacaoMain').then(
+    module => ({ default: module.GerarEntradaImportacaoMain })
+  )
+);
 const DevolucaoMain = lazy(() => import('@/components/corpo/comprador/Devolucao'));
 
 // Relatórios / Config / Acessos / Estoque
@@ -627,6 +632,12 @@ export const menus = [
             corpo: ImportacaoMain,
           },
           {
+            name: 'Gerar Entrada (Importação)',
+            icon: PackageCheck,
+            href: '/compras/importacao/gerar-entrada',
+            corpo: GerarEntradaImportacaoMain,
+          },
+          {
             name: 'Devolução',
             icon: RotateCcw,
             href: '/compras/devolucao',
@@ -828,6 +839,7 @@ function encontrarCorpoPorTela(
   menus: any[],
 ): React.ComponentType | typeof Carregamento {
   // Casos especiais (do segundo arquivo)
+  if (tela === '/compras/importacao/gerar-entrada') return GerarEntradaImportacaoMain;
   if (tela === '/compras/importacao') return ImportacaoMain;
   if (tela === '/compras/devolucao') return DevolucaoMain;
   if (tela === '/compras/ordens-compra') return ComprasTabManagerOrdens;
@@ -922,6 +934,7 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
         'Entrada por XML de NFe',
         'Entradas',
         'Importação',
+        'Gerar Entrada (Importação)',
         'Recebimento',
         'Alocação',
         'Devolução',
