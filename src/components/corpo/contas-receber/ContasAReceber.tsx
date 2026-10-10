@@ -38,6 +38,8 @@ import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/n
 import { nomeBancoPorInterno } from '@/lib/faturamento/bancoCobranca';
 import ModalRecebimentoTitulos from '@/components/corpo/contas-receber/ModalRecebimentoTitulos';
 import ModalBaixarJuros from '@/components/corpo/contas-receber/ModalBaixarJuros';
+import ModalBaixarJurosLote from '@/components/corpo/contas-receber/ModalBaixarJurosLote';
+import ModalCancelarAvulsoLote from '@/components/corpo/contas-receber/ModalCancelarAvulsoLote';
 import ModalComprovantes from '@/components/corpo/contas-receber/ModalComprovantes';
 import ModalConciliacao from '@/components/corpo/contas-receber/ModalConciliacao';
 import ModalConsultaAvancadaReceb from '@/components/corpo/contas-receber/ModalConsultaAvancadaReceb';
@@ -339,6 +341,14 @@ export default function ContasAReceber() {
   // Seleção múltipla para Dar Baixa em lote (mesmo cliente).
   const [selecionadosBaixa, setSelecionadosBaixa] = useState<ContaReceber[]>([]);
   const [modalRecebLoteAberto, setModalRecebLoteAberto] = useState(false);
+  // Ações em lote sobre os títulos selecionados (barra de seleção múltipla).
+  const [modalJurosLoteAberto, setModalJurosLoteAberto] = useState(false);
+  const [modalCancelAvulsoLoteAberto, setModalCancelAvulsoLoteAberto] = useState(false);
+  // Quantos dos selecionados são avulsos (sem fatura e sem grupo) — habilita o cancelar.
+  const avulsosSelecionados = selecionadosBaixa.filter(
+    (c) => !c.cod_fat && !c.grupo_pagamento_id,
+  ).length;
+
   // Baixar Juros (liberar taxa) por linha — 1 título.
   const [modalBaixarJurosAberto, setModalBaixarJurosAberto] = useState(false);
   const [contaBaixarJuros, setContaBaixarJuros] = useState<ContaReceber | null>(null);
@@ -596,32 +606,18 @@ export default function ContasAReceber() {
   const estaSelecionadoBaixa = (c: ContaReceber) =>
     selecionadosBaixa.some((x) => x.cod_receb === c.cod_receb);
 
-  // Após a 1ª seleção, bloqueia marcar títulos de OUTRO cliente (ou cartão operadora isolado).
-  const bloqueadoParaBaixa = (c: ContaReceber) => {
-    if (selecionadosBaixa.length === 0 || estaSelecionadoBaixa(c)) return false;
-    if (String(selecionadosBaixa[0].codcli) !== String(c.codcli)) return true;
-    if (String(c.forma_fat) === '6' || selecionadosBaixa.some((x) => String(x.forma_fat) === '6')) return true;
-    return false;
-  };
+  // Seleção LIVRE: qualquer título aberto pode ser marcado, inclusive de clientes
+  // diferentes (ex.: mesma empresa com 2 cadastros/códigos). Cada ação valida seu
+  // próprio escopo: "Dar Baixa" exige 1 cliente (regra do Caixa/Delphi); "Baixar
+  // juros" e "Cancelar avulso" em lote funcionam entre clientes.
+  const bloqueadoParaBaixa = (_c: ContaReceber) => false;
 
   const toggleSelecionadoBaixa = (conta: ContaReceber) => {
     if (!podeReceberTitulo(conta)) {
-      toast.error('Este título não pode ser recebido (já recebido ou cancelado).');
+      toast.error('Este título não pode ser selecionado (já recebido ou cancelado).');
       return;
     }
     const ja = estaSelecionadoBaixa(conta);
-    if (!ja && selecionadosBaixa.length > 0) {
-      // Regra Delphi/Caixa: todos os títulos devem ser do MESMO cliente.
-      if (String(selecionadosBaixa[0].codcli) !== String(conta.codcli)) {
-        toast.error('Só é possível receber títulos do MESMO cliente.');
-        return;
-      }
-      // Título "cartão a receber da operadora" (forma_fat=6) é recebido isoladamente.
-      if (String(conta.forma_fat) === '6' || selecionadosBaixa.some((x) => String(x.forma_fat) === '6')) {
-        toast.error('Título de cartão (a receber da operadora) deve ser recebido isoladamente.');
-        return;
-      }
-    }
     setSelecionadosBaixa((prev) =>
       ja ? prev.filter((x) => x.cod_receb !== conta.cod_receb) : [...prev, conta],
     );
@@ -631,6 +627,15 @@ export default function ContasAReceber() {
     (s, c) => s + Math.max(0, Number(c.valor_original || 0) - Number(c.valor_recebido || 0)),
     0,
   );
+
+  // "Dar Baixa" (recebimento) exige 1 cliente e cartão (forma_fat=6) isolado — regra
+  // do Caixa/Delphi. Com seleção mista, o botão de Dar Baixa fica desabilitado.
+  const clientesSelecionados = new Set(selecionadosBaixa.map((c) => String(c.codcli)));
+  const temCartaoSelecionado = selecionadosBaixa.some((c) => String(c.forma_fat) === '6');
+  const podeDarBaixaLote =
+    selecionadosBaixa.length > 0 &&
+    clientesSelecionados.size === 1 &&
+    !(temCartaoSelecionado && selecionadosBaixa.length > 1);
 
   // Preparar dados da tabela (seguindo estrutura do legado)
   const prepararDadosTabela = () => {
@@ -1194,9 +1199,12 @@ export default function ContasAReceber() {
       g.linhas.push(r);
       MONEY_KEYS_REL.forEach((k) => { g.sub[k] += Number(r[k] || 0); total[k] += Number(r[k] || 0); });
     }
-    const grupos = Array.from(mapa.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([, g]) => g);
+    // por_dia: ordena os grupos por data. por_cliente: o servidor já envia as
+    // linhas por NOME do cliente (cliente_nome ASC), então preservamos a ordem
+    // de inserção dos grupos (antes reordenava pela chave "cod nome" = código).
+    const grupos = porDia
+      ? Array.from(mapa.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => g)
+      : Array.from(mapa.values());
     return { grupos, total, qtd: rows.length };
   };
 
@@ -1888,14 +1896,48 @@ export default function ContasAReceber() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 px-4 py-2.5 flex-shrink-0">
             <div className="text-sm text-blue-900 dark:text-blue-100">
               <b>{selecionadosBaixa.length}</b> título(s) selecionado(s) ·{' '}
-              cliente <b>{selecionadosBaixa[0].codcli}{selecionadosBaixa[0].nome_cliente ? ` - ${selecionadosBaixa[0].nome_cliente}` : ''}</b> ·{' '}
+              {clientesSelecionados.size === 1 ? (
+                <>cliente <b>{selecionadosBaixa[0].codcli}{selecionadosBaixa[0].nome_cliente ? ` - ${selecionadosBaixa[0].nome_cliente}` : ''}</b></>
+              ) : (
+                <><b>{clientesSelecionados.size}</b> clientes</>
+              )}{' '}·{' '}
               a receber <b className="font-mono">{formatarBRL(totalSelecionadoBaixa)}</b>
             </div>
             <div className="flex items-center gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => setSelecionadosBaixa([])}>
                 Limpar
               </Button>
-              <Button type="button" size="sm" onClick={() => setModalRecebLoteAberto(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalJurosLoteAberto(true)}
+                title="Liberar/isentar juros (mesma taxa e motivo) para todos os selecionados"
+              >
+                Baixar juros em lote
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalCancelAvulsoLoteAberto(true)}
+                disabled={avulsosSelecionados === 0}
+                title={
+                  avulsosSelecionados === 0
+                    ? 'Nenhum avulso selecionado (só cancela título sem fatura/grupo)'
+                    : 'Cancelar os títulos avulsos selecionados'
+                }
+                className="border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+              >
+                Cancelar avulso em lote{avulsosSelecionados > 0 ? ` (${avulsosSelecionados})` : ''}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!podeDarBaixaLote}
+                title={!podeDarBaixaLote ? 'Dar Baixa exige títulos de um único cliente (cartão é recebido isoladamente)' : undefined}
+                onClick={() => setModalRecebLoteAberto(true)}
+              >
                 Dar Baixa
               </Button>
             </div>
@@ -3171,6 +3213,42 @@ export default function ContasAReceber() {
         onSuccess={() => {
           setModalBaixarJurosAberto(false);
           setContaBaixarJuros(null);
+          consultarContasReceber(paginaAtual, itensPorPagina, filtros);
+        }}
+      />
+
+      {/* Baixar Juros em LOTE (selecionados) */}
+      <ModalBaixarJurosLote
+        isOpen={modalJurosLoteAberto}
+        titulos={selecionadosBaixa.map((c) => ({
+          cod_receb: c.cod_receb,
+          nro_doc: c.nro_doc,
+          nome_cliente: c.nome_cliente,
+        }))}
+        username={user?.usuario || ''}
+        user={user as any}
+        onClose={() => setModalJurosLoteAberto(false)}
+        onSuccess={() => {
+          setModalJurosLoteAberto(false);
+          setSelecionadosBaixa([]);
+          consultarContasReceber(paginaAtual, itensPorPagina, filtros);
+        }}
+      />
+
+      {/* Cancelar Título Avulso em LOTE (selecionados) */}
+      <ModalCancelarAvulsoLote
+        isOpen={modalCancelAvulsoLoteAberto}
+        titulos={selecionadosBaixa.map((c) => ({
+          cod_receb: c.cod_receb,
+          nro_doc: c.nro_doc,
+          cod_fat: c.cod_fat,
+          grupo_pagamento_id: c.grupo_pagamento_id,
+        }))}
+        username={user?.usuario || user?.codusr || ''}
+        onClose={() => setModalCancelAvulsoLoteAberto(false)}
+        onSuccess={() => {
+          setModalCancelAvulsoLoteAberto(false);
+          setSelecionadosBaixa([]);
           consultarContasReceber(paginaAtual, itensPorPagina, filtros);
         }}
       />
