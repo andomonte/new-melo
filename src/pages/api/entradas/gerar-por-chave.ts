@@ -218,9 +218,12 @@ export default async function handler(
     // NFe como Associada ('C') — sem estado órfão.
     await client.query(`UPDATE dbnfe_ent SET exec = 'S' WHERE codnfe_ent = $1`, [nfeId]);
 
-    // 9. Atualizar quantidade atendida nos pedidos + auto-finalizar ordens
-    const isImp = nfe.natop === 'ENTRADA_IMPORTACAO';
-    if (associacoesParaValidar.length > 0 && !isImp) {
+    // 9. Atualizar quantidade atendida nos pedidos + auto-finalizar ordens.
+    //    Vale também para importação: a `importacao/gerar-entradas` NÃO mexe mais
+    //    em itr_quantidade_atendida (só cria o staging), então a atualização é
+    //    feita aqui, por fatura, no momento em que o dbent é criado — evitando a
+    //    contagem em dobro que barrava a geração.
+    if (associacoesParaValidar.length > 0) {
       const updatesAgrupados = new Map<string, number>();
       for (const assoc of associacoesParaValidar) {
         const key = `${assoc.pedidoId}|${assoc.produtoCod}`;

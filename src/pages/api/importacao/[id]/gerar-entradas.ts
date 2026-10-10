@@ -8,7 +8,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
-import { registrarHistoricoOrdem } from '@/lib/compras/ordemHistoricoHelper';
 import type { PoolClient } from 'pg';
 
 export default async function handler(
@@ -76,6 +75,14 @@ export default async function handler(
 
     const nfesCriadas: { faturaId: number; codnfe_ent: string; itensProcessados: number }[] = [];
 
+    // Produto importado (Delphi ENTRADA_IMPORTACAO / doc COMPRAS_INTERNACIONAIS_LEGADO):
+    // o dbprod guarda prcompra em DÓLAR (CUSTO_UNIT_DOLAR), dolar='S' e
+    // txdolarcompra = taxa usada (tx_dolar_medio + 0.10); o custo real em BRL é
+    // prcompra*txdolarcompra. Então a base de custo da entrada é o custo em USD, e
+    // ao final marcamos dolar/txdolarcompra nos produtos desta DI.
+    const codprodsImport = new Set<string>();
+    let txEfetiva = 0;
+
     for (const fatura of faturasResult.rows) {
       if (fatura.codent) {
         console.log(`[gerar-entradas] Fatura ${fatura.id} já tem entrada: ${fatura.codent}, pulando`);
@@ -85,7 +92,7 @@ export default async function handler(
       // Buscar itens da fatura com custos calculados
       const itensResult = await client.query(`
         SELECT id, codprod, descricao, qtd, custo_unit_dolar, custo_unit_real,
-               custo_total_real, id_orc, invoice_total
+               custo_total_real, id_orc, invoice_total, tx_dolar_medio
         FROM dbent_importacao_it_ent
         WHERE id_importacao = $1 AND id_fatura = $2 AND codprod IS NOT NULL
         ORDER BY id
@@ -142,14 +149,37 @@ export default async function handler(
         (fatura.fornecedor_nome || '').substring(0, 60),
       ]);
 
-      // 7. INSERT em dbnfe_ent_det (itens) + nfe_item_associacao + nfe_item_pedido_associacao
-      let nitem = 1;
+      // 7. Agrega itens por (codprod, id_orc) antes de gravar.
+      //    Uma DI pode ter o MESMO produto em várias adições; o dbitent tem PK
+      //    (codent, codprod, codreq), então linhas repetidas precisam virar UMA
+      //    (soma qtd, custo ponderado), senão a geração da entrada estoura a PK.
+      //    vuncom/vprod gravados em VALOR REAL (numeric) — NÃO em centavos: o motor
+      //    de custo usa dbnfe_ent_det.vuncom direto como prunit (igual ao nacional,
+      //    onde vuncom é o preço real do XML).
+      //    Base de custo = CUSTO EM DÓLAR (prcompra do importado é em USD). O valor
+      //    real em BRL vem depois por prcompra*txdolarcompra.
+      const grupos = new Map<string, { codprod: string; descricao: string; idOrc: number | null; qtd: number; total: number }>();
       for (const item of itensResult.rows) {
         const qtd = parseFloat(String(item.qtd || 0));
-        const custoUnitReal = parseFloat(String(item.custo_unit_real || 0));
-        const custoTotalReal = parseFloat(String(item.custo_total_real || 0));
+        const total = parseFloat(String(item.custo_unit_dolar || 0)) * qtd; // custo em USD
+        const idOrc = item.id_orc ? Number(item.id_orc) : null;
+        const key = `${item.codprod}|${idOrc ?? 0}`;
+        const g = grupos.get(key);
+        if (g) {
+          g.qtd += qtd;
+          g.total += total;
+        } else {
+          grupos.set(key, { codprod: item.codprod, descricao: item.descricao || '', idOrc, qtd, total });
+        }
+        // produto importado: coleta p/ marcar dolar='S' + txdolarcompra no final
+        codprodsImport.add(item.codprod);
+        if (!txEfetiva && item.tx_dolar_medio) txEfetiva = parseFloat(String(item.tx_dolar_medio)) + 0.10;
+      }
 
-        // dbnfe_ent_det (vuncom e vprod são integer - guardar em centavos como o sistema faz)
+      let nitem = 1;
+      for (const g of grupos.values()) {
+        const custoUnitUsd = g.qtd > 0 ? g.total / g.qtd : 0;
+
         await client.query(`
           INSERT INTO dbnfe_ent_det (
             codnfe_ent, nitem, cprod, xprod, qcom, vuncom, vprod
@@ -157,11 +187,11 @@ export default async function handler(
         `, [
           codnfe,
           String(nitem),
-          item.codprod,
-          (item.descricao || '').substring(0, 120),
-          qtd,
-          Math.round(custoUnitReal * 100),
-          Math.round(custoTotalReal * 100),
+          g.codprod,
+          g.descricao.substring(0, 120),
+          g.qtd,
+          custoUnitUsd,
+          g.total,
         ]);
 
         // nfe_item_associacao (pré-preenchida com codprod da DI)
@@ -174,15 +204,15 @@ export default async function handler(
         `, [
           codnfe,
           nitem,
-          item.codprod,
-          qtd,
-          custoUnitReal,
+          g.codprod,
+          g.qtd,
+          custoUnitUsd,
         ]);
 
         const assocId = assocResult.rows[0].id;
 
         // nfe_item_pedido_associacao (vincular ao pedido se tiver id_orc)
-        if (item.id_orc) {
+        if (g.idOrc) {
           await client.query(`
             INSERT INTO nfe_item_pedido_associacao (
               nfe_associacao_id, nfe_id, req_id, quantidade, valor_unitario, created_at
@@ -190,9 +220,9 @@ export default async function handler(
           `, [
             assocId,
             codnfe,
-            item.id_orc,
-            qtd,
-            custoUnitReal,
+            g.idOrc,
+            g.qtd,
+            custoUnitUsd,
           ]);
         }
 
@@ -213,87 +243,22 @@ export default async function handler(
       return res.status(400).json({ message: 'Nenhuma fatura elegível para gerar entrada' });
     }
 
-    // 9. Atualizar itr_quantidade_atendida nos pedidos (igual fluxo nacional)
-    // Buscar todas as associacoes com pedidos criadas nesta operacao
-    const pedidosAssociados = new Map<string, number>(); // key: "orcId|codprod", value: qtd total
+    // 9. (itr_quantidade_atendida + auto-finalização de ordens) — NÃO é feito aqui.
+    //    Este endpoint só cria o STAGING (dbnfe_ent). Atualizar a quantidade
+    //    atendida do pedido neste ponto fazia a contagem em DOBRO: o
+    //    `entradas/gerar-por-chave` (que cria o dbent de fato) revalidava o saldo
+    //    do pedido já reduzido e barrava com "quantidade insuficiente". A
+    //    atualização/finalização passou a ser feita só lá, por fatura, no momento
+    //    em que a entrada é realmente gerada (igual ao fluxo nacional).
 
-    for (const fatura of faturasResult.rows) {
-      if (fatura.codent) continue; // ja tinha entrada antes
-
-      const itensResult = await client.query(`
-        SELECT codprod, qtd, id_orc
-        FROM dbent_importacao_it_ent
-        WHERE id_importacao = $1 AND id_fatura = $2 AND codprod IS NOT NULL AND id_orc IS NOT NULL
-        ORDER BY id
-      `, [id, fatura.id]);
-
-      for (const item of itensResult.rows) {
-        const key = `${item.id_orc}|${item.codprod}`;
-        const qtdAtual = pedidosAssociados.get(key) || 0;
-        pedidosAssociados.set(key, qtdAtual + parseFloat(String(item.qtd || 0)));
-      }
-    }
-
-    if (pedidosAssociados.size > 0) {
-      // Atualizar quantidade atendida para cada par OC/produto
-      for (const [key, quantidade] of pedidosAssociados) {
-        const [pedidoId, produtoCod] = key.split('|');
-        await client.query(`
-          UPDATE cmp_it_requisicao ri
-          SET itr_quantidade_atendida = COALESCE(itr_quantidade_atendida, 0) + $1
-          FROM cmp_ordem_compra o
-          WHERE o.orc_id = $2
-            AND ri.itr_req_id = o.orc_req_id
-            AND ri.itr_req_versao = o.orc_req_versao
-            AND ri.itr_codprod = $3
-        `, [quantidade, pedidoId, produtoCod]);
-      }
-
-      // Auto-finalizar ordens totalmente atendidas
-      const pedidosDistintos = new Set<string>();
-      for (const key of pedidosAssociados.keys()) {
-        pedidosDistintos.add(key.split('|')[0]);
-      }
-
-      for (const pedidoId of pedidosDistintos) {
-        const ordemResult = await client.query(
-          `SELECT orc_id, orc_req_id, orc_req_versao, orc_status
-           FROM cmp_ordem_compra WHERE orc_id = $1`,
-          [pedidoId]
-        );
-        if (ordemResult.rows.length === 0 || ordemResult.rows[0].orc_status !== 'A') continue;
-
-        const ordem = ordemResult.rows[0];
-        const pendentesResult = await client.query(
-          `SELECT COUNT(*) as count FROM cmp_it_requisicao
-           WHERE itr_req_id = $1 AND itr_req_versao = $2
-             AND (itr_quantidade - COALESCE(itr_quantidade_atendida, 0) - COALESCE(itr_quantidade_fechada, 0)) > 0`,
-          [ordem.orc_req_id, ordem.orc_req_versao]
-        );
-
-        if (Number(pendentesResult.rows[0].count) === 0) {
-          await client.query(
-            `UPDATE cmp_ordem_compra SET orc_status = 'F' WHERE orc_id = $1`,
-            [pedidoId]
-          );
-          await registrarHistoricoOrdem(client, {
-            orcId: Number(pedidoId),
-            previousStatus: 'A',
-            newStatus: 'F',
-            userId: 'SISTEMA',
-            userName: 'Sistema (Importação DI)',
-            reason: `Ordem fechada automaticamente - todos os itens atendidos via importação DI #${id}`,
-            comments: {
-              tipo: 'FINALIZACAO',
-              motivo: 'auto_importacao_di',
-              importacao_id: id
-            }
-          });
-          console.log(`[gerar-entradas] Ordem ${pedidoId} fechada automaticamente`);
-        }
-      }
-
-      console.log(`[gerar-entradas] ${pedidosAssociados.size} itens de pedido atualizados (itr_quantidade_atendida)`);
+    // 9b. Produto importado: marca dolar='S' e grava a taxa usada (tx_dolar_medio+0.10).
+    //     Assim a média (confirmar-preço) pondera prcompra em USD×USD e o custo real
+    //     volta por prcompra*txdolarcompra — fiel ao Delphi ENTRADA_IMPORTACAO.
+    if (codprodsImport.size > 0 && txEfetiva > 0) {
+      await client.query(`
+        UPDATE dbprod SET txdolarcompra = $1, dolar = 'S' WHERE codprod = ANY($2)
+      `, [txEfetiva, Array.from(codprodsImport)]);
+      console.log(`[gerar-entradas] ${codprodsImport.size} produto(s) marcados dolar='S' txdolarcompra=${txEfetiva}`);
     }
 
     // 10. UPDATE status da DI para 'E' (Entrada Gerada)
