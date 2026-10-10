@@ -112,12 +112,13 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
 
   const handleCalcularCustos = () => {
     pedirConfirmacao(() => void calcularCustos(), {
-      title: 'Calcular custos',
+      title: 'Revisar / recalcular custos',
       message:
-        'O custo de cada item será recalculado: rateio de frete, impostos e despesas da DI por item ' +
-        '(pela taxa do dólar da DI). Os custos atuais serão sobrescritos. Deseja continuar?',
+        'Recalcula o custo de cada item (rateio de frete, impostos e despesas da DI pela taxa do dólar), ' +
+        'sobrescrevendo os custos atuais. É opcional — serve para revisar o custo antes de emitir; ' +
+        'o Emitir Nota já calcula o custo automaticamente. Deseja continuar?',
       type: 'info',
-      confirmText: 'Calcular',
+      confirmText: 'Recalcular',
       cancelText: 'Cancelar',
     });
   };
@@ -129,14 +130,22 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     if (!importacaoId) return;
     try {
       setEmitindo(true);
-      // 1) gera/reaproveita a fatura da DI
+      // 1) calcula o custo (nf_unit por item) — OBRIGATÓRIO antes da nota, feito aqui
+      //    automaticamente. Se a DI já saiu de 'Nova', o custo já existe e o erro é ignorado.
+      try {
+        await fetch(`/api/importacao/${importacaoId}/calcular-custos`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+        });
+      } catch { /* custo já existe; segue */ }
+
+      // 2) gera/reaproveita a fatura da DI
       const rf = await fetch(`/api/importacao/${importacaoId}/gerar-fatura-nacionalizacao`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
       });
       const jf = await rf.json().catch(() => ({}));
       if (!rf.ok || !jf.success) { window.alert(jf.message || 'Erro ao gerar a fatura de nacionalização'); return; }
 
-      // 2) emite pelo faturamento (assina + transmite SEFAZ)
+      // 3) emite pelo faturamento (assina + transmite SEFAZ)
       const re = await fetch(`/api/faturamento/emitir-faturado`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codfat: jf.codfat }),
       });
@@ -150,7 +159,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
         return;
       }
 
-      // 3) autorizada → oferece gerar a entrada
+      // 4) autorizada → oferece gerar a entrada
       const chave = je.chaveAcesso || je.chave || '';
       pedirConfirmacao(() => { window.location.href = '/compras/importacao/gerar-entrada'; }, {
         title: 'Nota de Nacionalização autorizada',
@@ -172,9 +181,10 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     pedirConfirmacao(() => void emitirNacionalizacao(), {
       title: 'Emitir Nota de Nacionalização',
       message:
-        'Vai gerar a fatura (aparece na Consulta de Faturas), montar o XML de importação ' +
-        '(CFOP 3.102, destinatário exterior, DI/adição/II, ICMS60, IBS/CBS), assinar e TRANSMITIR ' +
-        'à SEFAZ (ambiente conforme a empresa). Em caso de rejeição, reemita pelo Faturamento. Continuar?',
+        'Passos: (1) Calcular Custos (automático); (2) Gerar a fatura — aparece na Consulta de Faturas; ' +
+        '(3) Montar o XML de importação (CFOP 3.102, destinatário exterior, DI/adição/II, ICMS60, IBS/CBS), ' +
+        'assinar e TRANSMITIR à SEFAZ (ambiente conforme a empresa). Em caso de rejeição, reemita pelo ' +
+        'Faturamento. Continuar?',
       type: 'warning',
       confirmText: 'Emitir Nota',
       cancelText: 'Cancelar',
@@ -218,10 +228,11 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                   size="sm"
                   disabled={calculandoCustos || !faturas.some(f => f.itens?.some(i => !!i.codprod))}
                   onClick={handleCalcularCustos}
+                  title="Revisar/recalcular o custo por item. Opcional — o Emitir Nota já calcula o custo automaticamente."
                   className="flex items-center gap-1"
                 >
                   {calculandoCustos ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
-                  {calculandoCustos ? 'Calculando...' : 'Calcular Custos'}
+                  {calculandoCustos ? 'Calculando...' : 'Revisar Custos'}
                 </Button>
                 <Button
                   variant="outline"

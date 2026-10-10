@@ -6,6 +6,7 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import { gerarDanfeHtmlNFe } from './gerarDanfeHtml';
+import { gerarDanfeNacionalizacaoHtml } from './gerarDanfeNacionalizacaoHtml';
 import { gerarNfceHtml } from './gerarNfceHtml';
 import { renderHtmlToPdf } from './renderHtmlToPdf';
 
@@ -36,19 +37,29 @@ function jsBarcodeSrc(): string {
 }
 
 export async function gerarPdfNotaHtml(
-  tipo: 'nfe' | 'nfce',
+  tipo: 'nfe' | 'nfce' | 'nfe-importacao',
   fatura: any,
   produtos: any[],
   venda: any,
   dadosEmpresa: any,
   dadosNFe?: any,
-  opts: { homologacao?: boolean } = {},
+  opts: { homologacao?: boolean; entrada?: boolean; marcaDagua?: string } = {},
 ): Promise<Buffer> {
   const logoSrc = logoDataUri();
   const homologacao = !!opts.homologacao;
   let html: string;
 
-  if (tipo === 'nfce') {
+  if (tipo === 'nfe-importacao') {
+    // Nota de nacionalização: gerador PRÓPRIO (paginado estilo MELO). NÃO toca no
+    // DANFE de vendas (gerarDanfeHtmlNFe).
+    html = gerarDanfeNacionalizacaoHtml(fatura, produtos, venda, dadosEmpresa, dadosNFe, {
+      logoSrc,
+      jsBarcodeSrc: jsBarcodeSrc(),
+      homologacao,
+      entrada: opts.entrada,
+      marcaDagua: opts.marcaDagua,
+    });
+  } else if (tipo === 'nfce') {
     let qrCodeDataUrl = '';
     const chaveNum = String(dadosNFe?.chaveAcesso || '').replace(/\D/g, '');
     try {
@@ -67,6 +78,10 @@ export async function gerarPdfNotaHtml(
       logoSrc,
       jsBarcodeSrc: jsBarcodeSrc(),
       homologacao,
+      // Repassados só quando o chamador pede (ex.: prévia da nota de importação):
+      // a venda normal não envia, então nada muda no layout dela.
+      entrada: opts.entrada,
+      marcaDagua: opts.marcaDagua,
     });
   }
 

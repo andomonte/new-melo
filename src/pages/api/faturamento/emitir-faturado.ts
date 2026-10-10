@@ -641,14 +641,17 @@ export default async function handler(
 
       // PDF da nota em HTML (layout MELO via puppeteer). Fallback pro jsPDF se falhar.
       try {
+        // Nota de nacionalização (importacao_id) → DANFE do gerador próprio (paginado),
+        // sem tocar no DANFE de vendas.
+        const tipoDanfe = dbfatura.importacao_id ? 'nfe-importacao' : (isPessoaFisica ? 'nfce' : 'nfe');
         pdfBuffer = await gerarPdfNotaHtml(
-          isPessoaFisica ? 'nfce' : 'nfe',
+          tipoDanfe,
           faturaParaPdf,
           produtos,
           dbvenda || {},
           emitente,
           dadosNFe,
-          { homologacao: isHomologacao },
+          { homologacao: isHomologacao, entrada: !!dbfatura.importacao_id },
         );
       } catch (errHtml) {
         console.warn('⚠️ HTML→PDF falhou (emitir-faturado), usando jsPDF (fallback):', errHtml);

@@ -14,8 +14,7 @@ import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import type { PoolClient } from 'pg';
 import { construirNotasNacionalizacao } from '@/lib/compras/construirNotasNacionalizacao';
-import { gerarDanfeHtmlNFe } from '@/lib/danfe/gerarDanfeHtml';
-import { renderHtmlToPdf } from '@/lib/danfe/renderHtmlToPdf';
+import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -103,11 +102,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const venda = { nrovenda: '', obs: `NACIONALIZACAO DI ${di.nro_di} | PEDIDOS ${nota.pedidos.join(',')}`, transp: '' };
     const dadosNFe = { numeroNFe: '0', serieNFe: '1', chaveAcesso: '', protocolo: 'SEM VALIDADE', dataEmissao: '' };
 
-    const html = gerarDanfeHtmlNFe(fatura, produtos, venda, emp, dadosNFe, {
-      marcaDagua: 'SEM VALOR FISCAL',
+    // Mesmo caminho das vendas (injeta logo data-URI + barcode no servidor), para o
+    // DANFE sair idêntico ao da MELO. `entrada`/`marcaDagua` marcam a prévia.
+    const pdf = await gerarPdfNotaHtml('nfe-importacao', fatura, produtos, venda, emp, dadosNFe, {
+      homologacao: false,
       entrada: true,
+      marcaDagua: 'SEM VALOR FISCAL',
     });
-    const pdf = await renderHtmlToPdf(html, { landscape: true });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="previa-nacionalizacao-${di.nro_di}.pdf"`);
