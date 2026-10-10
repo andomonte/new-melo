@@ -395,6 +395,41 @@ export default function Caixa() {
     );
   };
 
+  // Marcar todos: respeita as regras do caixa (mesmo cliente; cartão forma_fat=6
+  // é recebido isolado, então fica de fora do "todos"). Se a lista tiver mais de
+  // um cliente, marca os do cliente já selecionado (ou o do 1º título) e avisa.
+  const marcarTodos = () => {
+    if (titulos.length === 0) return;
+    if (preVendaSel) {
+      setPreVendaSel(null);
+      setPreVendaDetalhes(null);
+      setValorPassada('');
+    }
+    const codcliAlvo = selecionados[0]?.codcli ?? titulos[0]?.codcli;
+    const elegiveis = titulos.filter(
+      (t) => t.codcli === codcliAlvo && String(t.forma_fat) !== '6',
+    );
+    if (elegiveis.length === 0) {
+      toast.error('Nenhum título elegível para marcar (cartão a receber da operadora é recebido isoladamente).');
+      return;
+    }
+    setPassadas([]);
+    setSelecionados(elegiveis);
+    const temOutroCliente = titulos.some((t) => t.codcli !== codcliAlvo);
+    const temCartao = titulos.some((t) => t.codcli === codcliAlvo && String(t.forma_fat) === '6');
+    if (temOutroCliente) {
+      const nome = elegiveis[0]?.nome_cliente || codcliAlvo;
+      toast.info(`Marcados ${elegiveis.length} título(s) de "${nome}". Só é possível receber de um cliente por vez.`);
+    } else if (temCartao) {
+      toast.info('Títulos de cartão (a receber da operadora) ficaram de fora — recebidos isoladamente.');
+    }
+  };
+
+  const desmarcarTodos = () => {
+    setPassadas([]);
+    setSelecionados([]);
+  };
+
   // ---- Derivados (somam todos os títulos selecionados) ----
   // Principal pendente = base do recebimento; juros/tarifa são adicionais (cobrados à parte).
   const principalPend = useMemo(() => {
@@ -1057,8 +1092,27 @@ export default function Caixa() {
                 {/* Resultados — seleção MÚLTIPLA (marque os títulos a receber) */}
                 {titulos.length > 0 && (
                   <div className="mt-3 space-y-1">
-                    <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                      {titulos.length} título(s) — marque os que vai receber
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                        {titulos.length} título(s) — marque os que vai receber
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={marcarTodos}
+                          className="text-[11px] font-medium px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800 text-[#347AB6] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        >
+                          Marcar todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={desmarcarTodos}
+                          disabled={selecionados.length === 0}
+                          className="text-[11px] font-medium px-2 py-0.5 rounded border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Desmarcar todos
+                        </button>
+                      </div>
                     </div>
                     {titulos.map((t) => {
                       const sel = estaSelecionado(t);
