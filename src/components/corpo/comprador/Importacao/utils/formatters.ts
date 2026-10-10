@@ -42,3 +42,20 @@ export const fmtDecimal = (valor: number | string | undefined, casas = 2): strin
   if (n === null) return '-';
   return n.toFixed(casas);
 };
+
+/**
+ * Código que a DI traz DENTRO da descrição da mercadoria (`... REF. MBCA1723`,
+ * `PN# MBCL11222LD`). É o identificador útil para conferir a sequência da adição
+ * contra o XML antes de associar o produto. Itens genéricos podem não ter → null.
+ */
+export const codigoDescricaoDI = (descricao: string | undefined): string | null => {
+  const m = /(?:REF\.?|PN#)\s*([A-Z0-9][A-Z0-9/\-.]*)/i.exec(descricao || '');
+  return m ? m[1].replace(/\.$/, '') : null;
+};
+
+/**
+ * Remove o prefixo fixo "[000001] " que o Siscomex coloca no início da descrição
+ * (sempre "000001", não identifica nada). No-op se já veio sem o prefixo.
+ */
+export const descricaoSemPrefixoDI = (descricao: string | undefined): string =>
+  (descricao || '').replace(/^\s*\[\d+\]\s*/, '');

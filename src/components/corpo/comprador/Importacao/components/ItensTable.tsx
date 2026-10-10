@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Package, Link2, ShoppingCart, Scissors, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemImportacao, AdicaoImportacao } from '../types/importacao';
-import { fmtDecimal } from '../utils/formatters';
+import { fmtDecimal, codigoDescricaoDI, descricaoSemPrefixoDI } from '../utils/formatters';
 import { BuscarProdutoModal } from './BuscarProdutoModal';
 import { ImportarPedidoModal } from './ImportarPedidoModal';
 import type { ItemPedidoSelecionado } from './ImportarPedidoModal';
@@ -156,7 +156,26 @@ export const ItensTable: React.FC<ItensTableProps> = ({
           {associado ? (item.marca || '-') : '-'}
         </div>
         <div className="flex-1 min-w-0 text-gray-600 dark:text-gray-300 truncate">
-          {item.descricao || '-'}
+          {(() => {
+            // Mostra o código da própria DI (REF./PN# embutido na descrição) no
+            // início da linha, no lugar do "[000001]" — permite conferir a
+            // sequência contra o XML antes de associar. Sem código: só limpa o prefixo.
+            const codDI = codigoDescricaoDI(item.descricao);
+            const texto = descricaoSemPrefixoDI(item.descricao) || '-';
+            return (
+              <>
+                {codDI && (
+                  <span
+                    className="font-mono text-[#347AB6] dark:text-blue-300 mr-1.5"
+                    title="Código da DI (referência na descrição da mercadoria)"
+                  >
+                    {codDI}
+                  </span>
+                )}
+                {texto}
+              </>
+            );
+          })()}
         </div>
         <div className="w-14 text-center text-gray-900 dark:text-gray-100">{item.qtd}</div>
         <div className="w-28 text-right text-gray-600 dark:text-gray-300">
