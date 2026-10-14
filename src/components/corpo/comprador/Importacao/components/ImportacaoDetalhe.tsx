@@ -70,6 +70,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     setPreviewNacionalizacaoResult,
     importarDoPedido,
     dividirItem,
+    associarOrdensItem,
     moverItens,
   } = useImportacaoDetalhe(importacaoId);
 
@@ -192,17 +193,26 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   };
 
 
-  // A Nota de Nacionalização exige todos os fornecedores (com itens) vinculados
-  // a um cliente do cadastro (destinatário exterior da NF-e).
+  // A Nota de Nacionalização exige (paridade com a entrada nacional/Delphi):
+  //  (1) TODOS os itens associados a um produto (codprod);
+  //  (2) TODOS os itens vinculados a uma ordem de compra (id_orc) — "associado sem
+  //      ordem" é incompleto: sem a ordem, o pedido de compra nunca é baixado;
+  //  (3) todos os fornecedores (com itens) vinculados a um cliente (dest. exterior).
   const fornecedoresComItens = faturas.filter((f) => (f.itens?.length || 0) > 0);
-  const temItensAssociados = faturas.some((f) => f.itens?.some((i) => !!i.codprod));
+  const todosItens = faturas.flatMap((f) => f.itens || []);
+  const itensSemProduto = todosItens.filter((i) => !i.codprod).length;
+  const itensSemOrdem = todosItens.filter((i) => !!i.codprod && !i.id_orc).length;
   const todosFornecedoresVinculados =
     fornecedoresComItens.length > 0 && fornecedoresComItens.every((f) => !!f.cod_cliente);
-  const bloqueioNacionalizacao = !temItensAssociados
-    ? 'Associe os itens a produtos antes de gerar a nota.'
-    : !todosFornecedoresVinculados
-      ? 'Vincule todos os fornecedores a um cliente (aba Faturas) antes de gerar a nota.'
-      : '';
+  const bloqueioNacionalizacao = todosItens.length === 0
+    ? 'Adicione itens antes de gerar a nota.'
+    : itensSemProduto > 0
+      ? `${itensSemProduto} item(ns) sem produto associado. Associe todos antes de gerar a nota.`
+      : itensSemOrdem > 0
+        ? `${itensSemOrdem} item(ns) associado(s) sem ordem de compra. Vincule cada um a uma ordem (botão 🛒) antes de gerar a nota.`
+        : !todosFornecedoresVinculados
+          ? 'Vincule todos os fornecedores a um cliente (aba Faturas) antes de gerar a nota.'
+          : '';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
@@ -380,6 +390,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                     importarDoPedido(faturaIdx, convertidos);
                   }}
                   onDividirItem={dividirItem}
+                  onAssociarOrdens={associarOrdensItem}
                   onMoverItens={moverItens}
                   readOnly={readOnly}
                 />

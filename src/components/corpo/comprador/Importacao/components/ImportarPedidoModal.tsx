@@ -51,6 +51,9 @@ export const ImportarPedidoModal: React.FC<ImportarPedidoModalProps> = ({
   const [itens, setItens] = useState<ItemPedido[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [selecionados, setSelecionados] = useState<Map<string, ItemPedido>>(new Map());
+  // Quantidade a importar por ordem selecionada (default = saldo da ordem). Editável
+  // para permitir ratear um produto entre ordens diferentes (pega parcial de cada uma).
+  const [qtdPorItem, setQtdPorItem] = useState<Map<string, number>>(new Map());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const temFornecedor = !!(codCredor || fornecedorNome);
@@ -81,6 +84,7 @@ export const ImportarPedidoModal: React.FC<ImportarPedidoModalProps> = ({
       setBusca('');
       setItens([]);
       setSelecionados(new Map());
+      setQtdPorItem(new Map());
       fetchItens('');
     }
   }, [aberto, codCredor, fornecedorNome, fetchItens]);
@@ -96,29 +100,47 @@ export const ImportarPedidoModal: React.FC<ImportarPedidoModalProps> = ({
   const chave = (item: ItemPedido) => `${item.orc_id}__${item.codprod}`;
 
   const toggleSelecao = (item: ItemPedido) => {
+    const k = chave(item);
+    const estaSelecionado = selecionados.has(k);
     setSelecionados((prev) => {
       const novo = new Map(prev);
-      const k = chave(item);
-      if (novo.has(k)) {
-        novo.delete(k);
-      } else {
-        novo.set(k, item);
-      }
+      if (estaSelecionado) novo.delete(k);
+      else novo.set(k, item);
+      return novo;
+    });
+    setQtdPorItem((prev) => {
+      const novo = new Map(prev);
+      if (estaSelecionado) novo.delete(k);
+      else novo.set(k, item.qtd_disponivel); // default = saldo da ordem
       return novo;
     });
   };
 
+  // Ajusta a quantidade a importar de uma ordem (limitada ao saldo disponível).
+  const setQtd = (k: string, valor: string, max: number) => {
+    let v = Number(String(valor).replace(',', '.'));
+    if (!Number.isFinite(v) || v < 0) v = 0;
+    if (v > max) v = max;
+    setQtdPorItem((prev) => new Map(prev).set(k, v));
+  };
+
   const handleConfirmar = () => {
-    const resultado: ItemPedidoSelecionado[] = Array.from(selecionados.values()).map((item) => ({
-      codprod: item.codprod,
-      descricao: item.descricao,
-      qtd: item.qtd_disponivel,
-      proforma_unit: item.preco_unit,
-      invoice_unit: item.preco_unit,
-      unidade: item.unidade,
-      ncm: item.ncm,
-      id_orc: parseInt(item.orc_id),
-    }));
+    const resultado: ItemPedidoSelecionado[] = Array.from(selecionados.values())
+      .map((item) => {
+        const k = chave(item);
+        const qtd = qtdPorItem.get(k) ?? item.qtd_disponivel;
+        return {
+          codprod: item.codprod,
+          descricao: item.descricao,
+          qtd,
+          proforma_unit: item.preco_unit,
+          invoice_unit: item.preco_unit,
+          unidade: item.unidade,
+          ncm: item.ncm,
+          id_orc: parseInt(item.orc_id),
+        };
+      })
+      .filter((r) => r.qtd > 0); // ignora linhas com quantidade zerada
     onConfirmar(resultado);
   };
 
@@ -153,25 +175,46 @@ export const ImportarPedidoModal: React.FC<ImportarPedidoModalProps> = ({
           </div>
         </div>
 
-        {/* Chips de selecionados */}
+        {/* Chips de selecionados — com quantidade editável por ordem (rateio) */}
         {selecionados.size > 0 && (
           <div className="px-5 py-2 border-b border-gray-200 dark:border-zinc-700 shrink-0">
             <div className="flex flex-wrap gap-2">
-              {Array.from(selecionados.values()).map((item) => (
-                <span
-                  key={chave(item)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[#347AB6]/10 text-[#347AB6] dark:bg-blue-900/30 dark:text-blue-400 border border-[#347AB6]/20 dark:border-blue-800"
-                >
-                  {item.codprod} - {item.descricao.substring(0, 30)}{item.descricao.length > 30 ? '...' : ''}
-                  <button
-                    onClick={() => toggleSelecao(item)}
-                    className="hover:text-red-500 transition-colors"
+              {Array.from(selecionados.values()).map((item) => {
+                const k = chave(item);
+                const qtd = qtdPorItem.get(k) ?? item.qtd_disponivel;
+                return (
+                  <span
+                    key={k}
+                    className="inline-flex items-center gap-2 pl-3 pr-2 py-1 rounded-full text-xs font-medium bg-[#347AB6]/10 text-[#347AB6] dark:bg-blue-900/30 dark:text-blue-400 border border-[#347AB6]/20 dark:border-blue-800"
                   >
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
+                    <span className="font-mono text-[11px]">OC #{item.orc_id}</span>
+                    <span className="truncate max-w-[180px]">
+                      {item.codprod} - {item.descricao.substring(0, 24)}{item.descricao.length > 24 ? '…' : ''}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px]">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={qtd}
+                        onChange={(e) => setQtd(k, e.target.value, item.qtd_disponivel)}
+                        title="Quantidade a importar desta ordem"
+                        className="w-14 text-right font-mono px-1 py-0.5 rounded border border-[#347AB6]/30 dark:border-blue-800 bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#347AB6]"
+                      />
+                      <span className="text-gray-400 dark:text-gray-500">/ {fmtDecimal(item.qtd_disponivel, 0)}</span>
+                    </span>
+                    <button
+                      onClick={() => toggleSelecao(item)}
+                      className="hover:text-red-500 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
+            <p className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+              Ajuste a quantidade para pegar parte de uma ordem — selecione outra ordem do mesmo produto para ratear o restante.
+            </p>
           </div>
         )}
 

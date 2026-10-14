@@ -95,6 +95,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           cod_cliente: codCliente,
           status,
           vinculado: !!codCliente,
+          // persistido = cod_cliente já gravado na fatura (entrada). Quando false mas
+          // vinculado=true, o vínculo veio apenas do APRENDIDO (reaproveitado) e ainda
+          // não foi materializado na entrada — o front persiste ao abrir o modal.
+          persistido: !!codFatura,
           candidatos: resolvido.candidatos,
           cliente,
           avisos: codCliente ? avisosDestinatarioExterior(cliente) : [],

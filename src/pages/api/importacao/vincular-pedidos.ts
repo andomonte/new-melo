@@ -46,6 +46,7 @@ const QUERY_PEDIDOS_POR_PRODUTO = `
     ON orc.orc_req_id = req.req_id AND orc.orc_req_versao = req.req_versao
   WHERE orc.orc_status = 'A'
     AND req.req_cod_credor = $1
+    AND COALESCE(req.req_tipo, '') <> 'EM'
     AND itr.itr_codprod = $2
     AND (itr.itr_quantidade - COALESCE(itr.itr_quantidade_atendida, 0)) > 0
   ORDER BY orc.orc_data DESC

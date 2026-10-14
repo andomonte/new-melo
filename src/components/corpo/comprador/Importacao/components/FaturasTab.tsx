@@ -44,6 +44,13 @@ interface FaturasTabProps {
   associarEVincularStats?: { total_itens: number; associados: number; vinculados: number; por_ref: number; por_ref_com_marca?: number; por_aprendizado: number; por_similaridade: number } | null;
   onImportarDoPedido?: (faturaIdx: number, itens: ItemPedidoSelecionado[]) => void;
   onDividirItem?: (faturaIndex: number, itemIndex: number, qtdPrimeiro: number) => void;
+  onAssociarOrdens?: (
+    faturaIndex: number,
+    itemIndex: number,
+    codprod: string,
+    referencia: string,
+    alocacoes: { orc_id: number; qtd: number }[],
+  ) => void;
   onMoverItens?: (faturaOrigemIdx: number, itensIndices: number[], destinoFaturaIdx: number | 'nova') => void;
   readOnly?: boolean;
 }
@@ -71,6 +78,7 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
   associarEVincularStats,
   onImportarDoPedido,
   onDividirItem,
+  onAssociarOrdens,
   onMoverItens,
   readOnly = false,
 }) => {
@@ -268,6 +276,7 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
               onUpdateItem={onUpdateItem ? (itemIdx, updates) => onUpdateItem(idx, itemIdx, updates) : undefined}
               onImportarDoPedido={onImportarDoPedido ? (itens) => onImportarDoPedido(idx, itens) : undefined}
               onDividirItem={onDividirItem ? (itemIdx, qtdPrimeiro) => onDividirItem(idx, itemIdx, qtdPrimeiro) : undefined}
+              onAssociarOrdens={onAssociarOrdens ? (itemIdx, codprod, ref, aloc) => onAssociarOrdens(idx, itemIdx, codprod, ref, aloc) : undefined}
               onMoverItens={onMoverItens && faturas.length > 0 ? () => setMoverFaturaIdx(idx) : undefined}
               readOnly={readOnly}
             />

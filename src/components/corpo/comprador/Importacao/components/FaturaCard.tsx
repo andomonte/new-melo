@@ -20,6 +20,12 @@ interface FaturaCardProps {
   onUpdateItem?: (itemIndex: number, updates: Partial<ItemImportacao>) => void;
   onImportarDoPedido?: (itens: ItemPedidoSelecionado[]) => void;
   onDividirItem?: (itemIndex: number, qtdPrimeiro: number) => void;
+  onAssociarOrdens?: (
+    itemIndex: number,
+    codprod: string,
+    referencia: string,
+    alocacoes: { orc_id: number; qtd: number }[],
+  ) => void;
   onMoverItens?: () => void;
   readOnly?: boolean;
 }
@@ -34,6 +40,7 @@ export const FaturaCard: React.FC<FaturaCardProps> = ({
   onUpdateItem,
   onImportarDoPedido,
   onDividirItem,
+  onAssociarOrdens,
   onMoverItens,
   readOnly = false,
 }) => {
@@ -152,6 +159,7 @@ export const FaturaCard: React.FC<FaturaCardProps> = ({
             fornecedorNome={fatura.fornecedor_nome}
             onImportarDoPedido={onImportarDoPedido}
             onDividirItem={onDividirItem}
+            onAssociarOrdens={onAssociarOrdens}
             readOnly={readOnly}
           />
         </div>

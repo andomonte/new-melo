@@ -30,6 +30,8 @@ interface FornecedorVinculo {
   cod_cliente: string | null;
   status: 'learned' | 'suggested' | 'multiple' | 'none';
   vinculado: boolean;
+  /** cod_cliente já gravado na fatura (entrada). Se false e vinculado=true, é só aprendido. */
+  persistido?: boolean;
   candidatos: ClienteX[];
   cliente?: ClienteX | null;
   avisos: string[];
@@ -161,8 +163,34 @@ export const VincularFornecedoresModal: React.FC<Props> = ({
     api
       .get(`/api/importacao/${importacaoId}/fornecedores`)
       .then((r) => {
-        setLista(r.data?.fornecedores || []);
+        const forns: FornecedorVinculo[] = r.data?.fornecedores || [];
+        setLista(forns);
         setPrincipal(r.data?.principal_nome || principalNome || null);
+        // Materializa os vínculos já resolvidos: os "aprendidos" (reaproveitados) que
+        // ainda não foram gravados na entrada (persistido=false) são persistidos agora
+        // via POST, e todos os vinculados são refletidos no parent — assim o contador e
+        // a trava da emissão (que leem entrada.cod_cliente) liberam sem recarregar a DI.
+        forns.forEach((f) => {
+          if (!f.vinculado || !f.cod_cliente) return;
+          if (f.persistido) {
+            onVinculado(f.nome_die, f.cod_cliente);
+          } else if (f.cliente) {
+            api
+              .post(`/api/importacao/${importacaoId}/fornecedores`, {
+                nome_die: f.nome_die,
+                cod_cliente: f.cod_cliente,
+              })
+              .then(() => {
+                onVinculado(f.nome_die, f.cod_cliente as string);
+                setLista((prev) =>
+                  prev.map((x) => (x.nome_die === f.nome_die ? { ...x, persistido: true } : x)),
+                );
+              })
+              .catch(() => {
+                /* mantém como pendente; usuário pode vincular manualmente */
+              });
+          }
+        });
       })
       .catch(() => setLista([]))
       .finally(() => setLoading(false));
@@ -191,7 +219,7 @@ export const VincularFornecedoresModal: React.FC<Props> = ({
       setLista((prev) =>
         prev.map((f) =>
           f.nome_die === nomeDie
-            ? { ...f, cod_cliente: c.codCliente, vinculado: true, status: 'learned', cliente: c, avisos }
+            ? { ...f, cod_cliente: c.codCliente, vinculado: true, persistido: true, status: 'learned', cliente: c, avisos }
             : f,
         ),
       );

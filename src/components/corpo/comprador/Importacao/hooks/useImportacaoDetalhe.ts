@@ -755,6 +755,40 @@ export function useImportacaoDetalhe(importacaoId?: number) {
     setPendingSave(true);
   }, []);
 
+  // Associa um item a UMA ou MAIS ordens (modelo nacional): substitui o item por N
+  // linhas (uma por ordem alocada), cada uma com codprod + id_orc + a quantidade
+  // alocada. A soma das alocações = quantidade do item (garantido pelo modal). O
+  // `gerar-entradas` agrupa por (codprod, id_orc) e baixa o saldo de cada ordem.
+  const associarOrdensItem = useCallback((
+    faturaIdx: number,
+    itemIdx: number,
+    codprod: string,
+    referencia: string,
+    alocacoes: { orc_id: number; qtd: number }[],
+  ) => {
+    if (alocacoes.length === 0) return;
+    setFaturas((prev) => {
+      const novas = prev.map((f) => ({ ...f, itens: [...(f.itens || [])] }));
+      const itens = novas[faturaIdx]?.itens;
+      const original = itens?.[itemIdx];
+      if (!itens || !original) return prev;
+      const linhas = alocacoes.map((a, i) => ({
+        ...original,
+        id: i === 0 ? original.id : undefined, // 1ª mantém o id; as demais são novas
+        codprod,
+        referencia,
+        marca: original.marca, // o pedido não traz marca; preserva a existente
+        id_orc: a.orc_id,
+        qtd: a.qtd,
+        proforma_total: a.qtd * (original.proforma_unit || 0),
+        invoice_total: a.qtd * (original.invoice_unit || 0),
+      }));
+      itens.splice(itemIdx, 1, ...linhas);
+      return novas;
+    });
+    setPendingSave(true);
+  }, []);
+
   // Mover itens de uma fatura para outra (existente ou nova)
   const moverItens = useCallback((
     faturaOrigemIdx: number,
@@ -840,6 +874,7 @@ export function useImportacaoDetalhe(importacaoId?: number) {
     removeItem,
     updateItem,
     vincularClienteFornecedor,
+    associarOrdensItem,
     autoAssociar,
     autoAssociando,
     autoAssociadoStats,

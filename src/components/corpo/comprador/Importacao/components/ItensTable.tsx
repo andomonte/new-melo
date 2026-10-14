@@ -7,11 +7,14 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Package, Link2, ShoppingCart, Scissors, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import api from '@/components/services/api';
 import type { ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { fmtDecimal, codigoDescricaoDI, descricaoSemPrefixoDI } from '../utils/formatters';
 import { BuscarProdutoModal } from './BuscarProdutoModal';
 import { ImportarPedidoModal } from './ImportarPedidoModal';
 import type { ItemPedidoSelecionado } from './ImportarPedidoModal';
+import { AssociarOrdemModal } from './AssociarOrdemModal';
+import type { AlocacaoOrdem } from './AssociarOrdemModal';
 import { DividirItemModal } from './DividirItemModal';
 
 interface ItensTableProps {
@@ -24,6 +27,12 @@ interface ItensTableProps {
   fornecedorNome?: string;
   onImportarDoPedido?: (itens: ItemPedidoSelecionado[]) => void;
   onDividirItem?: (itemIndex: number, qtdPrimeiro: number) => void;
+  onAssociarOrdens?: (
+    itemIndex: number,
+    codprod: string,
+    referencia: string,
+    alocacoes: AlocacaoOrdem[],
+  ) => void;
   readOnly?: boolean;
 }
 
@@ -36,13 +45,16 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   codCredor,
   fornecedorNome,
   onDividirItem,
+  onAssociarOrdens,
   onImportarDoPedido,
   readOnly = false,
 }) => {
   const [modalAberto, setModalAberto] = useState(false);
   const [modalPedidoAberto, setModalPedidoAberto] = useState(false);
+  const [modalOrdemAberto, setModalOrdemAberto] = useState(false);
   const [modalDividirAberto, setModalDividirAberto] = useState(false);
   const [itemSelecionadoIdx, setItemSelecionadoIdx] = useState<number>(-1);
+  const [itemOrdemIdx, setItemOrdemIdx] = useState<number>(-1);
   const [itemDividirIdx, setItemDividirIdx] = useState<number>(-1);
   const [filtro, setFiltro] = useState('');
 
@@ -100,9 +112,41 @@ export const ItensTable: React.FC<ItensTableProps> = ({
     setModalAberto(true);
   };
 
+  // Aprendizado: grava ref(DI) → produto para auto-associar nas próximas importações
+  // (mesma tabela do nacional: dbref_fabrica + dbprod_ref_fabrica). Best-effort.
+  const gravarAprendizado = (codprod: string, item?: ItemImportacao) => {
+    if (!codprod || !codCredor || !item) return;
+    const referenciaNFe = (codigoDescricaoDI(item.descricao) || item.referencia || '').trim();
+    if (!referenciaNFe) return;
+    api
+      .post('/api/entrada-xml/salvar-aprendizado', {
+        referenciaNFe,
+        codCredor,
+        codProduto: codprod,
+        codMarca: item.marca || undefined,
+      })
+      .catch(() => { /* aprendizado é best-effort; não bloqueia a associação */ });
+  };
+
   const handleDividir = (idx: number) => {
     setItemDividirIdx(idx);
     setModalDividirAberto(true);
+  };
+
+  const handleAssociarOrdem = (idx: number) => {
+    setItemOrdemIdx(idx);
+    setModalOrdemAberto(true);
+  };
+
+  // Associação por ORDEM (modelo nacional): o item é dividido nas ordens alocadas,
+  // cada linha com codprod + id_orc + quantidade. A soma = quantidade do item.
+  const handleOrdensAlocadas = (codprod: string, referencia: string, alocacoes: AlocacaoOrdem[]) => {
+    if (onAssociarOrdens && itemOrdemIdx >= 0) {
+      gravarAprendizado(codprod, itens[itemOrdemIdx]);
+      onAssociarOrdens(itemOrdemIdx, codprod, referencia, alocacoes);
+    }
+    setModalOrdemAberto(false);
+    setItemOrdemIdx(-1);
   };
 
   const handleProdutoSelecionado = (
@@ -113,6 +157,7 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   ) => {
     if (onUpdateItem && itemSelecionadoIdx >= 0) {
       onUpdateItem(itemSelecionadoIdx, { codprod, referencia, marca });
+      gravarAprendizado(codprod, itens[itemSelecionadoIdx]);
     }
     setModalAberto(false);
     setItemSelecionadoIdx(-1);
@@ -130,11 +175,14 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         <div className="w-24">
           {comPedido ? (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800">
-              Associado + PC
+              Associado + OC
             </span>
           ) : associado ? (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-lime-100 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400 border border-lime-200 dark:border-lime-800">
-              Associado
+            <span
+              title="Produto associado, mas ainda SEM ordem de compra — incompleto para a nota"
+              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800"
+            >
+              Sem OC
             </span>
           ) : (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
@@ -148,12 +196,24 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         </div>
         <div className="w-28 font-mono text-gray-900 dark:text-gray-100 truncate">
           {associado ? (item.referencia || '-') : '-'}
-          {item.id_orc && (
-            <div className="text-[9px] text-gray-400 dark:text-gray-500">PC: {item.id_orc}</div>
-          )}
         </div>
         <div className="w-24 text-gray-600 dark:text-gray-300 truncate">
           {associado ? (item.marca || '-') : '-'}
+        </div>
+        {/* Ordem de compra vinculada (OC) */}
+        <div className="w-32 shrink-0">
+          {item.id_orc ? (
+            <span
+              title="Ordem de compra vinculada a este item"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+            >
+              <ShoppingCart size={9} /> #{item.id_orc}
+            </span>
+          ) : associado ? (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500">sem ordem</span>
+          ) : (
+            <span className="text-gray-300 dark:text-gray-600">-</span>
+          )}
         </div>
         <div className="flex-1 min-w-0 text-gray-600 dark:text-gray-300 truncate">
           {(() => {
@@ -188,7 +248,7 @@ export const ItensTable: React.FC<ItensTableProps> = ({
           {item.custo_unit_real ? `R$ ${fmtDecimal(item.custo_unit_real)}` : '-'}
         </div>
         {!readOnly && (
-          <div className="w-24 flex items-center justify-end gap-1">
+          <div className="w-28 flex items-center justify-end gap-1">
             {!associado && onUpdateItem && (
               <button
                 onClick={() => handleAssociar(originalIdx)}
@@ -196,6 +256,15 @@ export const ItensTable: React.FC<ItensTableProps> = ({
               >
                 <Link2 size={10} />
                 Associar
+              </button>
+            )}
+            {onAssociarOrdens && !comPedido && (codCredor || fornecedorNome) && (
+              <button
+                onClick={() => handleAssociarOrdem(originalIdx)}
+                title="Associar à ordem de compra (mostra as ordens abertas do fornecedor)"
+                className="p-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+              >
+                <ShoppingCart className="h-3.5 w-3.5 text-indigo-500" />
               </button>
             )}
             {item.qtd > 1 && onDividirItem && (
@@ -268,7 +337,7 @@ export const ItensTable: React.FC<ItensTableProps> = ({
 
       {/* Tabela */}
       <div className="border border-gray-200 dark:border-zinc-700 rounded-lg overflow-x-auto">
-        <div className="min-w-[960px]">
+        <div className="min-w-[1120px]">
         {/* Header */}
         <div className="bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-600">
           <div className="flex gap-2 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200">
@@ -276,12 +345,13 @@ export const ItensTable: React.FC<ItensTableProps> = ({
             <div className="w-10 text-center">#</div>
             <div className="w-28">Referência</div>
             <div className="w-24">Marca</div>
+            <div className="w-32">Ordem (OC)</div>
             <div className="flex-1 min-w-0">Descrição</div>
             <div className="w-14 text-center">Qtd</div>
             <div className="w-28 text-right">Proforma (USD)</div>
             <div className="w-28 text-right">Invoice (USD)</div>
             <div className="w-28 text-right">Custo (BRL)</div>
-            {!readOnly && <div className="w-24" />}
+            {!readOnly && <div className="w-28" />}
           </div>
         </div>
 
@@ -379,6 +449,31 @@ export const ItensTable: React.FC<ItensTableProps> = ({
           }}
           codCredor={codCredor}
           fornecedorNome={fornecedorNome}
+        />
+      )}
+
+      {/* Modal de associar à ordem (alocação multi-ordem, por item) */}
+      {(codCredor || fornecedorNome) && onAssociarOrdens && (
+        <AssociarOrdemModal
+          aberto={modalOrdemAberto}
+          onFechar={() => { setModalOrdemAberto(false); setItemOrdemIdx(-1); }}
+          onConfirmar={handleOrdensAlocadas}
+          codCredor={codCredor}
+          fornecedorNome={fornecedorNome}
+          buscaInicial={
+            itemOrdemIdx >= 0 && itemOrdemIdx < itens.length
+              ? itens[itemOrdemIdx]?.referencia || codigoDescricaoDI(itens[itemOrdemIdx]?.descricao) || ''
+              : ''
+          }
+          qtdItem={itemOrdemIdx >= 0 && itemOrdemIdx < itens.length ? Number(itens[itemOrdemIdx]?.qtd) || 0 : 0}
+          codprodAtual={itemOrdemIdx >= 0 && itemOrdemIdx < itens.length ? (itens[itemOrdemIdx]?.codprod || undefined) : undefined}
+          descricaoItem={itemOrdemIdx >= 0 && itemOrdemIdx < itens.length ? itens[itemOrdemIdx]?.descricao : undefined}
+          onProdutoAssociado={(codprod, referencia, marca) => {
+            if (onUpdateItem && itemOrdemIdx >= 0) {
+              onUpdateItem(itemOrdemIdx, { codprod, referencia, marca });
+              gravarAprendizado(codprod, itens[itemOrdemIdx]);
+            }
+          }}
         />
       )}
 
