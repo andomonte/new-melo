@@ -85,6 +85,9 @@ interface DataTableContasPagarProps {
   onFiltrosLocaisChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
   /** Chamado ao clicar em "Limpar filtros" — o pai deve resetar o estado de filtros (mantendo o período). */
   onLimparFiltros?: () => void;
+  /** Ações extras no menu "Opções" (ex.: selecionar tudo, ações em lote). Renderizadas
+   *  após as opções padrão, separadas por uma linha. */
+  acoesOpcoes?: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean }[];
 }
 
 export default function DataTableContasPagar({
@@ -114,6 +117,7 @@ export default function DataTableContasPagar({
   filtroLocal = false,
   onFiltrosLocaisChange,
   onLimparFiltros,
+  acoesOpcoes,
 }: DataTableContasPagarProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -542,6 +546,23 @@ export default function DataTableContasPagar({
                     <BarChart3 className="mr-2 size-4 text-cyan-600 dark:text-cyan-400" />
                     Dashboard Geral
                   </DropdownMenuItem>
+                )}
+
+                {/* Ações extras injetadas pelo pai (ex.: selecionar tudo, ações em lote) */}
+                {acoesOpcoes && acoesOpcoes.length > 0 && (
+                  <>
+                    <div className="my-1 border-t border-gray-200 dark:border-zinc-700" />
+                    {acoesOpcoes.map((a, i) => (
+                      <DropdownMenuItem
+                        key={i}
+                        disabled={a.disabled}
+                        onClick={a.onClick}
+                        className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700 ${a.danger ? 'text-red-600 dark:text-red-400' : ''}`}
+                      >
+                        {a.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

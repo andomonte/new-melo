@@ -637,6 +637,17 @@ export default function ContasAReceber() {
     clientesSelecionados.size === 1 &&
     !(temCartaoSelecionado && selecionadosBaixa.length > 1);
 
+  // Selecionar tudo / Desmarcar tudo (itens do menu "Opções"). Marca todos os
+  // títulos carregados na página que são selecionáveis (não recebidos/cancelados).
+  const selecionarTodosRecebiveis = () => {
+    const selecionaveis = (contasReceber || []).filter(podeReceberTitulo);
+    if (selecionaveis.length === 0) {
+      toast.info('Nenhum título selecionável nesta página.');
+      return;
+    }
+    setSelecionadosBaixa(selecionaveis);
+  };
+
   // Preparar dados da tabela (seguindo estrutura do legado)
   const prepararDadosTabela = () => {
     // Criar mapa de bancos para lookup rápido
@@ -1909,30 +1920,6 @@ export default function ContasAReceber() {
               </Button>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setModalJurosLoteAberto(true)}
-                title="Liberar/isentar juros (mesma taxa e motivo) para todos os selecionados"
-              >
-                Baixar juros em lote
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setModalCancelAvulsoLoteAberto(true)}
-                disabled={avulsosSelecionados === 0}
-                title={
-                  avulsosSelecionados === 0
-                    ? 'Nenhum avulso selecionado (só cancela título sem fatura/grupo)'
-                    : 'Cancelar os títulos avulsos selecionados'
-                }
-                className="border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
-              >
-                Cancelar avulso em lote{avulsosSelecionados > 0 ? ` (${avulsosSelecionados})` : ''}
-              </Button>
-              <Button
-                type="button"
                 size="sm"
                 disabled={!podeDarBaixaLote}
                 title={!podeDarBaixaLote ? 'Dar Baixa exige títulos de um único cliente (cartão é recebido isoladamente)' : undefined}
@@ -1991,6 +1978,17 @@ export default function ContasAReceber() {
             noDataMessage="Nenhum título a receber encontrado."
             onFiltroChange={handleFiltroAvancado}
             onExportarExcel={handleExportarDireto}
+            acoesOpcoes={[
+              { label: 'Selecionar tudo', onClick: selecionarTodosRecebiveis },
+              { label: 'Desmarcar tudo', onClick: () => setSelecionadosBaixa([]), disabled: selecionadosBaixa.length === 0 },
+              { label: 'Baixar juros em lote', onClick: () => setModalJurosLoteAberto(true), disabled: selecionadosBaixa.length === 0 },
+              {
+                label: `Cancelar avulso em lote${avulsosSelecionados > 0 ? ` (${avulsosSelecionados})` : ''}`,
+                onClick: () => setModalCancelAvulsoLoteAberto(true),
+                disabled: avulsosSelecionados === 0,
+                danger: true,
+              },
+            ]}
             nonsortableColumns={['☑️', 'Ações']}
             // Todas as colunas filtráveis server-side (obs não existe em dbreceb; parcela/juros são
             // calculadas → ficam fora). Os rótulos espelham os headers do datatable.
