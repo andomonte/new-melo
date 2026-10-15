@@ -430,7 +430,11 @@ function montarUmaNota(
     },
   };
 
-  const xml = create({ version: '1.0', encoding: 'UTF-8' }).ele(xmlObj).end({ prettyPrint: true });
+  // XML MINIFICADO (sem indentação): a NF-e vai assinada e transmitida — o whitespace
+  // do pretty-print só incha o tamanho (p/ notas grandes estoura o cStat 214 "Tamanho
+  // da mensagem excedeu o limite"). Minificado é o formato padrão/seguro da NF-e (a
+  // assinatura canonicaliza por C14N, então não depende da indentação).
+  const xml = create({ version: '1.0', encoding: 'UTF-8' }).ele(xmlObj).end({ prettyPrint: false });
 
   return {
     modo,

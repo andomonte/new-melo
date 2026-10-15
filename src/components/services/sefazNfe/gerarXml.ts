@@ -551,5 +551,9 @@ export function gerarXMLNFe(dados: any): string {
     },
   };
 
-  return create({ version: '1.0', encoding: 'UTF-8' }).ele(xmlObj).end({ prettyPrint: true });
+  // XML MINIFICADO (sem indentação): o whitespace do pretty-print só incha o tamanho
+  // e, em notas com muitos itens, estoura o cStat 214 ("Tamanho da mensagem excedeu o
+  // limite"). Minificado é o formato padrão da NF-e; a assinatura canonicaliza (C14N),
+  // então não depende da indentação.
+  return create({ version: '1.0', encoding: 'UTF-8' }).ele(xmlObj).end({ prettyPrint: false });
 }
