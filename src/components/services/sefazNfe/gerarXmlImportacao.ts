@@ -159,17 +159,20 @@ function soData(data?: string | Date): string {
 
 /** Monta o grupo <DI> (com <adi>) de um item. */
 function montarDI(di: DiHeader, adi?: AdicaoImportacao): Record<string, any> {
+  const tpVia = String(di.via_transporte ?? '1'); // default marítima (há navio)
   const grupo: Record<string, any> = {
     nDI: di.nro_di,
     dDI: soData(di.data_di),
     xLocDesemb: di.local_desembaraco ?? '',
     UFDesemb: di.uf_desembaraco || 'AM',
     dDesemb: soData(di.data_desembaraco),
-    tpViaTransp: String(di.via_transporte ?? '1'),
+    tpViaTransp: tpVia,
   };
-  // vAFRMM só quando via marítima (tpViaTransp = 1) e valor > 0
-  if (String(di.via_transporte ?? '') === '1' && Number(di.valor_afrmm ?? 0) > 0) {
-    grupo.vAFRMM = Number(di.valor_afrmm).toFixed(2);
+  // vAFRMM é OBRIGATÓRIO em importação MARÍTIMA (tpViaTransp=1) — informar mesmo que
+  // 0.00 (ZFM costuma ser isenta). Sem o campo, a SEFAZ rejeita (cStat 330). Vai entre
+  // tpViaTransp e tpIntermedio na ordem do leiaute.
+  if (tpVia === '1') {
+    grupo.vAFRMM = Number(di.valor_afrmm ?? 0).toFixed(2);
   }
   grupo.tpIntermedio = String(di.forma_importacao ?? '1');
   if (adi?.cod_exportador) grupo.cExportador = adi.cod_exportador;
