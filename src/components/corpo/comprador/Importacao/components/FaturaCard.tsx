@@ -79,16 +79,26 @@ export const FaturaCard: React.FC<FaturaCardProps> = ({
           </span>
         )}
 
-        <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto shrink-0">
-          {(() => {
-            const total = fatura.itens?.length || 0;
-            const associados = fatura.itens?.filter((i) => !!i.codprod).length || 0;
-            const comPedido = fatura.itens?.filter((i) => !!i.codprod && !!i.id_orc).length || 0;
-            if (total === 0) return '0 itens';
-            if (comPedido > 0) return `${comPedido} c/ pedido / ${associados} assoc. / ${total} total`;
-            return `${associados}/${total} associados`;
-          })()}
-        </span>
+        {(() => {
+          const total = fatura.itens?.length || 0;
+          const associados = fatura.itens?.filter((i) => !!i.codprod).length || 0;
+          const comOC = fatura.itens?.filter((i) => !!i.codprod && !!i.id_orc).length || 0;
+          if (total === 0) {
+            return <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto shrink-0">0 itens</span>;
+          }
+          const completo = comOC === total;
+          const falta: string[] = [];
+          if (associados < total) falta.push(`${total - associados} sem produto`);
+          if (associados - comOC > 0) falta.push(`${associados - comOC} sem OC`);
+          return (
+            <span
+              title={completo ? 'Todos os itens com produto e ordem' : 'Faltam itens com produto e/ou ordem de compra'}
+              className={`text-xs ml-auto shrink-0 font-medium ${completo ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}
+            >
+              {comOC}/{total} c/ OC{completo ? ' ✓' : falta.length ? ` · ${falta.join(', ')}` : ''}
+            </span>
+          );
+        })()}
 
         {!readOnly && (
           <div className="flex items-center gap-1 shrink-0">

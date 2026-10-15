@@ -121,7 +121,7 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
         <IndicadorCard titulo="Total de Faturas" valor={String(faturas.length)} />
         <IndicadorCard titulo="Total de Itens" valor={String(totalItens)} />
         <IndicadorCard titulo="Itens Associados" valor={`${totalAssociados}/${totalItens}`} />
-        <IndicadorCard titulo="Itens c/ Pedido" valor={`${totalComPedido}/${totalAssociados}`} />
+        <IndicadorCard titulo="Itens c/ OC" valor={`${totalComPedido}/${totalItens}`} />
         <IndicadorCard titulo="Fornecedores" valor={String(totalFornecedores)} />
       </div>
 
