@@ -8,6 +8,8 @@ import React from 'react';
 import { X, Save, Calculator, Loader2, AlertCircle, FileText, Eye, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import useConfirmarSalvar from '@/hooks/useConfirmarSalvar';
+import { ModalProgressoEmissao } from './ModalProgressoEmissao';
+import type { PassoEmissao, PassoStatus } from './ModalProgressoEmissao';
 import { NacionalizacaoPreviewModal } from './NacionalizacaoPreviewModal';
 import { STATUS_LABELS } from '../types/importacao';
 import { TABS } from '../constants';
@@ -78,6 +80,16 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   const [gerandoDanfe, setGerandoDanfe] = React.useState(false);
   const [emitindo, setEmitindo] = React.useState(false);
 
+  // Progresso da emissão (modal com etapas, igual ao Faturamento)
+  type EmissaoState = {
+    aberto: boolean;
+    passos: PassoEmissao[];
+    status: 'loading' | 'success' | 'error';
+    detalhe?: string;
+    errorMsg?: string;
+  };
+  const [emissao, setEmissao] = React.useState<EmissaoState>({ aberto: false, passos: [], status: 'loading' });
+
   const handleGerarPreviewDanfe = async () => {
     if (!importacaoId) return;
     try {
@@ -127,35 +139,53 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   // Emissão REAL pela via nacional: gera a fatura (aparece na Consulta de Faturas),
   // emite pelo faturamento padrão (desvio importacao_id → XML de importação) e, no
   // sucesso, oferece gerar a entrada no estoque.
-  // Aviso no modal padrão (um botão). Substitui os window.alert nativos.
-  const avisar = (title: string, message: string, type: 'danger' | 'warning' | 'info' = 'danger') =>
-    pedirConfirmacao(() => {}, { title, message, type, somenteOk: true, confirmText: 'OK' });
-
   const emitirNacionalizacao = async () => {
     if (!importacaoId) return;
+    // Etapas exibidas no modal de progresso (igual ao Faturamento).
+    let passos: PassoEmissao[] = [
+      { nome: 'Calcular custos', status: 'pendente' },
+      { nome: 'Gerar fatura', status: 'pendente' },
+      { nome: 'Emitir na SEFAZ (assinar e transmitir)', status: 'pendente' },
+    ];
+    const aplicar = (patch: Partial<EmissaoState>) => setEmissao((e) => ({ ...e, ...patch }));
+    const setPasso = (i: number, st: PassoStatus) => {
+      passos = passos.map((p, idx) => (idx === i ? { ...p, status: st } : p));
+      aplicar({ passos });
+    };
+    setEmissao({ aberto: true, passos, status: 'loading', detalhe: undefined, errorMsg: undefined });
+
     try {
       setEmitindo(true);
-      // 1) calcula o custo (nf_unit por item) — OBRIGATÓRIO antes da nota, feito aqui
-      //    automaticamente. Se a DI já saiu de 'Nova', o custo já existe e o erro é ignorado.
+      // 1) custo (nf_unit por item) — se a DI já saiu de 'Nova', já existe (erro ignorado).
+      setPasso(0, 'loading');
       try {
         await fetch(`/api/importacao/${importacaoId}/calcular-custos`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
         });
       } catch { /* custo já existe; segue */ }
+      setPasso(0, 'done');
 
       // 2) gera/reaproveita a fatura da DI
+      setPasso(1, 'loading');
       const rf = await fetch(`/api/importacao/${importacaoId}/gerar-fatura-nacionalizacao`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
       });
       const jf = await rf.json().catch(() => ({}));
-      if (!rf.ok || !jf.success) { avisar('Erro ao gerar a fatura', jf.message || 'Erro ao gerar a fatura de nacionalização'); return; }
+      if (!rf.ok || !jf.success) {
+        setPasso(1, 'error');
+        aplicar({ status: 'error', errorMsg: jf.message || 'Erro ao gerar a fatura de nacionalização' });
+        return;
+      }
+      setPasso(1, 'done');
 
       // 3) emite pelo faturamento (assina + transmite SEFAZ)
+      setPasso(2, 'loading');
       const re = await fetch(`/api/faturamento/emitir-faturado`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codfat: jf.codfat }),
       });
       const je = await re.json().catch(() => ({}));
       if (!re.ok || je.sucesso === false) {
+        setPasso(2, 'error');
         // Motivo real da SEFAZ: cStat + xMotivo (rejeição) ou detalhe (exceção).
         const motivo = [je.status ? `[${je.status}]` : '', je.motivo || je.detalhe || je.erro || je.message || 'erro desconhecido']
           .filter(Boolean).join(' ');
@@ -172,32 +202,27 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
           autorizada = !!jr.autorizada;
         } catch { /* se a reversão falhar, mantém a fatura e orienta pelo Faturamento */ }
 
-        avisar(
-          'Emissão não autorizada',
-          `SEFAZ: ${motivo}\n\n` + (
-            revertido
-              ? 'A fatura foi revertida. Corrija o que a SEFAZ apontou e emita novamente.'
-              : autorizada
-                ? 'Atenção: a nota consta AUTORIZADA na SEFAZ — verifique na Consulta de Faturas (não foi revertida).'
-                : `Fatura ${jf.codfat} mantida. Reemita pela Consulta de Faturas.`
-          ),
-        );
+        aplicar({
+          status: 'error',
+          errorMsg: `SEFAZ: ${motivo}`,
+          detalhe: revertido
+            ? 'A fatura foi revertida. Corrija o que a SEFAZ apontou e emita novamente.'
+            : autorizada
+              ? 'Atenção: a nota consta AUTORIZADA na SEFAZ — verifique na Consulta de Faturas (não foi revertida).'
+              : `Fatura ${jf.codfat} mantida. Reemita pela Consulta de Faturas.`,
+        });
         return;
       }
+      setPasso(2, 'done');
 
-      // 4) autorizada → oferece gerar a entrada
+      // 4) autorizada
       const chave = je.chaveAcesso || je.chave || '';
-      pedirConfirmacao(() => { window.location.href = '/compras/importacao/gerar-entrada'; }, {
-        title: 'Nota de Nacionalização autorizada',
-        message:
-          `Fatura ${jf.codfat} emitida com sucesso.` + (chave ? `\nChave: ${chave}` : '') +
-          `\n\nDeseja gerar a entrada no estoque agora?`,
-        type: 'info',
-        confirmText: 'Gerar Entrada',
-        cancelText: 'Agora não',
+      aplicar({
+        status: 'success',
+        detalhe: `Fatura ${jf.codfat} emitida com sucesso.` + (chave ? `\nChave: ${chave}` : ''),
       });
     } catch (e: any) {
-      avisar('Erro na emissão', e?.message || 'Erro ao emitir a nota de nacionalização');
+      aplicar({ status: 'error', errorMsg: e?.message || 'Erro ao emitir a nota de nacionalização' });
     } finally {
       setEmitindo(false);
     }
@@ -429,6 +454,28 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
         </div>
       </div>
       {ConfirmacaoSalvarModal}
+
+      {/* Progresso da emissão (etapas) — no sucesso, ao fechar oferece gerar a entrada */}
+      <ModalProgressoEmissao
+        aberto={emissao.aberto}
+        passos={emissao.passos}
+        status={emissao.status}
+        detalhe={emissao.detalhe}
+        errorMsg={emissao.errorMsg}
+        onClose={() => {
+          const sucesso = emissao.status === 'success';
+          setEmissao((e) => ({ ...e, aberto: false }));
+          if (sucesso) {
+            pedirConfirmacao(() => { window.location.href = '/compras/importacao/gerar-entrada'; }, {
+              title: 'Nota de Nacionalização autorizada',
+              message: 'Deseja gerar a entrada no estoque agora?',
+              type: 'info',
+              confirmText: 'Gerar Entrada',
+              cancelText: 'Agora não',
+            });
+          }
+        }}
+      />
       <NacionalizacaoPreviewModal
         aberto={!!previewNacionalizacaoResult}
         resultado={previewNacionalizacaoResult}
