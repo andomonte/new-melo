@@ -444,6 +444,23 @@ export default async function handler(
         if (!rc.ok) throw new Error(rc.message);
         const notaNac = rc.data.notas[0];
         if (!notaNac) throw new Error('Sem itens para a nota de nacionalização.');
+
+        // A IE do emitente da nacionalização sai como tipo 07 por padrão
+        // (inscricaoestadual_07), mas a SÉRIE define a IE (modelo armazém→IE). O ajuste
+        // acima mexe em `emitente` (caminho normal), não em rc.data.emitente — sem
+        // alinhar aqui, a série vai com a IE errada e a SEFAZ rejeita 997 (série já
+        // vinculada a outra inscrição estadual deste CNPJ).
+        try {
+          const ieNac = await ieEmitentePorSerie(await getPgPoolFilial(req), rc.data.emitente.cnpj, String(dbfatura.serie || '1'));
+          const ieAtualNac = String(rc.data.emitente.ie || '').replace(/\D/g, '');
+          if (ieNac && ieNac !== ieAtualNac) {
+            console.log(`🎯 IE (nacionalização) ajustada pela série ${dbfatura.serie}: ${ieAtualNac} → ${ieNac}`);
+            rc.data.emitente.ie = ieNac;
+          }
+        } catch (eIE) {
+          console.warn('⚠️ IE por série (nacionalização) não ajustada (segue):', eIE);
+        }
+
         const dadosNac: DadosNacionalizacao = {
           modo: 'POR_DI',
           ambiente: Number(ambienteEmpresa) === 1 ? 1 : 2,
