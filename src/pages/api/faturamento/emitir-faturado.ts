@@ -554,6 +554,21 @@ export default async function handler(
       protocolo = null;
     }
 
+    // Fallback do motivo: a SEFAZ às vezes devolve o cStat sem xMotivo (ou em outro
+    // nível do XML). Garante uma causa legível em vez de "erro desconhecido" —
+    // dicionário dos códigos mais comuns + trecho da resposta crua.
+    const SEFAZ_CSTAT_MSG: Record<string, string> = {
+      '214': 'Rejeição: Tamanho da mensagem excedeu o limite estabelecido',
+      '215': 'Rejeição: Falha no schema XML (verifique campos obrigatórios/inválidos)',
+      '225': 'Rejeição: Falha no schema XML da NFe',
+    };
+    if (!motivo || !String(motivo).trim()) {
+      const trecho = typeof xmlResposta === 'string'
+        ? (xmlResposta.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] || '').trim()
+        : '';
+      motivo = trecho || SEFAZ_CSTAT_MSG[String(status)] || `Rejeição sem motivo informado pela SEFAZ (cStat ${status})`;
+    }
+
     console.log('✅ Status:', status, motivo);
 
     // 9️⃣ SE AUTORIZADO (100) - SALVAR E RETORNAR PDF
