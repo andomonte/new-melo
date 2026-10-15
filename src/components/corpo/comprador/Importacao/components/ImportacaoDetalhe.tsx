@@ -127,6 +127,10 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
   // Emissão REAL pela via nacional: gera a fatura (aparece na Consulta de Faturas),
   // emite pelo faturamento padrão (desvio importacao_id → XML de importação) e, no
   // sucesso, oferece gerar a entrada no estoque.
+  // Aviso no modal padrão (um botão). Substitui os window.alert nativos.
+  const avisar = (title: string, message: string, type: 'danger' | 'warning' | 'info' = 'danger') =>
+    pedirConfirmacao(() => {}, { title, message, type, somenteOk: true, confirmText: 'OK' });
+
   const emitirNacionalizacao = async () => {
     if (!importacaoId) return;
     try {
@@ -144,7 +148,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
       });
       const jf = await rf.json().catch(() => ({}));
-      if (!rf.ok || !jf.success) { window.alert(jf.message || 'Erro ao gerar a fatura de nacionalização'); return; }
+      if (!rf.ok || !jf.success) { avisar('Erro ao gerar a fatura', jf.message || 'Erro ao gerar a fatura de nacionalização'); return; }
 
       // 3) emite pelo faturamento (assina + transmite SEFAZ)
       const re = await fetch(`/api/faturamento/emitir-faturado`, {
@@ -152,10 +156,31 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
       });
       const je = await re.json().catch(() => ({}));
       if (!re.ok || je.sucesso === false) {
-        window.alert(
-          `Fatura ${jf.codfat} criada, mas a emissão não foi autorizada:\n` +
-          `${je.detalhe || je.erro || je.message || 'erro desconhecido'}\n\n` +
-          `Você pode reemitir pela tela de Faturamento (Consulta de Faturas).`,
+        // Motivo real da SEFAZ: cStat + xMotivo (rejeição) ou detalhe (exceção).
+        const motivo = [je.status ? `[${je.status}]` : '', je.motivo || je.detalhe || je.erro || je.message || 'erro desconhecido']
+          .filter(Boolean).join(' ');
+
+        // Rollback: não autorizada → reverte a fatura para a DI voltar re-emitível.
+        let revertido = false;
+        let autorizada = false;
+        try {
+          const rr = await fetch(`/api/importacao/${importacaoId}/reverter-fatura`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codfat: jf.codfat }),
+          });
+          const jr = await rr.json().catch(() => ({}));
+          revertido = !!jr.revertido;
+          autorizada = !!jr.autorizada;
+        } catch { /* se a reversão falhar, mantém a fatura e orienta pelo Faturamento */ }
+
+        avisar(
+          'Emissão não autorizada',
+          `SEFAZ: ${motivo}\n\n` + (
+            revertido
+              ? 'A fatura foi revertida. Corrija o que a SEFAZ apontou e emita novamente.'
+              : autorizada
+                ? 'Atenção: a nota consta AUTORIZADA na SEFAZ — verifique na Consulta de Faturas (não foi revertida).'
+                : `Fatura ${jf.codfat} mantida. Reemita pela Consulta de Faturas.`
+          ),
         );
         return;
       }
@@ -172,7 +197,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
         cancelText: 'Agora não',
       });
     } catch (e: any) {
-      window.alert(e?.message || 'Erro ao emitir a nota de nacionalização');
+      avisar('Erro na emissão', e?.message || 'Erro ao emitir a nota de nacionalização');
     } finally {
       setEmitindo(false);
     }
