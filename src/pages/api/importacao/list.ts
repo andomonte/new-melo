@@ -50,6 +50,25 @@ export default async function handler(
       paramIdx++;
     }
 
+    // Filtros por coluna (DataTablePadrao): `filtros` = JSON [{campo,tipo,valor}].
+    // Whitelist de colunas para evitar SQL injection; ILIKE simples por valor.
+    const COLS_FILTRO: Record<string, string> = {
+      nro_di: 'i.nro_di',
+      navio: 'i.navio',
+      data_di: 'i.data_di',
+    };
+    let filtros: { campo: string; tipo?: string; valor: string }[] = [];
+    try {
+      if (req.query.filtros) filtros = JSON.parse(String(req.query.filtros));
+    } catch { filtros = []; }
+    for (const f of Array.isArray(filtros) ? filtros : []) {
+      const col = COLS_FILTRO[f?.campo];
+      if (!col || !f?.valor) continue;
+      conditions.push(`${col}::text ILIKE $${paramIdx}`);
+      params.push(`%${String(f.valor)}%`);
+      paramIdx++;
+    }
+
     if (status && ['N', 'E', 'C'].includes(status)) {
       conditions.push(`i.status = $${paramIdx}`);
       params.push(status);
@@ -79,15 +98,31 @@ export default async function handler(
     );
     const total = parseInt(countResult.rows[0].total, 10);
 
-    // Fetch rows
+    // Fetch rows — inclui, por linha, se a DI já tem NOTA DE NACIONALIZAÇÃO emitida
+    // (dbfatura importacao_id + dbfat_nfe status '100'). Status derivado: a DI segue
+    // com status 'N' até gerar a entrada ('E'); o flag abaixo permite o badge "Nota
+    // Emitida" na listagem e some sozinho se a emissão for revertida (rollback).
     const dataResult = await pool.query(
       `SELECT
         i.id, i.nro_di, i.data_di, i.status, i.tipo_die, i.taxa_dolar,
         i.total_mercadoria, i.frete, i.seguro, i.thc, i.total_cif,
         i.pis_cofins, i.ii, i.ipi, i.siscomex, i.anuencia,
         i.peso_liquido, i.qtd_adicoes, i.navio,
-        i.data_entrada_brasil, i.codusr, i.data_cad
+        i.data_entrada_brasil, i.codusr, i.data_cad,
+        (nac.chave IS NOT NULL) AS nota_emitida,
+        nac.nroform AS nfe_numero,
+        nac.chave   AS nfe_chave
       FROM dbent_importacao i
+      LEFT JOIN LATERAL (
+        SELECT f.nroform, nf.chave
+          FROM dbfatura f
+          JOIN dbfat_nfe nf ON nf.codfat = f.codfat
+         WHERE f.importacao_id = i.id
+           AND COALESCE(f.cancel,'N') <> 'S'
+           AND nf.status = '100'
+         ORDER BY nf.codfat DESC
+         LIMIT 1
+      ) nac ON true
       ${where}
       ORDER BY i.data_cad DESC
       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,

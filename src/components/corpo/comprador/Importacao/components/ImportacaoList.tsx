@@ -1,10 +1,11 @@
 /**
- * Lista de Declarações de Importação (DIs)
- * Layout e tabela idênticos ao DataTableFiltroV3 + ComprasTabManager
+ * Lista de Declarações de Importação (DIs) — padrão DataTablePadrao (igual aos
+ * cadastros, ex.: clientes): busca, filtros por coluna e filtro de STATUS por
+ * dropdown (Nova / Nota Emitida / Entrada Gerada / Cancelada).
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Eye, Trash2, MoreHorizontal } from 'lucide-react';
+import { Plus, Eye, Trash2, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,9 +14,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import Carregamento from '@/utils/carregamento';
-import SearchInput from '@/components/common/SearchInput2';
-import SelectInput from '@/components/common/SelectPadrao';
+import DataTable from '@/components/common/DataTablePadrao';
+import type { Meta } from '@/data/common/meta';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import api from '@/components/services/api';
 
@@ -30,21 +30,44 @@ interface ImportacaoRow {
   nro_di: string;
   data_di: string;
   status: 'N' | 'E' | 'C';
+  /** DI já tem nota de nacionalização emitida (dbfatura + dbfat_nfe autorizada). */
+  nota_emitida?: boolean;
+  nfe_numero?: string | null;
+  nfe_chave?: string | null;
   taxa_dolar: number;
   total_mercadoria: number;
   total_cif: number;
   navio?: string;
   qtd_adicoes?: number;
-  codusr?: string;
-  data_cad?: string;
 }
 
-interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
+// Colunas: a CHAVE é o header (casa com a coluna do backend para os filtros); o
+// rótulo visível vem de COLUMN_LABELS. 'acoes' e 'status' não têm filtro de texto
+// (status usa o dropdown dedicado).
+const HEADERS = ['acoes', 'nro_di', 'data_di', 'status', 'qtd_adicoes', 'navio', 'total_mercadoria', 'taxa_dolar', 'total_cif'];
+const COLUMN_LABELS: Record<string, string> = {
+  acoes: 'Ações',
+  nro_di: 'Nº DI',
+  data_di: 'Data',
+  status: 'Status',
+  qtd_adicoes: 'Adições',
+  navio: 'Navio',
+  total_mercadoria: 'Total (USD)',
+  taxa_dolar: 'Taxa Dólar',
+  total_cif: 'Total CIF',
+};
+// Colunas no seletor de colunas (rótulos via COLUMN_LABELS).
+const COLUNAS_CHOOSER = ['nro_di', 'data_di', 'status', 'qtd_adicoes', 'navio', 'total_mercadoria', 'taxa_dolar', 'total_cif'];
+// Colunas SEM input de texto na linha de filtros (status usa o dropdown; numéricas não filtram).
+const COLUNAS_SEM_FILTRO = ['status', 'qtd_adicoes', 'total_mercadoria', 'taxa_dolar', 'total_cif'];
+// Campos realmente filtráveis no backend (whitelist de envio).
+const CAMPOS_FILTRAVEIS = ['nro_di', 'navio', 'data_di'];
+const STATUS_OPTIONS = [
+  { value: 'N', label: 'Nova' },
+  { value: 'EMITIDA', label: 'Nota Emitida' },
+  { value: 'E', label: 'Entrada Gerada' },
+  { value: 'C', label: 'Cancelada' },
+];
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   N: { label: 'Nova', variant: 'secondary' },
@@ -52,24 +75,13 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   C: { label: 'Cancelada', variant: 'destructive' },
 };
 
-const HEADERS = [
-  { key: 'acoes', label: 'Ações', fixed: true },
-  { key: 'nro_di', label: 'Nº DI', fixed: false },
-  { key: 'data_di', label: 'Data', fixed: false },
-  { key: 'status', label: 'Status', fixed: false },
-  { key: 'qtd_adicoes', label: 'Adições', fixed: false },
-  { key: 'navio', label: 'Navio', fixed: false },
-  { key: 'total_mercadoria', label: 'Total (USD)', fixed: false },
-  { key: 'taxa_dolar', label: 'Taxa Dólar', fixed: false },
-  { key: 'total_cif', label: 'Total CIF', fixed: false },
-];
-
-const PER_PAGE_OPTIONS = [
-  { value: '10', label: '10' },
-  { value: '25', label: '25' },
-  { value: '50', label: '50' },
-  { value: '100', label: '100' },
-];
+const fmtDate = (d: string) => {
+  if (!d) return '-';
+  try { return new Date(d).toLocaleDateString('pt-BR'); } catch { return d; }
+};
+const fmtUSD = (v: number) =>
+  `$ ${(parseFloat(String(v)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtTaxa = (v: number) => `R$ ${(parseFloat(String(v)) || 0).toFixed(4)}`;
 
 export const ImportacaoList: React.FC<ImportacaoListProps> = ({
   onNovaImportacao,
@@ -77,45 +89,50 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
   refreshKey,
 }) => {
   const [data, setData] = useState<ImportacaoRow[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [meta, setMeta] = useState<Meta>({ total: 0, lastPage: 1, currentPage: 1, perPage: 25 });
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(25);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [deleting, setDeleting] = useState<number | null>(null);
+  const [buscaCommit, setBuscaCommit] = useState(''); // busca aplicada (Enter/blur)
+  const [search, setSearch] = useState(''); // valor digitado
+  const [statusFiltro, setStatusFiltro] = useState('todas'); // todas | N | EMITIDA | E | C
+  const [filtros, setFiltros] = useState<{ campo: string; tipo: string; valor: string }[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<ImportacaoRow | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
 
-  const fetchData = useCallback(async (page = 1, busca = '') => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/importacao/list', {
-        params: { page, limit: perPage, busca: busca || undefined },
-      });
-      if (response.data?.success) {
-        setData(response.data.data || []);
-        setPagination(response.data.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 });
+      const params: Record<string, unknown> = { page, limit: perPage };
+      if (buscaCommit) params.busca = buscaCommit;
+      // Status (dropdown): 'EMITIDA' = status N + nota autorizada (com_nota).
+      if (statusFiltro && statusFiltro !== 'todas') {
+        if (statusFiltro === 'EMITIDA') { params.status = 'N'; params.com_nota = '1'; }
+        else params.status = statusFiltro;
+      }
+      // Filtros por coluna (campo = chave = coluna do backend; whitelist no backend).
+      const filtrosValidos = filtros.filter((f) => CAMPOS_FILTRAVEIS.includes(f.campo) && f.valor);
+      if (filtrosValidos.length) params.filtros = JSON.stringify(filtrosValidos);
+
+      const resp = await api.get('/api/importacao/list', { params });
+      if (resp.data?.success) {
+        setData(resp.data.data || []);
+        const p = resp.data.pagination || {};
+        setMeta({
+          total: p.total || 0,
+          lastPage: p.totalPages || 1,
+          currentPage: p.page || 1,
+          perPage: p.limit || perPage,
+        });
       }
     } catch (err) {
       console.error('Erro ao carregar importações:', err);
     } finally {
       setLoading(false);
     }
-  }, [perPage]);
+  }, [page, perPage, buscaCommit, statusFiltro, filtros]);
 
-  useEffect(() => {
-    fetchData(1, searchTerm);
-  }, [refreshKey, perPage]);
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') fetchData(1, searchTerm);
-  };
-
-  const handleSearchBlur = () => {
-    fetchData(1, searchTerm);
-  };
+  useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
 
   const handleExcluir = async () => {
     if (!confirmDelete) return;
@@ -124,7 +141,7 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
       const response = await api.delete(`/api/importacao/delete?id=${confirmDelete.id}`);
       if (response.data?.success) {
         setConfirmDelete(null);
-        fetchData(pagination.page, searchTerm);
+        fetchData();
       }
     } catch (err) {
       console.error('Erro ao excluir:', err);
@@ -133,221 +150,107 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
     }
   };
 
-  const fmtDate = (d: string) => {
-    if (!d) return '-';
-    try { return new Date(d).toLocaleDateString('pt-BR'); } catch { return d; }
-  };
-
-  const fmtUSD = (v: number) =>
-    `$ ${(parseFloat(String(v)) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const fmtTaxa = (v: number) =>
-    `R$ ${(parseFloat(String(v)) || 0).toFixed(4)}`;
-
-  const renderCell = (header: typeof HEADERS[number], row: ImportacaoRow) => {
-    switch (header.key) {
-      case 'acoes':
-        return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0" type="button">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onVerDetalhe(row.id)}>
-                <Eye className="mr-2 h-4 w-4" />
-                Ver
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setConfirmDelete(row)}
-                className="text-red-600 dark:text-red-400 focus:text-red-600"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Excluir (somente teste)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        );
-      case 'status': {
-        const info = STATUS_MAP[row.status] || { label: row.status, variant: 'secondary' as const };
-        return <Badge variant={info.variant}>{info.label}</Badge>;
-      }
-      case 'data_di':
-        return fmtDate(row.data_di);
-      case 'total_mercadoria':
-        return <span className="text-green-600 dark:text-green-400 font-medium">{fmtUSD(row.total_mercadoria)}</span>;
-      case 'total_cif':
-        return <span className="font-medium">{fmtUSD(row.total_cif)}</span>;
-      case 'taxa_dolar':
-        return fmtTaxa(row.taxa_dolar);
-      case 'qtd_adicoes':
-        return row.qtd_adicoes || '-';
-      case 'navio':
-        return row.navio || '-';
-      case 'nro_di':
-        return <span className="font-medium">{row.nro_di}</span>;
-      default:
-        return (row as any)[header.key] || '-';
+  const statusCell = (row: ImportacaoRow) => {
+    if (row.status === 'N' && row.nota_emitida) {
+      const tip = [row.nfe_numero ? `NF ${row.nfe_numero}` : '', row.nfe_chave || ''].filter(Boolean).join(' · ');
+      return (
+        <Badge title={tip || 'Nota de nacionalização emitida'} className="bg-blue-600 hover:bg-blue-600 text-white border-transparent">
+          Nota Emitida
+        </Badge>
+      );
     }
+    const info = STATUS_MAP[row.status] || { label: row.status, variant: 'secondary' as const };
+    return <Badge variant={info.variant}>{info.label}</Badge>;
   };
+
+  // Linhas no formato do DataTablePadrao: objeto keyado pelo header, valor = JSX/primitivo.
+  const rows = data.map((row) => ({
+    id: row.id,
+    acoes: (
+      <div onClick={(e) => e.stopPropagation()} className="flex justify-center">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0" type="button">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onVerDetalhe(row.id)}>
+              <Eye className="mr-2 h-4 w-4" /> Ver
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setConfirmDelete(row)}
+              className="text-red-600 dark:text-red-400 focus:text-red-600"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Excluir (somente teste)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    ),
+    nro_di: <span className="font-medium">{row.nro_di}</span>,
+    data_di: fmtDate(row.data_di),
+    status: statusCell(row),
+    qtd_adicoes: row.qtd_adicoes || '-',
+    navio: row.navio || '-',
+    total_mercadoria: <span className="text-green-600 dark:text-green-400 font-medium">{fmtUSD(row.total_mercadoria)}</span>,
+    taxa_dolar: fmtTaxa(row.taxa_dolar),
+    total_cif: <span className="font-medium">{fmtUSD(row.total_cif)}</span>,
+  }));
 
   return (
     <>
-    <ConfirmationModal
-      isOpen={!!confirmDelete}
-      onClose={() => setConfirmDelete(null)}
-      onConfirm={handleExcluir}
-      title="Excluir Importação (somente teste)"
-      message={`Deseja excluir a DI ${confirmDelete?.nro_di}?\n\nEsta ação irá remover a importação e todos os dados relacionados (contratos, entradas, itens).`}
-      type="danger"
-      confirmText="Sim, Excluir"
-      cancelText="Cancelar"
-      loading={deleting !== null}
-    />
-    <div className="h-full flex flex-col bg-white dark:bg-slate-900">
-      {/* Header - igual ComprasTabManager: px-10 pt-4 pb-1 */}
-      <div className="px-10 pt-4 pb-1 flex-shrink-0">
-        <div className="flex justify-between items-center mb-2">
-          <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
-            Declarações de Importação
-          </div>
-          <Button
-            onClick={onNovaImportacao}
-            className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
-          >
-            <Plus size={18} />
-            Nova Importação
-          </Button>
-        </div>
-      </div>
-
-      {/* Conteúdo - igual RequisicoesCompraMain: flex-1 min-h-0 overflow-hidden > px-4 */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="h-full pb-6 overflow-hidden">
-          <main className="px-4 w-full h-full">
-            {/* DataTable container - EXATO igual DataTableFiltroV3 linha 255 */}
-            <div
-              className="border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 rounded-lg flex flex-col w-full overflow-hidden"
-              style={{ height: 'calc(100vh - 200px)', maxWidth: '100%' }}
+      <ConfirmationModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleExcluir}
+        title="Excluir Importação (somente teste)"
+        message={`Deseja excluir a DI ${confirmDelete?.nro_di}?\n\nEsta ação irá remover a importação e todos os dados relacionados (contratos, entradas, itens).`}
+        type="danger"
+        confirmText="Sim, Excluir"
+        cancelText="Cancelar"
+        loading={deleting !== null}
+      />
+      <div className="h-full flex flex-col bg-white dark:bg-slate-900">
+        <div className="px-6 pt-4 pb-1 flex-shrink-0">
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">Declarações de Importação</div>
+            <Button
+              onClick={onNovaImportacao}
+              className="flex items-center gap-1 px-3 py-2 text-sm h-8 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
             >
-              {/* Search - border-b p-2 */}
-              <div className="border-b border-gray-200 dark:border-zinc-700 p-2">
-                <div className="flex justify-between items-center gap-2">
-                  <SearchInput
-                    placeholder="Pesquisar por nº DI, navio..."
-                    onChange={handleSearch}
-                    onKeyDown={handleSearchKeyDown}
-                    onBlur={handleSearchBlur}
-                  />
-                </div>
-              </div>
+              <Plus size={18} /> Nova Importação
+            </Button>
+          </div>
+        </div>
 
-              {/* Tabela */}
-              <div className="flex-1 overflow-hidden flex flex-col">
-                <div className="w-full overflow-x-auto overflow-y-auto flex-1">
-                  <div className="min-w-full">
-                    <table className="table-auto w-full border-collapse text-sm text-center">
-                      <thead className="sticky top-0 z-10 border-b border-gray-300 dark:border-zinc-700">
-                        <tr>
-                          {HEADERS.map((header) => (
-                            <th
-                              key={header.key}
-                              className={`relative px-2 py-2 bg-gray-200 dark:bg-zinc-800 whitespace-nowrap text-center ${
-                                header.fixed ? 'w-[80px]' : 'min-w-[140px]'
-                              }`}
-                            >
-                              <div className="flex justify-center">
-                                {header.label}
-                              </div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {loading ? (
-                          <tr>
-                            <td colSpan={HEADERS.length}>
-                              <div className="flex justify-center items-center py-20">
-                                <Carregamento texto="BUSCANDO DADOS" />
-                              </div>
-                            </td>
-                          </tr>
-                        ) : data.length === 0 ? (
-                          <tr>
-                            <td colSpan={HEADERS.length} className="py-20 text-center">
-                              Sem dados até o momento.
-                            </td>
-                          </tr>
-                        ) : (
-                          data.map((row, rowIndex) => (
-                            <tr
-                              key={row.id || rowIndex}
-                              className="bg-white dark:bg-zinc-900 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-all duration-200 cursor-pointer"
-                              onClick={() => onVerDetalhe(row.id)}
-                            >
-                              {HEADERS.map((header) => (
-                                <td
-                                  key={header.key}
-                                  className="border-t border-gray-300 dark:border-zinc-600 px-4 py-2 whitespace-nowrap"
-                                  onClick={header.key === 'acoes' ? (e) => e.stopPropagation() : undefined}
-                                >
-                                  <div className="truncate">
-                                    {renderCell(header, row)}
-                                  </div>
-                                </td>
-                              ))}
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              {/* Rodapé/Paginação - EXATO igual DataTableFiltroV3 linha 647 */}
-              <div className="flex-shrink-0 border-t border-gray-300 dark:border-zinc-500 bg-gray-200 dark:bg-zinc-800 px-2 py-2 min-h-[3rem]">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-4 text-gray-600 dark:text-gray-300">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm">Qtd. Itens:</span>
-                      <SelectInput
-                        name="itemsPagina"
-                        label=""
-                        value={perPage.toString()}
-                        options={PER_PAGE_OPTIONS}
-                        onValueChange={(val) => setPerPage(parseInt(val))}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 items-center text-sm">
-                    <button
-                      onClick={() => { if (pagination.page > 1) fetchData(pagination.page - 1, searchTerm); }}
-                      disabled={pagination.page <= 1}
-                      className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 disabled:opacity-40"
-                    >
-                      <ChevronLeft size={18} />
-                    </button>
-                    <span className="whitespace-nowrap">
-                      Página {pagination.page} de {pagination.totalPages || 1}
-                    </span>
-                    <button
-                      onClick={() => { if (pagination.page < pagination.totalPages) fetchData(pagination.page + 1, searchTerm); }}
-                      disabled={pagination.page >= pagination.totalPages}
-                      className="p-1 text-gray-600 dark:text-gray-300 hover:text-blue-600 disabled:opacity-40"
-                    >
-                      <ChevronRight size={18} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </main>
+        <div className="flex-1 min-h-0 flex flex-col px-4 pb-4">
+          <DataTable
+            headers={HEADERS}
+            columnLabels={COLUMN_LABELS}
+            rows={rows}
+            meta={meta}
+            carregando={loading}
+            semColunaDeAcaoPadrao
+            nonsortableColumns={HEADERS}
+            onRowClick={(r) => { if (r?.id) onVerDetalhe(r.id); }}
+            onPageChange={setPage}
+            onPerPageChange={(pp) => { setPerPage(pp); setPage(1); }}
+            onSearch={(e) => setSearch(e.target.value)}
+            onSearchKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); setBuscaCommit(search); } }}
+            onSearchBlur={() => { setPage(1); setBuscaCommit(search); }}
+            searchInputPlaceholder="Pesquisar por nº DI, navio..."
+            noDataMessage="Nenhuma declaração de importação encontrada."
+            colunasFiltro={COLUNAS_CHOOSER}
+            colunasSemFiltro={COLUNAS_SEM_FILTRO}
+            onFiltroChange={(novos) => { setPage(1); setBuscaCommit(''); setSearch(''); setFiltros(novos); }}
+            statusFilterColumn="status"
+            statusFilterOptions={STATUS_OPTIONS}
+            statusFilterValue={statusFiltro}
+            onStatusFilterChange={(v) => { setPage(1); setStatusFiltro(v); }}
+          />
         </div>
       </div>
-    </div>
     </>
   );
 };
