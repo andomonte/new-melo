@@ -9,6 +9,9 @@ interface ModalProps {
    *  transbordar — nesse caso o conteúdo precisa se virar para caber, porque a
    *  caixa é limitada a 92vh (ex.: a parte que cresce usa flex-1 min-h-0). */
   bodyClassName?: string;
+  /** Classe de z-index da camada do modal (default z-50). Use um valor maior
+   *  (ex.: "z-[60]") quando este modal abre POR CIMA de outro modal. */
+  zClass?: string;
 }
 
 export default function Modal({
@@ -18,11 +21,12 @@ export default function Modal({
   title,
   width = 'w-[94%] max-w-7xl',
   bodyClassName = 'overflow-y-auto max-h-[85vh]',
+  zClass = 'z-50',
 }: ModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className={`fixed inset-0 ${zClass} flex items-center justify-center bg-black bg-opacity-50`}>
       {/* max-h + flex-col: a caixa nunca passa da viewport, então o cabeçalho
           (e o ✕) continuam visíveis por mais conteúdo que o corpo tenha. */}
       <div

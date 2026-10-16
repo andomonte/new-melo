@@ -223,6 +223,10 @@ export function ContasAPagar() {
   const [historicoPagamentos, setHistoricoPagamentos] = useState<{
     historico: any[];
     total_pago: number;
+    total_juros?: number;
+    total_multa?: number;
+    total_desconto?: number;
+    total_geral?: number;
     qtd_pagamentos: number;
   } | null>(null);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
@@ -1297,7 +1301,17 @@ export function ContasAPagar() {
   // Preparar dados no formato que o DataTable espera
   const prepararDadosTabela = () => {
     return contasPagar.map(conta => {
-      const vencido = conta.dt_venc && new Date(conta.dt_venc) < new Date() && conta.status === 'pendente';
+      // "Vencido" só quando a DATA de vencimento é ANTERIOR a hoje. Compara pela DATA
+      // (string yyyy-mm-dd), MESMA base do formatarData (que faz split('T')[0]). Usar
+      // new Date() convertia p/ fuso local e, com dt_venc em UTC (…T00:00Z), marcava
+      // o dia anterior → vencimento de HOJE aparecia "Vencido".
+      let vencido = false;
+      if (conta.dt_venc && conta.status === 'pendente') {
+        const venc = String(conta.dt_venc).split('T')[0];
+        const h = new Date();
+        const hoje = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`;
+        vencido = !!venc && venc < hoje;
+      }
       const idStr = conta.id.toString();
       const isSelecionado = titulosSelecionados.has(idStr);
       const podeSelecionar = conta.status !== 'pago' && conta.status !== 'cancelado';
@@ -1667,50 +1681,11 @@ export function ContasAPagar() {
       setBancoSelecionado(conta.banco || '');
     }
     
-    // ✅ OTIMIZAÇÃO 3: Calcular juros automaticamente ao abrir modal
-    if (conta.dt_venc) {
-      try {
-        const valorOriginal = parseFloat(conta.valor_pgto.toString());
-        const totalJaPago = parseFloat(conta.total_pago_historico?.toString() || '0');
-        const saldoRestante = valorOriginal - totalJaPago;
-        
-        const response = await fetch('/api/contas-pagar/calcular-juros', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            valor_pgto: saldoRestante,
-            dt_venc: conta.dt_venc,
-            taxa_juros: 8
-          })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          setValorJuros(formatarValorParaInput(data.valor_juros));
-          
-          // Se houver juros, somar ao saldo restante
-          if (data.valor_juros > 0) {
-            const valorTotal = saldoRestante + parseFloat(data.valor_juros.toString());
-            setValorPago(formatarValorParaInput(valorTotal));
-          }
-          
-          if (data.dias_atraso > 0) {
-            toast.info(
-              `Título com ${data.dias_atraso} dias de atraso. Juros: R$ ${data.valor_juros.toFixed(2)}`,
-              { position: 'top-right', duration: 5000 }
-            );
-          }
-        } else {
-          setValorJuros('0');
-        }
-      } catch (error) {
-        console.error('Erro ao calcular juros:', error);
-        setValorJuros('0');
-      }
-    } else {
-      setValorJuros('0');
-    }
-    
+    // Juros SEMPRE zerado em Contas a Pagar: não cobramos juros automaticamente ao
+    // marcar como paga. O "Valor a Pagar" fica no saldo restante (setado acima); se
+    // houver juros/multa a cobrar, o usuário digita manualmente no campo.
+    setValorJuros('0');
+
     modais.setContaSelecionada(conta);
     modais.setModalPagoAberto(true);
   };
@@ -3161,25 +3136,25 @@ export function ContasAPagar() {
           {/* Formulário de Pagamento */}
           <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="data-pagamento-lote">Data do Pagamento *</Label>
                 <Input
                   id="data-pagamento-lote"
                   type="date"
                   value={dataPagamentoLote}
                   onChange={(e) => setDataPagamentoLote(e.target.value)}
-                  className="mt-1"
+                  className="mt-1 w-full"
                   required
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="banco-lote">Conta *</Label>
                 <SelectPadrao searchable
                   value={bancoLote}
                   onValueChange={setBancoLote}
                   placeholder="Selecione a conta"
-                  options={bancosDisponiveis}
+                  options={contasDbconta}
                 />
               </div>
             </div>
@@ -3835,7 +3810,8 @@ export function ContasAPagar() {
         </div>
       </Modal>
 
-      {/* Modal Cancelar Pagamento Individual */}
+      {/* Modal Cancelar Pagamento Individual — abre POR CIMA do Histórico (z-50),
+          por isso precisa de z maior, senão fica atrás. */}
       <Modal
         isOpen={modais.modalCancelarPagamentoAberto}
         onClose={() => {
@@ -3843,6 +3819,7 @@ export function ContasAPagar() {
           setPagamentoParaCancelar(null);
         }}
         title="Cancelar Pagamento"
+        zClass="z-[60]"
       >
         <div className="space-y-4">
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
@@ -4214,14 +4191,30 @@ export function ContasAPagar() {
                   <div>
                     <Label className="text-xs text-gray-600 dark:text-gray-400">Total Pago</Label>
                     <p className="text-lg font-mono font-bold text-green-600 dark:text-green-400">
-                      {formatarMoeda(historicoPagamentos.total_pago)}
+                      {formatarMoeda(historicoPagamentos.total_geral ?? historicoPagamentos.total_pago)}
                     </p>
+                    {(() => {
+                      const juros = historicoPagamentos.total_juros || 0;
+                      const multa = historicoPagamentos.total_multa || 0;
+                      const desc = historicoPagamentos.total_desconto || 0;
+                      if (!juros && !multa && !desc) return null;
+                      const extras: string[] = [];
+                      if (juros) extras.push(`juros ${formatarMoeda(juros)}`);
+                      if (multa) extras.push(`multa ${formatarMoeda(multa)}`);
+                      if (desc) extras.push(`desc. −${formatarMoeda(desc)}`);
+                      return (
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                          principal {formatarMoeda(historicoPagamentos.total_pago)} + {extras.join(' + ')}
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div>
                     <Label className="text-xs text-gray-600 dark:text-gray-400">Saldo Restante</Label>
                     <p className="text-lg font-mono font-bold text-orange-600 dark:text-orange-400">
                       {formatarMoeda((modais.contaSelecionada?.valor_pgto || 0) - historicoPagamentos.total_pago)}
                     </p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">sobre o principal</p>
                   </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -4641,11 +4634,11 @@ export function ContasAPagar() {
                 checked={novaContaDados.tem_cobr}
                 onChange={(e) => {
                   const marcado = e.target.checked;
+                  // Não limpa mais a duplicata ao desmarcar: a duplicata pode ser
+                  // informada também em título único (o cliente digita o número).
                   setNovaContaDados({
                     ...novaContaDados,
                     tem_cobr: marcado,
-                    // Desmarcou → limpa a duplicata (grava NULL, fiel ao Delphi/MELOSYS)
-                    ...(marcado ? {} : { nro_dup: '' }),
                   });
                 }}
                 style={{
@@ -4692,16 +4685,16 @@ export function ContasAPagar() {
                   placeholder={novaContaDados.eh_internacional ? 'Ex: INV-2025-001' : 'Ex: 12345'}
                 />
               </div>
-              {/* Nº da Duplicata — habilitado só com "Tem Cobrança" */}
+              {/* Nº da Duplicata — SEMPRE habilitado: pode ser informado também em
+                  título único (o cliente digita o número). Obrigatório só com cobrança. */}
               <div>
-                <Label className={novaContaDados.eh_internacional || novaContaDados.tem_cobr ? '' : 'opacity-50'}>
+                <Label>
                   {novaContaDados.eh_internacional ? 'Número do Contrato' : 'Número da Duplicata'}
                   {novaContaDados.tem_cobr && !novaContaDados.eh_internacional ? ' *' : ''}
                 </Label>
                 <Input
                   type="text"
                   value={novaContaDados.eh_internacional ? novaContaDados.nro_contrato : novaContaDados.nro_dup}
-                  disabled={!novaContaDados.eh_internacional && !novaContaDados.tem_cobr}
                   onChange={(e) => {
                     const valor = e.target.value;
                     if (novaContaDados.eh_internacional) {
@@ -4710,24 +4703,8 @@ export function ContasAPagar() {
                       setNovaContaDados({ ...novaContaDados, nro_dup: valor });
                     }
                   }}
-                  placeholder={
-                    novaContaDados.eh_internacional
-                      ? 'Ex: CONT-2025-001'
-                      : novaContaDados.tem_cobr
-                      ? 'Nº da duplicata (ex: 001)'
-                      : 'Marque "Parcelar Título" para habilitar'
-                  }
-                  className={
-                    !novaContaDados.eh_internacional && !novaContaDados.tem_cobr
-                      ? 'bg-gray-100 dark:bg-gray-800 cursor-not-allowed'
-                      : ''
-                  }
+                  placeholder={novaContaDados.eh_internacional ? 'Ex: CONT-2025-001' : 'Nº da duplicata (ex: 001)'}
                 />
-                {!novaContaDados.eh_internacional && !novaContaDados.tem_cobr && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Disponível quando “Parcelar Título” estiver marcado.
-                  </p>
-                )}
               </div>
             </div>
           </div>

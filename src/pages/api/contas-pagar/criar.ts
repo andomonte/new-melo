@@ -129,10 +129,10 @@ export default async function handler(
     const valorParcelaFormatado = Math.floor(valorParcela * 100) / 100;
     const restocentavos = parseFloat(valor_pgto) - (valorParcelaFormatado * totalParcelas);
     
-    // Nro. da duplicata só é gravado quando há cobrança (tem_cobr), fiel ao Delphi
-    // (UniContasP: Check4 desmarcado → vNro_Dup := NULL). Sem cobrança, nro_dup fica NULL.
+    // Nro. da duplicata: pode ser informado também em TÍTULO ÚNICO (o cliente digita o
+    // número). Antes só gravava com cobrança (fiel ao Delphi); agora grava o que vier.
     const temCobr = !!tem_cobr;
-    let baseDup = temCobr ? (nro_dup || '') : '';
+    let baseDup = nro_dup || '';
     if (temCobr && !baseDup && totalParcelas > 1) {
       // Gerar um ID único baseado em timestamp (só quando há cobrança e múltiplas parcelas)
       baseDup = `DUP${Date.now().toString().slice(-8)}`;
@@ -184,10 +184,8 @@ export default async function handler(
         ? valorInformado
         : (i === 0 ? valorParcelaFormatado + restocentavos : valorParcelaFormatado);
 
-      // Gerar nro_dup para esta parcela (formato: base/X ou X/Y). Sem cobrança → NULL.
-      const nroDupParcela = !temCobr
-        ? null
-        : totalParcelas > 1
+      // nro_dup da parcela: parcelado → base/NN; título único → o número digitado (ou NULL).
+      const nroDupParcela = totalParcelas > 1
         ? `${baseDup}/${String(i + 1).padStart(2, '0')}`
         : (baseDup || null);
 
