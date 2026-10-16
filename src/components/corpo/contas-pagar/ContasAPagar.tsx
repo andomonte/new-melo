@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Autocomplete } from '@/components/common/Autocomplete';
+import ModalPedagio from '@/components/corpo/contas-pagar/ModalPedagio';
 import { toast } from 'sonner';
 import { CheckCircle, Edit, XCircle, Eye, FileText, Plus, Filter, CalculatorIcon, DollarSign, History, ShoppingCart, Edit3, AlertTriangle, FileBarChart, Download, Loader2, Search, Landmark, MoreHorizontal, ChevronDown } from 'lucide-react';
 import DataTableContasPagar from '@/components/common/DataTableContasPagar';
@@ -345,6 +346,8 @@ export function ContasAPagar() {
   // TODO: trocar o state para um autcomplete
   const [titulosSelecionados, setTitulosSelecionados] = useState<Set<string>>(new Set());
   const [modalPagamentoLoteAberto, setModalPagamentoLoteAberto] = useState(false);
+  // Modal dedicado "Lançar Pedágio" (vários pedágios de um fornecedor pagos juntos no dia).
+  const [modalPedagioAberto, setModalPedagioAberto] = useState(false);
   const [bancoLote, setBancoLote] = useState('');
   const [dataPagamentoLote, setDataPagamentoLote] = useState('');
   const [obsPagamentoLote, setObsPagamentoLote] = useState('');
@@ -2973,6 +2976,13 @@ export function ContasAPagar() {
               )}
             </div>
             <DefaultButton
+              variant="secondary"
+              size="default"
+              onClick={() => setModalPedagioAberto(true)}
+              icon={<DollarSign className="w-4 h-4" />}
+              text="Pedágio"
+            />
+            <DefaultButton
               variant="primary"
               size="default"
               onClick={() => {
@@ -4427,6 +4437,19 @@ export function ContasAPagar() {
           onParcelaSelecionada={handleParcelaSelecionada}
         />
       )}
+
+      {/* Modal dedicado Lançar Pedágio */}
+      <ModalPedagio
+        isOpen={modalPedagioAberto}
+        onClose={() => setModalPedagioAberto(false)}
+        onCriado={async (codPgtos) => {
+          // Atualiza a lista e já abre o Pagamento em Lote com os pedágios criados
+          // pré-selecionados — o usuário decide quais dar baixa (pode não pagar algum hoje).
+          await consultarContasPagar(paginaAtual, limite, filtros);
+          setTitulosSelecionados(new Set(codPgtos));
+          setModalPagamentoLoteAberto(true);
+        }}
+      />
 
       {/* Modal Nova Conta */}
       <Modal

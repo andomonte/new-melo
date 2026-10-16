@@ -184,10 +184,12 @@ export default async function handler(
         ? valorInformado
         : (i === 0 ? valorParcelaFormatado + restocentavos : valorParcelaFormatado);
 
-      // nro_dup da parcela: parcelado → base/NN; título único → o número digitado (ou NULL).
-      const nroDupParcela = totalParcelas > 1
+      // nro_dup da parcela: sem base → NULL; com base e parcelado → base/NN; único → a base.
+      const nroDupParcela = !baseDup
+        ? null
+        : totalParcelas > 1
         ? `${baseDup}/${String(i + 1).padStart(2, '0')}`
-        : (baseDup || null);
+        : baseDup;
 
       // Inserir a parcela
       const result = await pool.query(
