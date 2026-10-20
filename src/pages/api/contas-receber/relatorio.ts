@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPoolFilial } from '@/lib/pg';
+import { usuarioPossuiFuncao, usuarioPossuiTela } from '@/lib/permissoes';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -791,6 +792,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({
       erro: `Parâmetro "tipo" inválido. Use: ${Object.keys(TIPO_CONFIG).join(', ')}.`,
     });
+  }
+
+  // Enforcement do "Títulos Diário à Vista": liberado para quem já acessa a tela de
+  // Contas a Receber (sem regressão para o fluxo atual) OU para o operador de caixa que
+  // tenha a função granular REL_DIARIO_AVISTA. Os demais tipos seguem como antes.
+  if (tipoVal === 'diario_avista') {
+    const autorizado =
+      (await usuarioPossuiTela(req, '/admin/financeiro/contasAReceber')) ||
+      (await usuarioPossuiFuncao(req, 'REL_DIARIO_AVISTA'));
+    if (!autorizado) {
+      return res.status(403).json({ erro: 'Sem permissão para o relatório Diário à Vista.' });
+    }
   }
 
   try {
