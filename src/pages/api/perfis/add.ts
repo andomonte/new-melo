@@ -37,25 +37,31 @@ export default async function handle(
       tela: tela.tela.value,
     }));
 
-    const permissoesGruposValues = permissoesGrupos.map((p) => [
-      p.editar,
-      p.cadastrar,
-      p.remover,
-      p.exportar,
-      p.grupoId,
-      p.tela,
-    ]);
-
-    if (permissoesGruposValues.length > 0) {
+    if (permissoesGrupos.length > 0) {
+      // id explícito (MAX+1): a sequence de "tb_grupo_Permissao".id dessincroniza
+      // após cargas (o sync-sequences não cobre o nome com maiúsculas) → 23505.
+      const maxRes = await client.query(
+        `SELECT COALESCE(MAX(id), 0) AS maxid FROM "tb_grupo_Permissao"`,
+      );
+      const baseId = Number(maxRes.rows[0].maxid);
+      const permissoesGruposValues = permissoesGrupos.map((p, i) => [
+        baseId + i + 1,
+        p.editar,
+        p.cadastrar,
+        p.remover,
+        p.exportar,
+        p.grupoId,
+        p.tela,
+      ]);
       await client.query(
         `
-        INSERT INTO "tb_grupo_Permissao" (editar, cadastrar, remover, exportar, "grupoId", tela)
+        INSERT INTO "tb_grupo_Permissao" (id, editar, cadastrar, remover, exportar, "grupoId", tela)
         VALUES ${permissoesGruposValues
           .map(
             (_, index) =>
-              `($${index * 6 + 1}, $${index * 6 + 2}, $${index * 6 + 3}, $${
-                index * 6 + 4
-              }, $${index * 6 + 5}, $${index * 6 + 6})`,
+              `($${index * 7 + 1}, $${index * 7 + 2}, $${index * 7 + 3}, $${
+                index * 7 + 4
+              }, $${index * 7 + 5}, $${index * 7 + 6}, $${index * 7 + 7})`,
           )
           .join(', ')}
       `,

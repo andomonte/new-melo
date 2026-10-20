@@ -57,7 +57,15 @@ export default async function handle(
       }));
 
       if (telasParaInserir.length > 0) {
-        const values = telasParaInserir.flatMap((t) => [
+        // id explícito (MAX+1) porque a sequence de "tb_grupo_Permissao".id
+        // dessincroniza após cargas de dados (o sync-sequences não cobre o nome
+        // com maiúsculas), gerando 23505 duplicate key. Mesmo padrão da migration 071.
+        const maxRes = await client.query(
+          `SELECT COALESCE(MAX(id), 0) AS maxid FROM "tb_grupo_Permissao"`,
+        );
+        const baseId = Number(maxRes.rows[0].maxid);
+        const values = telasParaInserir.flatMap((t, i) => [
+          baseId + i + 1,
           t.grupoId,
           t.tela,
           t.cadastrar,
@@ -68,14 +76,14 @@ export default async function handle(
         const placeholders = telasParaInserir
           .map(
             (_, index) =>
-              `($${index * 6 + 1}, $${index * 6 + 2}, $${index * 6 + 3}, $${
-                index * 6 + 4
-              }, $${index * 6 + 5}, $${index * 6 + 6})`,
+              `($${index * 7 + 1}, $${index * 7 + 2}, $${index * 7 + 3}, $${
+                index * 7 + 4
+              }, $${index * 7 + 5}, $${index * 7 + 6}, $${index * 7 + 7})`,
           )
           .join(', ');
         await client.query(
           `
-            INSERT INTO "tb_grupo_Permissao" ("grupoId", tela, cadastrar, editar, remover, exportar)
+            INSERT INTO "tb_grupo_Permissao" (id, "grupoId", tela, cadastrar, editar, remover, exportar)
             VALUES ${placeholders}
           `,
           values,
