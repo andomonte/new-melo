@@ -14,6 +14,9 @@ interface ConfirmationModalProps {
   loading?: boolean;
   /** Alerta de um botão só (esconde o Cancelar) */
   hideCancel?: boolean;
+  /** Ignora o Enter por N ms após abrir (evita que o Enter de um modal anterior
+   *  cascateie e confirme este sem querer). Padrão 0 (sem guarda). */
+  enterDelayMs?: number;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -27,14 +30,19 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   cancelText = 'Cancelar',
   loading = false,
   hideCancel = false,
+  enterDelayMs = 0,
 }) => {
   // Teclado: Enter confirma, Esc cancela/fecha (padrão do sistema antigo).
   useEffect(() => {
     if (!isOpen) return;
+    // Janela de guarda: ignora o Enter nos primeiros enterDelayMs após abrir,
+    // para o Enter que confirmou um modal anterior não cascatear neste.
+    const abertoEm = Date.now();
     const onKey = (e: KeyboardEvent) => {
       if (loading) return;
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (enterDelayMs > 0 && Date.now() - abertoEm < enterDelayMs) return;
         onConfirm();
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -43,7 +51,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, loading, onConfirm, onClose]);
+  }, [isOpen, loading, onConfirm, onClose, enterDelayMs]);
 
   if (!isOpen || typeof document === 'undefined') return null;
 

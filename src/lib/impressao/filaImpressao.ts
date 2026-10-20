@@ -44,14 +44,53 @@ export async function enfileirarImpressaoDanfe(
     if (existe.rows.length > 0) return false;
 
     await db.query(
-      `INSERT INTO fin_impressao (imp_aut_id, imp_data, imp_impresso, imp_fila)
-       VALUES ($1, NOW(), 'N', $2)`,
+      `INSERT INTO fin_impressao (imp_aut_id, imp_data, imp_impresso, imp_fila, imp_tipo)
+       VALUES ($1, NOW(), 'N', $2, 'DANFE')`,
       [cod, fila],
     );
     return true;
   } catch (err: any) {
     console.error(
       `[filaImpressao] Falha ao enfileirar DANFE (codfat=${cod}): ${err?.message ?? err}`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Enfileira o COMPROVANTE de pagamento para o Robô de Impressão.
+ *
+ * Fiel ao Delphi (CAIXA.INSERIR_IMPRESSAO): ao finalizar o recebimento, se o operador
+ * pede, a autenticação (aut_id do fin_autenticacao) é enfileirada. O robô distingue
+ * pelo imp_tipo='COMPROVANTE' e baixa o PDF do comprovante (não a DANFE).
+ *
+ * Idempotente por aut_id pendente. Nunca lança (apenas loga).
+ * @returns true se inseriu; false caso contrário.
+ */
+export async function enfileirarImpressaoComprovante(
+  db: Executor,
+  autId: string | number | null | undefined,
+  opts: { fila?: number } = {},
+): Promise<boolean> {
+  const { fila = 1 } = opts;
+  if (autId === null || autId === undefined || String(autId).trim() === '') return false;
+  const cod = String(autId).trim();
+  try {
+    const existe = await db.query(
+      `SELECT 1 FROM fin_impressao WHERE imp_aut_id = $1 AND imp_tipo = 'COMPROVANTE' AND imp_impresso = 'N' LIMIT 1`,
+      [cod],
+    );
+    if (existe.rows.length > 0) return false;
+
+    await db.query(
+      `INSERT INTO fin_impressao (imp_aut_id, imp_data, imp_impresso, imp_fila, imp_tipo)
+       VALUES ($1, NOW(), 'N', $2, 'COMPROVANTE')`,
+      [cod, fila],
+    );
+    return true;
+  } catch (err: any) {
+    console.error(
+      `[filaImpressao] Falha ao enfileirar COMPROVANTE (aut_id=${cod}): ${err?.message ?? err}`,
     );
     return false;
   }

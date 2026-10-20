@@ -29,6 +29,7 @@ export interface PagamentoInput {
   cvnsu?: string; // cartão CV/NSU
   autorizacao?: string; // cartão autorização
   cof_id?: number | string | null; // conta financeira escolhida (cad_conta_financeira.cof_id)
+  obs?: string; // observação (Crédito de Devolução, obrigatória) → dbfreceb.nome
 }
 
 export interface ReceberParams {
@@ -336,6 +337,10 @@ export async function executarRecebimento(
     const ehCartao = pag.forma === 'credito' || pag.forma === 'debito';
     // tipo real da forma (codfpgt da dbforma_pagto); fallback pelo grupo de comportamento.
     const tipo = (pag.tipo && String(pag.tipo).trim()) || TIPO_PRINCIPAL[pag.forma];
+    // Crédito de Devolução (05): observação obrigatória (igual ao Delphi) — trava server-side.
+    if (String(tipo) === '05' && !(pag.obs && String(pag.obs).trim())) {
+      throw new Error('Observação da devolução é obrigatória.');
+    }
     let txCartao: number | null = null;
     let dtCartao: string | null = null;
     if (ehCartao) {
@@ -350,7 +355,10 @@ export async function executarRecebimento(
       valor: pag.valor, tipo, sf: ehCartao ? 'N' : 'S', dataPgto: p.dataPgto,
       txCartao, dtCartao, codConta: p.cod_conta, contaFinanceira: pag.cof_id ?? null, codusr,
       coddocumento: ehCartao ? pag.cvnsu : null, codautorizacao: ehCartao ? pag.autorizacao : null,
-      parcela: ehCartao ? String(pag.vezes || 1) : null, nome: `Recebimento ${pag.forma}`,
+      parcela: ehCartao ? String(pag.vezes || 1) : null,
+      // Devolução (Crédito de Devolução): grava a observação obrigatória no nome
+      // (igual ao edtRefCredito→Nome do Delphi); demais formas mantêm o texto genérico.
+      nome: (pag.obs && String(pag.obs).trim()) || `Recebimento ${pag.forma}`,
     });
     resultado.movimentos.push({ cod_freceb: codF, tipo, valor: pag.valor });
 
