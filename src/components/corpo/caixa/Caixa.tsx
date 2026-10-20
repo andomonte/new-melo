@@ -9,8 +9,13 @@ import SelectPadrao from '@/components/common/SelectPadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { mascaraInputBRL, desmascarar, formatarBRL, formatarDecimalBR } from '@/utils/monetario';
 import useConfirmarSalvar from '@/hooks/useConfirmarSalvar';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { useSessaoCaixa } from '@/hooks/useSessaoCaixa';
 import CaixaSessaoBar from '@/components/corpo/caixa/CaixaSessaoBar';
+import ModalRelatorioDiarioAvista from '@/components/corpo/caixa/ModalRelatorioDiarioAvista';
+import ModalConsultaPrePedidos from '@/components/corpo/caixa/ModalConsultaPrePedidos';
+import ModalHistoricoRecebimento from '@/components/corpo/caixa/ModalHistoricoRecebimento';
+import ModalConsultaCliente from '@/components/corpo/caixa/ModalConsultaCliente';
 import { registrarRecebimento } from '@/data/caixa/sessao';
 import type { FormaPagamentoSessao } from '@/data/caixa/sessao';
 import { faturarPreVenda, type DetalhesPreVenda } from '@/data/caixa/faturarPreVenda';
@@ -25,6 +30,9 @@ import {
   FileText,
   X,
   Printer,
+  ShoppingCart,
+  History,
+  User,
 } from 'lucide-react';
 
 // ---- Tipos ----
@@ -99,6 +107,7 @@ interface Passada {
   cofId?: number; // conta financeira (cad_conta_financeira.cof_id)
   cofDescricao?: string;
   codfpgt?: string; // código real da forma (dbforma_pagto.codfpgt) → dbfreceb.tipo
+  obs?: string; // observação da devolução (Crédito de Devolução) → dbfreceb.nome
 }
 
 const FORMAS: { key: Forma; label: string; icon: React.ElementType }[] = [
@@ -149,12 +158,54 @@ export default function Caixa() {
   const [busca, setBusca] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [titulos, setTitulos] = useState<Titulo[]>([]);
+  const [titulosPagos, setTitulosPagos] = useState<Titulo[]>([]); // já quitados (rec='S') — só p/ ver histórico
   const [selecionados, setSelecionados] = useState<Titulo[]>([]);
+  // Histórico de pagamentos de um título (modal, mesma fonte do Contas a Receber)
+  const [historicoCod, setHistoricoCod] = useState<string | null>(null);
+  const [historicoTitulo, setHistoricoTitulo] = useState<string>('');
+  // Consulta do cadastro do cliente (somente leitura) — busca própria ou por contexto
+  const [modalClienteAberto, setModalClienteAberto] = useState(false);
+  const [clienteConsultaCod, setClienteConsultaCod] = useState<string | null>(null);
+  const [clienteConsultaNome, setClienteConsultaNome] = useState<string>('');
   const [prevendas, setPrevendas] = useState<PreVenda[]>([]); // pré-vendas faturáveis achadas na busca
-  const [preVendaSel, setPreVendaSel] = useState<PreVenda | null>(null); // pré-venda escolhida p/ faturar+receber
-  const [preVendaDetalhes, setPreVendaDetalhes] = useState<DetalhesPreVenda | null>(null); // dados p/ faturar
+  // Multi-seleção de pré-pedidos (mesmo cliente) → agrupados numa ÚNICA fatura/NF.
+  const [preVendasSel, setPreVendasSel] = useState<PreVenda[]>([]); // pré-vendas escolhidas p/ faturar+receber
+  const [preVendaDetalhesMap, setPreVendaDetalhesMap] = useState<Record<string, DetalhesPreVenda>>({}); // detalhes por codvenda
   const [progresso, setProgresso] = useState<string | null>(null); // etapa atual do faturar+emitir+receber
   const [emitidas, setEmitidas] = useState<Emitida[]>([]); // vendas já faturadas (reimprimir)
+  // Filtro da busca: mostrar Tudo, só Títulos ou só Pré-Pedidos.
+  const [filtroResultado, setFiltroResultado] = useState<'tudo' | 'titulos' | 'prevendas'>('tudo');
+
+  // Pré-venda "combinada" (compat com o restante do código que lia preVendaSel único).
+  // total = soma dos selecionados; cliente/header = do 1º (são todos do mesmo cliente).
+  const preVendaSel = useMemo<PreVenda | null>(() => {
+    if (preVendasSel.length === 0) return null;
+    const totalSoma = preVendasSel.reduce((s, pv) => s + Number(pv.total || 0), 0);
+    return { ...preVendasSel[0], total: totalSoma };
+  }, [preVendasSel]);
+
+  // Detalhes combinados p/ faturar: itens concatenados, resumoFinanceiro somado.
+  // Null enquanto algum detalhe ainda está carregando.
+  const preVendaDetalhes = useMemo<DetalhesPreVenda | null>(() => {
+    const ds = preVendasSel.map((pv) => preVendaDetalhesMap[pv.codvenda]).filter(Boolean) as DetalhesPreVenda[];
+    if (ds.length === 0 || ds.length !== preVendasSel.length) return null;
+    if (ds.length === 1) return ds[0];
+    const dbitvenda = ds.flatMap((d) => d.dbitvenda || []);
+    const resumoFinanceiro = ds.reduce(
+      (acc, d) => ({
+        totalProdutos: acc.totalProdutos + Number(d.resumoFinanceiro?.totalProdutos || 0),
+        totalGeral: acc.totalGeral + Number(d.resumoFinanceiro?.totalGeral || 0),
+      }),
+      { totalProdutos: 0, totalGeral: 0 },
+    );
+    return { dbclien: ds[0].dbclien, dbvenda: ds[0].dbvenda, dbitvenda, resumoFinanceiro };
+  }, [preVendasSel, preVendaDetalhesMap]);
+
+  // Prefill do valor a pagar com o total combinado (recalcula ao marcar/desmarcar um pré-pedido).
+  useEffect(() => {
+    if (preVendaSel) setValorPassada(formatarDecimalBR(Number(preVendaSel.total || 0)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preVendaSel?.total]);
   const [notaView, setNotaView] = useState<{ url: string; titulo: string } | null>(null); // visualizador da DANFE
   const [imprimindo, setImprimindo] = useState(false);
 
@@ -168,6 +219,9 @@ export default function Caixa() {
   const [valorPassada, setValorPassada] = useState('');
   const [cvnsu, setCvnsu] = useState('');
   const [autorizacao, setAutorizacao] = useState('');
+  // Observação da devolução (Crédito de Devolução) — obrigatória, igual ao Delphi
+  // (edtRefCredito); gravada em dbfreceb.nome.
+  const [obsDevolucao, setObsDevolucao] = useState('');
 
   // ---- Estado: contas financeiras (classificação do recebimento) ----
   type ContaFin = { cof_id: number; cof_descricao: string; centro_custo: string | null };
@@ -198,6 +252,15 @@ export default function Caixa() {
     (f: any) => (typeof f === 'string' ? f : f?.sigla) === 'LIBERAR_JUROS',
   );
   const [liberarAberto, setLiberarAberto] = useState(false);
+
+  // ---- Relatório "Títulos Diário à Vista" — função REL_DIARIO_AVISTA (só caixa) ----
+  const podeRelDiarioAvista = ((user as any)?.funcoes || []).some(
+    (f: any) => (typeof f === 'string' ? f : f?.sigla) === 'REL_DIARIO_AVISTA',
+  );
+  const [modalRelDiarioAberto, setModalRelDiarioAberto] = useState(false);
+
+  // ---- Consulta de Pré-Pedidos (somente leitura, com copiar número) ----
+  const [modalPrePedidosAberto, setModalPrePedidosAberto] = useState(false);
   const [liberarTaxa, setLiberarTaxa] = useState('');
   const [liberarMotivo, setLiberarMotivo] = useState('');
   const [liberando, setLiberando] = useState(false);
@@ -206,6 +269,7 @@ export default function Caixa() {
   const [refetchDados, setRefetchDados] = useState(0); // força recalcular dadosMap após liberar juros
 
   const ehCartao = forma === 'credito' || forma === 'debito';
+  const ehDevolucao = codFpgt === '05'; // Crédito de Devolução (forma 5 do Delphi)
   const formaBucket = bucketDaForma(codFpgt); // 'principal' | 'tarifa' | 'juros'
 
   // Conta do operador vem do login (user.cod_conta = tb_user_perfil.cod_conta da filial).
@@ -370,8 +434,7 @@ export default function Caixa() {
   const toggleTitulo = (t: Titulo) => {
     if (preVendaSel) {
       // receber título e faturar pré-venda são exclusivos
-      setPreVendaSel(null);
-      setPreVendaDetalhes(null);
+      setPreVendasSel([]);
       setValorPassada('');
     }
     const jaSel = selecionados.some((x) => x.cod_receb === t.cod_receb);
@@ -401,8 +464,7 @@ export default function Caixa() {
   const marcarTodos = () => {
     if (titulos.length === 0) return;
     if (preVendaSel) {
-      setPreVendaSel(null);
-      setPreVendaDetalhes(null);
+      setPreVendasSel([]);
       setValorPassada('');
     }
     const codcliAlvo = selecionados[0]?.codcli ?? titulos[0]?.codcli;
@@ -428,6 +490,43 @@ export default function Caixa() {
   const desmarcarTodos = () => {
     setPassadas([]);
     setSelecionados([]);
+  };
+
+  // Abre o histórico de pagamentos (dbfreceb) de um título — igual ao Contas a Receber.
+  const abrirHistorico = (t: Titulo) => {
+    setHistoricoTitulo(t.nro_doc || t.cod_receb);
+    setHistoricoCod(t.cod_receb);
+  };
+
+  // Abre o cadastro do cliente (somente leitura). Com código → detalhe direto;
+  // sem código → modo busca (qualquer cliente).
+  const abrirCliente = (codcli?: string | null, nome?: string | null) => {
+    setClienteConsultaNome(nome || '');
+    setClienteConsultaCod(codcli ? String(codcli) : null);
+    setModalClienteAberto(true);
+  };
+
+  // Enfileira o comprovante p/ o Robô de Impressão (imp_tipo='COMPROVANTE').
+  const imprimirComprovante = async (autId?: string | null) => {
+    if (!autId) return;
+    try {
+      await fetch('/api/caixa/imprimir-comprovante', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aut_id: autId }),
+      });
+      toast.success('Comprovante enviado para impressão.');
+    } catch {
+      toast.error('Falha ao enviar o comprovante para impressão.');
+    }
+  };
+
+  // Pergunta "Deseja imprimir o comprovante?" ao fim do recebimento (fiel ao Delphi).
+  // Usa um modal DEDICADO (não o pedirConfirmacao do recebimento) com guarda de Enter,
+  // para o Enter que confirmou o recebimento não disparar a impressão sozinho.
+  const [comprovanteAutId, setComprovanteAutId] = useState<string | null>(null);
+  const perguntarImprimirComprovante = (autId?: string | null) => {
+    if (autId) setComprovanteAutId(String(autId));
   };
 
   // ---- Derivados (somam todos os títulos selecionados) ----
@@ -483,8 +582,10 @@ export default function Caixa() {
   const podeReceber = recebidoTotal > 0;
 
   // ---- Buscar título ----
-  const buscar = async () => {
-    const termo = busca.trim();
+  // termoArg permite buscar direto por um número (ex.: vindo da consulta de pré-pedidos).
+  // Guarda contra o event do onClick={buscar} (só usa termoArg se for string).
+  const buscar = async (termoArg?: string) => {
+    const termo = (typeof termoArg === 'string' ? termoArg : busca).trim();
     if (!termo) {
       toast.info('Digite o número do documento ou nota para buscar.');
       return;
@@ -495,7 +596,9 @@ export default function Caixa() {
       setPassadas([]);
       setPrevendas([]);
       setEmitidas([]);
-      setPreVendaSel(null);
+      setPreVendasSel([]);
+      setTitulosPagos([]);
+      setFiltroResultado('tudo');
       // Sem filtro de status: precisa achar tanto pendentes quanto VENCIDOS.
       // O front filtra os já recebidos/cancelados (cancel/rec) logo abaixo.
       const params = new URLSearchParams({
@@ -512,6 +615,11 @@ export default function Caixa() {
       const data = await resp.json();
       const lista: Titulo[] = (data.contas_receber || []).filter(
         (t: Titulo) => t.cancel !== 'S' && t.rec !== 'S'
+      );
+      // Títulos já QUITADOS (rec='S') — não entram no recebimento, mas ficam disponíveis
+      // para consultar o histórico de pagamentos (como no Contas a Receber).
+      setTitulosPagos(
+        (data.contas_receber || []).filter((t: Titulo) => t.cancel !== 'S' && t.rec === 'S'),
       );
       // Caixa: VENCIDOS primeiro (mais antigos no topo), depois a vencer — ambos por data.
       // Vencido = dt_venc < hoje (data local, sem shift de fuso).
@@ -591,6 +699,11 @@ export default function Caixa() {
       toast.error('Selecione a Conta Financeira.');
       return;
     }
+    // Regra Delphi (btnCreditoConfirmarClick): devolução exige a observação/referência.
+    if (ehDevolucao && !obsDevolucao.trim()) {
+      toast.error('Informe a observação da devolução.');
+      return;
+    }
     // Regra Delphi: com Depósito marcado, dinheiro é bloqueado (só cartão/PIX/depósito/boleto).
     if (deposito && forma === 'dinheiro') {
       toast.error('Com Depósito marcado não dá pra receber em dinheiro — use cartão, PIX ou depósito.');
@@ -632,12 +745,14 @@ export default function Caixa() {
         cofId: Number(cofId),
         cofDescricao: contasFin.find((cf) => String(cf.cof_id) === String(cofId))?.cof_descricao,
         codfpgt: codFpgt,
+        obs: ehDevolucao ? obsDevolucao.trim() : undefined,
       },
     ]);
     // limpar campos da passada
     setValorPassada('');
     setCvnsu('');
     setAutorizacao('');
+    setObsDevolucao('');
   };
 
   const removerPassada = (id: number) =>
@@ -704,6 +819,7 @@ export default function Caixa() {
           autorizacao: p.autorizacao,
           cof_id: p.cofId,
           tipo: p.codfpgt,
+          obs: p.obs, // devolução: vai p/ dbfreceb.nome
         }));
       const resp = await fetch('/api/caixa/receber', {
         method: 'POST',
@@ -745,6 +861,8 @@ export default function Caixa() {
         setPassadas([]);
         setPrevia(null);
         await buscarNovamente(selecionados.map((t) => t.cod_receb));
+        // Fiel ao Delphi: ao finalizar, pergunta se quer imprimir o comprovante.
+        perguntarImprimirComprovante(data.aut_id);
       }
     } catch (err: any) {
       toast.error(`Erro ao receber: ${err.message}`);
@@ -796,41 +914,46 @@ export default function Caixa() {
     }
   };
 
-  // Selecionar pré-venda para faturar+receber (mutuamente exclusivo com títulos).
-  // Busca os detalhes da venda (dados p/ faturar + total REAL da fatura = totalGeral).
+  // Selecionar/desmarcar pré-venda (multi, MESMO cliente) — exclusivo com títulos.
+  // Vários pré-pedidos do mesmo cliente são agrupados numa única fatura/NF.
+  // Busca os detalhes de cada venda (itens + total REAL da fatura = totalGeral).
   const selecionarPreVenda = async (pv: PreVenda) => {
-    if (preVendaSel?.codvenda === pv.codvenda) {
-      setPreVendaSel(null);
-      setPreVendaDetalhes(null);
-      setValorPassada('');
+    const jaSel = preVendasSel.some((x) => x.codvenda === pv.codvenda);
+    if (jaSel) {
+      setPreVendasSel((prev) => prev.filter((x) => x.codvenda !== pv.codvenda));
       return;
     }
+    // Regra do caixa (Delphi): só pré-pedidos do MESMO cliente podem ser agrupados.
+    if (preVendasSel.length > 0 && preVendasSel[0].codcli !== pv.codcli) {
+      toast.error(`Só é possível agrupar pré-pedidos do MESMO cliente. Este é de "${pv.nome_cliente || pv.codcli}".`);
+      return;
+    }
+    // receber título e faturar pré-venda são exclusivos
     setSelecionados([]);
     setPassadas([]);
     setPrevia(null);
-    setPreVendaSel(pv);
-    setPreVendaDetalhes(null);
-    setValorPassada('');
+    // adiciona otimista; se o detalhe falhar, desfaz
+    setPreVendasSel((prev) => [...prev, pv]);
+    if (preVendaDetalhesMap[pv.codvenda]) return; // detalhe já em cache
     try {
       const r = await fetch(`/api/faturamento/detalhes-venda?nrovenda=${encodeURIComponent(pv.nrovenda)}`);
       const d = await r.json();
       if (r.ok && d?.resumoFinanceiro) {
-        setPreVendaDetalhes({
-          dbclien: d.dbclien,
-          dbvenda: d.dbvenda,
-          dbitvenda: d.dbitvenda,
-          resumoFinanceiro: d.resumoFinanceiro,
-        });
-        // usa o total da FATURA (totalGeral), que pode diferir do total da lista
+        // usa o total da FATURA (totalGeral) — pode diferir do total da lista
         const totalFat = Number(d.resumoFinanceiro.totalGeral ?? pv.total);
-        setPreVendaSel({ ...pv, total: totalFat });
-        // pré-preenche o valor a pagar com o total (caso comum: paga tudo de uma forma)
-        setValorPassada(formatarDecimalBR(totalFat));
+        setPreVendaDetalhesMap((m) => ({
+          ...m,
+          [pv.codvenda]: { dbclien: d.dbclien, dbvenda: d.dbvenda, dbitvenda: d.dbitvenda, resumoFinanceiro: d.resumoFinanceiro },
+        }));
+        // garante que o total exibido do item bata com a fatura
+        setPreVendasSel((prev) => prev.map((x) => (x.codvenda === pv.codvenda ? { ...x, total: totalFat } : x)));
       } else {
         toast.error('Não foi possível carregar os itens da pré-venda.');
+        setPreVendasSel((prev) => prev.filter((x) => x.codvenda !== pv.codvenda)); // desfaz
       }
     } catch {
       toast.error('Erro ao carregar a pré-venda.');
+      setPreVendasSel((prev) => prev.filter((x) => x.codvenda !== pv.codvenda));
     }
   };
 
@@ -855,6 +978,7 @@ export default function Caixa() {
       // 1) faturar + emitir NF (com rollback interno em caso de falha)
       const r = await faturarPreVenda({
         detalhes: preVendaDetalhes,
+        codvendas: preVendasSel.map((x) => x.codvenda), // agrupa todas numa única fatura/NF
         codConta: codConta.trim(),
         username,
         onStep: setProgresso,
@@ -881,6 +1005,7 @@ export default function Caixa() {
               autorizacao: p.autorizacao,
               cof_id: p.cofId,
               tipo: p.codfpgt,
+              obs: p.obs, // devolução: vai p/ dbfreceb.nome
             })),
         }),
       });
@@ -906,11 +1031,12 @@ export default function Caixa() {
 
       toast.success(`Faturado e recebido! Fatura ${r.codfat} · NF-e ${r.nfe.modelo} autorizada.`);
       // TODO(próximo): imprimir DANFE silenciosa (QZ Tray) usando r.nfe.pdfBase64
-      setPreVendaSel(null);
-      setPreVendaDetalhes(null);
+      setPreVendasSel([]);
       setPassadas([]);
       setPrevendas([]);
       setBusca('');
+      // Fiel ao Delphi: ao finalizar, pergunta se quer imprimir o comprovante.
+      perguntarImprimirComprovante(dr.aut_id);
     } catch (err: any) {
       toast.error(`Erro: ${err.message}`);
     } finally {
@@ -1008,6 +1134,32 @@ export default function Caixa() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-6 flex-wrap text-sm">
+          <button
+            type="button"
+            onClick={() => abrirCliente(null)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition"
+            title="Consultar cadastro de qualquer cliente (somente consulta)"
+          >
+            <User size={15} /> Cliente
+          </button>
+          <button
+            type="button"
+            onClick={() => setModalPrePedidosAberto(true)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition"
+            title="Consultar pré-pedidos (somente consulta)"
+          >
+            <ShoppingCart size={15} /> Pré-Pedidos
+          </button>
+          {podeRelDiarioAvista && (
+            <button
+              type="button"
+              onClick={() => setModalRelDiarioAberto(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition"
+              title="Relatório Títulos Diário à Vista"
+            >
+              <FileText size={15} /> Diário à Vista
+            </button>
+          )}
           <div>
             <div className="text-[10px] uppercase tracking-wide text-gray-400">Operador</div>
             <div className="font-semibold">{username}</div>
@@ -1070,10 +1222,11 @@ export default function Caixa() {
                       // Ao limpar o filtro, some com a lista e a seleção (não deixa resultado velho).
                       if (!v.trim()) {
                         setTitulos([]);
+                        setTitulosPagos([]);
                         setSelecionados([]);
                         setPrevendas([]);
                         setEmitidas([]);
-                        setPreVendaSel(null);
+                        setPreVendasSel([]);
                       }
                     }}
                     onKeyDown={(e) => e.key === 'Enter' && buscar()}
@@ -1089,8 +1242,32 @@ export default function Caixa() {
                   />
                 </div>
 
+                {/* Filtro Tudo / Títulos / Pré-Pedidos — aparece quando há os dois tipos */}
+                {(titulos.length > 0 || prevendas.length > 0) && (
+                  <div className="mt-3 inline-flex rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden text-xs font-semibold">
+                    {([
+                      { k: 'tudo', label: `Tudo (${titulos.length + prevendas.length})` },
+                      { k: 'titulos', label: `Títulos (${titulos.length})` },
+                      { k: 'prevendas', label: `Pré-Pedidos (${prevendas.length})` },
+                    ] as const).map((op) => (
+                      <button
+                        key={op.k}
+                        type="button"
+                        onClick={() => setFiltroResultado(op.k)}
+                        className={`px-3 py-1.5 transition-colors ${
+                          filtroResultado === op.k
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {op.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {/* Resultados — seleção MÚLTIPLA (marque os títulos a receber) */}
-                {titulos.length > 0 && (
+                {filtroResultado !== 'prevendas' && titulos.length > 0 && (
                   <div className="mt-3 space-y-1">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] uppercase tracking-wide text-gray-400">
@@ -1121,10 +1298,10 @@ export default function Caixa() {
                         ? Number(d.principalPendente || 0)
                         : Number(t.valor_original || 0) - Number(t.valor_recebido || 0);
                       return (
+                        <div key={t.cod_receb} className="flex items-stretch gap-1">
                         <button
-                          key={t.cod_receb}
                           onClick={() => toggleTitulo(t)}
-                          className={`w-full text-left flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          className={`flex-1 min-w-0 text-left flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                             sel
                               ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40'
                               : 'border-gray-200 dark:border-slate-700 hover:border-blue-400'
@@ -1159,30 +1336,97 @@ export default function Caixa() {
                           )}
                           <span className="font-mono tabular-nums font-semibold">{formatarBRL(principal)}</span>
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => abrirCliente(t.codcli, t.nome_cliente)}
+                          title="Ver cadastro do cliente"
+                          className="shrink-0 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 hover:text-blue-600 hover:border-blue-400"
+                        >
+                          <User size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => abrirHistorico(t)}
+                          title="Histórico de pagamentos"
+                          className="shrink-0 w-9 inline-flex items-center justify-center rounded-lg border border-gray-200 dark:border-slate-700 text-gray-400 hover:text-blue-600 hover:border-blue-400"
+                        >
+                          <History size={15} />
+                        </button>
+                        </div>
                       );
                     })}
                   </div>
                 )}
 
-                {/* Pré-vendas faturáveis — selecione e escolha a forma; o botão vira "Faturar e receber" */}
-                {prevendas.length > 0 && (
+                {/* Títulos JÁ PAGOS (quitados) — somente consulta do histórico */}
+                {titulosPagos.length > 0 && filtroResultado !== 'prevendas' && (
                   <div className="mt-3 space-y-1">
                     <div className="text-[10px] uppercase tracking-wide text-gray-400">
-                      {prevendas.length} pré-venda(s) a faturar — selecione uma
+                      {titulosPagos.length} título(s) já pago(s) — consulte o histórico
+                    </div>
+                    {titulosPagos.map((t) => (
+                      <div
+                        key={t.cod_receb}
+                        className="flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20 px-3 py-2 text-sm"
+                      >
+                        <span className="flex flex-col leading-tight min-w-[128px]">
+                          <span className="font-mono">{t.nro_doc || t.cod_receb}</span>
+                          <span className="text-[11px] text-gray-400">venc {fmtData(t.dt_venc)}</span>
+                        </span>
+                        <span className="truncate flex-1 text-gray-500">
+                          {t.nome_cliente}
+                          {t.codcli && <span className="text-gray-400"> - {t.codcli}</span>}
+                        </span>
+                        <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          PAGO
+                        </span>
+                        <span className="font-mono tabular-nums font-semibold">{formatarBRL(Number(t.valor_original || 0))}</span>
+                        <button
+                          type="button"
+                          onClick={() => abrirCliente(t.codcli, t.nome_cliente)}
+                          title="Ver cadastro do cliente"
+                          className="shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                        >
+                          <User size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => abrirHistorico(t)}
+                          title="Histórico de pagamentos"
+                          className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                        >
+                          <History size={14} /> Histórico
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pré-vendas faturáveis — selecione e escolha a forma; o botão vira "Faturar e receber" */}
+                {filtroResultado !== 'titulos' && prevendas.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                      {prevendas.length} pré-venda(s) a faturar — selecione um ou mais (mesmo cliente)
                     </div>
                     {prevendas.map((pv) => {
-                      const sel = preVendaSel?.codvenda === pv.codvenda;
+                      const sel = preVendasSel.some((x) => x.codvenda === pv.codvenda);
+                      // desabilita os de outro cliente quando já há seleção
+                      const outroCliente = preVendasSel.length > 0 && preVendasSel[0].codcli !== pv.codcli;
                       return (
                         <button
                           key={pv.codvenda}
                           onClick={() => selecionarPreVenda(pv)}
+                          disabled={outroCliente}
+                          title={outroCliente ? 'Outro cliente — só é possível agrupar pré-pedidos do mesmo cliente' : undefined}
                           className={`w-full text-left flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                             sel
                               ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
+                              : outroCliente
+                              ? 'border-gray-200 dark:border-slate-700 opacity-40 cursor-not-allowed'
                               : 'border-emerald-200 dark:border-emerald-800 hover:border-emerald-400'
                           }`}
                         >
-                          <input type="radio" readOnly checked={sel} className="pointer-events-none accent-emerald-600" />
+                          <input type="checkbox" readOnly checked={sel} className="pointer-events-none accent-emerald-600" />
                           <span className="flex flex-col leading-tight min-w-[120px]">
                             <span className="font-mono">{pv.nrovenda}</span>
                             <span className="text-[11px] text-gray-400">
@@ -1197,10 +1441,12 @@ export default function Caixa() {
                         </button>
                       );
                     })}
-                    {preVendaSel && (
+                    {preVendasSel.length > 0 && (
                       <p className="text-[11px] text-emerald-700 dark:text-emerald-400 pt-1">
-                        Faturando <b>{preVendaSel.nrovenda}</b> — escolha a forma de pagamento à direita e clique em{' '}
-                        <b>Faturar e receber</b>.
+                        Faturando <b>{preVendasSel.length}</b> pré-pedido(s) de{' '}
+                        <b>{preVendasSel[0].nome_cliente || preVendasSel[0].codcli}</b> — total{' '}
+                        <b>{formatarBRL(Number(preVendaSel?.total || 0))}</b> numa única nota. Escolha a forma de pagamento à
+                        direita e clique em <b>Faturar e receber</b>.
                       </p>
                     )}
                   </div>
@@ -1296,7 +1542,7 @@ export default function Caixa() {
                   </div>
                 )}
 
-                {titulos.length === 0 && prevendas.length === 0 && emitidas.length === 0 && (
+                {titulos.length === 0 && titulosPagos.length === 0 && prevendas.length === 0 && emitidas.length === 0 && (
                   <div className="mt-4 text-center text-sm text-gray-400 border border-dashed border-gray-300 dark:border-slate-700 rounded-lg py-8">
                     Busque um documento para iniciar o recebimento.
                   </div>
@@ -1312,6 +1558,10 @@ export default function Caixa() {
                 <Landmark size={14} /> Recebimento
               </h2>
               <div className="p-4">
+                {/* <form> só como âncora de navegação: o SelectPadrao avança o foco p/ o
+                    próximo campo ao selecionar (procura o <form>/.form-compact ancestral).
+                    Enter no Valor adiciona o pagamento. onSubmit previne reload. */}
+                <form onSubmit={(e) => e.preventDefault()}>
                 {/* Combo de forma de pagamento (tabela real dbforma_pagto — buscável por código e nome) */}
                 <div>
                   <Label>Forma de Pagamento</Label>
@@ -1423,7 +1673,9 @@ export default function Caixa() {
                     <Input
                       value={valorPassada}
                       onChange={(e) => setValorPassada(mascaraInputBRL(e.target.value))}
-                      onKeyDown={(e) => e.key === 'Enter' && adicionarPassada()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); adicionarPassada(); }
+                      }}
                       placeholder="0,00"
                       readOnly={formaBucket === 'tarifa'}
                       title={formaBucket === 'tarifa' ? 'Tarifa é valor fixo do título (não editável)' : undefined}
@@ -1431,6 +1683,22 @@ export default function Caixa() {
                       inputMode="decimal"
                     />
                   </div>
+
+                  {/* Devolução: observação obrigatória (igual ao edtRefCredito do Delphi) → dbfreceb.nome */}
+                  {ehDevolucao && (
+                    <div className="col-span-2">
+                      <Label>Observação da devolução *</Label>
+                      <Input
+                        value={obsDevolucao}
+                        onChange={(e) => setObsDevolucao(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); adicionarPassada(); }
+                        }}
+                        placeholder="Motivo / referência da devolução"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
 
                   {ehCartao && (
                     <>
@@ -1469,6 +1737,7 @@ export default function Caixa() {
                     </button>
                   </div>
                 </div>
+                </form>
 
                 {/* Lista de passadas */}
                 {passadas.length > 0 ? (
@@ -1814,9 +2083,14 @@ export default function Caixa() {
                     preVendaSel
                       ? pedirConfirmacao(faturarEReceber, {
                           title: 'Faturar e receber',
-                          message: `FATURAR a pré-venda ${preVendaSel.nrovenda} (${preVendaSel.nome_cliente}), emitir a nota e receber ${formatarBRL(
-                            recebido,
-                          )}?`,
+                          message:
+                            preVendasSel.length > 1
+                              ? `FATURAR ${preVendasSel.length} pré-pedidos de ${preVendaSel.nome_cliente} (${preVendasSel
+                                  .map((x) => x.nrovenda)
+                                  .join(', ')}) numa ÚNICA nota, emitir e receber ${formatarBRL(recebido)}?`
+                              : `FATURAR a pré-venda ${preVendaSel.nrovenda} (${preVendaSel.nome_cliente}), emitir a nota e receber ${formatarBRL(
+                                  recebido,
+                                )}?`,
                           type: 'info',
                         })
                       : pedirConfirmacao(receberEDarBaixa, {
@@ -1896,6 +2170,50 @@ export default function Caixa() {
           </div>
         </div>
       )}
+
+      {/* Relatório "Títulos Diário à Vista" (só com a função REL_DIARIO_AVISTA) */}
+      <ModalRelatorioDiarioAvista isOpen={modalRelDiarioAberto} onClose={() => setModalRelDiarioAberto(false)} />
+
+      {/* Consulta de Pré-Pedidos (somente leitura, copiar número / usar na busca) */}
+      <ModalConsultaPrePedidos
+        isOpen={modalPrePedidosAberto}
+        onClose={() => setModalPrePedidosAberto(false)}
+        onUsarNumero={(nro) => { setBusca(nro); buscar(nro); }}
+      />
+
+      {/* Histórico de pagamentos de um título (parcial ou quitado) */}
+      <ModalHistoricoRecebimento
+        isOpen={!!historicoCod}
+        onClose={() => setHistoricoCod(null)}
+        codReceb={historicoCod}
+        titulo={historicoTitulo}
+      />
+
+      {/* Cadastro do cliente (somente consulta) — busca própria ou por contexto */}
+      <ModalConsultaCliente
+        isOpen={modalClienteAberto}
+        onClose={() => setModalClienteAberto(false)}
+        codcli={clienteConsultaCod}
+        nomeCliente={clienteConsultaNome}
+      />
+
+      {/* "Deseja imprimir o comprovante?" — só enfileira ao confirmar aqui.
+          enterDelayMs evita o Enter do recebimento cascatear e imprimir sozinho. */}
+      <ConfirmationModal
+        isOpen={!!comprovanteAutId}
+        onClose={() => setComprovanteAutId(null)}
+        onConfirm={() => {
+          const id = comprovanteAutId;
+          setComprovanteAutId(null);
+          imprimirComprovante(id);
+        }}
+        title="Comprovante de pagamento"
+        message="Deseja imprimir o comprovante de pagamento?"
+        type="info"
+        confirmText="Sim, imprimir"
+        cancelText="Não"
+        enterDelayMs={600}
+      />
     </div>
   );
 }

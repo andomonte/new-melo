@@ -79,6 +79,10 @@ export default function SelectPadrao({
   onInputChange,
   loading = false,
 }: SelectPadraoProps) {
+  // Wrapper do modo Radix (não-searchable) — usado p/ avançar o foco ao selecionar.
+  // Declarado antes do branch searchable p/ respeitar a ordem dos hooks.
+  const navWrapRef = React.useRef<HTMLDivElement>(null);
+
   // Modo searchable: renderiza dropdown customizado com campo de busca
   if (searchable) {
     return (
@@ -109,10 +113,30 @@ export default function SelectPadrao({
   const currentValue = value !== undefined ? value : defaultValue;
   const handleChange = (val: string) => {
     onValueChange?.(val === '__CLEAR__' ? '' : val);
+    if (val === '__CLEAR__') return;
+    // Enter → próximo campo: avança o foco igual ao modo searchable, se houver um
+    // ancestral de formulário (<form>/.form-compact/[role=dialog]). Fora disso, não mexe.
+    setTimeout(() => {
+      const trigger = navWrapRef.current?.querySelector('[role="combobox"]') as HTMLElement | null;
+      if (!trigger) return;
+      const form = trigger.closest('.form-compact, form, [role="dialog"]');
+      if (!form) return;
+      const focusable = Array.from(
+        form.querySelectorAll<HTMLElement>(
+          'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="combobox"]:not([disabled]), button[role="combobox"]:not([disabled])',
+        ),
+      );
+      const idx = focusable.indexOf(trigger);
+      const next = focusable[idx + 1];
+      if (next) {
+        next.focus();
+        if (next instanceof HTMLInputElement) next.select();
+      }
+    }, 60);
   };
 
   return (
-    <div className={cn('space-y-1 text-gray-700 dark:text-gray-200', className)}>
+    <div ref={navWrapRef} className={cn('space-y-1 text-gray-700 dark:text-gray-200', className)}>
       {label && (
         <Label htmlFor={name}>
           {label}

@@ -26,13 +26,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       filtro = `(v.nrovenda = $2 OR v.codcli = $2 OR ${filtro})`;
     }
 
-    // total da FATURA = soma dos itens + frete (o campo v.total pode estar inconsistente
-    // com os itens em vendas antigas). É o valor que vai na NF e será recebido.
+    // Total = v.total (mesmo campo da Central de Vendas e do detalhes-venda.totalGeral,
+    // que já inclui IPI/ST). O SUM(totalproduto) não batia com a Central porque não
+    // inclui IPI — mostrava valores iguais/errados na lista do caixa.
     const q = `
       SELECT v.codvenda, v.nrovenda, v.data, v.codvend, v.codcli, v.tipo, v.status,
              c.nome AS nome_cliente, c.cpfcgc,
-             COALESCE((SELECT SUM(i.totalproduto) FROM dbitvenda i WHERE i.codvenda = v.codvenda), 0)
-               + COALESCE(v.vlrfrete, 0) AS total
+             COALESCE(v.total, 0) AS total
         FROM dbvenda v
         LEFT JOIN dbclien c ON c.codcli = v.codcli
        WHERE v.status NOT IN ('F','B','C')

@@ -301,6 +301,87 @@ export const registrarSangria = (c: PoolClient, p: SangriaSuprimentoParams) =>
 export const registrarSuprimento = (c: PoolClient, p: SangriaSuprimentoParams) =>
   movimentoManual(c, 'SUPRIMENTO', p);
 
+// UC-02b/03b — Editar / Excluir sangria ou suprimento (só enquanto ABERTO) ------
+export interface EditarExcluirParams {
+  filial: string;
+  sessao_id: number;
+  movimento_id: number;
+  operador?: string;
+}
+
+/** Carrega o movimento garantindo que pertence à sessão e é SANGRIA/SUPRIMENTO (os demais são automáticos). */
+async function carregarMovManual(c: PoolClient, schema: string, sessaoId: number, movId: number) {
+  const r = await c.query(
+    `SELECT * FROM ${schema}.caixa_movimento WHERE id=$1 AND sessao_id=$2`,
+    [movId, sessaoId],
+  );
+  if (!r.rows[0]) throw new CaixaError('NAO_ENCONTRADA', `Movimento ${movId} não encontrado.`, 404);
+  const mov = r.rows[0];
+  if (mov.tipo !== 'SANGRIA' && mov.tipo !== 'SUPRIMENTO') {
+    throw new CaixaError('MOVIMENTO_NAO_EDITAVEL', 'Apenas sangria e suprimento podem ser alterados.');
+  }
+  return mov;
+}
+
+export async function excluirMovimento(c: PoolClient, p: EditarExcluirParams) {
+  const schema = schemaDaFilial(p.filial);
+  const sessao = await getSessao(c, schema, p.sessao_id);
+  if (sessao.status !== 'ABERTO') {
+    const code = sessao.status === 'EM_FECHAMENTO' ? 'CAIXA_EM_FECHAMENTO' : 'CAIXA_FECHADO';
+    throw new CaixaError(code, `Sessão não está aberta (status ${sessao.status}).`, 409);
+  }
+  const mov = await carregarMovManual(c, schema, p.sessao_id, p.movimento_id);
+  // Remover um SUPRIMENTO (entrada) reduz o saldo — não pode deixar o caixa negativo.
+  if (mov.tipo === 'SUPRIMENTO') {
+    const { saldoDinheiro } = await calcularSaldos(c, schema, sessao);
+    if (round2(saldoDinheiro - num(mov.valor)) < 0) {
+      throw new CaixaError(
+        'SALDO_INSUFICIENTE',
+        `Remover este suprimento (R$ ${num(mov.valor).toFixed(2)}) deixaria o caixa negativo.`,
+      );
+    }
+  }
+  await c.query(`DELETE FROM ${schema}.caixa_movimento WHERE id=$1 AND sessao_id=$2`, [p.movimento_id, p.sessao_id]);
+  return { ok: true };
+}
+
+export async function editarMovimento(
+  c: PoolClient,
+  p: EditarExcluirParams & { valor: number; motivo: string },
+) {
+  const schema = schemaDaFilial(p.filial);
+  const valor = round2(num(p.valor));
+  if (valor <= 0) throw new CaixaError('VALOR_INVALIDO', 'Valor deve ser positivo.');
+  if (!String(p.motivo || '').trim()) throw new CaixaError('MOTIVO_OBRIGATORIO', 'Informe o motivo.');
+
+  const sessao = await getSessao(c, schema, p.sessao_id);
+  if (sessao.status !== 'ABERTO') {
+    const code = sessao.status === 'EM_FECHAMENTO' ? 'CAIXA_EM_FECHAMENTO' : 'CAIXA_FECHADO';
+    throw new CaixaError(code, `Sessão não está aberta (status ${sessao.status}).`, 409);
+  }
+  const mov = await carregarMovManual(c, schema, p.sessao_id, p.movimento_id);
+
+  // Saldo após a troca não pode ficar negativo. Tira a contribuição atual e aplica a nova.
+  const { saldoDinheiro } = await calcularSaldos(c, schema, sessao);
+  const contribAtual = mov.sentido === 'ENTRADA' ? num(mov.valor) : -num(mov.valor);
+  const saldoSemEste = round2(saldoDinheiro - contribAtual);
+  const contribNovo = mov.tipo === 'SUPRIMENTO' ? valor : -valor; // suprimento entra, sangria sai
+  if (round2(saldoSemEste + contribNovo) < 0) {
+    throw new CaixaError(
+      'SALDO_INSUFICIENTE',
+      mov.tipo === 'SANGRIA'
+        ? `Sangria (R$ ${valor.toFixed(2)}) maior que o dinheiro disponível (R$ ${saldoSemEste.toFixed(2)}).`
+        : `Valor deixaria o caixa negativo.`,
+    );
+  }
+
+  const r = await c.query(
+    `UPDATE ${schema}.caixa_movimento SET valor=$3, motivo=$4 WHERE id=$1 AND sessao_id=$2 RETURNING *`,
+    [p.movimento_id, p.sessao_id, valor, String(p.motivo).trim()],
+  );
+  return r.rows[0];
+}
+
 // ---------------------------------------------------------------------------
 // UC-05 — Iniciar fechamento (congela snapshot)
 // ---------------------------------------------------------------------------

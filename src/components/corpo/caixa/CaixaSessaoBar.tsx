@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Lock, Unlock, ArrowUp, ArrowDown, X, Printer } from 'lucide-react';
+import { Lock, Unlock, ArrowUp, ArrowDown, X, Printer, Pencil, Trash2 } from 'lucide-react';
 import { mascaraInputBRL, desmascarar, formatarBRL } from '@/utils/monetario';
 import type { SessaoCaixaHook } from '@/hooks/useSessaoCaixa';
-import type { FormaPagamentoSessao } from '@/data/caixa/sessao';
-import { getRelatorio } from '@/data/caixa/sessao';
+import type { FormaPagamentoSessao, MovimentoSessao } from '@/data/caixa/sessao';
+import { getRelatorio, getMovimentos, editarMovimento as apiEditarMovimento, excluirMovimento as apiExcluirMovimento } from '@/data/caixa/sessao';
 import { imprimirMovimentoCaixa } from '@/lib/caixa/imprimirMovimentoCaixa';
 
 const hojeISO = () => new Date().toISOString().slice(0, 10);
@@ -35,6 +35,11 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
   // form: sangria/suprimento
   const [movValor, setMovValor] = useState('');
   const [movMotivo, setMovMotivo] = useState('');
+  // lista de sangrias/suprimentos do caixa aberto (com editar/remover)
+  const [movimentos, setMovimentos] = useState<MovimentoSessao[]>([]);
+  const [movCarregando, setMovCarregando] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [confirmarRemoverId, setConfirmarRemoverId] = useState<number | null>(null);
   // form: fechamento
   const [espDinheiro, setEspDinheiro] = useState(0);
   const [espFormas, setEspFormas] = useState<{ forma_pagamento: FormaPagamentoSessao; esperado: number; informado: string }[]>([]);
@@ -65,19 +70,75 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
   };
 
   // ---- Sangria / Suprimento ----
-  const abrirMov = (tipo: 'sangria' | 'suprimento') => { setMovValor(''); setMovMotivo(''); setModal(tipo); };
+  const abrirMov = (tipo: 'sangria' | 'suprimento') => {
+    setMovValor(''); setMovMotivo(''); setEditId(null); setConfirmarRemoverId(null); setModal(tipo);
+  };
+
+  const carregarMovimentos = async () => {
+    if (!s.sessao) { setMovimentos([]); return; }
+    setMovCarregando(true);
+    try {
+      const r = await getMovimentos(s.sessao.id, filial);
+      setMovimentos(r.movimentos || []);
+    } catch {
+      /* silencioso: a lista é auxiliar */
+    } finally { setMovCarregando(false); }
+  };
+
+  // Carrega a lista ao abrir o modal de sangria/suprimento.
+  useEffect(() => {
+    if (modal === 'sangria' || modal === 'suprimento') carregarMovimentos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modal]);
+
+  const tipoMov = modal === 'sangria' ? 'SANGRIA' : 'SUPRIMENTO';
+  const listaTipo = movimentos.filter((m) => m.tipo === tipoMov);
+
+  const iniciarEdicao = (m: MovimentoSessao) => {
+    setEditId(m.id);
+    setMovValor(formatarBRL(m.valor).replace('R$', '').trim());
+    setMovMotivo(m.motivo || '');
+    setConfirmarRemoverId(null);
+  };
+  const cancelarEdicao = () => { setEditId(null); setMovValor(''); setMovMotivo(''); };
+
   const onMov = async () => {
     const valor = desmascarar(movValor);
     if (valor <= 0) return toast.error('Valor deve ser positivo.');
     if (!movMotivo.trim()) return toast.error('Informe o motivo.');
+    if (!s.sessao) return;
     setBusy(true);
     try {
-      if (modal === 'sangria') await s.sangria(valor, movMotivo.trim());
-      else await s.suprimento(valor, movMotivo.trim());
-      toast.success(modal === 'sangria' ? 'Sangria registrada.' : 'Suprimento registrado.');
-      fechar();
+      if (editId != null) {
+        await apiEditarMovimento(s.sessao.id, editId, { filial, operador, valor, motivo: movMotivo.trim() });
+        toast.success('Movimento atualizado.');
+      } else if (modal === 'sangria') {
+        await s.sangria(valor, movMotivo.trim());
+        toast.success('Sangria registrada.');
+      } else {
+        await s.suprimento(valor, movMotivo.trim());
+        toast.success('Suprimento registrado.');
+      }
+      cancelarEdicao();
+      await s.refresh();
+      await carregarMovimentos();
     } catch (e: any) {
       toast.error(e.message || 'Erro ao registrar.');
+    } finally { setBusy(false); }
+  };
+
+  const removerMov = async (id: number) => {
+    if (!s.sessao) return;
+    setBusy(true);
+    try {
+      await apiExcluirMovimento(s.sessao.id, id, { filial, operador });
+      toast.success('Movimento removido.');
+      if (editId === id) cancelarEdicao();
+      setConfirmarRemoverId(null);
+      await s.refresh();
+      await carregarMovimentos();
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao remover.');
     } finally { setBusy(false); }
   };
 
@@ -224,7 +285,11 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
       {/* MODAL SANGRIA / SUPRIMENTO */}
       {(modal === 'sangria' || modal === 'suprimento') && (
         <Modal
-          titulo={modal === 'sangria' ? 'Sangria (retirada)' : 'Suprimento (reforço)'}
+          titulo={
+            editId != null
+              ? (modal === 'sangria' ? 'Editar sangria' : 'Editar suprimento')
+              : (modal === 'sangria' ? 'Sangria (retirada)' : 'Suprimento (reforço)')
+          }
           icone={modal === 'sangria' ? <ArrowUp size={18} /> : <ArrowDown size={18} />}
           onClose={fechar}
         >
@@ -240,9 +305,63 @@ export default function CaixaSessaoBar({ s, filial, codConta, operador }: Props)
             <input className="fld" value={movMotivo} onChange={(e) => setMovMotivo(e.target.value)} placeholder="Ex.: retirada para o cofre" />
           </Campo>
           <Rodape>
-            <Btn onClick={fechar}>Cancelar</Btn>
-            <Btn ok onClick={onMov} disabled={busy}>Confirmar</Btn>
+            {editId != null && <Btn onClick={cancelarEdicao} disabled={busy}>Cancelar edição</Btn>}
+            <Btn onClick={fechar}>Fechar</Btn>
+            <Btn ok onClick={onMov} disabled={busy}>{editId != null ? 'Salvar alteração' : 'Confirmar'}</Btn>
           </Rodape>
+
+          {/* Lista de sangrias/suprimentos deste caixa aberto */}
+          <div className="border-t border-gray-200 dark:border-slate-700 pt-3 mt-1">
+            <div className="text-[13px] font-semibold mb-2">
+              {modal === 'sangria' ? 'Sangrias' : 'Suprimentos'} deste caixa
+              {listaTipo.length > 0 && <span className="text-gray-400 font-normal"> ({listaTipo.length})</span>}
+            </div>
+            {movCarregando ? (
+              <div className="text-sm text-gray-400">Carregando…</div>
+            ) : listaTipo.length === 0 ? (
+              <div className="text-sm text-gray-400">
+                {modal === 'sangria' ? 'Nenhuma sangria registrada ainda.' : 'Nenhum suprimento registrado ainda.'}
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-1.5 max-h-52 overflow-auto pr-1">
+                {listaTipo.map((m) => (
+                  <li
+                    key={m.id}
+                    className={`rounded-lg border px-3 py-2 text-sm flex items-center gap-2 ${
+                      editId === m.id
+                        ? 'border-blue-400 bg-blue-50/50 dark:border-blue-600 dark:bg-blue-900/15'
+                        : 'border-gray-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono font-semibold tabular-nums">{formatarBRL(m.valor)}</div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {m.motivo || '—'}
+                        {m.operador ? ` · ${m.operador}` : ''}
+                        {m.criado_em ? ` · ${new Date(m.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </div>
+                    </div>
+                    {confirmarRemoverId === m.id ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-red-600 dark:text-red-400">Remover?</span>
+                        <button type="button" className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline disabled:opacity-50" onClick={() => removerMov(m.id)} disabled={busy}>Sim</button>
+                        <button type="button" className="text-xs text-gray-500 hover:underline" onClick={() => setConfirmarRemoverId(null)}>Não</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button type="button" title="Editar" className="h-7 w-7 inline-flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-slate-800" onClick={() => iniciarEdicao(m)}>
+                          <Pencil size={14} />
+                        </button>
+                        <button type="button" title="Remover" className="h-7 w-7 inline-flex items-center justify-center rounded text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" onClick={() => { setConfirmarRemoverId(m.id); }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </Modal>
       )}
 

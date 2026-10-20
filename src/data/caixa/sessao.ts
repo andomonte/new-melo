@@ -66,8 +66,32 @@ export const cancelarFechamento = (id: number, filial: string) =>
 export const getRelatorio = (id: number, filial: string) =>
   req(`/api/caixa/sessoes/${id}/relatorio?${qs({ filial, _: '' })}`.replace('&_=', ''));
 
-export const getMovimentos = (id: number, filial: string) =>
+export interface MovimentoSessao {
+  id: number;
+  tipo: 'ABERTURA' | 'SANGRIA' | 'SUPRIMENTO' | 'RECEBIMENTO';
+  forma_pagamento: FormaPagamentoSessao;
+  valor: number;
+  sentido: 'ENTRADA' | 'SAIDA';
+  referencia: string | null;
+  motivo: string | null;
+  operador: string;
+  criado_em: string;
+}
+
+export const getMovimentos = (id: number, filial: string): Promise<{ movimentos: MovimentoSessao[] }> =>
   req(`/api/caixa/sessoes/${id}/movimentos?${qs({ filial })}`);
+
+export const editarMovimento = (
+  sessaoId: number,
+  movId: number,
+  body: { filial: string; operador?: string; valor: number; motivo: string },
+) => req(`/api/caixa/sessoes/${sessaoId}/movimentos/${movId}`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const excluirMovimento = (
+  sessaoId: number,
+  movId: number,
+  body: { filial: string; operador?: string },
+) => req(`/api/caixa/sessoes/${sessaoId}/movimentos/${movId}`, { method: 'DELETE', body: JSON.stringify(body) });
 
 /** Registra os movimentos de RECEBIMENTO na sessão aberta (chamado após a baixa real). */
 export const registrarRecebimento = (body: {

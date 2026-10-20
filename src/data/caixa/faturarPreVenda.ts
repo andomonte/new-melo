@@ -44,6 +44,10 @@ export async function faturarPreVenda(params: {
   tipoOperacao?: string;
   /** true (default): gera cobrança/título. false: sem título (ex.: transferência). */
   comCobranca?: boolean;
+  /** Códigos das vendas a agrupar numa ÚNICA fatura/NF. Default: [detalhes.dbvenda.codvenda].
+   *  Quando o operador seleciona vários pré-pedidos do MESMO cliente, passa todos aqui;
+   *  o detalhes já vem combinado (itens concatenados + totais somados). */
+  codvendas?: string[];
 }): Promise<FaturarResultado> {
   const { detalhes, codConta, username, onStep } = params;
   const tipoOperacao = params.tipoOperacao || 'VENDA';
@@ -69,7 +73,8 @@ export async function faturarPreVenda(params: {
     insc07: 'N',
     tipo_movimentacao: 'SAIDA',
     tipo_operacao: tipoOperacao,
-    vendas: [dbvenda.codvenda],
+    // uma fatura/NF agrupando todas as vendas selecionadas (mesmo cliente)
+    vendas: params.codvendas && params.codvendas.length ? params.codvendas : [dbvenda.codvenda],
     usuario_associacao: dbclien.codcli,
     // cobrança à vista (só quando comCobranca): 1 título com o total. Transferência = sem título.
     cobranca_dados: comCobranca
