@@ -33,6 +33,7 @@ import {
   ShoppingCart,
   History,
   User,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ---- Tipos ----
@@ -172,6 +173,9 @@ export default function Caixa() {
   const [preVendasSel, setPreVendasSel] = useState<PreVenda[]>([]); // pré-vendas escolhidas p/ faturar+receber
   const [preVendaDetalhesMap, setPreVendaDetalhesMap] = useState<Record<string, DetalhesPreVenda>>({}); // detalhes por codvenda
   const [progresso, setProgresso] = useState<string | null>(null); // etapa atual do faturar+emitir+receber
+  // Erro persistente da última operação (ex.: rejeição de NF-e) + ação para tentar de novo.
+  // O toast some; aqui o operador vê o motivo e pode reenviar sem reconfigurar tudo.
+  const [erroOperacao, setErroOperacao] = useState<{ msg: string; retry?: () => void } | null>(null);
   const [emitidas, setEmitidas] = useState<Emitida[]>([]); // vendas já faturadas (reimprimir)
   // Filtro da busca: mostrar Tudo, só Títulos ou só Pré-Pedidos.
   const [filtroResultado, setFiltroResultado] = useState<'tudo' | 'titulos' | 'prevendas'>('tudo');
@@ -792,6 +796,7 @@ export default function Caixa() {
 
     setSalvando(true);
     setPrevia(null);
+    setErroOperacao(null);
     try {
       // juros/tarifa efetivamente lançados (baldes) rateados por título (proporcional ao valor de cada um).
       const titulosPayload = selecionados.map((t) => {
@@ -866,6 +871,7 @@ export default function Caixa() {
       }
     } catch (err: any) {
       toast.error(`Erro ao receber: ${err.message}`);
+      setErroOperacao({ msg: err.message || 'Erro ao receber.', retry: () => receberEDarBaixa() });
     } finally {
       setSalvando(false);
     }
@@ -974,6 +980,7 @@ export default function Caixa() {
     }
     setSalvando(true);
     setProgresso('Iniciando…');
+    setErroOperacao(null);
     try {
       // 1) faturar + emitir NF (com rollback interno em caso de falha)
       const r = await faturarPreVenda({
@@ -1039,6 +1046,8 @@ export default function Caixa() {
       perguntarImprimirComprovante(dr.aut_id);
     } catch (err: any) {
       toast.error(`Erro: ${err.message}`);
+      // Mantém o motivo na tela (o toast some) + permite reenviar sem reconfigurar.
+      setErroOperacao({ msg: err.message || 'Erro ao faturar/emitir.', retry: () => faturarEReceber() });
     } finally {
       setSalvando(false);
       setProgresso(null);
@@ -1188,6 +1197,41 @@ export default function Caixa() {
               operador={username}
             />
           )}
+
+          {/* Erro persistente da última operação (ex.: rejeição de NF-e) — o toast some,
+              aqui o operador vê o motivo e pode REENVIAR sem reconfigurar. */}
+          {erroOperacao && (
+            <div className="mb-4 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 flex items-start gap-3">
+              <AlertTriangle size={18} className="text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-red-700 dark:text-red-300">Última operação rejeitada</div>
+                <div className="text-sm text-red-700 dark:text-red-300 break-words whitespace-pre-wrap mt-0.5">{erroOperacao.msg}</div>
+                <div className="flex items-center gap-2 mt-2">
+                  {erroOperacao.retry && (
+                    <button
+                      type="button"
+                      onClick={() => { const r = erroOperacao.retry; setErroOperacao(null); r?.(); }}
+                      disabled={salvando}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      <Loader2 size={14} className={salvando ? 'animate-spin' : 'hidden'} /> Tentar novamente
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(erroOperacao.msg).then(() => toast.success('Erro copiado.')).catch(() => {})}
+                    className="text-xs font-semibold rounded-lg px-3 py-1.5 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+              <button type="button" onClick={() => setErroOperacao(null)} title="Fechar" className="text-red-400 hover:text-red-600 shrink-0">
+                <X size={18} />
+              </button>
+            </div>
+          )}
+
           <div className="relative">
             {/* Véu de bloqueio enquanto o caixa não está aberto (gate visual do recebimento) */}
             {caixaGate && (

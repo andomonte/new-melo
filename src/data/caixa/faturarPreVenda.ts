@@ -162,7 +162,16 @@ export async function faturarPreVenda(params: {
       const rev = await jfetch('/api/caixa/reverter-fatura', { method: 'POST', body: { codfat } }).catch(
         () => ({ ok: false } as any),
       );
-      const motivo = nf?.json?.motivo || nf?.json?.erro || 'erro na SEFAZ';
+      // Prioriza o motivo real da SEFAZ (cStat/xMotivo na rejeição 400); no erro 500 o
+      // emitir-cupom manda o detalhe real em `detalhe` (o `erro` é genérico). Surfacea os dois.
+      const motivo =
+        nf?.json?.motivo ||
+        nf?.json?.detalhe ||
+        (nf?.json?.erro && nf?.json?.erro !== 'Erro no processamento do cupom fiscal.'
+          ? nf?.json?.erro
+          : '') ||
+        nf?.json?.erro ||
+        'erro na SEFAZ';
       throw new Error(
         rev.ok
           ? `NF não autorizada (${st || nf?.httpStatus}): ${motivo}. Fatura desfeita.`
