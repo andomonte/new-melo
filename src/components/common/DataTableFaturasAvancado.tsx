@@ -399,6 +399,8 @@ export default function DataTableFaturasAvancado({
   const [mostrarProdutos, setMostrarProdutos] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [dadosEspelho, setDadosEspelho] = useState<any | null>(null);
+  // Espelho da Fatura (zoom read-only) — modal self-contained por codfat.
+  const [espelhoCodfat, setEspelhoCodfat] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [faturaParaBoletos, setFaturaParaBoletos] = useState<any | null>(null);
   const [dadosPreview, setDadosPreview] = useState<{
@@ -1703,6 +1705,7 @@ const handleCancelarNota = async () => {
       <DropdownFatura
         fatura={f}
         onEspelhoClick={() => handleVisualizarNota(f)}
+        onEspelhoFaturaClick={() => setEspelhoCodfat(String(f.codfat))}
         onCobrancaClick={() => {
           if (f.cobranca === 'S') {
             avisoErro('Esta fatura já possui cobrança gerada.');
@@ -2376,18 +2379,12 @@ const handleCancelarNota = async () => {
           </DialogContent>
         </Dialog>
 
-        {/* Modal Espelho */}
-        {/* {dadosEspelho && (
-          <EspelhoFaturaModal
-            isOpen={!!dadosEspelho}
-            onClose={() => setDadosEspelho(null)}
-            fatura={dadosEspelho.fatura}
-            venda={dadosEspelho.venda}
-            vendas_faturadas={dadosEspelho.vendas_faturadas}
-            itens_por_venda={dadosEspelho.itens_por_venda}
-            produtos={dadosEspelho.produtos}
-          />
-        )} */}
+        {/* Espelho da Fatura (zoom read-only) */}
+        <EspelhoFaturaModal
+          isOpen={!!espelhoCodfat}
+          onClose={() => setEspelhoCodfat(null)}
+          codfat={espelhoCodfat}
+        />
 
         {isPreviewOpen && dadosPreview && (
           <NotaFiscalPreviewModal

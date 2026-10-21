@@ -26,6 +26,8 @@ import {
 interface Props {
   fatura: any;
   onEspelhoClick: () => void;
+  /** Espelho da Fatura (zoom read-only: dados, status NF-e, valores, itens, vendas, cobrança). */
+  onEspelhoFaturaClick?: () => void;
   onCobrancaClick: () => void;
   onEditarClick: () => void;
   onCancelarCobranca: () => void;
@@ -53,6 +55,7 @@ interface Props {
 export default function DropdownFatura({
   fatura,
   onEspelhoClick,
+  onEspelhoFaturaClick,
   onCobrancaClick,
   onEditarClick,
   onCancelarCobranca,
@@ -134,6 +137,17 @@ export default function DropdownFatura({
           <FileText className="size-4 text-gray-600 group-hover:text-white transition" />
           Vizualizar Nota
         </DropdownMenuItem>
+
+        {onEspelhoFaturaClick && (
+          <DropdownMenuItem
+            onClick={onEspelhoFaturaClick}
+            title="Espelho da Fatura (dados, status NF-e, valores, itens, vendas, cobrança)"
+            className="group flex items-center gap-2 px-2 py-2 hover:bg-sky-600 hover:text-white transition"
+          >
+            <FileText className="size-4 text-sky-600 group-hover:text-white transition" />
+            Espelho da Fatura
+          </DropdownMenuItem>
+        )}
 
         {onEventoClick && (
           <DropdownMenuItem
