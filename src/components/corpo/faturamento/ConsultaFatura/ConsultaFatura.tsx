@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { StatusEstruturaBanco } from '@/components/common/StatusEstruturaBanco';
 import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
+import EspelhoFaturaModal from '@/components/corpo/faturamento/ModalEspelhoFatura';
 
 // Cor da LINHA por status (estilo Delphi), calibrada p/ tema escuro:
 // borda lateral + fundo levíssimo + texto das células tonalizado. Prioridade
@@ -278,13 +279,31 @@ export default function ConsultaFaturasPage() {
     setAbrirNovoFaturamento(true);
   };
 
+  // Espelho da Fatura (zoom read-only) — estado no pai p/ servir o menu e o atalho Ctrl+Z.
+  const [espelhoCodfat, setEspelhoCodfat] = useState<string | null>(null);
+
   const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<any>({
     data: linhasExibidas,
-    ativo: !abrirNovoFaturamento && !legendaAberta,
-    // Atalhos (padrão da tela de produtos): ↑/↓ navega, Enter abre ações, Ctrl+N = Novo.
+    ativo: !abrirNovoFaturamento && !legendaAberta && !espelhoCodfat,
+    // Atalhos: ↑/↓ navega, Enter abre ações, Ctrl+N = Novo.
+    // Atalhos fiéis ao Delphi (popup da Consulta de Fatura):
+    //   Ctrl+Z = Espelho da Fatura · Ctrl+F = Filtrar (foca a busca).
     onEnter: () => abrirAcoesLinhaAtiva(),
     atalhos: [
       { key: 'n', ctrl: true, precisaLinha: false, handler: () => abrirNovoFaturamentoLimpo() },
+      { key: 'z', ctrl: true, handler: (row) => { if (row?.codfat) setEspelhoCodfat(String(row.codfat)); } },
+      {
+        key: 'f',
+        ctrl: true,
+        precisaLinha: false,
+        handler: () => {
+          const el = document.querySelector<HTMLInputElement>(
+            'input[placeholder*="BUSCAR"], input[placeholder*="Buscar"], input[placeholder*="buscar"]',
+          );
+          el?.focus();
+          el?.select();
+        },
+      },
     ],
   });
 
@@ -729,6 +748,7 @@ export default function ConsultaFaturasPage() {
             return `${cor} ${sel}`;
           }}
           onRowClick={(row) => setLinhaSelecionada(linhasExibidas.indexOf(row))}
+          onEspelhoFatura={(f) => setEspelhoCodfat(String(f.codfat))}
           legendaSlot={legendaFiltro}
           headerLeftSlot={toolbarFiltros}
           searchCompacto
@@ -737,6 +757,14 @@ export default function ConsultaFaturasPage() {
           statusFilterOptions={opcoesStatusNFe}
         />
       </main>
+
+      {/* Espelho da Fatura (zoom read-only) — aberto pelo menu Ações ou pelo atalho Ctrl+Z */}
+      <EspelhoFaturaModal
+        isOpen={!!espelhoCodfat}
+        onClose={() => setEspelhoCodfat(null)}
+        codfat={espelhoCodfat}
+      />
+
       <Dialog
         open={abrirNovoFaturamento}
         onOpenChange={handleFecharModalFaturamento}

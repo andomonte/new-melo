@@ -20,7 +20,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import DadosCobranca from './DadosCobranca';
-import EspelhoFaturaModal from '../corpo/faturamento/ModalEspelhoFatura';
 import ModalExportarFaturas from '../corpo/faturamento/ConsultaFatura/modalexportFatura/modalExportaExcelPdfFatura';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -60,6 +59,8 @@ interface Props {
   // Navegação por teclado (setas) — repassados ao DataTablePadrao pela página.
   rowClassName?: (row: any, index: number) => string;
   onRowClick?: (row: any) => void;
+  /** Abrir o Espelho da Fatura (o estado/modal vive no pai, p/ também servir o atalho Ctrl+Z). */
+  onEspelhoFatura?: (fatura: any) => void;
   onOrderedRowsChange?: (rows: any[]) => void;
   // Dispara a busca (Enter ou ao sair do campo), no padrão de produtos/requisição.
   onBuscar?: () => void;
@@ -90,6 +91,7 @@ export default function DataTableFaturasAvancado({
   onCriarGrupoPagamento,
   rowClassName,
   onRowClick,
+  onEspelhoFatura,
   onOrderedRowsChange,
   onBuscar,
   legendaSlot,
@@ -399,8 +401,6 @@ export default function DataTableFaturasAvancado({
   const [mostrarProdutos, setMostrarProdutos] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [dadosEspelho, setDadosEspelho] = useState<any | null>(null);
-  // Espelho da Fatura (zoom read-only) — modal self-contained por codfat.
-  const [espelhoCodfat, setEspelhoCodfat] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [faturaParaBoletos, setFaturaParaBoletos] = useState<any | null>(null);
   const [dadosPreview, setDadosPreview] = useState<{
@@ -1705,7 +1705,7 @@ const handleCancelarNota = async () => {
       <DropdownFatura
         fatura={f}
         onEspelhoClick={() => handleVisualizarNota(f)}
-        onEspelhoFaturaClick={() => setEspelhoCodfat(String(f.codfat))}
+        onEspelhoFaturaClick={() => onEspelhoFatura?.(f)}
         onCobrancaClick={() => {
           if (f.cobranca === 'S') {
             avisoErro('Esta fatura já possui cobrança gerada.');
@@ -2379,12 +2379,8 @@ const handleCancelarNota = async () => {
           </DialogContent>
         </Dialog>
 
-        {/* Espelho da Fatura (zoom read-only) */}
-        <EspelhoFaturaModal
-          isOpen={!!espelhoCodfat}
-          onClose={() => setEspelhoCodfat(null)}
-          codfat={espelhoCodfat}
-        />
+        {/* Espelho da Fatura: estado/modal ficam no pai (ConsultaFatura) para também
+            atender o atalho de teclado Ctrl+Z. Aqui só disparamos via onEspelhoFatura. */}
 
         {isPreviewOpen && dadosPreview && (
           <NotaFiscalPreviewModal
