@@ -274,9 +274,10 @@ export async function construirNotasNacionalizacao(
     };
   };
 
-  const rowsOrdenados = [...itensRes.rows].sort((a: any, b: any) =>
-    String(a.ref ?? a.codprod ?? '').localeCompare(String(b.ref ?? b.codprod ?? ''), 'en'),
-  );
+  // Ordem dos itens no XML da nota = ordem da DI (adição → item), a MESMA do XML da DI.
+  // A query acima já traz ORDER BY numero_adicao, num_item, id; não reordenar por ref
+  // (senão os <det nItem> saem alfabéticos e divergem da DI).
+  const rowsOrdenados = itensRes.rows;
   const nItens = rowsOrdenados.length;
   const vOutroItem = nItens > 0 ? r2(outrosTotal / nItens) : 0;
   const dest = await destDoExportador(codPrincipal || '');

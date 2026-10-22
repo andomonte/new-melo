@@ -53,6 +53,7 @@ export default async function handler(
 
     const taxaDolar = parseFloat(String(cab.taxa_dolar || 0));
     const totalMercadoria = parseFloat(String(cab.total_mercadoria || 0));
+    const totalCif = parseFloat(String(cab.total_cif || 0));
     const frete = parseFloat(String(cab.frete || 0));
     const thc = parseFloat(String(cab.thc || 0));
     const pisCofins = parseFloat(String(cab.pis_cofins || 0));
@@ -116,7 +117,14 @@ export default async function handler(
       + despachante + infraeroPorto
       + carreteiroEadi + carreteiroMelo + eadi;
 
-    console.log(`[calcular-custos] DI #${id}: TxDolarMedio=${txDolarMedio.toFixed(4)}, DespesaCusto=${despesaCusto.toFixed(2)}, DespesaNota=${despesaNota.toFixed(2)}`);
+    // Banda "Imposto" (nível cabeçalho, 1× por DI — fiel ao Oracle ATUALIZAR_CUSTO):
+    //   imp_perc      = ((THC + frete) / Total_Mercadoria) + 1   (fator de gross-up do CIF)
+    //   imp_icms_perc = Icms_St / round(Total_Cif × Taxa_Dolar, 2)
+    const impPerc = totalMercadoria > 0 ? (thc + frete) / totalMercadoria + 1 : 1;
+    const baseIcmsImp = round2(totalCif * taxaDolar);
+    const impIcmsPerc = baseIcmsImp > 0 ? icmsSt / baseIcmsImp : 0;
+
+    console.log(`[calcular-custos] DI #${id}: TxDolarMedio=${txDolarMedio.toFixed(4)}, DespesaCusto=${despesaCusto.toFixed(2)}, DespesaNota=${despesaNota.toFixed(2)}, ImpPerc=${impPerc.toFixed(6)}, ImpIcmsPerc=${impIcmsPerc.toFixed(6)}`);
 
     // 4. Buscar itens com codprod
     const itensResult = await client.query(`
@@ -168,13 +176,26 @@ export default async function handler(
       const custoTotalReal = custoUnitReal * qtd;
       const custoUnitDolar = txEfetiva > 0 ? custoUnitReal / txEfetiva : 0;
 
-      // Valores para NF (fiscal): base = PROFORMA grossada p/ CIF × taxa DÓLAR DA DI,
-      // mais o rateio da DESPESA DA NOTA (com ICMS-ST, sem Frete de Origem).
-      const nfCifUnit = totalMercadoria > 0
-        ? proformaUnit * ((thc + frete) / totalMercadoria + 1)
-        : proformaUnit;
-      const nfRealTotal = nfCifUnit * taxaDolar * qtd;
+      // Banda "Imposto" por item (conferência fiscal do CIF — Oracle ATUALIZAR_CUSTO):
+      //   imp_cif_unit  = invoice_total × imp_perc  (⚠ usa invoice_TOTAL da linha; US$)
+      //   imp_cif_total = imp_cif_unit × taxa_dolar (R$)
+      //   imp_icms_*    = sobre o CIF em R$
+      const impCifUnit = invoiceTotal * impPerc;
+      const impCifTotal = impCifUnit * taxaDolar;
+      const impIcmsTotal = impCifTotal * impIcmsPerc;
+      const impIcmsUnit = impIcmsTotal / qtd;
+
+      // PIS/COFINS: perc = icms_perc; total/unit = 0 (já entra em despesaCusto — igual Oracle).
+      const pisCofinsPerc = icmsPerc;
+
+      // Banda "Nota de Entrada" (detalhe): base = PROFORMA grossada p/ CIF × taxa DÓLAR
+      // DA DI, mais o rateio da DESPESA DA NOTA (com ICMS-ST, sem Frete de Origem).
+      const nfCifUnit = proformaUnit * impPerc;
+      const nfCifTotal = qtd * nfCifUnit;
+      const nfRealUnit = nfCifUnit * taxaDolar;
+      const nfRealTotal = qtd * nfRealUnit;
       const nfDespTotal = despesaPerc * despesaNota;
+      const nfDespUnit = nfDespTotal / qtd;
       const nfTotal = nfRealTotal + nfDespTotal;
       const nfUnit = qtd > 0 ? nfTotal / qtd : 0;
 
@@ -189,23 +210,39 @@ export default async function handler(
           icms_perc = $7,
           icms_total = $8,
           icms_unit = $9,
-          pis_cofins_total = $10,
-          custo_unit_real = $11,
-          custo_total_real = $12,
-          custo_unit_dolar = $13,
-          tx_dolar_di = $14,
-          tx_dolar_medio = $15,
-          nf_unit = $16,
-          nf_total = $17
+          pis_cofins_perc = $10,
+          pis_cofins_total = $11,
+          pis_cofins_unit = $12,
+          custo_unit_real = $13,
+          custo_total_real = $14,
+          custo_unit_dolar = $15,
+          tx_dolar_di = $16,
+          tx_dolar_medio = $17,
+          imp_perc = $18,
+          imp_cif_unit = $19,
+          imp_cif_total = $20,
+          imp_icms_perc = $21,
+          imp_icms_total = $22,
+          imp_icms_unit = $23,
+          nf_cif_unit = $24,
+          nf_cif_total = $25,
+          nf_real_unit = $26,
+          nf_real_total = $27,
+          nf_desp_unit = $28,
+          nf_desp_total = $29,
+          nf_unit = $30,
+          nf_total = $31
         WHERE id = $1
       `, [
         item.id,
         realUnit, realTotal,
         despesaPerc, despesaTotal, despesaUnit,
         icmsPerc, icmsTotal, icmsUnit,
-        pisCofinsTotal,
+        pisCofinsPerc, pisCofinsTotal, pisCofinsUnit,
         custoUnitReal, custoTotalReal, custoUnitDolar,
         taxaDolar, txDolarMedio,
+        impPerc, impCifUnit, impCifTotal, impIcmsPerc, impIcmsTotal, impIcmsUnit,
+        nfCifUnit, nfCifTotal, nfRealUnit, nfRealTotal, nfDespUnit, nfDespTotal,
         nfUnit, nfTotal,
       ]);
 

@@ -1,7 +1,15 @@
 /**
  * Tabela de itens dentro de uma fatura da DI
  * Padrão visual do sistema (raw tailwind, flex divs)
- * Inclui badge de status (Pendente/Associado) e botão Associar
+ *
+ * Visões por BANDA (como o grid da Importação EX do Delphi): a identidade do item
+ * fica sempre à esquerda (Status, #, Ref, Marca, Descrição, Estoque, Qtd) e os botões
+ * agrupados trocam só as colunas de valor → cada visão cabe na tela, sem rolagem
+ * horizontal gigante.
+ *   - Associação: + Ordem (OC) + ações (vincular produto/OC, dividir, remover)
+ *   - Valores: Proforma · Invoice · Em Real
+ *   - Despesa / Tributos: Despesa · ICMS · PIS/COFINS
+ *   - Resultado: Custo Manaus · Imposto · Nota de Entrada
  */
 
 import React, { useState } from 'react';
@@ -36,6 +44,97 @@ interface ItensTableProps {
   readOnly?: boolean;
 }
 
+// Formatação dos valores (vêm do Postgres como string após salvar — numeric → string)
+const fmtR = (v?: number | null) => (v != null ? fmtDecimal(v) : '-');          // 2 casas
+const fmtP = (v?: number | null) => (v != null ? `${fmtDecimal((Number(v) || 0) * 100, 3)}%` : '-'); // fração → %
+const fmtF = (v?: number | null) => (v != null ? fmtDecimal(v, 4) : '-');       // fator (ex.: 1.0021)
+
+// Uma coluna de valor dentro de uma banda
+interface ColBanda {
+  head: string;
+  w: string;                 // classe de largura (tailwind) — igual no header e no corpo
+  cls?: string;              // classes extras da célula de dado
+  cell: (it: ItemImportacao) => React.ReactNode;
+}
+
+const NUM = 'text-gray-500 dark:text-gray-400';
+const REAL = 'text-emerald-700 dark:text-emerald-400';
+const STRONG = 'font-medium text-gray-900 dark:text-gray-100';
+const STRONG2 = 'font-medium text-gray-700 dark:text-gray-200';
+
+type ViewKey =
+  | 'assoc' | 'proforma' | 'invoice' | 'real'
+  | 'despesa' | 'icms' | 'pis' | 'custo' | 'imposto' | 'nf';
+
+interface Visao {
+  label: string;
+  hint: string;
+  cols: ColBanda[];          // colunas de valor (vazio na Associação)
+}
+
+// Visões por banda. A identidade é fixa; estas são só as colunas de valor.
+const VIEWS: Record<ViewKey, Visao> = {
+  assoc: { label: 'Associação', hint: 'Vincular produto e ordem de compra (OC). Ações por item à direita.', cols: [] },
+  proforma: { label: 'Proforma', hint: 'Preço de proforma (US$) por item.', cols: [
+    { head: 'Un. US$', w: 'w-24', cls: 'text-gray-600 dark:text-gray-300', cell: (it) => fmtR(it.proforma_unit) },
+    { head: 'Total US$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.proforma_total) },
+  ]},
+  invoice: { label: 'Invoice', hint: 'Preço de invoice (US$) por item.', cols: [
+    { head: 'Un. US$', w: 'w-24', cls: 'text-gray-600 dark:text-gray-300', cell: (it) => fmtR(it.invoice_unit) },
+    { head: 'Total US$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.invoice_total) },
+  ]},
+  real: { label: 'Em Real', hint: 'Valor convertido em R$ (câmbio médio + 0,10).', cols: [
+    { head: 'Un. R$', w: 'w-24', cls: REAL, cell: (it) => fmtR(it.real_unit) },
+    { head: 'Total R$', w: 'w-28', cls: REAL, cell: (it) => fmtR(it.real_total) },
+  ]},
+  despesa: { label: 'Despesa', hint: 'Rateio das despesas da DI por item (% = invoice ÷ total da mercadoria).', cols: [
+    { head: '%', w: 'w-16', cls: `${NUM} tabular-nums`, cell: (it) => fmtP(it.despesa_perc) },
+    { head: 'Total R$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.despesa_total) },
+    { head: 'Un. R$', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.despesa_unit) },
+  ]},
+  icms: { label: 'ICMS', hint: 'ICMS-ST rateado por item.', cols: [
+    { head: '%', w: 'w-16', cls: `${NUM} tabular-nums`, cell: (it) => fmtP(it.icms_perc) },
+    { head: 'Total R$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.icms_total) },
+    { head: 'Un. R$', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.icms_unit) },
+  ]},
+  pis: { label: 'PIS/COFINS', hint: 'PIS/COFINS — sempre 0 por item (já entra no custo, igual ao Delphi).', cols: [
+    { head: '%', w: 'w-16', cls: `${NUM} tabular-nums`, cell: (it) => fmtP(it.pis_cofins_perc ?? it.icms_perc) },
+    { head: 'Total R$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.pis_cofins_total) },
+    { head: 'Un. R$', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.pis_cofins_unit) },
+  ]},
+  custo: { label: 'Custo Manaus', hint: 'Custo final em Manaus (R$ e US$) — o que vai para o estoque.', cols: [
+    { head: 'Un. R$', w: 'w-24', cls: STRONG, cell: (it) => fmtR(it.custo_unit_real) },
+    { head: 'Total R$', w: 'w-28', cls: STRONG2, cell: (it) => fmtR(it.custo_total_real) },
+    { head: 'US$', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.custo_unit_dolar) },
+  ]},
+  imposto: { label: 'Imposto', hint: 'Conferência fiscal do CIF (fator de gross-up, CIF e ICMS da DI).', cols: [
+    { head: 'Fator', w: 'w-16', cls: `${NUM} tabular-nums`, cell: (it) => fmtF(it.imp_perc) },
+    { head: 'CIF Un. US$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.imp_cif_unit) },
+    { head: 'CIF Tot. R$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.imp_cif_total) },
+    { head: 'ICMS %', w: 'w-16', cls: `${NUM} tabular-nums`, cell: (it) => fmtP(it.imp_icms_perc) },
+    { head: 'ICMS Tot.', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.imp_icms_total) },
+    { head: 'ICMS Un.', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.imp_icms_unit) },
+  ]},
+  nf: { label: 'Nota de Entrada', hint: 'Valores que compõem a Nota de Entrada (CIF, Real e Despesa → NF Un./Tot.).', cols: [
+    { head: 'CIF Un. US$', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.nf_cif_unit) },
+    { head: 'CIF Tot. US$', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.nf_cif_total) },
+    { head: 'Real Un.', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.nf_real_unit) },
+    { head: 'Real Tot.', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.nf_real_total) },
+    { head: 'Desp. Un.', w: 'w-24', cls: NUM, cell: (it) => fmtR(it.nf_desp_unit) },
+    { head: 'Desp. Tot.', w: 'w-28', cls: NUM, cell: (it) => fmtR(it.nf_desp_total) },
+    { head: 'NF Un.', w: 'w-24', cls: STRONG2, cell: (it) => fmtR(it.nf_unit) },
+    { head: 'NF Tot.', w: 'w-28', cls: STRONG2, cell: (it) => fmtR(it.nf_total) },
+  ]},
+};
+
+// Agrupamento dos botões, como as bandas do Delphi
+const GRUPOS: { cap: string; keys: ViewKey[] }[] = [
+  { cap: '', keys: ['assoc'] },
+  { cap: 'Valores', keys: ['proforma', 'invoice', 'real'] },
+  { cap: 'Despesa / Tributos', keys: ['despesa', 'icms', 'pis'] },
+  { cap: 'Resultado', keys: ['custo', 'imposto', 'nf'] },
+];
+
 export const ItensTable: React.FC<ItensTableProps> = ({
   itens,
   adicoes = [],
@@ -57,25 +156,26 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   const [itemOrdemIdx, setItemOrdemIdx] = useState<number>(-1);
   const [itemDividirIdx, setItemDividirIdx] = useState<number>(-1);
   const [filtro, setFiltro] = useState('');
+  // Visão por banda (default Associação — fluxo de vincular produto/OC).
+  const [view, setView] = useState<ViewKey>('assoc');
+  const v = VIEWS[view];
+  const ehAssoc = view === 'assoc';
 
   // Busca dentro da fatura: referência, marca, descrição, código ou nº do item.
   const q = filtro.trim().toLowerCase();
   const casa = (item: ItemImportacao) =>
     q === '' ||
     [item.referencia, item.marca, item.descricao, item.codprod, item.num_item != null ? String(item.num_item) : '']
-      .some((v) => (v || '').toLowerCase().includes(q));
+      .some((val) => (val || '').toLowerCase().includes(q));
 
-  // Hierarquia Fornecedor → Adição → Item:
-  // agrupa os itens por numero_adicao (asc) e, dentro de cada adição,
-  // ordena por num_item (nSeqAdic). Mantém o índice original para os
-  // callbacks (associar/remover/dividir usam a posição no array da fatura).
+  // Hierarquia Fornecedor → Adição → Item.
   const SEM_ADICAO = -1;
   const adicaoMap = new Map<number, AdicaoImportacao>();
   adicoes.forEach((a) => adicaoMap.set(Number(a.numero_adicao), a));
 
   const grupos = new Map<number, { item: ItemImportacao; originalIdx: number }[]>();
   itens.forEach((item, originalIdx) => {
-    if (!casa(item)) return; // filtro da busca (preserva originalIdx)
+    if (!casa(item)) return;
     const na = Number(item.numero_adicao);
     const key = Number.isFinite(na) && na > 0 ? na : SEM_ADICAO;
     if (!grupos.has(key)) grupos.set(key, []);
@@ -96,13 +196,9 @@ export const ItensTable: React.FC<ItensTableProps> = ({
       return va - vb || a.originalIdx - b.originalIdx;
     }),
   );
-  // Só mostra cabeçalhos de adição quando há adição de verdade;
-  // DI antiga/itens avulsos (tudo em SEM_ADICAO) cai na lista plana.
   const mostrarAdicoes = !(chavesOrdenadas.length === 1 && chavesOrdenadas[0] === SEM_ADICAO);
-  const fmtNum = (v: unknown) => fmtDecimal(Number(v) || 0);
+  const fmtNum = (val: unknown) => fmtDecimal(Number(val) || 0);
 
-  // Number(...) porque os valores voltam do Postgres como string após salvar a DI
-  // (numeric → string); sem isso, 0 + "3.5" concatena e .toFixed quebra.
   const totalProforma = itens.reduce((s, i) => s + (Number(i.proforma_total) || 0), 0);
   const totalInvoice = itens.reduce((s, i) => s + (Number(i.invoice_total) || 0), 0);
   const totalCusto = itens.reduce((s, i) => s + (Number(i.custo_total_real) || 0), 0);
@@ -112,8 +208,7 @@ export const ItensTable: React.FC<ItensTableProps> = ({
     setModalAberto(true);
   };
 
-  // Aprendizado: grava ref(DI) → produto para auto-associar nas próximas importações
-  // (mesma tabela do nacional: dbref_fabrica + dbprod_ref_fabrica). Best-effort.
+  // Aprendizado: grava ref(DI) → produto para auto-associar nas próximas importações.
   const gravarAprendizado = (codprod: string, item?: ItemImportacao) => {
     if (!codprod || !codCredor || !item) return;
     const referenciaNFe = (codigoDescricaoDI(item.descricao) || item.referencia || '').trim();
@@ -125,7 +220,7 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         codProduto: codprod,
         codMarca: item.marca || undefined,
       })
-      .catch(() => { /* aprendizado é best-effort; não bloqueia a associação */ });
+      .catch(() => { /* best-effort; não bloqueia a associação */ });
   };
 
   const handleDividir = (idx: number) => {
@@ -138,8 +233,6 @@ export const ItensTable: React.FC<ItensTableProps> = ({
     setModalOrdemAberto(true);
   };
 
-  // Associação por ORDEM (modelo nacional): o item é dividido nas ordens alocadas,
-  // cada linha com codprod + id_orc + quantidade. A soma = quantidade do item.
   const handleOrdensAlocadas = (codprod: string, referencia: string, alocacoes: AlocacaoOrdem[]) => {
     if (onAssociarOrdens && itemOrdemIdx >= 0) {
       gravarAprendizado(codprod, itens[itemOrdemIdx]);
@@ -166,12 +259,14 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   const renderLinha = ({ item, originalIdx }: { item: ItemImportacao; originalIdx: number }) => {
     const associado = !!item.codprod;
     const comPedido = associado && !!item.id_orc;
+    const codDI = codigoDescricaoDI(item.descricao);
+    const texto = descricaoSemPrefixoDI(item.descricao) || '-';
     return (
       <div
         key={originalIdx}
-        className="flex gap-2 px-3 py-2 text-xs border-b border-gray-100 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors items-center"
+        className="group flex gap-2 px-3 py-2 text-xs border-b border-gray-100 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors items-center"
       >
-        {/* Badge de status - 3 estados */}
+        {/* Identidade (sempre visível) */}
         <div className="w-24">
           {comPedido ? (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800">
@@ -190,7 +285,6 @@ export const ItensTable: React.FC<ItensTableProps> = ({
             </span>
           )}
         </div>
-
         <div className="w-10 text-center text-gray-400 dark:text-gray-500 tabular-nums">
           {item.num_item ?? '-'}
         </div>
@@ -200,54 +294,50 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         <div className="w-24 text-gray-600 dark:text-gray-300 truncate">
           {associado ? (item.marca || '-') : '-'}
         </div>
-        {/* Ordem de compra vinculada (OC) */}
-        <div className="w-32 shrink-0">
-          {item.id_orc ? (
+        {/* Ordem de compra (OC) — só na Associação */}
+        {ehAssoc && (
+          <div className="w-32 shrink-0">
+            {item.id_orc ? (
+              <span
+                title="Ordem de compra vinculada a este item"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+              >
+                <ShoppingCart size={9} /> #{item.id_orc}
+              </span>
+            ) : associado ? (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">sem ordem</span>
+            ) : (
+              <span className="text-gray-300 dark:text-gray-600">-</span>
+            )}
+          </div>
+        )}
+        <div
+          className="flex-1 min-w-[180px] text-gray-600 dark:text-gray-300 truncate"
+          title={`${codDI ? codDI + ' ' : ''}${texto}`}
+        >
+          {codDI && (
             <span
-              title="Ordem de compra vinculada a este item"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+              className="font-mono text-[#347AB6] dark:text-blue-300 mr-1.5"
+              title="Código da DI (referência na descrição da mercadoria)"
             >
-              <ShoppingCart size={9} /> #{item.id_orc}
+              {codDI}
             </span>
-          ) : associado ? (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">sem ordem</span>
-          ) : (
-            <span className="text-gray-300 dark:text-gray-600">-</span>
           )}
+          {texto}
         </div>
-        <div className="flex-1 min-w-0 text-gray-600 dark:text-gray-300 truncate">
-          {(() => {
-            // Mostra o código da própria DI (REF./PN# embutido na descrição) no
-            // início da linha, no lugar do "[000001]" — permite conferir a
-            // sequência contra o XML antes de associar. Sem código: só limpa o prefixo.
-            const codDI = codigoDescricaoDI(item.descricao);
-            const texto = descricaoSemPrefixoDI(item.descricao) || '-';
-            return (
-              <>
-                {codDI && (
-                  <span
-                    className="font-mono text-[#347AB6] dark:text-blue-300 mr-1.5"
-                    title="Código da DI (referência na descrição da mercadoria)"
-                  >
-                    {codDI}
-                  </span>
-                )}
-                {texto}
-              </>
-            );
-          })()}
+        {/* Estoque (sempre visível) */}
+        <div className="w-16 text-right tabular-nums text-gray-600 dark:text-gray-300">
+          {associado && item.estoque != null ? fmtDecimal(item.estoque, 0) : '-'}
         </div>
         <div className="w-14 text-center text-gray-900 dark:text-gray-100">{item.qtd}</div>
-        <div className="w-28 text-right text-gray-600 dark:text-gray-300">
-          {fmtDecimal(item.proforma_unit)}
-        </div>
-        <div className="w-28 text-right text-gray-600 dark:text-gray-300">
-          {fmtDecimal(item.invoice_unit)}
-        </div>
-        <div className="w-28 text-right font-medium text-gray-900 dark:text-gray-100">
-          {item.custo_unit_real ? `R$ ${fmtDecimal(item.custo_unit_real)}` : '-'}
-        </div>
-        {!readOnly && (
+
+        {/* Colunas da banda ativa */}
+        {v.cols.map((c, i) => (
+          <div key={i} className={`${c.w} text-right ${c.cls || NUM}`}>{c.cell(item)}</div>
+        ))}
+
+        {/* Ações — só na Associação */}
+        {ehAssoc && !readOnly && (
           <div className="w-28 flex items-center justify-end gap-1">
             {!associado && onUpdateItem && (
               <button
@@ -290,12 +380,11 @@ export const ItensTable: React.FC<ItensTableProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      {/* Cabeçalho da seção: contador, busca, ações */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 shrink-0">
           Itens ({q ? `${totalFiltrado}/${itens.length}` : itens.length})
         </span>
-        {/* Busca dentro da fatura */}
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
           <input
@@ -335,74 +424,105 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         )}
       </div>
 
-      {/* Tabela */}
-      <div className="border border-gray-200 dark:border-zinc-700 rounded-lg overflow-x-auto">
-        <div className="min-w-[1120px]">
-        {/* Header */}
-        <div className="bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-600">
-          <div className="flex gap-2 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200">
-            <div className="w-24">Status</div>
-            <div className="w-10 text-center">#</div>
-            <div className="w-28">Referência</div>
-            <div className="w-24">Marca</div>
-            <div className="w-32">Ordem (OC)</div>
-            <div className="flex-1 min-w-0">Descrição</div>
-            <div className="w-14 text-center">Qtd</div>
-            <div className="w-28 text-right">Proforma (USD)</div>
-            <div className="w-28 text-right">Invoice (USD)</div>
-            <div className="w-28 text-right">Custo (BRL)</div>
-            {!readOnly && <div className="w-28" />}
-          </div>
-        </div>
-
-        {/* Corpo */}
-        {itens.length === 0 ? (
-          <div className="flex items-center justify-center h-20">
-            <div className="text-center">
-              <Package className="h-5 w-5 text-gray-400 mx-auto mb-1" />
-              <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item nesta fatura</p>
+      {/* Barra de bandas (botões agrupados como o Delphi) */}
+      <div className="flex items-end gap-3 flex-wrap">
+        {GRUPOS.map((g, gi) => (
+          <div key={gi} className="flex flex-col gap-1">
+            <span className="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-500 font-semibold pl-0.5 leading-none">
+              {g.cap || ' '}
+            </span>
+            <div className="flex rounded-md border border-gray-300 dark:border-zinc-600 overflow-hidden">
+              {g.keys.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setView(k)}
+                  className={`px-2.5 py-1 text-xs font-medium border-l first:border-l-0 border-gray-300 dark:border-zinc-600 transition-colors ${
+                    view === k
+                      ? 'bg-[#347AB6] text-white'
+                      : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {VIEWS[k].label}
+                </button>
+              ))}
             </div>
           </div>
-        ) : totalFiltrado === 0 ? (
-          <div className="flex items-center justify-center h-20">
-            <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item para “{filtro}”</p>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-400 dark:text-gray-500 -mt-1">{v.hint}</p>
+
+      {/* Tabela */}
+      <div className="border border-gray-200 dark:border-zinc-700 rounded-lg overflow-x-auto">
+        {/* min-w-[720px] = piso p/ telas estreitas; sem min-w-max, a Descrição (flex-1)
+            trunca e as colunas da banda ficam sempre visíveis, sem scroll lateral. */}
+        <div className="min-w-[720px]">
+          {/* Cabeçalho */}
+          <div className="bg-gray-100 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-600">
+            <div className="flex gap-2 px-3 py-2 text-[11px] font-semibold text-gray-700 dark:text-gray-200">
+              <div className="w-24">Status</div>
+              <div className="w-10 text-center">#</div>
+              <div className="w-28">Referência</div>
+              <div className="w-24">Marca</div>
+              {ehAssoc && <div className="w-32">Ordem (OC)</div>}
+              <div className="flex-1 min-w-[180px]">Descrição</div>
+              <div className="w-16 text-right">Estoque</div>
+              <div className="w-14 text-center">Qtd</div>
+              {v.cols.map((c, i) => (
+                <div key={i} className={`${c.w} text-right`}>{c.head}</div>
+              ))}
+              {ehAssoc && !readOnly && <div className="w-28" />}
+            </div>
           </div>
-        ) : !mostrarAdicoes ? (
-          (grupos.get(SEM_ADICAO) || []).map(renderLinha)
-        ) : (
-          chavesOrdenadas.map((key) => {
-            const linhas = grupos.get(key)!;
-            const ad = key === SEM_ADICAO ? undefined : adicaoMap.get(key);
-            const assoc = linhas.filter((l) => !!l.item.codprod).length;
-            return (
-              <div key={key}>
-                {/* Cabeçalho da adição */}
-                <div className="flex items-center gap-3 px-3 py-1.5 bg-blue-50/70 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/40 text-[11px]">
-                  <span className="font-semibold text-[#347AB6] dark:text-blue-300 shrink-0">
-                    {key === SEM_ADICAO ? 'Sem adição' : `Adição ${String(key).padStart(3, '0')}`}
-                  </span>
-                  {ad?.ncm && (
-                    <span className="text-gray-500 dark:text-gray-400 shrink-0">
-                      NCM <span className="font-mono text-gray-700 dark:text-gray-200">{ad.ncm}</span>
-                    </span>
-                  )}
-                  <span className="text-gray-400 dark:text-gray-500 shrink-0">
-                    {assoc}/{linhas.length} assoc.
-                  </span>
-                  {ad && (
-                    <span className="ml-auto flex items-center gap-4 text-gray-500 dark:text-gray-400 shrink-0">
-                      <span>FOB <span className="font-medium text-gray-700 dark:text-gray-200">US$ {fmtNum(ad.vl_fob)}</span></span>
-                      <span>Frete <span className="font-medium text-gray-700 dark:text-gray-200">US$ {fmtNum(ad.vl_frete)}</span></span>
-                      <span>PIS/COFINS <span className="font-medium text-gray-700 dark:text-gray-200">R$ {fmtNum(ad.vl_pis_cofins)}</span></span>
-                      <span>ICMS <span className="font-medium text-gray-700 dark:text-gray-200">R$ {fmtNum(ad.vl_icms)}</span></span>
-                    </span>
-                  )}
-                </div>
-                {linhas.map(renderLinha)}
+
+          {/* Corpo */}
+          {itens.length === 0 ? (
+            <div className="flex items-center justify-center h-20">
+              <div className="text-center">
+                <Package className="h-5 w-5 text-gray-400 mx-auto mb-1" />
+                <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item nesta fatura</p>
               </div>
-            );
-          })
-        )}
+            </div>
+          ) : totalFiltrado === 0 ? (
+            <div className="flex items-center justify-center h-20">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Nenhum item para “{filtro}”</p>
+            </div>
+          ) : !mostrarAdicoes ? (
+            (grupos.get(SEM_ADICAO) || []).map(renderLinha)
+          ) : (
+            chavesOrdenadas.map((key) => {
+              const linhas = grupos.get(key)!;
+              const ad = key === SEM_ADICAO ? undefined : adicaoMap.get(key);
+              const assoc = linhas.filter((l) => !!l.item.codprod).length;
+              return (
+                <div key={key}>
+                  {/* Cabeçalho da adição */}
+                  <div className="flex items-center gap-3 px-3 py-1.5 bg-blue-50/70 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/40 text-[11px]">
+                    <span className="font-semibold text-[#347AB6] dark:text-blue-300 shrink-0">
+                      {key === SEM_ADICAO ? 'Sem adição' : `Adição ${String(key).padStart(3, '0')}`}
+                    </span>
+                    {ad?.ncm && (
+                      <span className="text-gray-500 dark:text-gray-400 shrink-0">
+                        NCM <span className="font-mono text-gray-700 dark:text-gray-200">{ad.ncm}</span>
+                      </span>
+                    )}
+                    <span className="text-gray-400 dark:text-gray-500 shrink-0">
+                      {assoc}/{linhas.length} assoc.
+                    </span>
+                    {ad && (
+                      <span className="ml-auto flex items-center gap-4 text-gray-500 dark:text-gray-400 shrink-0">
+                        <span>FOB <span className="font-medium text-gray-700 dark:text-gray-200">US$ {fmtNum(ad.vl_fob)}</span></span>
+                        <span>Frete <span className="font-medium text-gray-700 dark:text-gray-200">US$ {fmtNum(ad.vl_frete)}</span></span>
+                        <span>PIS/COFINS <span className="font-medium text-gray-700 dark:text-gray-200">R$ {fmtNum(ad.vl_pis_cofins)}</span></span>
+                        <span>ICMS <span className="font-medium text-gray-700 dark:text-gray-200">R$ {fmtNum(ad.vl_icms)}</span></span>
+                      </span>
+                    )}
+                  </div>
+                  {linhas.map(renderLinha)}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

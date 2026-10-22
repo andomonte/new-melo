@@ -158,6 +158,7 @@ export interface ItemImportacao {
   codprod: string;
   referencia?: string; // dbprod.ref do produto associado (exibição)
   marca?: string;      // dbmarcas.descr do produto associado (exibição)
+  estoque?: number;    // dbprod.estoque_contabil (estoque atual) — coluna "Estoque" do Delphi
   num_item?: number;   // nSeqAdic (numItem da DIe) — ordem na adição
   descricao?: string;
   ncm?: string;
@@ -189,8 +190,10 @@ export interface ItemImportacao {
   icms_total?: number;
   icms_unit?: number;
 
-  // PIS/COFINS (calculados)
+  // PIS/COFINS (calculados — perc = icms_perc; total/unit = 0, igual Oracle)
+  pis_cofins_perc?: number;
   pis_cofins_total?: number;
+  pis_cofins_unit?: number;
 
   // Custo final (calculados)
   custo_unit_real?: number;
@@ -201,7 +204,21 @@ export interface ItemImportacao {
   tx_dolar_di?: number;
   tx_dolar_medio?: number;
 
-  // Valores para NF
+  // Banda "Imposto" (conferência fiscal do CIF — Oracle ATUALIZAR_CUSTO)
+  imp_perc?: number;        // ((THC + frete) / Total_Mercadoria) + 1
+  imp_cif_unit?: number;    // invoice_total × imp_perc (US$)
+  imp_cif_total?: number;   // imp_cif_unit × taxa_dolar (R$)
+  imp_icms_perc?: number;   // icms_st / (total_cif × taxa_dolar)
+  imp_icms_total?: number;  // imp_cif_total × imp_icms_perc (R$)
+  imp_icms_unit?: number;   // imp_icms_total / qtd (R$)
+
+  // Banda "Nota de Entrada" (detalhe; nf_unit/nf_total = resultado final)
+  nf_cif_unit?: number;     // proforma_unit × imp_perc (US$)
+  nf_cif_total?: number;    // qtd × nf_cif_unit (US$)
+  nf_real_unit?: number;    // nf_cif_unit × taxa_dolar (R$)
+  nf_real_total?: number;   // qtd × nf_real_unit (R$)
+  nf_desp_unit?: number;    // nf_desp_total / qtd (R$)
+  nf_desp_total?: number;   // despesa_perc × despesa_nota (R$)
   nf_unit?: number;
   nf_total?: number;
 }

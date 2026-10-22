@@ -34,7 +34,8 @@ const QUERY_ENTRADAS = `
 const QUERY_ITENS = `
   SELECT it.*,
          COALESCE(p.ref, '') AS referencia,
-         COALESCE(m.descr, '') AS marca
+         COALESCE(m.descr, '') AS marca,
+         p.estoque_contabil AS estoque
   FROM dbent_importacao_it_ent it
   LEFT JOIN dbprod p ON p.codprod = it.codprod
   LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
