@@ -517,10 +517,15 @@ export function ContasAPagar() {
     });
   };
 
-  // Edita pela quantidade de DIAS → vencimento = emissão + dias (dia útil).
+  const diasEntre = (ate: Date, de: Date) =>
+    Math.max(0, Math.ceil((ate.getTime() - de.getTime()) / (1000 * 60 * 60 * 24)));
+
+  // Edita pela quantidade de DIAS → vencimento = emissão + dias (próximo dia útil).
+  // dias = 0 → vence na própria data de emissão (dia atual), ajustando feriado/domingo.
+  // Campo vazio/negativo: zera os dias sem mexer no vencimento (deixa continuar digitando).
   const atualizarDiasNT = (idx: number, diasStr: string) => {
     const dias = parseInt(diasStr, 10);
-    if (isNaN(dias) || dias <= 0) {
+    if (isNaN(dias) || dias < 0) {
       setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias: 0 } : p)));
       return;
     }
@@ -530,21 +535,36 @@ export function ContasAPagar() {
     setParcelas((prev) => prev.map((p, i) => (i === idx ? { ...p, dias, vencimento: fmtLocalData(util) } : p)));
   };
 
-  // Edita a DATA → dias = venc − emissão (dia útil).
-  const atualizarVencimentoNT = (idx: number, isoDate: string) => {
-    if (!isoDate) return;
-    const d = new Date(isoDate + 'T00:00:00');
-    if (isNaN(d.getTime())) return;
+  // Digitação da DATA (onChange): tolerante — só guarda o valor digitado e recalcula os
+  // dias quando a data já é válida (≥ emissão). Sem rejeitar/avisar, senão o ano digitado
+  // dígito a dígito (0002, 0020…) dispararia erro e travaria a digitação.
+  const onChangeVencimentoNT = (idx: number, isoDate: string) => {
+    setParcelas((prev) => prev.map((p, i) => {
+      if (i !== idx) return p;
+      if (!isoDate) return { ...p, vencimento: '' };
+      const d = new Date(isoDate + 'T00:00:00');
+      const emis = baseEmissaoNT();
+      const dias = !isNaN(d.getTime()) && d >= emis ? diasEntre(d, emis) : p.dias;
+      return { ...p, vencimento: isoDate, dias };
+    }));
+  };
+
+  // Confirmação da DATA (onBlur): ajusta p/ o próximo dia útil e valida contra a emissão.
+  // Se ficou anterior à emissão, avisa e volta para a emissão (dia atual).
+  const onBlurVencimentoNT = (idx: number) => {
     const emis = baseEmissaoNT();
-    if (d < emis) {
-      toast.error('O vencimento não pode ser anterior à data de emissão.');
-      return;
-    }
-    const util = getProximoDiaUtil(d);
-    const novosDias = Math.max(0, Math.ceil((util.getTime() - emis.getTime()) / (1000 * 60 * 60 * 24)));
-    setParcelas((prev) =>
-      prev.map((p, i) => (i === idx ? { ...p, vencimento: fmtLocalData(util), dias: novosDias } : p)),
-    );
+    setParcelas((prev) => prev.map((p, i) => {
+      if (i !== idx || !p.vencimento) return p;
+      const d = new Date(p.vencimento + 'T00:00:00');
+      if (isNaN(d.getTime())) return p;
+      if (d < emis) {
+        toast.error('O vencimento não pode ser anterior à data de emissão.');
+        const util = getProximoDiaUtil(emis);
+        return { ...p, vencimento: fmtLocalData(util), dias: diasEntre(util, emis) };
+      }
+      const util = getProximoDiaUtil(d);
+      return { ...p, vencimento: fmtLocalData(util), dias: diasEntre(util, emis) };
+    }));
   };
 
   const removerParcelaNT = (idx: number) => setParcelas((prev) => {
@@ -4951,18 +4971,21 @@ export function ContasAPagar() {
                           <div className="flex items-center gap-1">
                             <Input
                               type="number"
-                              min="1"
+                              min="0"
                               value={p.dias}
                               onChange={(e) => atualizarDiasNT(i, e.target.value)}
                               className="w-20 text-xs"
+                              title="Dias a partir da emissão (0 = vence no dia da emissão, ajustado para o próximo dia útil)"
                             />
                             <span className="text-gray-500 text-xs">dias</span>
                           </div>
                           <Input
                             type="date"
                             value={p.vencimento}
-                            onChange={(e) => atualizarVencimentoNT(i, e.target.value)}
+                            onChange={(e) => onChangeVencimentoNT(i, e.target.value)}
+                            onBlur={() => onBlurVencimentoNT(i)}
                             className="w-36 text-xs"
+                            title="Pode digitar a data; ao sair do campo ela é ajustada para o próximo dia útil"
                           />
                           <div className="flex items-center gap-1">
                             <span className="text-gray-500 text-xs">R$</span>
