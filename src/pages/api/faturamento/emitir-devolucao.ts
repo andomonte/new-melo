@@ -8,6 +8,7 @@ import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { decrypt } from '@/utils/crypto';
 import { getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { getPgPoolFilial } from '@/lib/pg';
+import type { PagamentoNota } from '@/lib/fiscal/pagamentoNota';
 
 // ESTORNO — FASE 2: emite a NF-e de DEVOLUÇÃO da DI (Documento Interno) gerada na fase 1.
 // Emite a partir da FATURA (dbfatura + dbprodfat), como o Delphi (sem venda), com
@@ -107,6 +108,8 @@ export default async function handler(
       tpNF: '0', // entrada
       finNFe: '4', // devolução
       refNFe: chaveOriginal,
+      // Devolução: tPag 90 (sem pagamento), vPag 0 — igual ao Delphi.
+      pagamentoNota: { tPag: '90', vPagZero: true } satisfies PagamentoNota,
     });
 
     const xmlAssinado = await assinarXMLComCertificados(xmlBruto, 'infNFe', certificadoKey, certificadoCrt);

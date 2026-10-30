@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { getPgPoolFilial } from '@/lib/pg';
+import { registrarErroEmissao } from '@/lib/fiscal/erroEmissao';
 import type { Pool } from 'pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { parseStringPromise } from 'xml2js';
@@ -16,6 +17,7 @@ import { SEFAZ_AM_URLS, getSefazUrl } from '@/utils/sefazUrls';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import https from 'https';
 import { DOMParser } from 'xmldom';
+import { pagamentoNotaDaFatura } from '@/lib/fiscal/pagamentoNota';
 
 /**
  * API para emissão de Cupom Fiscal Eletrônico (NFC-e) - Modelo 65
@@ -446,8 +448,12 @@ export default async function handler(
     // 4️⃣ GERAR XML DO CUPOM FISCAL
     console.log('🔄 Gerando XML do Cupom Fiscal (NFC-e)...');
     
+    // <pag> fiel ao Delphi: regra lida da fatura no banco (frmfat/cfop1/estorno/dev_id).
+    const pagamentoNota = await pagamentoNotaDaFatura(pool, codfat);
+
     const xmlCupom = await gerarXmlCupomFiscal({
       emitente: dados.emitente,
+      pagamentoNota,
       cliente: dados.dbclien,
       produtos: produtos,
       data: new Date(),
@@ -1033,6 +1039,14 @@ export default async function handler(
       String(error);
     console.error('❌ Erro ao emitir cupom fiscal:', detalheMsg);
     console.error('❌ Stack:', error?.stack || '(sem stack)');
+
+    // Erro antes/fora da SEFAZ (certificado, CSC, XML...) — não vai p/ dbfat_nfe; fica no log.
+    await registrarErroEmissao(
+      req,
+      pool,
+      codfat || req.body?.dbfatura?.codfat || req.body?.codfat,
+      String(detalheMsg),
+    );
 
     return res.status(500).json({
       sucesso: false,

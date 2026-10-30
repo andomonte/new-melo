@@ -6,6 +6,7 @@ import { naturezaPorOperacao } from '@/utils/naturezaPorOperacao';
 import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
 import { resolverFiscalArmazem, determinarSeriePorIE } from '@/lib/faturamento/fiscalPorArmazem';
 import { inserirCobranca } from '@/lib/faturamento/inserirCobranca';
+import { resolverCodusrDelphi, MSG_SEM_CODIGO_DELPHI } from '@/lib/usuario/codusrDelphi';
 
 /**
  * Resolve a operação fiscal do faturamento a partir de Movimentação (SAIDA/ENTRADA)
@@ -226,7 +227,7 @@ export default async function handler(
     nfs = nfsnota,
     observacoes: _observacoes,
     vendas = [], // Array de codvenda
-    usuario_associacao = '',
+    usuario, // login (fallback quando o cookie não vier); o código gravado é o do Delphi
     // FASE 4 (A) — ajustes fiscais do faturamento (default = comportamento de venda "limpo")
     tipo_movimentacao,      // SAIDA | ENTRADA
     tipo_operacao,          // operação do CFOP (VENDA, TRANSFERENCIA, REMESSA_*, ...)
@@ -264,6 +265,16 @@ export default async function handler(
   }
 
   const client = await (await getPgPoolFilial(req)).connect();
+
+  // Usuário que fatura = código do Delphi (dbusuario.codusr). Igual ao GERAR_FATURAM, que
+  // grava inc_acao_usr(codusr,'INCLUIR','DBFATURA','COD:'||codfat) — é por ali que se sabe
+  // quem criou a fatura (Consulta "minhas faturas" do caixa usa isso).
+  const usr = await resolverCodusrDelphi(req, client, usuario);
+  if (!usr.codusr) {
+    client.release();
+    return res.status(400).json({ error: MSG_SEM_CODIGO_DELPHI, sucesso: false });
+  }
+  const codusrDelphi = usr.codusr;
 
   try {
     console.log('🔄 Iniciando transação...');
@@ -579,7 +590,7 @@ export default async function handler(
       await client.query(
         `INSERT INTO fatura_venda (codfat, codvenda, data_associacao, usuario_associacao, status)
          VALUES ($1, $2, NOW(), $3, 'ativo')`,
-        [novoCodfat, codvenda, usuario_associacao],
+        [novoCodfat, codvenda, codusrDelphi],
       );
 
       // Atualiza o status da venda para 'F' (faturado) e statuspedido
@@ -711,6 +722,13 @@ export default async function handler(
       });
       console.log('✅ Cobrança gravada na transação da fatura');
     }
+
+    // Log da ação — espelha Usuario.inc_acao_usr(codusr,'INCLUIR','DBFATURA','COD:'||codfat).
+    await client.query(
+      `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
+       VALUES ($1, 'INCLUIR', 'DBFATURA', $2, now())`,
+      [codusrDelphi, `COD:${novoCodfat}`],
+    );
 
     await client.query('COMMIT');
 

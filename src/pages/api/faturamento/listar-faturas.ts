@@ -1,5 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPoolFilial } from '@/lib/pg';
+import { usuarioPossuiFuncao, usuarioPossuiTela } from '@/lib/permissoes';
+import { resolverCodusrDelphi, MSG_SEM_CODIGO_DELPHI } from '@/lib/usuario/codusrDelphi';
+import { sqlUltimoErroEmissao } from '@/lib/fiscal/erroEmissao';
+
+/** Função (tb_login_functions) que libera ao caixa a Consulta de Faturas só das próprias faturas. */
+const FUNCAO_CONSULTA_FATURA_CAIXA = 'CONSULTA_FATURA_CAIXA';
 
 const operadoresSQL: Record<string, string> = {
   igual: '=',
@@ -291,6 +297,31 @@ export default async function listarFaturas(
       );
     }
 
+    // Escopo "minhas faturas" (Caixa): só as faturas que o usuário criou. O Delphi registra o
+    // criador em dbacao ('INCLUIR','DBFATURA','COD:<codfat>', codusr) — salvar.ts faz o mesmo.
+    // Quem não tem a tela Consulta de Faturas só enxerga as próprias (e precisa da função).
+    const temTelaConsulta = await usuarioPossuiTela(req, '/faturamento/consultaFatura').catch(() => false);
+    if (req.query.escopo === 'minhas' || !temTelaConsulta) {
+      if (
+        !temTelaConsulta &&
+        !(await usuarioPossuiFuncao(req, FUNCAO_CONSULTA_FATURA_CAIXA).catch(() => false))
+      ) {
+        client.release();
+        return res.status(403).json({ error: 'Sem permissão para consultar faturas.' });
+      }
+      const usr = await resolverCodusrDelphi(req, client);
+      if (!usr.codusr) {
+        client.release();
+        return res.status(403).json({ error: MSG_SEM_CODIGO_DELPHI });
+      }
+      clausulasAND.push(
+        `EXISTS (SELECT 1 FROM dbacao a
+                  WHERE a.tabela = 'DBFATURA' AND a.acao = 'INCLUIR'
+                    AND substring(a.obs FROM 5) = f.codfat AND a.codusr = $${values.length + 1})`,
+      );
+      values.push(usr.codusr);
+    }
+
     // Construir WHERE final após processar todos os filtross
     let where = '';
     const filtroClienteValido = `(c.nome IS NOT NULL AND c.nome <> '' AND f.nroform IS NOT NULL AND f.nroform <> '')`;
@@ -351,7 +382,15 @@ export default async function listarFaturas(
         CASE 
           WHEN nfe.status IS NOT NULL AND nfe.status != '100' THEN nfe.motivo
           ELSE NULL
-        END AS mensagem_rejeicao
+        END AS mensagem_rejeicao,
+        -- Erro de emissão que não chegou à SEFAZ (certificado, CSC, XML...): só conta se for
+        -- mais novo que o último retorno da SEFAZ e a nota não estiver autorizada.
+        CASE
+          WHEN COALESCE(nfe.status, '') <> '100'
+           AND (nfe.data IS NULL OR errnf.erro_emissao_data > nfe.data)
+          THEN errnf.erro_emissao_msg
+        END AS erro_emissao,
+        errnf.erro_emissao_data
         ${
           hasCodgpColumn
             ? `,
@@ -378,6 +417,7 @@ export default async function listarFaturas(
         ORDER BY (n.status = '100') DESC, n.dthrprotocolo DESC NULLS LAST, n.chave DESC NULLS LAST
         LIMIT 1
       ) nfe ON true
+      ${sqlUltimoErroEmissao('f')}
       ${hasCodgpColumn && hasGrupoPagamentoTable ? 'LEFT JOIN grupo_pagamento gp ON f.codgp = gp.codigo_gp' : ''}
       ${where}
       ORDER BY f.data DESC

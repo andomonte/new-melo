@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { calcularJurosCaixa, type TituloJurosInput, type Feriados } from '@/lib/caixa/calcularJuros';
+import { sqlUltimoErroEmissao } from '@/lib/fiscal/erroEmissao';
 
 /**
  * Fase 0 do motor de recebimento do Caixa — porte de CAIXA.DADOS_RECEBIMENTO / CALULAR_JUROS.
@@ -66,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const dpg = (dataPgto ? String(dataPgto) : new Date().toISOString()).slice(0, 10);
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // 1) Títulos
@@ -117,16 +118,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 3) Venda à vista (fatura das últimas 24h) — exceção de juros
     const fats = tit.rows.map((r: any) => r.cod_fat).filter(Boolean);
     let fatsRecentes = new Set<string>();
+    // Nota fiscal da fatura: "pendente" = tem registro em dbfat_nfe mas nenhum autorizado
+    // (rejeitada/timeout). Fatura sem registro (legado não migrado) não acusa nada.
+    // Delphi: só avisa — o caixa recebe mesmo assim.
+    const notaPendenteMap = new Map<string, string>();
     if (fats.length) {
       try {
         const fr = await client.query(
-          `SELECT cod_fat FROM dbfatura
-           WHERE cod_fat = ANY($1) AND data >= (CURRENT_DATE - INTERVAL '1 day')`,
+          `SELECT codfat FROM dbfatura
+           WHERE codfat = ANY($1) AND data >= (CURRENT_DATE - INTERVAL '1 day')`,
           [fats],
         );
-        fatsRecentes = new Set(fr.rows.map((r: any) => String(r.cod_fat)));
+        fatsRecentes = new Set(fr.rows.map((r: any) => String(r.codfat)));
       } catch {
         /* dbfatura ausente/coluna diferente — trata como sem venda à vista */
+      }
+      try {
+        const nr = await client.query(
+          `SELECT DISTINCT ON (codfat) codfat, status, motivo
+             FROM dbfat_nfe
+            WHERE codfat = ANY($1)
+              AND NOT EXISTS (SELECT 1 FROM dbfat_nfe a WHERE a.codfat = dbfat_nfe.codfat AND a.status = '100')
+            ORDER BY codfat, data DESC NULLS LAST`,
+          [fats],
+        );
+        nr.rows.forEach((r: any) =>
+          notaPendenteMap.set(String(r.codfat), `${r.status || ''}${r.motivo ? ' — ' + r.motivo : ''}`),
+        );
+      } catch {
+        /* dbfat_nfe ausente — sem aviso de nota */
+      }
+      // Erro antes da SEFAZ (certificado, CSC, XML...) não gera dbfat_nfe — vem do log (dbacao).
+      try {
+        const er = await client.query(
+          `SELECT f.codfat, errnf.erro_emissao_msg
+             FROM dbfatura f
+             ${sqlUltimoErroEmissao('f')}
+            WHERE f.codfat = ANY($1) AND errnf.erro_emissao_msg IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM dbfat_nfe n
+                               WHERE n.codfat = f.codfat
+                                 AND (n.status = '100' OR n.data >= errnf.erro_emissao_data))`,
+          [fats],
+        );
+        er.rows.forEach((r: any) =>
+          notaPendenteMap.set(String(r.codfat), `Erro na emissão — ${r.erro_emissao_msg}`),
+        );
+      } catch {
+        /* dbacao ausente — segue sem */
       }
     }
 
@@ -161,6 +199,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cancel: r.cancel,
         valor_pgto: Number(r.valor_pgto || 0),
         valor_rec: Number(r.valor_rec || 0),
+        notaPendente: r.cod_fat ? notaPendenteMap.has(String(r.cod_fat)) : false,
+        notaMotivo: r.cod_fat ? notaPendenteMap.get(String(r.cod_fat)) ?? null : null,
         ...calc,
       };
     });

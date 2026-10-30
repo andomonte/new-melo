@@ -252,7 +252,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Rotas que não precisam de autenticação (login próprio do módulo)
     const rotasPublicas = ['/separacao', '/separacao-estacao', '/conferencia', '/conferencia-estacao', '/tv', '/operacional/tv', '/entrada/recebimento', '/alocacao'];
-    const isRotaPublica = rotasPublicas.includes(router.pathname);
+    // /prototipo/*: telas de validação com dados simulados (não acessam API).
+    const isRotaPublica =
+      rotasPublicas.includes(router.pathname) || router.pathname.startsWith('/prototipo/');
 
     if (
       !isLoading &&

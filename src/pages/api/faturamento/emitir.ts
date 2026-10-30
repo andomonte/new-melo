@@ -14,12 +14,14 @@ import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { normalizarPayloadNFe } from '@/utils/normalizarPayloadNFe';
 import { create } from 'xmlbuilder2';
 import { getPgPoolFilial } from '@/lib/pg';
+import { registrarErroEmissao } from '@/lib/fiscal/erroEmissao';
 import type { Pool } from 'pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
 import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { obterCRTEmpresa } from '@/utils/consultarCRTReceita';
+import { pagamentoNotaDaFatura, regraPagamentoNota } from '@/lib/fiscal/pagamentoNota';
  
 // Função para registrar erros/mensagens da emissão
 async function registrarMensagemFatura(
@@ -411,6 +413,12 @@ export default async function handler(
           (dadosNormalizados as any).fatura?.descrcfop ||
           '',
       ).trim() || 'VENDA DE MERCADORIAS';
+
+    // <pag> fiel ao Delphi: regra lida da fatura no banco (frmfat/cfop1/estorno/dev_id).
+    (dadosNormalizados as any).pagamentoNota = await pagamentoNotaDaFatura(
+      await getPgPoolFilial(req),
+      dados?.codfat || dados?.dbfatura?.codfat,
+    );
 
     const xmlBruto = gerarXMLNFe(dadosNormalizados);
 
@@ -1446,13 +1454,24 @@ export default async function handler(
     console.error('❌ Erro ao emitir NF-e:', JSON.stringify(detalhe, null, 2));
 
     // Registrar erro genérico nas tabelas se houver codfat
-    const codfat = req.body?.dbfatura?.codfat;
+    const codfat = req.body?.dbfatura?.codfat || req.body?.codfat;
     if (codfat) {
       await registrarMensagemFatura(
         await getPgPoolFilial(req),
         codfat,
         'ERRO_GERAL',
         `Erro no processamento: ${error.message || 'Erro desconhecido'}`,
+      );
+      // dbmensagens guarda 1 texto por código (o 1º 'ERRO_GERAL'); a mensagem real desta
+      // fatura vai p/ o log (dbacao), que a Consulta e o Caixa leem.
+      const det = error?.response?.data;
+      await registrarErroEmissao(
+        req,
+        await getPgPoolFilial(req),
+        codfat,
+        (det && typeof det === 'object' ? det.motivo || det.erro || det.message : det) ||
+          error?.message ||
+          'Erro desconhecido',
       );
     }
 

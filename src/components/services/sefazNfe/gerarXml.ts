@@ -1,4 +1,5 @@
 import { create } from 'xmlbuilder2';
+import { regraPagamentoNota, type PagamentoNota } from '@/lib/fiscal/pagamentoNota';
 
 // Função para calcular o dígito verificador (Módulo 11)
 export function calcularDV(chave: string): number {
@@ -198,6 +199,9 @@ export function gerarXMLNFe(dados: any): string {
     quantidade,
     fatura,
   } = dados;
+
+  // <pag>: a API de emissão manda a regra calculada do banco (dbfatura); senão, usa a fatura do payload.
+  const pagNota: PagamentoNota = dados?.pagamentoNota ?? regraPagamentoNota(fatura);
 
   console.log(`🔍 [gerarXMLNFe] Totais recebidos:`, {
     totalProdutos,
@@ -532,10 +536,12 @@ export function gerarXMLNFe(dados: any): string {
             pesoB: Number(pesoBruto ?? 0).toFixed(3),
           },
         },
+        // Forma de pagamento fiel ao Delphi (99 Recibo / 15 boleto / 90 sem pagamento).
         pag: {
           detPag: {
-            tPag: '01',
-            vPag: Number(totalNF).toFixed(2),
+            tPag: pagNota.tPag,
+            ...(pagNota.xPag ? { xPag: pagNota.xPag } : {}),
+            vPag: pagNota.vPagZero ? '0.00' : Number(totalNF).toFixed(2),
           }
         },
         infAdic: {

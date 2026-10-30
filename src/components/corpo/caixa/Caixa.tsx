@@ -16,10 +16,18 @@ import ModalRelatorioDiarioAvista from '@/components/corpo/caixa/ModalRelatorioD
 import ModalConsultaPrePedidos from '@/components/corpo/caixa/ModalConsultaPrePedidos';
 import ModalHistoricoRecebimento from '@/components/corpo/caixa/ModalHistoricoRecebimento';
 import ModalConsultaCliente from '@/components/corpo/caixa/ModalConsultaCliente';
+import ConsultaFaturasPage from '@/components/corpo/faturamento/ConsultaFatura/ConsultaFatura';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { registrarRecebimento } from '@/data/caixa/sessao';
 import type { FormaPagamentoSessao } from '@/data/caixa/sessao';
-import { faturarPreVenda, type DetalhesPreVenda } from '@/data/caixa/faturarPreVenda';
 import {
+  faturarEEmitirNota,
+  emitirNotaDaFatura,
+  type DetalhesPreVenda,
+  type ResultadoNota,
+} from '@/data/caixa/faturarPreVenda';
+import {
+  Receipt,
   Search,
   CreditCard,
   Banknote,
@@ -34,6 +42,7 @@ import {
   History,
   User,
   AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 
 // ---- Tipos ----
@@ -146,6 +155,28 @@ interface PreVenda {
   doc: string | null;
 }
 
+// Resposta de /api/contas-receber/[cod_receb] → Titulo da lista do caixa
+function tituloDaApi(t: any): Titulo {
+  return {
+    cod_receb: t.cod_receb,
+    codcli: t.codcli,
+    nome_cliente: t.nome_cliente,
+    dt_venc: t.dt_venc,
+    dt_emissao: t.dt_emissao,
+    valor_original: Number(t.valor_pgto || 0),
+    valor_recebido: Number(t.valor_rec || 0),
+    nro_doc: t.nro_doc,
+    tipo: t.tipo,
+    rec: t.rec,
+    cancel: t.cancel,
+    banco: t.banco,
+    cod_fat: t.cod_fat,
+    cod_venda: t.cod_venda,
+    status: t.status,
+    forma_fat: t.forma_fat,
+  };
+}
+
 export default function Caixa() {
   const { user } = useContext(AuthContext);
   const username = user?.usuario || 'Sistema';
@@ -176,6 +207,16 @@ export default function Caixa() {
   // Erro persistente da última operação (ex.: rejeição de NF-e) + ação para tentar de novo.
   // O toast some; aqui o operador vê o motivo e pode reenviar sem reconfigurar tudo.
   const [erroOperacao, setErroOperacao] = useState<{ msg: string; retry?: () => void } | null>(null);
+  // Última fatura gerada no caixa (passo "Faturar e emitir nota", padrão Delphi). A fatura e o
+  // título RECIBO ficam gravados mesmo se a nota falhar — o operador reenvia a nota daqui.
+  const [faturado, setFaturado] = useState<{
+    codfat: string;
+    cod_receb: string | null;
+    valorTitulo: number;
+    nrovendas: string[];
+    nota: ResultadoNota;
+  } | null>(null);
+  const [reenviando, setReenviando] = useState(false);
   const [emitidas, setEmitidas] = useState<Emitida[]>([]); // vendas já faturadas (reimprimir)
   // Filtro da busca: mostrar Tudo, só Títulos ou só Pré-Pedidos.
   const [filtroResultado, setFiltroResultado] = useState<'tudo' | 'titulos' | 'prevendas'>('tudo');
@@ -262,6 +303,18 @@ export default function Caixa() {
     (f: any) => (typeof f === 'string' ? f : f?.sigla) === 'REL_DIARIO_AVISTA',
   );
   const [modalRelDiarioAberto, setModalRelDiarioAberto] = useState(false);
+
+  // ---- "Minhas Faturas" — Consulta de Faturas restrita às faturas criadas pelo operador
+  // (função CONSULTA_FATURA_CAIXA, ou quem já tem a tela Consulta de Faturas). Serve p/ ver o
+  // motivo de uma nota não autorizada e reemitir depois de sair da tela.
+  const podeMinhasFaturas =
+    ((user as any)?.funcoes || []).some(
+      (f: any) => (typeof f === 'string' ? f : f?.sigla) === 'CONSULTA_FATURA_CAIXA',
+    ) ||
+    ((user as any)?.permissoes || []).some(
+      (p: any) => p?.tb_telas?.PATH_TELA === '/faturamento/consultaFatura',
+    );
+  const [minhasFaturasAberto, setMinhasFaturasAberto] = useState(false);
 
   // ---- Consulta de Pré-Pedidos (somente leitura, com copiar número) ----
   const [modalPrePedidosAberto, setModalPrePedidosAberto] = useState(false);
@@ -584,6 +637,11 @@ export default function Caixa() {
   const quitado = totalTitulo > 0 && recebidoTitulo >= totalTitulo - 0.005;
   const parcial = recTitulos > 0 && recTitulos < principalPend - 0.005;
   const podeReceber = recebidoTotal > 0;
+  // Títulos selecionados cuja fatura está com a nota fiscal pendente (rejeitada/sem autorização).
+  const notaPendenteDe = (t: Titulo) =>
+    !!dadosMap[t.cod_receb]?.notaPendente ||
+    (!!faturado && t.cod_receb === faturado.cod_receb && !faturado.nota.autorizada);
+  const titulosNotaPendente = selecionados.filter(notaPendenteDe);
 
   // ---- Buscar título ----
   // termoArg permite buscar direto por um número (ex.: vindo da consulta de pré-pedidos).
@@ -603,6 +661,7 @@ export default function Caixa() {
       setPreVendasSel([]);
       setTitulosPagos([]);
       setFiltroResultado('tudo');
+      setFaturado(null);
       // Sem filtro de status: precisa achar tanto pendentes quanto VENCIDOS.
       // O front filtra os já recebidos/cancelados (cancel/rec) logo abaixo.
       const params = new URLSearchParams({
@@ -887,24 +946,7 @@ export default function Caixa() {
           setTitulos((prev) => prev.filter((t) => t.cod_receb !== codReceb));
           continue;
         }
-        const t = await resp.json();
-        const atualizado: Titulo = {
-          cod_receb: t.cod_receb,
-          codcli: t.codcli,
-          nome_cliente: t.nome_cliente,
-          dt_venc: t.dt_venc,
-          dt_emissao: t.dt_emissao,
-          valor_original: Number(t.valor_pgto || 0),
-          valor_recebido: Number(t.valor_rec || 0),
-          nro_doc: t.nro_doc,
-          tipo: t.tipo,
-          rec: t.rec,
-          cancel: t.cancel,
-          banco: t.banco,
-          cod_fat: t.cod_fat,
-          cod_venda: t.cod_venda,
-          status: t.status,
-        };
+        const atualizado = tituloDaApi(await resp.json());
         // Quitado sai da seleção/lista; parcial permanece atualizado
         setSelecionados((prev) =>
           atualizado.rec === 'S'
@@ -963,93 +1005,90 @@ export default function Caixa() {
     }
   };
 
-  // Faturar pré-venda no caixa: faturar → emitir NF → receber (nasce baixado). Rollback se falhar.
-  const faturarEReceber = async () => {
+  // Passo 1 do caixa (fiel ao Delphi — Avançar): FATURAR + título RECIBO em aberto + emitir NF.
+  // Se a nota falhar a fatura NÃO é desfeita: fica o aviso com "Reenviar nota". O recebimento
+  // é o passo 2, sobre o título gerado (mesmo fluxo de "Receber e dar baixa" de qualquer título).
+  const faturarEEmitir = async () => {
     if (!preVendaSel) return;
     if (!preVendaDetalhes) {
       toast.error('Aguarde carregar os dados da pré-venda.');
-      return;
-    }
-    if (passadas.length === 0) {
-      toast.error('Adicione ao menos uma forma de pagamento.');
       return;
     }
     if (!codConta.trim()) {
       toast.error('Sem conta de operador.');
       return;
     }
+    const codvendas = preVendasSel.map((x) => x.codvenda);
+    const nrovendas = preVendasSel.map((x) => x.nrovenda);
     setSalvando(true);
     setProgresso('Iniciando…');
     setErroOperacao(null);
     try {
-      // 1) faturar + emitir NF (com rollback interno em caso de falha)
-      const r = await faturarPreVenda({
+      const r = await faturarEEmitirNota({
         detalhes: preVendaDetalhes,
-        codvendas: preVendasSel.map((x) => x.codvenda), // agrupa todas numa única fatura/NF
+        codvendas, // agrupa todas numa única fatura/NF
         codConta: codConta.trim(),
-        username,
         onStep: setProgresso,
       });
-      // 2) receber o título gerado (nasce baixado conforme o pago)
-      setProgresso('Recebendo o pagamento…');
-      const resp = await fetch('/api/caixa/receber', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cod_receb: r.cod_receb,
-          dataPgto,
-          cod_conta: codConta.trim(),
-          username,
-          principalPendente: r.valorTitulo,
-          pagamentos: passadas
-            .filter((p) => bucketDaForma(p.codfpgt) === 'principal')
-            .map((p) => ({
-              forma: p.forma,
-              valor: p.valor,
-              codopera: p.codopera,
-              vezes: p.vezes,
-              cvnsu: p.cvnsu,
-              autorizacao: p.autorizacao,
-              cof_id: p.cofId,
-              tipo: p.codfpgt,
-              obs: p.obs, // devolução: vai p/ dbfreceb.nome
-            })),
-        }),
-      });
-      const dr = await resp.json();
-      if (!resp.ok) throw new Error(dr.detalhes || dr.erro || 'Fatura/NF ok, mas falhou ao receber o título.');
+      // Daqui em diante a fatura EXISTE: os pré-pedidos saem da lista (já faturados).
+      setPreVendasSel([]);
+      setPrevendas((prev) => prev.filter((p) => !codvendas.includes(p.codvenda)));
+      setPassadas([]);
+      setFaturado({ codfat: r.codfat, cod_receb: r.cod_receb, valorTitulo: r.valorTitulo, nrovendas, nota: r.nota });
 
-      // 3) registra o movimento na sessão de caixa (auditoria + saldo da gaveta)
-      try {
-        await registrarRecebimento({
-          filial: user?.filial || '',
-          cod_conta: codConta.trim(),
-          operador: username,
-          movimentos: passadas.map((p) => ({
-            forma_pagamento: MAP_FORMA_SESSAO[p.forma],
-            valor: p.valor,
-            referencia: r.cod_receb,
-          })),
-        });
-        await sessaoCaixa.refresh();
-      } catch {
-        /* silencioso */
+      // Carrega o título gerado como selecionado → libera o Recebimento.
+      if (r.cod_receb) {
+        try {
+          const resp = await fetch(`/api/contas-receber/${r.cod_receb}`);
+          if (resp.ok) {
+            const t = tituloDaApi(await resp.json());
+            setTitulos((prev) => [t, ...prev.filter((x) => x.cod_receb !== t.cod_receb)]);
+            setSelecionados([t]);
+            setValorPassada(formatarDecimalBR(r.valorTitulo));
+          }
+        } catch {
+          /* o operador pode buscar o título pelo número */
+        }
       }
 
-      toast.success(`Faturado e recebido! Fatura ${r.codfat} · NF-e ${r.nfe.modelo} autorizada.`);
-      // TODO(próximo): imprimir DANFE silenciosa (QZ Tray) usando r.nfe.pdfBase64
-      setPreVendasSel([]);
-      setPassadas([]);
-      setPrevendas([]);
-      setBusca('');
-      // Fiel ao Delphi: ao finalizar, pergunta se quer imprimir o comprovante.
-      perguntarImprimirComprovante(dr.aut_id);
+      if (r.nota.autorizada) {
+        toast.success(`Fatura ${r.codfat} · ${r.nota.nomeDoc} autorizada. Receba o pagamento.`);
+      } else {
+        toast.warning(`Fatura ${r.codfat} gravada, mas a ${r.nota.nomeDoc} não foi autorizada.`);
+      }
+      if (!r.cod_receb) {
+        setErroOperacao({
+          msg: `Fatura ${r.codfat} gravada, mas o título a receber não foi localizado. Busque pela fatura/cliente antes de receber.`,
+        });
+      }
     } catch (err: any) {
+      // Só chega aqui se a FATURA não foi gravada (nada foi criado) — pode tentar de novo.
       toast.error(`Erro: ${err.message}`);
-      // Mantém o motivo na tela (o toast some) + permite reenviar sem reconfigurar.
-      setErroOperacao({ msg: err.message || 'Erro ao faturar/emitir.', retry: () => faturarEReceber() });
+      setErroOperacao({ msg: err.message || 'Erro ao faturar.', retry: () => faturarEEmitir() });
     } finally {
       setSalvando(false);
+      setProgresso(null);
+    }
+  };
+
+  // Reenviar a nota da fatura mantida (rejeição/timeout). Não refatura nada.
+  const reenviarNota = async () => {
+    if (!faturado) return;
+    setReenviando(true);
+    setProgresso('Reenviando a nota…');
+    try {
+      let nota: ResultadoNota;
+      try {
+        nota = await emitirNotaDaFatura({ codfat: faturado.codfat, onStep: setProgresso });
+      } catch (e: any) {
+        nota = { ...faturado.nota, autorizada: false, motivo: e?.message || 'Falha ao emitir a nota.' };
+      }
+      setFaturado((f) => (f ? { ...f, nota } : f));
+      setRefetchDados((x) => x + 1); // atualiza o aviso de "nota pendente" do título
+      if (nota.autorizada) toast.success(`${nota.nomeDoc} autorizada.`);
+      else toast.error(`${nota.nomeDoc} não autorizada: ${nota.motivo || 'erro na SEFAZ'}`);
+    } finally {
+      setReenviando(false);
       setProgresso(null);
     }
   };
@@ -1169,6 +1208,16 @@ export default function Caixa() {
               <FileText size={15} /> Diário à Vista
             </button>
           )}
+          {podeMinhasFaturas && (
+            <button
+              type="button"
+              onClick={() => setMinhasFaturasAberto(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold rounded-lg px-3 py-2 border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 hover:border-blue-500 hover:text-blue-600 transition"
+              title="Faturas criadas por você: status da nota, motivo do erro/rejeição e reemissão"
+            >
+              <Receipt size={15} /> Minhas Faturas
+            </button>
+          )}
           <div>
             <div className="text-[10px] uppercase tracking-wide text-gray-400">Operador</div>
             <div className="font-semibold">{username}</div>
@@ -1229,6 +1278,49 @@ export default function Caixa() {
               <button type="button" onClick={() => setErroOperacao(null)} title="Fechar" className="text-red-400 hover:text-red-600 shrink-0">
                 <X size={18} />
               </button>
+            </div>
+          )}
+
+          {/* Nota não autorizada — padrão Delphi: a fatura e o título FICAM; reenvia só a nota.
+              O recebimento continua liberado (só avisa). */}
+          {faturado && !faturado.nota.autorizada && (
+            <div className="mb-4 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 flex items-start gap-3">
+              <AlertTriangle size={18} className="text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-red-700 dark:text-red-300">
+                  {faturado.nota.nomeDoc} não autorizada — fatura {faturado.codfat} mantida
+                </div>
+                <div className="text-sm text-red-700 dark:text-red-300 break-words whitespace-pre-wrap mt-0.5">
+                  {faturado.nota.status ? `(${faturado.nota.status}) ` : ''}
+                  {faturado.nota.motivo || 'erro na SEFAZ'}
+                </div>
+                <div className="text-xs text-red-700 dark:text-red-300 mt-1">
+                  A fatura <b>não foi desfeita</b>. Corrija e reenvie a nota desta mesma fatura.
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={reenviarNota}
+                    disabled={reenviando || salvando}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <Loader2 size={14} className={reenviando ? 'animate-spin' : 'hidden'} />
+                    {reenviando ? progresso || 'Reenviando…' : 'Reenviar nota'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard
+                        ?.writeText(`${faturado.nota.status || ''} ${faturado.nota.motivo || ''}`.trim())
+                        .then(() => toast.success('Erro copiado.'))
+                        .catch(() => {})
+                    }
+                    className="text-xs font-semibold rounded-lg px-3 py-1.5 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1369,6 +1461,14 @@ export default function Caixa() {
                                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${chip.c}`}>{chip.t}</span>
                                 ) : null;
                               })()}
+                              {notaPendenteDe(t) && (
+                                <span
+                                  title={dadosMap[t.cod_receb]?.notaMotivo || 'Nota fiscal da fatura não autorizada'}
+                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300"
+                                >
+                                  NOTA PENDENTE
+                                </span>
+                              )}
                             </span>
                           </span>
                           <span className="truncate flex-1 text-gray-500">
@@ -1446,7 +1546,7 @@ export default function Caixa() {
                   </div>
                 )}
 
-                {/* Pré-vendas faturáveis — selecione e escolha a forma; o botão vira "Faturar e receber" */}
+                {/* Pré-vendas faturáveis — selecione um ou mais e clique em "Faturar e emitir nota" */}
                 {filtroResultado !== 'titulos' && prevendas.length > 0 && (
                   <div className="mt-3 space-y-1">
                     <div className="text-[10px] uppercase tracking-wide text-gray-400">
@@ -1486,12 +1586,91 @@ export default function Caixa() {
                       );
                     })}
                     {preVendasSel.length > 0 && (
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 pt-1">
-                        Faturando <b>{preVendasSel.length}</b> pré-pedido(s) de{' '}
-                        <b>{preVendasSel[0].nome_cliente || preVendasSel[0].codcli}</b> — total{' '}
-                        <b>{formatarBRL(Number(preVendaSel?.total || 0))}</b> numa única nota. Escolha a forma de pagamento à
-                        direita e clique em <b>Faturar e receber</b>.
-                      </p>
+                      <div className="pt-2 space-y-2">
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          Faturando <b>{preVendasSel.length}</b> pré-pedido(s) de{' '}
+                          <b>{preVendasSel[0].nome_cliente || preVendasSel[0].codcli}</b> — total{' '}
+                          <b>{formatarBRL(Number(preVendaSel?.total || 0))}</b> numa única nota. Clique em{' '}
+                          <b>Faturar e emitir nota</b>; o recebimento é liberado em seguida.
+                        </p>
+                        <DefaultButton
+                          text={salvando ? progresso || 'Processando...' : 'Faturar e emitir nota'}
+                          icon={salvando ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                          onClick={() =>
+                            preVendaSel &&
+                            pedirConfirmacao(faturarEEmitir, {
+                              title: 'Faturar e emitir nota',
+                              message:
+                                preVendasSel.length > 1
+                                  ? `FATURAR ${preVendasSel.length} pré-pedidos de ${preVendaSel.nome_cliente} (${preVendasSel
+                                      .map((x) => x.nrovenda)
+                                      .join(', ')}) numa ÚNICA nota de ${formatarBRL(Number(preVendaSel.total || 0))} e emitir?`
+                                  : `FATURAR a pré-venda ${preVendaSel.nrovenda} (${preVendaSel.nome_cliente}) de ${formatarBRL(
+                                      Number(preVendaSel.total || 0),
+                                    )} e emitir a nota?`,
+                              type: 'info',
+                            })
+                          }
+                          variant="primary"
+                          disabled={salvando || !preVendaDetalhes}
+                          className="w-full h-11"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Fatura gerada no caixa (passo 1) — situação da nota */}
+                {faturado && (
+                  <div
+                    className={`mt-3 rounded-lg border px-3 py-2 text-sm flex items-center gap-3 ${
+                      faturado.nota.autorizada
+                        ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30'
+                        : 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30'
+                    }`}
+                  >
+                    {faturado.nota.autorizada ? (
+                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold">
+                        Fatura <span className="font-mono">{faturado.codfat}</span>
+                        {faturado.nota.autorizada ? (
+                          <>
+                            {' '}
+                            · {faturado.nota.nomeDoc}{' '}
+                            {faturado.nota.numero && <span className="font-mono">{faturado.nota.numero}</span>} autorizada
+                          </>
+                        ) : (
+                          <> · {faturado.nota.nomeDoc} pendente</>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 truncate">
+                        Pré-pedido(s) {faturado.nrovendas.join(', ')}
+                        {faturado.cod_receb && <> · título {faturado.cod_receb} em aberto ({formatarBRL(faturado.valorTitulo)})</>}
+                      </div>
+                    </div>
+                    {faturado.nota.autorizada && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          verReimprimir({
+                            nrovenda: faturado.nrovendas.join(', '),
+                            codcli: selecionados[0]?.codcli || '',
+                            nome_cliente: selecionados[0]?.nome_cliente || '',
+                            data: '',
+                            codfat: faturado.codfat,
+                            nrodoc: faturado.nota.numero || '',
+                            chave: faturado.nota.chaveAcesso || '',
+                            modelo: faturado.nota.modelo,
+                          })
+                        }
+                        className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                      >
+                        <Printer size={14} /> DANFE
+                      </button>
                     )}
                   </div>
                 )}
@@ -1596,7 +1775,20 @@ export default function Caixa() {
           </div>
 
           {/* ---- COLUNA DIREITA: Recebimento ---- */}
-          <div>
+          <div className="relative">
+            {/* Pré-pedido selecionado: primeiro fatura e emite a nota (passo 1); o recebimento
+                é do título gerado (passo 2) — igual ao Delphi. */}
+            {preVendaSel && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/60 dark:bg-slate-900/70 backdrop-blur-[1.5px]">
+                <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 shadow-lg rounded-2xl px-7 py-6 text-center max-w-sm">
+                  <div className="text-3xl">🔒</div>
+                  <div className="font-bold mt-1.5">Aguardando a nota fiscal</div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    Fature e emita a nota. O recebimento é liberado com o título gerado.
+                  </div>
+                </div>
+              </div>
+            )}
             <section className="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
               <h2 className="text-xs uppercase tracking-wider text-gray-500 font-bold px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center gap-2">
                 <Landmark size={14} /> Recebimento
@@ -2112,48 +2304,36 @@ export default function Caixa() {
                   </div>
                 )}
 
+                {/* Fatura sem nota autorizada: Delphi só avisa e deixa receber. */}
+                {titulosNotaPendente.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <span>
+                      <b>Nota fiscal pendente</b> na fatura{' '}
+                      {[...new Set(titulosNotaPendente.map((t) => t.cod_fat))].join(', ')}. O recebimento é permitido;
+                      reenvie a nota{faturado && !faturado.nota.autorizada ? ' pelo aviso acima' : ' na Consulta de Faturas'}.
+                    </span>
+                  </div>
+                )}
+
                 <DefaultButton
-                  text={
-                    salvando
-                      ? 'Processando...'
-                      : preVendaSel
-                      ? 'Faturar e receber'
-                      : parcial
-                      ? 'Receber parcial'
-                      : 'Receber e dar baixa'
-                  }
+                  text={salvando ? 'Processando...' : parcial ? 'Receber parcial' : 'Receber e dar baixa'}
                   icon={salvando ? <Loader2 className="animate-spin" size={16} /> : undefined}
                   onClick={() =>
-                    preVendaSel
-                      ? pedirConfirmacao(faturarEReceber, {
-                          title: 'Faturar e receber',
-                          message:
-                            preVendasSel.length > 1
-                              ? `FATURAR ${preVendasSel.length} pré-pedidos de ${preVendaSel.nome_cliente} (${preVendasSel
-                                  .map((x) => x.nrovenda)
-                                  .join(', ')}) numa ÚNICA nota, emitir e receber ${formatarBRL(recebido)}?`
-                              : `FATURAR a pré-venda ${preVendaSel.nrovenda} (${preVendaSel.nome_cliente}), emitir a nota e receber ${formatarBRL(
-                                  recebido,
-                                )}?`,
-                          type: 'info',
-                        })
-                      : pedirConfirmacao(receberEDarBaixa, {
-                          title: parcial ? 'Confirmar recebimento PARCIAL' : 'Confirmar recebimento',
-                          message: parcial
-                            ? `Receber PARCIAL de ${formatarBRL(recebido)} em ${selecionados.length} título(s)? O restante (${formatarBRL(
-                                falta,
-                              )}) fica EM ABERTO.`
-                            : `GRAVAR o recebimento de ${formatarBRL(recebido)} e dar baixa em ${selecionados.length} título(s)?`,
-                          type: parcial ? 'warning' : 'info',
-                        })
+                    pedirConfirmacao(receberEDarBaixa, {
+                      title: parcial ? 'Confirmar recebimento PARCIAL' : 'Confirmar recebimento',
+                      message:
+                        (parcial
+                          ? `Receber PARCIAL de ${formatarBRL(recebido)} em ${selecionados.length} título(s)? O restante (${formatarBRL(
+                              falta,
+                            )}) fica EM ABERTO.`
+                          : `GRAVAR o recebimento de ${formatarBRL(recebido)} e dar baixa em ${selecionados.length} título(s)?`) +
+                        (titulosNotaPendente.length > 0 ? ' ATENÇÃO: a nota fiscal desta fatura ainda não foi autorizada.' : ''),
+                      type: parcial || titulosNotaPendente.length > 0 ? 'warning' : 'info',
+                    })
                   }
-                  variant={preVendaSel ? 'confirm' : 'confirm'}
-                  disabled={
-                    salvando ||
-                    (selecionados.length === 0 && !preVendaSel) ||
-                    passadas.length === 0 ||
-                    !podeReceber
-                  }
+                  variant="confirm"
+                  disabled={salvando || selecionados.length === 0 || passadas.length === 0 || !podeReceber}
                   className="w-full mt-3 h-12"
                 />
               </div>
@@ -2217,6 +2397,20 @@ export default function Caixa() {
 
       {/* Relatório "Títulos Diário à Vista" (só com a função REL_DIARIO_AVISTA) */}
       <ModalRelatorioDiarioAvista isOpen={modalRelDiarioAberto} onClose={() => setModalRelDiarioAberto(false)} />
+
+      {/* Minhas Faturas — Consulta de Faturas em modo caixa (só as próprias, só reemitir) */}
+      <Dialog
+        open={minhasFaturasAberto}
+        onOpenChange={(aberto) => {
+          setMinhasFaturasAberto(aberto);
+          if (!aberto) setRefetchDados((x) => x + 1); // nota reemitida lá → atualiza o aviso aqui
+        }}
+      >
+        <DialogContent className="w-[96vw] h-[92vh] max-w-none p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Minhas Faturas</DialogTitle>
+          {minhasFaturasAberto && <ConsultaFaturasPage modoCaixa />}
+        </DialogContent>
+      </Dialog>
 
       {/* Consulta de Pré-Pedidos (somente leitura, copiar número / usar na busca) */}
       <ModalConsultaPrePedidos

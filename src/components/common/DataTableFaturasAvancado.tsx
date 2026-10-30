@@ -40,6 +40,14 @@ const formatarBRL = (v: any) =>
     maximumFractionDigits: 2,
   })}`;
 
+// dbfatura.data é DATE: chega como meia-noite UTC e `new Date().toLocaleDateString()` no
+// navegador (UTC-4) mostrava o dia anterior. Formata direto do YYYY-MM-DD, sem fuso.
+const fmtDataFatura = (v: any): string => {
+  const m = String(v ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return v ? new Date(v).toLocaleDateString('pt-BR') : '-';
+};
+
 interface Props {
   faturas: any[];
   meta: Meta;
@@ -73,6 +81,8 @@ interface Props {
   statusFilterValue?: string;
   onStatusFilterChange?: (value: string) => void;
   statusFilterOptions?: { value: string; label: string }[];
+  /** Modo Caixa ("minhas faturas"): só consulta + reemissão; sem agrupar, cancelar ou cobrança. */
+  modoCaixa?: boolean;
 }
 
 export default function DataTableFaturasAvancado({
@@ -98,6 +108,7 @@ export default function DataTableFaturasAvancado({
   headerLeftSlot,
   searchCompacto,
   statusFilterValue,
+  modoCaixa = false,
   onStatusFilterChange,
   statusFilterOptions,
 }: Props) {
@@ -1576,6 +1587,8 @@ const handleCancelarNota = async () => {
     else if (f.cancel === 'S' || f.nfe_status === 'C') { cls = 'can'; txt = 'Cancelada'; }
     else if (f.denegada === 'S') { cls = 'rej'; txt = 'Denegada'; }
     else if (f.mensagem_rejeicao || f.nfe_motivo) { cls = 'rej'; txt = 'Rejeitada'; }
+    // Erro antes da SEFAZ (certificado, CSC, XML...) — não tem dbfat_nfe, vem do log.
+    else if (f.erro_emissao) { cls = 'rej'; txt = 'Erro na emissão'; }
     const box: Record<string, string> = {
       aut: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border-emerald-500/40',
       rej: 'text-amber-700 dark:text-amber-300 bg-amber-500/10 border-amber-500/40',
@@ -1588,7 +1601,7 @@ const handleCancelarNota = async () => {
     return (
       <span
         className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${box[cls]}`}
-        title={f.mensagem_rejeicao || f.nfe_motivo || f.motivocancelamento || txt}
+        title={f.mensagem_rejeicao || f.nfe_motivo || f.erro_emissao || f.motivocancelamento || txt}
       >
         <span className={`w-1.5 h-1.5 rounded-full ${dot[cls]}`} />
         {txt}
@@ -1716,15 +1729,16 @@ const handleCancelarNota = async () => {
         }}
         onEditarClick={() => setFaturaParaEdicao(f)}
         onCancelarCobranca={() => handleCancelarCobranca(f)}
-        onAlterarCobranca={() => handleAlterarCobranca(f)}
+        restrito={modoCaixa}
+        onAlterarCobranca={modoCaixa ? undefined : () => handleAlterarCobranca(f)}
         onFecharFatura={() => handleFecharFatura(f)}
-        onCancelarFaturaClick={() => handleCancelarFatura(f)}
-        onEventoClick={() => setEventoFatura(f)}
+        onCancelarFaturaClick={modoCaixa ? undefined : () => handleCancelarFatura(f)}
+        onEventoClick={modoCaixa ? undefined : () => setEventoFatura(f)}
         onEmailDanfeClick={() => setEmaildanfeModalAberto(f)}
         onenviarCobrancaClick={() => setCobrancaEnviada(f)}
         onVisualizarBoletosClick={() => handleVisualizarBoletos(f)}
         onReciboClick={() => handleRecibo(f)}
-        onResumoGpClick={() => handleResumoGp(f)}
+        onResumoGpClick={modoCaixa ? undefined : () => handleResumoGp(f)}
         onVerProdutosClick={() => handleLinhaClick(f)}
         isSelecionada={faturasSelecionadas.includes(f.codfat)}
         onVisualizarRejeicaoClick={() => {
@@ -1733,6 +1747,13 @@ const handleCancelarNota = async () => {
           // CORREÇÃO: Só mostra mensagem de rejeição se NFe NÃO foi autorizada
           if (f.mensagem_rejeicao && f.nfe_status !== '100') {
             mensagens.push(`Rejeição SEFAZ: ${f.mensagem_rejeicao}`);
+          }
+
+          if (f.erro_emissao) {
+            const quando = f.erro_emissao_data
+              ? ` (${new Date(f.erro_emissao_data).toLocaleString('pt-BR')})`
+              : '';
+            mensagens.push(`Erro na emissão${quando}: ${f.erro_emissao}`);
           }
           
           if (f.motivocancelamento) {
@@ -1761,10 +1782,10 @@ const handleCancelarNota = async () => {
         }}
         onCancelarNotaClick={() => handleAbrirModalCancelar(f)}
         onEmitirNotaClick={() => handleEmitirNota(f)}
-        onCartaCorrecaoClick={() => handleAbrirModalCartaCorrecao(f)}
-        onTermoBateriasClick={() => handleAbrirModalTermoBaterias(f)}
-        onEstornoClick={() => handleAbrirModalEstorno(f)}
-        onEmitirDevolucaoClick={() => handleEmitirDevolucao(f.codfat)}
+        onCartaCorrecaoClick={modoCaixa ? undefined : () => handleAbrirModalCartaCorrecao(f)}
+        onTermoBateriasClick={modoCaixa ? undefined : () => handleAbrirModalTermoBaterias(f)}
+        onEstornoClick={modoCaixa ? undefined : () => handleAbrirModalEstorno(f)}
+        onEmitirDevolucaoClick={modoCaixa ? undefined : () => handleEmitirDevolucao(f.codfat)}
       />
     ),
     status: statusNfePill(f),
@@ -1774,7 +1795,7 @@ const handleCancelarNota = async () => {
     nroform: f.nroform ?? '-',
     cliente_nome: ` ${f.codcli}-${f.cliente_nome ?? f.dbclien?.nome ?? '-'}`,
     totalnf: formatarBRL(f.totalnf),
-    data: new Date(f.data).toLocaleDateString(),
+    data: fmtDataFatura(f.data),
     codvend: `${f.codvend} - ${f.nome_vendedor ?? '—'}`,
     codtransp: `${f.codtransp} - ${f.nome_transportadora ?? '—'}`,
     codgp: f.codgp ?? '-',
@@ -1792,7 +1813,7 @@ const handleCancelarNota = async () => {
     const tableData = faturas.map((f) =>
       colunas.map((col) => {
         if (col === 'totalnf') return formatarBRL(f[col]);
-        if (col === 'data') return new Date(f[col]).toLocaleDateString();
+        if (col === 'data') return fmtDataFatura(f[col]);
         return f[col] ?? '';
       }),
     );
@@ -1826,7 +1847,7 @@ const handleCancelarNota = async () => {
     <div className="flex flex-col w-full min-h-0 flex-1">
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden text-black dark:text-white  ">
         {/* Botão para criar grupo de pagamento */}
-        {faturasSelecionadas.length > 0 && (
+        {!modoCaixa && faturasSelecionadas.length > 0 && (
           <div className="mb-2 p-2 bg-blue-100 dark:bg-blue-900 rounded flex items-center justify-between">
             {(() => {
               // GP das faturas selecionadas (se alguma vier de um grupo).
@@ -2780,7 +2801,7 @@ const handleCancelarNota = async () => {
                           {formatarBRL(fatura.totalnf)}
                         </td>
                         <td className="p-2 border text-gray-800 dark:text-white">
-                          {new Date(fatura.data).toLocaleDateString()}
+                          {fmtDataFatura(fatura.data)}
                         </td>
                         <td className="p-2 border text-gray-800 dark:text-white">
                           <div className="flex gap-1 items-center">

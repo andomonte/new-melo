@@ -25,6 +25,7 @@ import { getPgPoolFilial } from '@/lib/pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { DOMParser } from 'xmldom';
+import { regraPagamentoNota } from '@/lib/fiscal/pagamentoNota';
 
 /**
  * API para re-emissão de NF-e ou NFC-e de faturas existentes (rejeitadas ou pendentes)
@@ -352,6 +353,7 @@ export default async function handler(
       // Gerar XML NFC-e
       const xmlCupom = await gerarXmlCupomFiscal({
         emitente,  // Usar emitente diretamente, não dados.emitente
+        pagamentoNota: regraPagamentoNota(dbfatura), // <pag> fiel ao Delphi
         cliente: clienteParaXml,
         produtos: produtosNFCe,
         tpEmis: contingencia ? '9' : '1',
@@ -482,6 +484,7 @@ export default async function handler(
           ...dadosNormalizados,
           ambiente: ambienteEmpresa,
           naturezaOperacao,
+          pagamentoNota: regraPagamentoNota(dbfatura), // <pag> fiel ao Delphi
         });
       }
 

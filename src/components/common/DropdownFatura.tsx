@@ -50,6 +50,12 @@ interface Props {
   onEstornoClick?: () => void;
   onEmitirDevolucaoClick?: () => void;
   isSelecionada?: boolean;
+  /**
+   * Modo Caixa ("minhas faturas"): só consulta e reemissão da nota — esconde cancelar,
+   * cobrança, fechar/alterar fatura e envio de cobrança. Os opcionais (carta de correção,
+   * estorno, evento...) já somem quando o handler não é passado.
+   */
+  restrito?: boolean;
 }
 
 export default function DropdownFatura({
@@ -77,6 +83,7 @@ export default function DropdownFatura({
   onEstornoClick,
   onEmitirDevolucaoClick,
   isSelecionada = false,
+  restrito = false,
 }: Props) {
   // É uma DI de devolução (gerada por estorno) quando tem codfatrel + natureza DEVOLUCAO.
   const ehDI =
@@ -172,13 +179,14 @@ export default function DropdownFatura({
 
         <DropdownMenuItem
           onClick={onVisualizarRejeicaoClick}
-          disabled={!fatura.mensagem_rejeicao && !fatura.motivocancelamento && (!fatura.nfe_motivo || fatura.nfe_status === 'A')}
+          disabled={!fatura.mensagem_rejeicao && !fatura.erro_emissao && !fatura.motivocancelamento && (!fatura.nfe_motivo || fatura.nfe_status === 'A')}
           className="group flex items-center gap-2 px-2 py-2 hover:bg-yellow-600 hover:text-white transition"
         >
           <FileText className="size-4 text-yellow-600 group-hover:text-white transition group-disabled:text-gray-400" />
-          Visualizar Rejeição da Nota
+          Visualizar Rejeição / Erro da Nota
         </DropdownMenuItem>
 
+        {!restrito && (
         <DropdownMenuItem
           onClick={onCancelarNotaClick}
           className="group flex items-center gap-2 px-2 py-2 hover:bg-red-700 hover:text-white transition"
@@ -186,6 +194,7 @@ export default function DropdownFatura({
           <FileText className="size-4 text-red-700 group-hover:text-white transition" />
           Cancelar Nota Fiscal
         </DropdownMenuItem>
+        )}
 
         {onCancelarFaturaClick && (
           <DropdownMenuItem
@@ -236,6 +245,7 @@ export default function DropdownFatura({
           </DropdownMenuItem>
         )}
 
+        {!restrito && (<>
         <DropdownMenuItem
           onClick={onCobrancaClick}
           // REGRA: gerar cobrança (inclui a agrupada) exige a NF-e EMITIDA (autorizada, 100)
@@ -285,6 +295,7 @@ export default function DropdownFatura({
           }`} />
           Cancelar Cobrança
         </DropdownMenuItem>
+        </>)}
 
         {onAlterarCobranca && (() => {
           // Fiel ao Delphi + salvaguarda: habilita só com cobrança, sem parcela paga,
@@ -323,6 +334,7 @@ export default function DropdownFatura({
           );
         })()}
 
+        {!restrito && (<>
         <DropdownMenuItem
           onClick={onFecharFatura}
           disabled={fatura.cancel === 'S'}
@@ -357,6 +369,7 @@ export default function DropdownFatura({
           <Edit className="size-4 text-blue-500 group-hover:text-white transition" />
           Alterar Fatura
         </DropdownMenuItem>
+        </>)}
          <DropdownMenuItem
           onClick={onVisualizarBoletosClick}
           className="group flex items-center gap-2 px-2 py-2 hover:bg-blue-700 hover:text-white transition"
@@ -411,6 +424,7 @@ export default function DropdownFatura({
           Enviar Danfe
         </DropdownMenuItem>
 
+        {!restrito && (
         <DropdownMenuItem
           onClick={onenviarCobrancaClick}
           disabled={fatura.cobranca !== 'S'}
@@ -424,6 +438,7 @@ export default function DropdownFatura({
           <MailCheck className="size-4 text-blue-500 group-hover:text-white transition" />
           Enviar Cobrança
         </DropdownMenuItem>
+        )}
 
         {onEmitirDevolucaoClick && ehDI && (
           <DropdownMenuItem

@@ -109,6 +109,8 @@ export async function decrypt(
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (e) {
+    // chave ausente no .env não é "dado corrompido" — repassa a mensagem real
+    if (e instanceof Error && e.message.startsWith('CRYPTO_MASTER_KEY')) throw e;
     console.error('Erro ao descriptografar dado:', e);
     throw new Error(
       'Falha na descriptografia. Dado corrompido ou chave inválida.',

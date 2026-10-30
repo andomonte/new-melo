@@ -1,5 +1,6 @@
 import { create } from 'xmlbuilder2';
 import { getSefazUrl } from './sefazUrls';
+import { regraPagamentoNota, type PagamentoNota } from '@/lib/fiscal/pagamentoNota';
 
 /**
  * Gera XML para Cupom Fiscal Eletrônico (NFC-e) - Modelo 65
@@ -778,8 +779,12 @@ export async function gerarXmlCupomFiscal(dados: any): Promise<string> {
   
   // Detalhamento do pagamento
   const detPag = pag.ele('detPag');
-  detPag.ele('tPag').txt('01').up() // 01 = Dinheiro
-        .ele('vPag').txt(valorPago.toFixed(2)).up();
+  // Forma de pagamento fiel ao Delphi (99 Recibo / 15 boleto / 90 sem pagamento).
+  // A API de emissão manda a regra calculada do banco (dbfatura); senão, 99/Outros.
+  const pagNota: PagamentoNota = dados?.pagamentoNota ?? regraPagamentoNota(dados?.fatura);
+  detPag.ele('tPag').txt(pagNota.tPag).up();
+  if (pagNota.xPag) detPag.ele('xPag').txt(pagNota.xPag).up();
+  detPag.ele('vPag').txt(pagNota.vPagZero ? '0.00' : valorPago.toFixed(2)).up();
   
   // Adicionar tBand e CNPJ da credenciadora apenas se for cartão
   if (false) { // Adaptar conforme necessidade

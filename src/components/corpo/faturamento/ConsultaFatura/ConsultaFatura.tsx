@@ -47,7 +47,12 @@ const calcPeriodo = (preset: string): { de: string; ate: string } => {
   return { de: '', ate: '' }; // todos
 };
 
-export default function ConsultaFaturasPage() {
+/**
+ * modoCaixa: aberta de dentro do Caixa ("Minhas faturas") — lista só as faturas criadas pelo
+ * usuário (escopo=minhas; o backend força isso p/ quem não tem a tela) e só permite consultar,
+ * ver o motivo do erro/rejeição e reemitir a nota. Sem Novo, agrupar, cancelar ou cobrança.
+ */
+export default function ConsultaFaturasPage({ modoCaixa = false }: { modoCaixa?: boolean } = {}) {
   // Alerta/erro no MODAL CENTRAL padrão (nunca toast no canto).
   const { pedirConfirmacao, ConfirmacaoSalvarModal } = useConfirmarSalvar();
   const avisoErro = (msg: any, opts?: { id?: string; title?: string } | any) => {
@@ -227,6 +232,7 @@ export default function ConsultaFaturasPage() {
         page,
         perPage,
         filtros: JSON.stringify(filtrosLimpos),
+        ...(modoCaixa ? { escopo: 'minhas' } : {}),
       },
       timeout: 30000, // 30 segundos de timeout
     });
@@ -251,7 +257,7 @@ export default function ConsultaFaturasPage() {
     setCarregando(false);
     console.log('✅ buscarFaturas COMPLETA');
   }
- }, []); // useCallback sem dependências pois usa apenas os parâmetros passados
+ }, [modoCaixa]); // modoCaixa é fixo por instância (prop)
 
   const handleFiltroChange = (filtros: any[]) => {
 
@@ -290,7 +296,7 @@ export default function ConsultaFaturasPage() {
     //   Ctrl+Z = Espelho da Fatura · Ctrl+F = Filtrar (foca a busca).
     onEnter: () => abrirAcoesLinhaAtiva(),
     atalhos: [
-      { key: 'n', ctrl: true, precisaLinha: false, handler: () => abrirNovoFaturamentoLimpo() },
+      { key: 'n', ctrl: true, precisaLinha: false, handler: () => { if (!modoCaixa) abrirNovoFaturamentoLimpo(); } },
       { key: 'z', ctrl: true, handler: (row) => { if (row?.codfat) setEspelhoCodfat(String(row.codfat)); } },
       {
         key: 'f',
@@ -669,7 +675,7 @@ export default function ConsultaFaturasPage() {
         {/* Header com título e botão */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-semibold text-black dark:text-white">
-            Consulta de Faturas
+            {modoCaixa ? 'Minhas Faturas' : 'Consulta de Faturas'}
           </h1>
           <div className="flex items-center gap-2">
             {/* <DefaultButton
@@ -678,6 +684,7 @@ export default function ConsultaFaturasPage() {
               text={mostrarStatusBanco ? "Ocultar Status" : "Status DB"}
               variant="secondary"
             /> */}
+            {!modoCaixa && (
             <DefaultButton
               onClick={() => {
                 // Limpar estados antes de abrir o modal para garantir que seja um novo faturamento
@@ -689,6 +696,7 @@ export default function ConsultaFaturasPage() {
               text="Novo"
               icon={<PlusIcon size={18} />}
             />
+            )}
           </div>
         </div>
 
@@ -737,7 +745,8 @@ export default function ConsultaFaturasPage() {
           }
           limiteColunas={limiteColunas}
           onLimiteColunasChange={setLimiteColunas}
-          onCriarGrupoPagamento={handleCriarGrupoPagamento}
+          onCriarGrupoPagamento={modoCaixa ? undefined : handleCriarGrupoPagamento}
+          modoCaixa={modoCaixa}
           onOrderedRowsChange={setLinhasExibidas}
           rowClassName={(row, i) => {
             const cor = MAPA_COR_LINHA[(row as any).__statusCor] || '';
