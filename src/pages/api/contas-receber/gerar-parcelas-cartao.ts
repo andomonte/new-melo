@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 interface ParcelaGerada {
   parcela: string;
@@ -32,7 +32,7 @@ export default async function handler(
     });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
 
   try {

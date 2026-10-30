@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import {
   executarRecebimento,
   executarRecebimentoMulti,
@@ -32,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ erro: 'Informe cod_receb (single) ou titulos[] (multi).' });
   }
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

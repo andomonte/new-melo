@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * GET /api/caixa/titulo-fatura?codfat=
@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') return res.status(405).json({ erro: 'Método não permitido.' });
   const codfat = String(req.query.codfat || '').trim();
   if (!codfat) return res.status(400).json({ erro: 'Informe codfat.' });
-  const client = await getPgPool().connect();
+  const client = await (await getPgPoolFilial(req)).connect();
   try {
     const r = await client.query(
       `SELECT cod_receb, codcli, valor_pgto, valor_rec, forma_fat, dt_venc, rec

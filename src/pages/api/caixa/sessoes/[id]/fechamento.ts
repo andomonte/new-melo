@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { iniciarFechamento, confirmarFechamento, cancelarFechamento } from '@/lib/caixa/sessaoCaixa';
 import { responderErroCaixa } from '@/lib/caixa/apiCaixa';
 
@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const id = Number(req.query.id);
   if (!filial) return res.status(400).json({ erro: 'Obrigatório: filial.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     if (req.method === 'POST') {

@@ -13,7 +13,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { getFilialCidadeUf } from '@/lib/filialLocal';
 import type { PoolClient } from 'pg';
 
@@ -103,7 +103,7 @@ export default async function handler(
     return res.status(400).json({ message: 'Nº da DI é obrigatório' });
   }
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
   let client: PoolClient | null = null;
 
   try {

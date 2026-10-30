@@ -12,7 +12,7 @@
 // Fonte: caixa_movimento / caixa_sessao / caixa_fechamento_forma.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 const num = (v: any) => (v == null ? 0 : Number(v)) || 0;
 const r2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let conta = String(req.query.conta || '').trim();
   const sessaoId = String(req.query.sessao || '').trim();
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   try {
     // Se veio a sessão, resolve a conta + a data (dia) a partir dela.
     if (sessaoId) {

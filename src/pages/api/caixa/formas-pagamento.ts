@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Formas de pagamento do Caixa — lidas da tabela REAL do Delphi `dbforma_pagto`
@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') {
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     const r = await client.query(

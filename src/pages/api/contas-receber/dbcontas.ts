@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
-const pool = getPgPool();
 
 /**
  * GET /api/contas-receber/dbcontas?search=  → contas (dbconta) para o filtro dos relatórios.
@@ -9,6 +8,7 @@ const pool = getPgPool();
  * NÃO a conta financeira. Busca por código ou nome.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const pool = await getPgPoolFilial(req);
   if (req.method !== 'GET') return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   try {
     const search = String(req.query.search || '').trim();

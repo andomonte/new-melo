@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Comprovantes de Pagamento (aba "Comprovante Pgto" do Delphi).
@@ -11,7 +11,7 @@ import { getPgPool } from '@/lib/pg';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     const autId = String(req.query.aut_id || '').trim();

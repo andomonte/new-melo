@@ -5,7 +5,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { getFilialCidadeUf } from '@/lib/filialLocal';
 import type { PoolClient } from 'pg';
 
@@ -151,7 +151,7 @@ export default async function handler(
 
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo || 'MANAUS';
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
 
   if (req.method === 'GET') {
     return handleGet(pool, id, filial, res);

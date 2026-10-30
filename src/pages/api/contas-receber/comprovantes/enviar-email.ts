@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { getSmtpConfigWithFallback } from '@/lib/smtpConfig';
 import { gerarComprovantePdf } from '@/lib/financeiro/comprovantePdf';
 
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (lista.length === 0) return res.status(400).json({ erro: 'Informe ao menos um destinatário válido.' });
   const unicos = Array.from(new Set(lista));
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // Cabeçalho + cliente

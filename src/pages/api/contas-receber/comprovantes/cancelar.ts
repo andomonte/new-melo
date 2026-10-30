@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * POST /api/contas-receber/comprovantes/cancelar  { aut_id, usuario, motivo? }
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { aut_id, usuario, motivo } = req.body || {};
   if (!aut_id) return res.status(400).json({ erro: 'Informe o aut_id.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     const cab = await client.query(

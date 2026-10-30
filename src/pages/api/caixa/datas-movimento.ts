@@ -8,7 +8,7 @@
 // agregando pelo dia da abertura no fuso de Manaus.
 
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const primeiro = `${mes}-01`;
   try {
-    const q = await getPgPool().query(
+    const q = await (await getPgPoolFilial(req)).query(
       `SELECT DISTINCT to_char((aberto_em AT TIME ZONE 'America/Manaus')::date, 'YYYY-MM-DD') AS dia
          FROM caixa_sessao
         WHERE cod_conta = $1

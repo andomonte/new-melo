@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * GET /api/caixa/consultar-prevendas?desde=yyyy-mm-dd&termo=&limit=
@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const termo = String(req.query.termo || '').trim();
   const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     const params: any[] = [];

@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
-const pool = getPgPool();
 
 /**
  * GET /api/contas-receber/cliente-banco?codcli=X
@@ -14,6 +13,7 @@ const pool = getPgPool();
  * Responde { banco: '1'..'9' | null }.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const pool = await getPgPoolFilial(req);
   if (req.method !== 'GET') {
     return res.status(405).json({ erro: 'Método não permitido. Use GET.' });
   }

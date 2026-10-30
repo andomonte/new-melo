@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * Consulta Avançada do Financeiro — Recebimentos (porte de GERAL.FIN_RECEBMENSAL_DINAMICA
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const colData = COL_DATA[String(tipo_data || 'emissao').toLowerCase()] || COL_DATA.emissao;
   if (!data_inicio || !data_fim) return res.status(400).json({ erro: 'Informe data_inicio e data_fim.' });
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // ── Detalhe (drill-down por cliente + conta financeira) ──

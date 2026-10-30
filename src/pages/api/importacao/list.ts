@@ -16,7 +16,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { getPgPoolPorNomeFilial } from '@/lib/pg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -37,7 +37,7 @@ export default async function handler(
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 25));
   const offset = (page - 1) * limit;
 
-  const pool = getPgPool(filial);
+  const pool = await getPgPoolPorNomeFilial(filial);
 
   try {
     const conditions: string[] = [];

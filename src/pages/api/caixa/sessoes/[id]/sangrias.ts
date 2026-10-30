@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { registrarSangria } from '@/lib/caixa/sessaoCaixa';
 import { responderErroCaixa } from '@/lib/caixa/apiCaixa';
 
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido.' });
   const b = req.body || {};
   if (!b.filial || !b.operador) return res.status(400).json({ erro: 'Obrigatórios: filial, operador.' });
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

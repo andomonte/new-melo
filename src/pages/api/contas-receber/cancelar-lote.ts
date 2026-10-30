@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
 /**
  * POST /api/contas-receber/cancelar-lote
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (motivoTxt.length < 5) return res.status(400).json({ erro: 'Informe o motivo do cancelamento (mínimo 5 caracteres).' });
   const usuarioTxt = String(usuario ?? '').trim() || 'DESCONHECIDO';
 
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

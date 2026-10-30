@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 
-const pool = getPgPool();
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const pool = await getPgPoolFilial(req);
   if (req.method !== 'POST') {
     return res.status(405).json({ erro: 'Método não permitido. Use POST.' });
   }

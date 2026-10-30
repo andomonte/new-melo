@@ -1,9 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { codigoFormaFatura } from '@/lib/faturamento/formaFatura';
 import { bancoInternoDbreceb } from '@/lib/faturamento/bancoCobranca';
 
-const pool = getPgPool();
 
 // Regra banco↔forma do Delphi (UniContasR — Novo Título), a MESMA da cobrança GP:
 //   - códigos do dropdown dbbanco_cobranca: 1 BRADESCO 2 BB 3 ITAU 4 RURAL 5 MELO
@@ -16,6 +15,7 @@ const MELO_DROPDOWN = '5';
 const FORMAS_MELO = new Set(['4', '3', '1']);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const pool = await getPgPoolFilial(req);
   if (req.method !== 'POST') {
     return res.status(405).json({ erro: 'Método não permitido. Use POST.' });
   }

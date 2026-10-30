@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPoolFilial } from '@/lib/pg';
 import { abrirCaixa, sessaoAtual, calcularSaldos, schemaDaFilial } from '@/lib/caixa/sessaoCaixa';
 import { responderErroCaixa } from '@/lib/caixa/apiCaixa';
 
@@ -10,7 +10,7 @@ import { responderErroCaixa } from '@/lib/caixa/apiCaixa';
  * GET  /api/caixa/sessoes?filial=&cod_conta=         → sessão aberta da conta (+ saldos)
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const pool = getPgPool();
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     if (req.method === 'GET') {
