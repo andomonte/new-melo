@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPool } from '@/lib/pg';
+import { getPgPool, getPgPoolFilial, filialDaRequisicao } from '@/lib/pg';
 
 /**
  * POST /api/contas-receber/liberar-juros
@@ -22,12 +22,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const mot = String(motivo ?? '').trim();
   if (mot.length < 15) return res.status(400).json({ erro: 'O motivo é obrigatório (mínimo 15 caracteres).' });
 
-  const pool = getPgPool();
+  // Títulos/liberação/log são da FILIAL; o Código Delphi do usuário é do acesso (central).
+  const pool = await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // lij_cod_usuario é varchar(4): precisa do CÓDIGO do operador (dbusuario.codusr), não do login.
-    // Prioridade: codusr da sessão (front) → resolve por nomeusr → vazio (erro). Sempre capado em 4.
-    let codusr = String(codusrBody ?? '').trim();
+    // Prioridade: Código Delphi do perfil (tb_user_perfil.codusr_delphi, login + filial) →
+    // codusr da sessão (front; hoje é o codvend, vazio p/ quem não vende) → nomeusr → erro.
+    let codusr = '';
+    try {
+      const filial = filialDaRequisicao(req);
+      const d = await getPgPool().query(
+        `SELECT codusr_delphi FROM tb_user_perfil
+          WHERE UPPER(user_login_id) = UPPER($1) AND codusr_delphi IS NOT NULL
+          ORDER BY (UPPER(nome_filial) = $2) DESC
+          LIMIT 1`,
+        [String(usuario ?? ''), filial],
+      );
+      if (d.rows[0]?.codusr_delphi) codusr = String(d.rows[0].codusr_delphi).trim();
+    } catch {
+      /* segue para os fallbacks */
+    }
+    if (!codusr) codusr = String(codusrBody ?? '').trim();
     if (!codusr) {
       try {
         const u = await client.query('SELECT codusr FROM dbusuario WHERE nomeusr=$1 LIMIT 1', [usuario]);
@@ -38,7 +54,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     codusr = codusr.substring(0, 4);
     if (!codusr) {
-      return res.status(400).json({ erro: 'Não foi possível identificar o código do operador (codusr). Refaça o login.' });
+      return res.status(400).json({
+        erro: 'Usuário sem Código Delphi nesta filial. Cadastre-o em Controle de Acesso > Usuários.',
+      });
     }
 
     await client.query('BEGIN');
@@ -57,14 +75,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         liberados.push(id);
       }
 
-      // Log de ação (quem/quando/taxa/motivo), igual ao padrão de auditoria.
+      // Log de ação (quem/quando/taxa/motivo), igual ao padrão de auditoria. Em SAVEPOINT:
+      // uma falha aqui abortaria a transação e o COMMIT viraria rollback silencioso.
+      await client.query('SAVEPOINT log_acao');
       await client
         .query(
           `INSERT INTO dbacao (codusr, acao, tabela, obs, data)
            VALUES ($1,'LIBERAR JUROS','FIN_LIBERA_JUROS',$2,now())`,
           [codusr.substring(0, 60) || 'DESCONHECIDO', `TIT:${liberados.join(',')} | TAXA:${tx} | MOTIVO:${mot}`.substring(0, 255)],
         )
-        .catch(() => {});
+        .then(() => client.query('RELEASE SAVEPOINT log_acao'))
+        .catch(() => client.query('ROLLBACK TO SAVEPOINT log_acao'));
 
       await client.query('COMMIT');
       return res.status(200).json({

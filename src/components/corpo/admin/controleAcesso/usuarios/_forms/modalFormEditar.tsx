@@ -178,6 +178,34 @@ export default function FormEditarUsuario({
   const [codvendInput, setCodvendInput] = useState<string | null>(null);
   const [compradorInput, setCompradorInput] = useState<string | null>(null);
   const [contaInput, setContaInput] = useState<string | null>(null);
+  const [codusrDelphiInput, setCodusrDelphiInput] = useState<string | null>(null);
+
+  // Código do usuário no Delphi (dbusuario_delphi daquela filial) — igual ao
+  // cadastro. A lista depende da filial selecionada (cada schema tem a sua).
+  const [codigosDelphiOpts, setCodigosDelphiOpts] = useState<
+    { value: string; label: string }[]
+  >([]);
+  const [loadingCodigosDelphi, setLoadingCodigosDelphi] = useState(false);
+  const buscarCodigosDelphi = useCallback(async (termo: string, filial: string) => {
+    if (!filial) { setCodigosDelphiOpts([]); return; }
+    setLoadingCodigosDelphi(true);
+    try {
+      const resp = await fetch(
+        `/api/usuarios/codigos-delphi?filial=${encodeURIComponent(filial)}` +
+          `&search=${encodeURIComponent(termo)}`,
+      );
+      const json = await resp.json();
+      setCodigosDelphiOpts(json.usuarios ?? []);
+    } catch (e) {
+      console.error('Erro ao buscar códigos do Delphi:', e);
+      setCodigosDelphiOpts([]);
+    } finally {
+      setLoadingCodigosDelphi(false);
+    }
+  }, []);
+  useEffect(() => {
+    buscarCodigosDelphi('', filialSelecionada);
+  }, [buscarCodigosDelphi, filialSelecionada]);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [filiaisOptions, setFiliaisOptions] = useState<
@@ -241,6 +269,8 @@ export default function FormEditarUsuario({
                 f.codvend ?? ''
               }|${f.codcomprador ?? ''}|${
                 (f as { cod_conta?: string | null }).cod_conta ?? ''
+              }|${
+                (f as { codusr_delphi?: string | null }).codusr_delphi ?? ''
               }|[${armazens}]|[${funcoes}]`;
             })
             .sort()
@@ -291,6 +321,8 @@ export default function FormEditarUsuario({
           codcomprador: filial.codcomprador ?? null,
           cod_conta:
             (filial as { cod_conta?: string | null }).cod_conta ?? null,
+          codusr_delphi:
+            (filial as { codusr_delphi?: string | null }).codusr_delphi ?? null,
           armazens: filial.armazens ?? [],
           funcoesDoUsuario: filial.funcoesDoUsuario ?? [],
         })),
@@ -336,6 +368,7 @@ export default function FormEditarUsuario({
         setCodvendInput(null);
         setCompradorInput(null);
         setContaInput(null);
+        setCodusrDelphiInput(null);
         setItensAtivados({});
         // Limpa armazém selecionado
       }
@@ -392,6 +425,7 @@ export default function FormEditarUsuario({
         codvend: codvendInput ?? null,
         codcomprador: compradorInput ?? null,
         cod_conta: contaInput ?? null,
+        codusr_delphi: codusrDelphiInput ?? null,
         armazens: armazensSelecionados[filialSelecionada] ?? [],
         funcoesDoUsuario: funcoesSelecionadas,
       };
@@ -435,6 +469,7 @@ export default function FormEditarUsuario({
       setCodvendInput(null);
       setCompradorInput(null);
       setContaInput(null);
+      setCodusrDelphiInput(null);
       setFuncoesSelecionadas([]);
       setItensAtivados({});
 
@@ -534,6 +569,7 @@ export default function FormEditarUsuario({
     setCodvendInput(filial?.codvend ?? null);
     setCompradorInput(filial?.codcomprador ?? null);
     setContaInput(filial?.cod_conta ?? null);
+    setCodusrDelphiInput(filial?.codusr_delphi ?? null);
 
     // Reativa a linha (ícone sun)
     if (filialSelecionada) {
@@ -575,6 +611,7 @@ export default function FormEditarUsuario({
       setCodvendInput(filialExistente?.codvend ?? null);
       setCompradorInput(filialExistente?.codcomprador ?? null);
       setContaInput(filialExistente?.cod_conta ?? null);
+      setCodusrDelphiInput(filialExistente?.codusr_delphi ?? null);
 
       if (filialExistente?.armazens) {
         setArmazensSelecionados((prev) => ({
@@ -590,6 +627,7 @@ export default function FormEditarUsuario({
       setCodvendInput(null);
       setCompradorInput(null);
       setContaInput(null);
+      setCodusrDelphiInput(null);
     }
   };
 
@@ -612,6 +650,7 @@ export default function FormEditarUsuario({
     setCodvendInput(null);
     setCompradorInput(null);
     setContaInput(null);
+    setCodusrDelphiInput(null);
     setItensAtivados({});
     setHasChanges(false);
     // Limpa armazém selecionado
@@ -736,6 +775,7 @@ export default function FormEditarUsuario({
       setCodvendInput(null);
       setCompradorInput(null);
       setContaInput(null);
+      setCodusrDelphiInput(null);
       // Limpa armazém selecionado
     } else {
       const funcoesNormalizadas: Funcao[] = funcoes.map((funcao) => ({
@@ -794,6 +834,12 @@ export default function FormEditarUsuario({
       setContaInput(
         codContaDoItemAtivado !== null && codContaDoItemAtivado !== undefined
           ? String(codContaDoItemAtivado)
+          : null,
+      );
+      const codDelphiDoItemAtivado = filialEncontrada?.codusr_delphi ?? null;
+      setCodusrDelphiInput(
+        codDelphiDoItemAtivado !== null && codDelphiDoItemAtivado !== undefined
+          ? String(codDelphiDoItemAtivado)
           : null,
       );
     }
@@ -885,6 +931,10 @@ export default function FormEditarUsuario({
     const contaMudou =
       String(contaInput ?? '') !== String(codContaItemNaLista ?? '');
 
+    const delphiMudou =
+      String(codusrDelphiInput ?? '') !==
+      String(filialNaLista?.codusr_delphi ?? '');
+
     const armazemAtual: Armazem[] = armazensSelecionados[chave] ?? [];
 
     const armazensMudaram = !areArmazensEqual(
@@ -893,7 +943,12 @@ export default function FormEditarUsuario({
     );
 
     return (
-      funcoesMudaram || codvendMudou || compradorMudou || contaMudou || armazensMudaram
+      funcoesMudaram ||
+      codvendMudou ||
+      compradorMudou ||
+      contaMudou ||
+      delphiMudou ||
+      armazensMudaram
     );
   })();
 
@@ -1106,6 +1161,28 @@ export default function FormEditarUsuario({
                   onValueChange={(v) => setContaInput(v || null)}
                   onInputChange={(termo) => buscarContas(termo)}
                   loading={loadingContas}
+                />
+              </div>
+
+              {/* Código do usuário no Delphi, por filial — igual ao cadastro.
+                  A lista vem da dbusuario_delphi DAQUELA filial. */}
+              <div className="w-[25%]">
+                <label className="block mb-1 text-sm font-medium">
+                  Código Delphi <span className="ml-1">(opcional)</span>
+                </label>
+                <SelectPadrao
+                  searchable
+                  name="codusr_delphi"
+                  placeholder={
+                    filialSelecionada
+                      ? 'Selecione o usuário do Delphi'
+                      : 'Selecione a filial primeiro'
+                  }
+                  options={codigosDelphiOpts}
+                  value={codusrDelphiInput ?? ''}
+                  onValueChange={(v) => setCodusrDelphiInput(v || null)}
+                  onInputChange={(termo) => buscarCodigosDelphi(termo, filialSelecionada)}
+                  loading={loadingCodigosDelphi}
                 />
               </div>
 

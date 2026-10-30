@@ -53,9 +53,14 @@ interface ColumnMapping {
   startRow: number;
 }
 
+// Node < 20 não tem `File` global: no SSR, z.instanceof(File) quebra o import.
+const arquivoSchema = (
+  typeof File === 'undefined' ? z.any() : z.instanceof(File)
+) as z.ZodType<File>;
+
 // Schema de validação
 const formSchema = z.object({
-  arquivo: z.instanceof(File).refine(
+  arquivo: arquivoSchema.refine(
     (file) => {
       const validTypes = [
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
