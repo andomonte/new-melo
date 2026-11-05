@@ -2,6 +2,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPoolFilial } from '@/lib/pg';
+import { getUserFromRequest } from '@/lib/authHelper';
 
 export default async function handler(
   req: NextApiRequest,
@@ -10,6 +11,10 @@ export default async function handler(
   // 1. Validar o método HTTP, assim como no seu exemplo
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Método não permitido' });
+  }
+  // Exige usuário logado: emissão fiscal e dados da empresa não são rotas públicas.
+  if (!getUserFromRequest(req)) {
+    return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
   }
 
   // 2. Obter parâmetros opcionais para filtrar empresa específica
@@ -74,7 +79,18 @@ export default async function handler(
     }
 
     // 4. Retornar os dados encontrados (a empresa com certificados válidos)
-    return res.status(200).json(rows[0]);
+    // Certificado, chave e CSC nunca vão ao navegador: as APIs de emissão os leem do banco.
+    // Além de sensíveis, somam ~15 KB que o front reenviava em `emitente` no POST da nota,
+    // estourando o limite do nginx (500 antes de chegar ao app).
+    const {
+      certificadoKey: _key,
+      certificadoCrt: _crt,
+      cadeiaCrt: _cadeia,
+      csc_nfce_homologacao: _cscHom,
+      csc_nfce_producao: _cscProd,
+      ...empresa
+    } = rows[0];
+    return res.status(200).json(empresa);
   } catch (error: any) {
     // 5. Tratamento de erro, igual ao seu exemplo
     console.error('Erro ao buscar dados da empresa:', error);

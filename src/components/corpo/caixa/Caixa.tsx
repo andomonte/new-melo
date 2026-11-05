@@ -567,14 +567,18 @@ export default function Caixa() {
   const imprimirComprovante = async (autId?: string | null) => {
     if (!autId) return;
     try {
-      await fetch('/api/caixa/imprimir-comprovante', {
+      const resp = await fetch('/api/caixa/imprimir-comprovante', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aut_id: autId }),
       });
-      toast.success('Comprovante enviado para impressão.');
-    } catch {
-      toast.error('Falha ao enviar o comprovante para impressão.');
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.erro || 'Falha ao enviar o comprovante para impressão.');
+      toast.success(
+        json.jaNaFila ? 'Comprovante já estava na fila de impressão.' : 'Comprovante enviado para impressão.',
+      );
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao enviar o comprovante para impressão.');
     }
   };
 
@@ -926,7 +930,8 @@ export default function Caixa() {
         setPrevia(null);
         await buscarNovamente(selecionados.map((t) => t.cod_receb));
         // Fiel ao Delphi: ao finalizar, pergunta se quer imprimir o comprovante.
-        perguntarImprimirComprovante(data.aut_id);
+        if (data.aut_id) perguntarImprimirComprovante(data.aut_id);
+        else toast.warning('Recebimento gravado, mas o comprovante não foi gerado. Não há o que imprimir.');
       }
     } catch (err: any) {
       toast.error(`Erro ao receber: ${err.message}`);

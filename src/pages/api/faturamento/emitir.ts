@@ -17,6 +17,7 @@ import { getPgPoolFilial } from '@/lib/pg';
 import { registrarErroEmissao } from '@/lib/fiscal/erroEmissao';
 import type { Pool } from 'pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
+import { getUserFromRequest } from '@/lib/authHelper';
 import { determinarSerieFatura, proximoNroForm } from '@/lib/faturamento/gerarNumeracaoFatura';
 import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
@@ -82,6 +83,10 @@ export default async function handler(
   console.log('📋 [NF-e] Método:', req.method);
   if (req.method !== 'POST') {
     return res.status(405).json({ erro: 'Método não permitido' });
+  }
+  // Exige usuário logado: emissão fiscal e dados da empresa não são rotas públicas.
+  if (!getUserFromRequest(req)) {
+    return res.status(401).json({ sucesso: false, erro: 'Sessão expirada. Faça login novamente.' });
   }
 
   try {

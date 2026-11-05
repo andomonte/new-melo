@@ -63,6 +63,8 @@ export default async function handler(
     const response = await axios.post(urlApi, dados, {
       headers: {
         'Content-Type': 'application/json',
+        // Repassa sessão e filial: as rotas de emissão exigem login.
+        ...(req.headers.cookie ? { cookie: req.headers.cookie } : {}),
       },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,

@@ -57,37 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ sucesso: true, simulado: true, mensagem: 'Simulação — nada foi gravado.', ...resultado });
     }
 
-    // Fila de impressão da DANFE: a impressão é disparada na EMISSÃO da NF-e
-    // (faturamento/emitir e emitir-faturado enfileiram ao autorizar). Aqui só há uma
-    // REDE DE SEGURANÇA: enfileira a fatura recebida apenas se ela nunca teve job de
-    // impressão (somenteSeInexistente=true) — evita reimprimir no recebimento algo que
-    // já foi impresso na emissão.
-    try {
-      const codRecebs: string[] = [];
-      if (ehMulti && resultado.resultados) {
-        for (const r of resultado.resultados) {
-          if (r.cod_receb) codRecebs.push(r.cod_receb);
-        }
-      } else if (body.cod_receb) {
-        codRecebs.push(body.cod_receb);
-      }
-      if (codRecebs.length > 0) {
-        const faturas = await client.query(
-          `SELECT DISTINCT cod_fat FROM dbreceb WHERE cod_receb = ANY($1) AND cod_fat IS NOT NULL`,
-          [codRecebs],
-        );
-        for (const f of faturas.rows) {
-          await enfileirarImpressaoDanfe(client, f.cod_fat, { somenteSeInexistente: true });
-        }
-      }
-    } catch (filaErr: any) {
-      // Não bloqueia o recebimento se falhar a fila de impressão
-      console.error('Aviso: erro ao inserir na fila de impressão DANFE:', filaErr.message);
-    }
-
     // Comprovante de pagamento (fin_autenticacao) — fiel ao Delphi. Não bloqueia o recebimento.
     let autIdComp: string | null = null;
     let codRecebsComp: string[] = [];
+    let comprovanteErro: string | null = null;
+    // SAVEPOINT: erro de SQL aqui abortaria a transação inteira e o COMMIT viraria ROLLBACK.
+    await client.query('SAVEPOINT sp_comprovante');
     try {
       let codusrComp: string | null = null;
       if (body.username) {
@@ -146,8 +121,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const comp = await gerarComprovante(client, { codusr: codusrComp, cod_conta: body.cod_conta, itens: compItens });
         autIdComp = comp?.aut_id ?? null;
       }
-    } catch (e) {
+      await client.query('RELEASE SAVEPOINT sp_comprovante');
+    } catch (e: any) {
       console.warn('Falha ao gerar comprovante (não bloqueia o recebimento):', e);
+      await client.query('ROLLBACK TO SAVEPOINT sp_comprovante');
+      autIdComp = null;
+      comprovanteErro = e?.message || 'Falha ao gerar o comprovante.';
     }
 
     // Conciliação bancária: se este recebimento veio de uma linha de extrato, marca a linha
@@ -161,8 +140,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .catch((e: any) => console.warn('Falha ao vincular conc_linha (não bloqueia):', e.message));
     }
 
-    await client.query('COMMIT');
-    return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', aut_id: autIdComp, ...resultado });
+    // Transação abortada: o Postgres responde ao COMMIT com ROLLBACK, sem lançar erro.
+    const fim = await client.query('COMMIT');
+    if (fim.command === 'ROLLBACK') {
+      throw new Error('A transação foi abortada e o recebimento não foi gravado.');
+    }
+
+    // Fila de impressão da DANFE: a impressão é disparada na EMISSÃO da NF-e
+    // (faturamento/emitir e emitir-faturado enfileiram ao autorizar). Aqui só há uma
+    // REDE DE SEGURANÇA: enfileira a fatura recebida apenas se ela nunca teve job de
+    // impressão (somenteSeInexistente=true) — evita reimprimir no recebimento algo que
+    // já foi impresso na emissão. Roda após o COMMIT: dentro da transação, um erro aqui a
+    // abortaria e o recebimento seria perdido.
+    try {
+      const codRecebs: string[] = [];
+      if (ehMulti && resultado.resultados) {
+        for (const r of resultado.resultados) {
+          if (r.cod_receb) codRecebs.push(r.cod_receb);
+        }
+      } else if (body.cod_receb) {
+        codRecebs.push(body.cod_receb);
+      }
+      if (codRecebs.length > 0) {
+        const faturas = await client.query(
+          `SELECT DISTINCT cod_fat FROM dbreceb WHERE cod_receb = ANY($1) AND cod_fat IS NOT NULL`,
+          [codRecebs],
+        );
+        for (const f of faturas.rows) {
+          await enfileirarImpressaoDanfe(client, f.cod_fat, { somenteSeInexistente: true });
+        }
+      }
+    } catch (filaErr: any) {
+      // Não bloqueia o recebimento se falhar a fila de impressão
+      console.error('Aviso: erro ao inserir na fila de impressão DANFE:', filaErr.message);
+    }
+
+    return res.status(200).json({ sucesso: true, simulado: false, mensagem: 'Recebimento efetuado.', aut_id: autIdComp, comprovante_erro: comprovanteErro, ...resultado });
   } catch (error: any) {
     await client.query('ROLLBACK');
     console.error('Erro no recebimento do caixa:', error);

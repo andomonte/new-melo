@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { gerarPreviewCupomFiscal } from '@/utils/gerarPDFCupomFiscal';
 import { gerarPdfNotaHtml } from '@/lib/danfe/gerarPdfNotaHtml';
 import { getPgPoolFilial } from '@/lib/pg';
+import { getUserFromRequest } from '@/lib/authHelper';
 import { registrarErroEmissao } from '@/lib/fiscal/erroEmissao';
 import type { Pool } from 'pg';
 import { enfileirarImpressaoDanfe } from '@/lib/impressao/filaImpressao';
@@ -80,6 +81,10 @@ export default async function handler(
   
   if (req.method !== 'POST') {
     return res.status(405).json({ erro: 'Método não permitido. Use POST.' });
+  }
+  // Exige usuário logado: emissão fiscal e dados da empresa não são rotas públicas.
+  if (!getUserFromRequest(req)) {
+    return res.status(401).json({ sucesso: false, erro: 'Sessão expirada. Faça login novamente.' });
   }
 
   let xmlBruto = '';

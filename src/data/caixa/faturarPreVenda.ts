@@ -65,7 +65,8 @@ function motivoDaNota(nf: any): string {
     nf?.json?.detalhe ||
     (nf?.json?.erro && nf?.json?.erro !== 'Erro no processamento do cupom fiscal.' ? nf?.json?.erro : '') ||
     nf?.json?.erro ||
-    'erro na SEFAZ'
+    // Resposta sem JSON (ex.: nginx/proxy): não dá para afirmar que veio da SEFAZ.
+    `Sem resposta válida do servidor (HTTP ${nf?.httpStatus ?? '?'}). A emissão não foi confirmada — reenvie a nota.`
   );
 }
 
