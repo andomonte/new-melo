@@ -14,6 +14,8 @@ const filtroParaColunaSQL: Record<string, string> = {
   cidade: 'c.cidade',
   email: 'c.email',
   nome_vendedor: 'v.nome',
+  // A coluna mostra "código - nome": filtra sobre esse mesmo texto.
+  codvend: "NULLIF(CONCAT_WS(' - ', TRIM(c.codvend), TRIM(v.nome)), '')",
   nome_pais: 'p.descricao',
   nome_municipio: 'm.descricao',
   nome_banco: 'bc.nome',
@@ -192,8 +194,15 @@ export default async function handler(
 
     const total = parseInt(totalResult.rows[0].count || '0', 10);
 
+    // Mesmo formato da busca geral (/api/clientes/get): "código - nome".
+    const clientes = data.rows.map((c: any) =>
+      c.codvend && c.nome_vendedor
+        ? { ...c, codvend: `${String(c.codvend).trim()} - ${String(c.nome_vendedor).trim()}` }
+        : c,
+    );
+
     res.status(200).json({
-      data: serializeBigInt(data.rows),
+      data: serializeBigInt(clientes),
       meta: {
         total,
         lastPage: total > 0 ? Math.ceil(total / Number(perPage)) : 1,

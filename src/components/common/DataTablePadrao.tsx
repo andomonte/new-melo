@@ -211,8 +211,13 @@ export default function DataTablePadrao({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   // Linha expandida (acordeão de uma por vez). Guardamos a chave da linha.
   const [linhaExpandida, setLinhaExpandida] = useState<string | null>(null);
-  const chaveDaLinha = (row: any, idx: number) =>
-    getRowKey ? getRowKey(row) : String(row?.__codprod ?? row?.codprod ?? idx);
+  const chaveDaLinha = (row: any, idx: number) => {
+    if (getRowKey) return getRowKey(row);
+    // Valor vazio não identifica a linha: com a mesma chave em todas, o React deixa
+    // linhas antigas na tela, com botões que não respondem.
+    const cod = row?.__codprod ?? row?.codprod;
+    return cod == null || String(cod).trim() === '' ? String(idx) : String(cod);
+  };
   const [mostrarFiltros, setMostrarFiltros] = useState(mostrarFiltrosSempre === true);
   const [mostrarModalFiltroAvancado, setMostrarModalFiltroAvancado] = useState(false);
   const [filtrosColuna, setFiltrosColuna] = useState<Record<string, { tipo: string; valor: string }>>(initialFilters || {});

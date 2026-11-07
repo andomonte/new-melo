@@ -15,6 +15,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import DataTable from '@/components/common/DataTablePadrao';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
+import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavegacaoTecladoTabela';
 import ClientFormModal from '@/components/corpo/admin/cadastro/clientes/ClientFormModal';
 import { ClientZoomModal } from '@/components/corpo/admin/cadastro/clientes/ClientZoomModal';
 import { MudarClasseModal } from '@/components/corpo/admin/cadastro/clientes/MudarClasseModal';
@@ -42,6 +43,13 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
+
+/** Badge de atalho de teclado exibido à direita do item do menu. */
+const Kbd: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+    {children}
+  </kbd>
+);
 
 // Tipos de permissão e usuário
 export type Permissao = {
@@ -124,6 +132,15 @@ const ClientesPage = () => {
     remover: boolean;
     consultar: boolean;
   }>({ cadastrar: false, editar: false, remover: false, consultar: true });
+
+  // Funções granulares (migration 075, fiel ao Delphi): sem nenhuma delas o usuário
+  // só consulta (Zoom, Status, Intervalo, Filtrar).
+  const temFuncao = (sigla: string) =>
+    ((user as any)?.funcoes || []).some(
+      (f: any) => (typeof f === 'string' ? f : f?.sigla) === sigla,
+    );
+  const podeExportar = temFuncao('CLI_FIN');
+  const podeAcoesFinanceiras = podeExportar || temFuncao('CLI_FIN_RES');
 
   // Seleção de clientes para ações coletivas
   const [selectedClients, setSelectedClients] = useState<Set<string>>(
@@ -518,10 +535,65 @@ const ClientesPage = () => {
     });
   };
 
+  // ========== NAVEGAÇÃO POR TECLADO ==========
+
+  const algumModalAberto =
+    isModalOpen ||
+    isZoomOpen ||
+    isClasseModalOpen ||
+    isBancoModalOpen ||
+    isStatusCompraOpen ||
+    isIntervaloCompraOpen ||
+    isExportExcelOpen;
+
+  // Estilo Delphi, como nas telas de compras: ↑/↓ movem a linha; Enter e V abrem o
+  // Zoom. Cada tecla respeita a mesma regra do item no menu Ações.
+  const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<Cliente>({
+    data: clientes.data,
+    ativo: !algumModalAberto,
+    onEnter: (cliente) => handleZoom(cliente),
+    atalhos: [
+      { key: 'v', handler: (cliente) => cliente && handleZoom(cliente) },
+      {
+        key: 'e',
+        handler: (cliente) => {
+          if (cliente && userPermissions.editar) handleEdit(cliente);
+        },
+      },
+      { key: 's', handler: (cliente) => cliente && handleStatusCompra(cliente) },
+      { key: 'i', handler: (cliente) => cliente && handleIntervaloCompra(cliente) },
+    ],
+  });
+
+  // Nova lista: o índice antigo apontaria para outro cliente.
+  useEffect(() => {
+    setLinhaSelecionada(-1);
+  }, [clientes.data, setLinhaSelecionada]);
+
+  // Esc fecha os modais abertos pelos atalhos. O de cadastro/edição fica de fora:
+  // ele bloqueia o Esc de propósito para não perder o que foi digitado.
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (isZoomOpen) {
+        setIsZoomOpen(false);
+        setClientToZoom(null);
+      } else if (isStatusCompraOpen) {
+        setIsStatusCompraOpen(false);
+        setClientForAction(null);
+      } else if (isIntervaloCompraOpen) {
+        setIsIntervaloCompraOpen(false);
+        setClientForAction(null);
+      }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [isZoomOpen, isStatusCompraOpen, isIntervaloCompraOpen]);
+
   // ========== MONTAGEM DAS LINHAS DA TABELA ==========
 
-  const rows = clientes.data?.map((cliente) => {
-    const linha: Record<string, any> = {};
+  const rows = clientes.data?.map((cliente, index) => {
+    const linha: Record<string, any> = { __index: index };
     const id = cliente.codcli;
 
     headers?.forEach((coluna) => {
@@ -587,6 +659,7 @@ const ClientesPage = () => {
                         size={16}
                       />
                       ZOOM (Inspeção)
+                      <Kbd>V</Kbd>
                     </button>
 
                     {/* Editar */}
@@ -600,6 +673,7 @@ const ClientesPage = () => {
                           size={16}
                         />
                         Editar
+                        <Kbd>E</Kbd>
                       </button>
                     )}
 
@@ -614,6 +688,7 @@ const ClientesPage = () => {
                         size={16}
                       />
                       Status de Compra
+                      <Kbd>S</Kbd>
                     </button>
 
                     {/* Intervalo de Compra */}
@@ -627,6 +702,7 @@ const ClientesPage = () => {
                         size={16}
                       />
                       Intervalo de Compra
+                      <Kbd>I</Kbd>
                     </button>
                   </div>
                 </div>,
@@ -681,6 +757,12 @@ const ClientesPage = () => {
           carregando={loading}
           headers={headers}
           rows={rows || []}
+          rowClassName={(row) =>
+            row.__index === linhaSelecionada
+              ? `bg-blue-100 dark:bg-blue-900/50 ${CLASSE_LINHA_ATIVA}`
+              : ''
+          }
+          onRowClick={(row) => setLinhaSelecionada(row.__index ?? -1)}
           semColunaDeAcaoPadrao={true}
           nonsortableColumns={['Ações']}
           onColunaSubstituida={handleColunaSubstituida}
@@ -722,25 +804,31 @@ const ClientesPage = () => {
           // Ações customizadas no header
           customHeaderActions={
             <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                Ações Coletivas
-              </DropdownMenuLabel>
+              {podeAcoesFinanceiras && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Ações Coletivas
+                  </DropdownMenuLabel>
 
-              <DropdownMenuItem onClick={handleMudarClassePagamento}>
-                <CreditCard className="mr-2 size-4 text-purple-500 dark:text-purple-300" />
-                Mudar Classe de Pagamento
-              </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleMudarClassePagamento}>
+                    <CreditCard className="mr-2 size-4 text-purple-500 dark:text-purple-300" />
+                    Mudar Classe de Pagamento
+                  </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleAlterarBanco}>
-                <Building2 className="mr-2 size-4 text-indigo-500 dark:text-indigo-300" />
-                Alterar Banco de Cliente
-              </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleAlterarBanco}>
+                    <Building2 className="mr-2 size-4 text-indigo-500 dark:text-indigo-300" />
+                    Alterar Banco de Cliente
+                  </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={handleExportarExcel}>
-                <FileDown className="mr-2 size-4 text-green-500 dark:text-green-300" />
-                Exportar para Excel
-              </DropdownMenuItem>
+                  {podeExportar && (
+                    <DropdownMenuItem onClick={handleExportarExcel}>
+                      <FileDown className="mr-2 size-4 text-green-500 dark:text-green-300" />
+                      Exportar para Excel
+                    </DropdownMenuItem>
+                  )}
+                </>
+              )}
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-gray-500 dark:text-gray-400">

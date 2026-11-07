@@ -306,6 +306,11 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [parcelasCartao, setParcelasCartao] = useState<number>(() => draft.current?.parcelasCartao || 0);
   const [showParcelasDropdown, setShowParcelasDropdown] = useState(false);
   const [parcelasIdx, setParcelasIdx] = useState(0);
+
+  // Listas suspensas: a barra de rolagem acompanha a seleção feita pelas setas do teclado.
+  useEffect(() => {
+    document.querySelector('[data-kbd-ativo="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [clienteIdx, vendedorIdx, operadorIdx, tipoMovIdx, tipoOpIdx, docIdx, transpIdx, fpIdx, prazoIdx, parcelasIdx]);
   const [transporteSel, setTransporteSel] = useState<{ CODTPTRANSP: string; DESCR: string }>(() => draft.current?.transporteSel || { CODTPTRANSP: '002', DESCR: 'CARRO (MELO)' });
   const [dadosTransporte, setDadosTransporte] = useState<{ CODTPTRANSP: string; DESCR: string }[]>([]);
   const [valTransp, setValTransp] = useState(() => draft.current?.valTransp || 'R$ 0,00');
@@ -1929,7 +1934,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                         return (
                           <div key={cli.CODCLI || idx}
                             tabIndex={0} role="button"
-                            className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 ${idx === clienteIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                            data-kbd-ativo={(idx === clienteIdx) || undefined} className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 ${idx === clienteIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                             onClick={() => selecionarCliente(cli)}
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarCliente(cli); } }}
                           >
@@ -1983,7 +1988,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                       {resultadosVendedor.map((v, idx) => (
                         <div key={v.codigo || idx}
                           tabIndex={0} role="button"
-                          className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 text-sm font-semibold text-gray-900 dark:text-gray-100 ${idx === vendedorIdx ? 'bg-indigo-50 dark:bg-indigo-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          data-kbd-ativo={(idx === vendedorIdx) || undefined} className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 text-sm font-semibold text-gray-900 dark:text-gray-100 ${idx === vendedorIdx ? 'bg-indigo-50 dark:bg-indigo-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onClick={() => selecionarVendedor(v)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarVendedor(v); } }}
                         >
@@ -2025,7 +2030,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                       {resultadosOperador.map((v, idx) => (
                         <div key={v.codigo || idx}
                           tabIndex={0} role="button"
-                          className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 text-sm font-semibold text-gray-900 dark:text-gray-100 ${idx === operadorIdx ? 'bg-lime-50 dark:bg-lime-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          data-kbd-ativo={(idx === operadorIdx) || undefined} className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-zinc-700 text-sm font-semibold text-gray-900 dark:text-gray-100 ${idx === operadorIdx ? 'bg-lime-50 dark:bg-lime-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onClick={() => selecionarOperador(v)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); selecionarOperador(v); } }}
                         >
@@ -2275,7 +2280,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     {showTipoMov && tipoMovFiltrados.length > 0 ? (
                       <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                         {tipoMovFiltrados.map((op, idx) => (
-                          <div key={op.value} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoMovIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          <div key={op.value} data-kbd-ativo={(idx === tipoMovIdx) || undefined} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoMovIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                             onMouseDown={(ev) => { ev.preventDefault(); setTipoMovimentacao(op.value); setShowTipoMov(false); setBuscaTipoMov(''); setTimeout(() => navegarFocavel('next'), 50); }}
                           >{op.label}</div>
                         ))}
@@ -2306,7 +2311,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     {showTipoOp && tipoOpFiltrados.length > 0 ? (
                       <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                         {tipoOpFiltrados.map((op, idx) => (
-                          <div key={op.value} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoOpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          <div key={op.value} data-kbd-ativo={(idx === tipoOpIdx) || undefined} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === tipoOpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                             onMouseDown={(ev) => { ev.preventDefault(); setTipoOperacao(op.value); setShowTipoOp(false); setBuscaTipoOp(''); setTimeout(() => navegarFocavel('next'), 50); }}
                           >{op.label}</div>
                         ))}
@@ -2355,7 +2360,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   {showFP && !fPagamento && fpFiltradosPorBusca.length > 0 ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {fpFiltradosPorBusca.map((fp, idx) => (
-                        <div key={fp.id} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === fpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        <div key={fp.id} data-kbd-ativo={(idx === fpIdx) || undefined} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === fpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onMouseDown={(ev) => { ev.preventDefault(); setFPagamento(fp.id); setBuscaFP(''); setShowFP(false); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
                         >{fp.descricao}</div>
                       ))}
@@ -2387,7 +2392,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {Array.from({ length: maxParcelasCartao }, (_, i) => i + 1).map((n) => {
                         return (
-                          <div key={n} className={`px-3 py-1.5 cursor-pointer text-sm flex justify-between ${n - 1 === parcelasIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                          <div key={n} data-kbd-ativo={(n - 1 === parcelasIdx) || undefined} className={`px-3 py-1.5 cursor-pointer text-sm flex justify-between ${n - 1 === parcelasIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                             onMouseDown={(ev) => { ev.preventDefault(); setParcelasCartao(n); setShowParcelasDropdown(false); setTimeout(() => navegarFocavel('next'), 50); }}
                           >
                             <span className="font-bold">{n}x</span>
@@ -2441,17 +2446,17 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   {showPrazoDropdown && !prazoDesabilitado ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-48 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {/* Opções fixas no topo */}
-                      <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 0 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                      <div data-kbd-ativo={(prazoIdx === 0) || undefined} className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 0 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                         onMouseDown={(ev) => { ev.preventDefault(); setPrazo('FECHAMENTO NA SEMANA'); setPrazosArray([]); setShowPrazoDropdown(false); setBuscaPrazo(''); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}>
                         <span className="font-semibold text-purple-600">Fechamento na Semana</span>
                       </div>
-                      <div className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                      <div data-kbd-ativo={(prazoIdx === 1) || undefined} className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-200 dark:border-zinc-600 ${prazoIdx === 1 ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                         onMouseDown={(ev) => { ev.preventDefault(); setShowPrazoDropdown(false); setBuscaPrazo(''); setOpenModalPrazo(true); }}>
                         <span className="font-semibold text-blue-600 dark:text-blue-400">Personalizar...</span>
                       </div>
                       {/* Opções da tabela de prazos (filtradas) */}
                       {prazoOpcoesFiltradas.map((op, idx) => (
-                        <div key={op.prazo} className={`px-3 py-2 cursor-pointer text-sm ${(idx + 2) === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        <div key={op.prazo} data-kbd-ativo={((idx + 2) === prazoIdx) || undefined} className={`px-3 py-2 cursor-pointer text-sm ${(idx + 2) === prazoIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onMouseDown={(ev) => { ev.preventDefault(); setPrazo(op.prazo.replace(/\//g, ' ')); const hoje = new Date(); setPrazosArray(op.dias.map((d, i) => { const dt = new Date(hoje); dt.setDate(dt.getDate() + d); return { id: i + 1, dataVencimento: dt, dias: d }; })); setShowPrazoDropdown(false); setBuscaPrazo(''); setTimeout(() => navegarFocalvelRef.current?.('next'), 50); }}
                         >
                           <div className="flex items-center justify-between">
@@ -2509,7 +2514,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                   {showTransp && !transporteSel.CODTPTRANSP && transpFiltrados.length > 0 ? (
                     <div className="absolute bottom-full left-0 right-0 z-50 mb-1 max-h-40 overflow-auto bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-600 rounded-lg shadow-xl">
                       {transpFiltrados.map((t, idx) => (
-                        <div key={t.CODTPTRANSP} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === transpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
+                        <div key={t.CODTPTRANSP} data-kbd-ativo={(idx === transpIdx) || undefined} className={`px-3 py-1.5 cursor-pointer text-sm ${idx === transpIdx ? 'bg-blue-50 dark:bg-blue-950' : 'hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
                           onMouseDown={(ev) => { ev.preventDefault(); setTransporteSel(t); setBuscaTransp(''); setShowTransp(false); setTimeout(() => navegarFocavel('next'), 50); }}
                         >{t.CODTPTRANSP} - {t.DESCR}</div>
                       ))}

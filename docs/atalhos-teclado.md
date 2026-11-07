@@ -98,6 +98,24 @@
 
 ---
 
+### Lista de Clientes (`/admin/cadastros/clientes`)
+
+| Atalho | Ação | Contexto |
+|--------|------|----------|
+| ↑ / ↓ | Navegar entre clientes | Sempre |
+| Enter / V | Zoom (Inspeção) | Fora de inputs |
+| E | Editar | Fora de inputs, requer permissão de editar |
+| S | Status de Compra | Fora de inputs |
+| I | Intervalo de Compra | Fora de inputs |
+| Esc | Fechar Zoom, Status ou Intervalo | Modal aberto |
+
+**Funções (menu Opções → Ações Coletivas):**
+- `CLI_FIN`: Mudar Classe, Alterar Banco e Exportar para Excel
+- `CLI_FIN_RES`: Mudar Classe e Alterar Banco, sem exportar
+- Sem nenhuma das duas: a seção não aparece
+
+---
+
 ## Componentes utilizados
 
 | Componente | Pacote | Uso |
