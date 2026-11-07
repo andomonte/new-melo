@@ -63,6 +63,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'nfeId é obrigatório.' });
   }
 
+  // Delphi exige o conhecimento quando "Tem Conhecimento" está marcado; antes, aqui
+  // a marcação era descartada sem aviso e o frete ficava fora do custo.
+  if (temConhecimento && !conhecimento?.nrocon?.trim()) {
+    return res.status(400).json({ error: 'Cadastre o conhecimento (CTe) ou desmarque "Tem Conhecimento".' });
+  }
+
   const temCon = !!(temConhecimento && conhecimento && conhecimento.nrocon);
   const codTranspFinal =
     (temCon ? conhecimento!.codtransp : codtransp) || null;

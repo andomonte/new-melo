@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import type { ArmazemAlterado } from '@/data/recebimento-entrada/recebimentoEntradaService';
 import {
   CheckCircle,
   AlertTriangle,
@@ -87,7 +88,11 @@ export interface ItemEntradaRecebimento {
   status_item: StatusItem;
   observacao: string | null;
   unidade: string;
+  arm_id: number | null;
+  romaneio_dividido: boolean;
 }
+
+export type { ArmazemAlterado };
 
 // Tipo do item local com estado editavel
 export interface ItemLocal extends ItemEntradaRecebimento {
@@ -135,7 +140,7 @@ export interface ModalConferirItensProps {
   onClose: () => void;
   entrada: EntradaParaReceber;
   matricula: string;
-  onFinalizar: (observacao?: string) => void;
+  onFinalizar: (observacao?: string, armazens?: ArmazemAlterado[]) => void;
 }
 
 // Armazem padrao

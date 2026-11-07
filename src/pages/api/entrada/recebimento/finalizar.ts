@@ -13,6 +13,8 @@ interface FinalizarRequest {
   entradaId: string; // codent
   matricula: string;
   observacao?: string;
+  // Só os itens cujo armazém o operador mudou. entradaItemId = linha de conferência.
+  armazens?: { entradaItemId: number; armId: number }[];
 }
 
 interface FinalizarResponse {
@@ -22,7 +24,7 @@ interface FinalizarResponse {
   precosAtualizados?: number;
 }
 
-const ARMAZEM_PADRAO = 1003;
+const ARMAZEM_PADRAO = 1001; // GERAL, como no Delphi
 
 export default async function handler(
   req: NextApiRequest,
@@ -32,9 +34,15 @@ export default async function handler(
     return res.status(405).json({ error: 'Metodo nao permitido' });
   }
 
-  const { entradaId, matricula, observacao } = (req.body || {}) as FinalizarRequest;
+  const { entradaId, matricula, observacao, armazens = [] } = (req.body || {}) as FinalizarRequest;
   if (!entradaId || !matricula) {
     return res.status(400).json({ error: 'entradaId e matricula sao obrigatorios' });
+  }
+  if (
+    !Array.isArray(armazens) ||
+    armazens.some((a) => !Number.isInteger(a?.entradaItemId) || !Number.isInteger(a?.armId))
+  ) {
+    return res.status(400).json({ error: 'Armazem invalido' });
   }
 
   const cookies = parseCookies({ req });
@@ -105,6 +113,21 @@ export default async function handler(
            VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
           [entradaId, item.codprod, item.codreq, ARMAZEM_PADRAO, parseFloat(item.quant)]);
       }
+    }
+
+    // Armazém escolhido na conferência. Romaneio dividido em vários armazéns não é
+    // alterado aqui: juntá-lo apagaria a divisão feita na entrada.
+    for (const { entradaItemId, armId } of armazens) {
+      await client.query(
+        `UPDATE dbitent_armazem d SET arm_id = $1
+           FROM entrada_itens_recebimento e
+          WHERE e.id = $2 AND e.codent = $3
+            AND d.codent = e.codent AND d.codprod = e.produto_cod
+            AND COALESCE(d.codreq,'') = COALESCE(e.codreq,'')
+            AND (SELECT COUNT(DISTINCT x.arm_id) FROM dbitent_armazem x
+                  WHERE x.codent = e.codent AND x.codprod = e.produto_cod
+                    AND COALESCE(x.codreq,'') = COALESCE(e.codreq,'')) = 1`,
+        [armId, entradaItemId, entradaId]);
     }
 
     // Devolução automática (itens com FALTA)

@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
+import { SQL_PROXIMO_COD_REF } from '@/lib/compras/refFabrica';
 
 /**
  * Cria uma nova Referência de Fábrica (tabela dbref_fabrica) — equivalente ao
@@ -55,7 +56,7 @@ export default async function handle(
 
     // Novo cod_id = MAX + 1
     const maxId = await client.query(
-      'SELECT COALESCE(MAX(cod_id), 0) + 1 AS next_id FROM dbref_fabrica',
+      SQL_PROXIMO_COD_REF,
     );
     const codId = maxId.rows[0].next_id;
 

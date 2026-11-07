@@ -63,11 +63,12 @@ export default async function handler(
       const produtosInsuficientes: string[] = [];
       for (const rom of romaneioResult.rows) {
         const est = await client.query(
-          `SELECT arp_qtest FROM cad_armazem_produto WHERE arp_arm_id = $1 AND arp_codprod = $2`,
+          `SELECT COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0) AS disponivel
+             FROM cad_armazem_produto WHERE arp_arm_id = $1 AND arp_codprod = $2`,
           [rom.arm_id, rom.codprod]
         );
         if (est.rows.length > 0) {
-          const qtstArmazem = parseFloat(est.rows[0].arp_qtest || 0);
+          const qtstArmazem = parseFloat(est.rows[0].disponivel || 0);
           const qtdNecessaria = parseFloat(rom.qtd);
           if (qtstArmazem < qtdNecessaria) {
             produtosInsuficientes.push(`${rom.codprod} no armazém ${rom.arm_id}: disponível ${qtstArmazem}, necessário ${qtdNecessaria}`);
@@ -91,15 +92,18 @@ export default async function handler(
           [rom.codprod, qtd]
         );
         await client.query(
-          `UPDATE cad_armazem_produto SET arp_qtest = GREATEST(COALESCE(arp_qtest, 0) - $3, 0)
+          `UPDATE cad_armazem_produto
+              SET arp_qtest_reservada = COALESCE(arp_qtest_reservada, 0) + $3
              WHERE arp_arm_id = $1 AND arp_codprod = $2`,
           [rom.arm_id, rom.codprod, qtd]
         );
       }
 
-      await client.query(`DELETE FROM dbitent_armazem WHERE codent = $1`, [id]);
       await client.query(`UPDATE dbent SET est_alocado = 0 WHERE codent = $1`, [id]);
     }
+
+    // Nova conferência: a operação anterior bloquearia o reinício do recebimento
+    await client.query(`DELETE FROM entrada_operacoes WHERE codent = $1`, [id]);
 
     // Reabre o dbent e volta o workflow para PENDENTE, limpando as confirmações
     await client.query(`UPDATE dbent SET status = 'A' WHERE codent = $1`, [id]);

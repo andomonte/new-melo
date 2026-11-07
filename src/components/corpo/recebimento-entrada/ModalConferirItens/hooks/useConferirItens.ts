@@ -15,6 +15,7 @@ import {
   Armazem,
   EntradaParaReceber,
   ARMAZEM_PADRAO_ID,
+  ArmazemAlterado,
 } from '../constants';
 import {
   calcularResumo,
@@ -29,7 +30,7 @@ interface UseConferirItensProps {
   isOpen: boolean;
   entrada: EntradaParaReceber | null;
   matricula: string;
-  onFinalizar: (observacao?: string) => void;
+  onFinalizar: (observacao?: string, armazens?: ArmazemAlterado[]) => void;
   onClose: () => void;
 }
 
@@ -112,8 +113,7 @@ export const useConferirItens = ({
       }
 
       // Mapear itens - TODOS JA SALVOS
-      setItens(
-        itensData.map(item => ({
+      const itensLocais: ItemLocal[] = itensData.map(item => ({
           ...item,
           // Usar valores do banco (ja salvos)
           qtdRecebidaLocal: item.qtd_recebida ?? item.qtd_esperada,
@@ -122,10 +122,14 @@ export const useConferirItens = ({
           // Nao marcado como modificado pois ja esta salvo no banco
           modificado: false,
           salvando: false,
-          // Armazem padrao
-          armazemId: ARMAZEM_PADRAO_ID,
-        }))
-      );
+          // O romaneio manda; sem romaneio, o padrao. Dividido nao tem armazem unico.
+          armazemId: item.arm_id ?? (item.romaneio_dividido ? null : ARMAZEM_PADRAO_ID),
+      }));
+      setItens(itensLocais);
+
+      // O seletor geral so marca um armazem quando todos os itens estao nele.
+      const armazensDosItens = new Set(itensLocais.map(item => item.armazemId));
+      setArmazemSelecionado(armazensDosItens.size === 1 ? itensLocais[0].armazemId : null);
     } catch (error) {
       console.error('Erro ao carregar itens:', error);
       toast({
@@ -198,11 +202,15 @@ export const useConferirItens = ({
 
     // Aplicar automaticamente para todos os itens
     setItens(prev =>
-      prev.map(item => ({
-        ...item,
-        armazemId: armId,
-        // Nao marca como modificado - armazem e apenas para alocacao
-      }))
+      prev.map(item =>
+        item.romaneio_dividido
+          ? item
+          : {
+              ...item,
+              armazemId: armId,
+              // Nao marca como modificado - o armazem vai junto na finalizacao
+            },
+      )
     );
   }, []);
 
@@ -338,7 +346,11 @@ export const useConferirItens = ({
         }
       }
 
-      await onFinalizar(observacaoGeral || undefined);
+      const armazensAlterados: ArmazemAlterado[] = itens
+        .filter(item => item.armazemId !== null && item.armazemId !== item.arm_id)
+        .map(item => ({ entradaItemId: item.entrada_item_id, armId: item.armazemId as number }));
+
+      await onFinalizar(observacaoGeral || undefined, armazensAlterados);
     } finally {
       isSubmittingRef.current = false;
       setIsFinalizando(false);

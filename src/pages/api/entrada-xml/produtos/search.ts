@@ -39,6 +39,9 @@ export default async function handler(
 
   // Quando true, casa SOMENTE pela referência (p.ref) com match EXATO.
   const somenteRef = String(req.query.somenteRef ?? '') === 'true';
+  // Quando true, casa SOMENTE pelo código interno (p.codprod): usado por quem já tem o
+  // produto em mãos, como o item da ordem de compra.
+  const somenteCodprod = String(req.query.somenteCodprod ?? '') === 'true';
 
   let client;
 
@@ -51,7 +54,23 @@ export default async function handler(
     // Buscar produtos no banco de dados
     let result;
 
-    if (somenteRef) {
+    if (somenteCodprod) {
+      result = await client.query(`
+        SELECT
+          p.codprod as id,
+          p.codprod as referencia,
+          p.ref as ref,
+          p.descr as descricao,
+          p.codbar as codigo_barras,
+          COALESCE(m.descr, 'SEM MARCA') as marca,
+          COALESCE(p.qtest, 0) - COALESCE(p.qtdreservada, 0) as estoque,
+          p.tipo as tipo,
+          COALESCE(p.local, 'MERCADORIA') as localizacao
+        FROM dbprod p
+        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
+        WHERE p.codprod = $1
+      `, [search.trim()]);
+    } else if (somenteRef) {
       // "Somente referência": match EXATO em p.ref, tolerante a espaço/vírgula
       // (ex.: "MB 482" == "MB,482" == "mb  482"). "/" separa ref / marca:
       //   "MB 482"          => ref exata

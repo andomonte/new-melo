@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { ARMAZEM_GERAL, posicionarReserva } from '@/lib/compras/estoqueEntrada';
 import { getPgPool } from '@/lib/pgClient';
 
 interface RomaneioItem {
@@ -85,19 +86,8 @@ export default async function handler(
       });
     }
 
-    // 3. Verificar se já tem romaneio (não pode editar depois de salvo!)
-    const romaneioExistente = await client.query(`
-      SELECT COUNT(*) as total
-      FROM dbitent_armazem
-      WHERE codent = $1
-    `, [entrada.codent]);
-
-    if (parseInt(romaneioExistente.rows[0].total) > 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        error: 'Romaneio já foi salvo e não pode ser alterado. Para modificar, cancele a entrada e crie uma nova.'
-      });
-    }
+    // 3. O romaneio nasce na geração; alterar substitui o anterior (Delphi: ALT_ROMANEIO)
+    await client.query(`DELETE FROM dbitent_armazem WHERE codent = $1`, [entrada.codent]);
 
     // 4. Validar armazéns existem e estão ativos
     const armIds = [...new Set(itens.flatMap(i => i.romaneio.map(r => r.arm_id)))];
@@ -154,7 +144,7 @@ export default async function handler(
 
       const req_id = reqResult.rows[0]?.codreq || null;
 
-      // Se não tiver separação, usar armazém padrão (1003) para todo o produto
+      // Se não tiver separação, usar o armazém padrão para todo o produto
       if (item.romaneio.length === 0) {
         await client.query(`
           INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
@@ -163,9 +153,10 @@ export default async function handler(
           entrada.codent,
           item.produto_cod,
           req_id,
-          1003, // Armazém padrão do sistema
+          ARMAZEM_GERAL,
           item.quantidade_total
         ]);
+        await posicionarReserva(client, item.produto_cod, ARMAZEM_GERAL, item.quantidade_total);
         totalSeparacoes++;
       } else {
         // Inserir cada separação
@@ -181,16 +172,17 @@ export default async function handler(
               rom.arm_id,
               rom.qtd
             ]);
+            await posicionarReserva(client, item.produto_cod, rom.arm_id, rom.qtd);
             totalSeparacoes++;
           }
         }
       }
     }
 
-    // 7. Marcar entrada como tendo romaneio realizado (est_alocado=1)
+    // 7. Marcar entrada como tendo romaneio realizado
     await client.query(`
       UPDATE dbent
-      SET est_alocado = 1
+      SET romaneio = 'S'
       WHERE codent = $1
     `, [entrada.codent]);
 

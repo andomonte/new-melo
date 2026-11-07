@@ -11,6 +11,7 @@ import {
   RecebimentoFinalizado,
   getEntradasParaReceber,
   finalizarRecebimento,
+  type ArmazemAlterado,
   getRecebimentosFinalizados,
 } from '@/data/recebimento-entrada/recebimentoEntradaService';
 import { DefaultButton } from '@/components/common/Buttons';
@@ -121,12 +122,14 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
   const handleFinalizarRecebimento = useCallback(async (
     entrada: EntradaParaReceber,
     observacao?: string,
+    armazens?: ArmazemAlterado[],
   ) => {
     try {
       await finalizarRecebimento({
         entradaId: entrada.entrada_id,
         matricula: recebedor.matricula,
         observacao,
+        armazens,
       });
 
       toast({
@@ -382,8 +385,8 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
           }}
           entrada={entradaSelecionada}
           matricula={recebedor.matricula}
-          onFinalizar={(observacao) =>
-            handleFinalizarRecebimento(entradaSelecionada, observacao)
+          onFinalizar={(observacao, armazens) =>
+            handleFinalizarRecebimento(entradaSelecionada, observacao, armazens)
           }
         />
       )}

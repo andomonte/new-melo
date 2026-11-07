@@ -1,3 +1,4 @@
+import { liberarReserva, posicionarReserva } from '@/lib/compras/estoqueEntrada';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 
@@ -53,8 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Estoque ainda reservado (antes de confirmar estoque)?
-    const reservado =
-      !ent.rec_status || ['PENDENTE', 'PRECO_CONFIRMADO'].includes(ent.rec_status);
+    const reservado = ent.rec_status !== 'DISPONIVEL_VENDA';
     const isImp = ent.natop === 'ENTRADA_IMPORTACAO';
 
     const itens = (
@@ -91,12 +91,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       )
     ).rows;
     for (const rom of romaneio) {
+      const armId = Number(rom.arm_id);
+      const qtd = Number(rom.qtd);
+      if (reservado) await posicionarReserva(client, rom.codprod, armId, qtd);
       await client.query(
         `UPDATE cad_armazem_produto
             SET arp_qtest = GREATEST(COALESCE(arp_qtest,0) - $3, 0)
           WHERE arp_arm_id = $1 AND arp_codprod = $2`,
-        [rom.arm_id, rom.codprod, Number(rom.qtd)],
+        [armId, rom.codprod, qtd],
       );
+      if (reservado) await liberarReserva(client, rom.codprod, armId, qtd);
     }
     await client.query(`DELETE FROM dbitent_armazem WHERE codent = $1`, [id]);
 

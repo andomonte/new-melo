@@ -79,7 +79,8 @@ export default function RomaneioModal({
       if (!romaneioRes.ok) throw new Error('Erro ao buscar romaneio');
       const romaneioData = await romaneioRes.json();
 
-      setTemRomaneioSalvo(romaneioData.tem_romaneio_salvo);
+      // O romaneio nasce na geração: ao abrir, continua editável, preenchido com o atual.
+      setTemRomaneioSalvo(false);
 
       // Transformar para formato do estado com distribuicao
       const itensFormatados: ItemEntradaComDistribuicao[] = romaneioData.itens.map((item: any) => ({

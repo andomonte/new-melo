@@ -576,11 +576,24 @@ export const NFeMain: React.FC = () => {
     setShowGerarEntradaDireta(false);
     setNfeParaEntradaDireta(null);
     setAssociacoesCarregadas([]);
+
+    // "Salvar e gerar depois" não cria entrada: a NFe continua Associada.
+    if (!numeroEntrada) {
+      refetch();
+      setMessageData({
+        title: 'Configuração Salva',
+        message: 'Selo e conhecimento salvos. A entrada ainda não foi gerada e a NFe continua Associada.',
+        type: 'success'
+      });
+      setShowMessage(true);
+      return;
+    }
+
     updateNFeStatus(nfeId, 'PROCESSADA');
     refetch();
     setMessageData({
-      title: 'NFe Processada',
-      message: 'NFe processada com sucesso! Para gerar a entrada de estoque, acesse a tela de Entradas de Mercadorias.',
+      title: 'Entrada Gerada com Sucesso!',
+      message: `Entrada ${numeroEntrada} gerada. Confirme o preço e o estoque na tela de Entradas de Mercadorias.`,
       type: 'success'
     });
     setShowMessage(true);
@@ -661,12 +674,24 @@ export const NFeMain: React.FC = () => {
     setSelectedNFeId('');
     setAssociatedItemsData([]);
 
+    // "Salvar e gerar depois" não cria entrada: a NFe continua Associada.
+    if (!numeroEntrada) {
+      refetch();
+      setMessageData({
+        title: 'Configuração Salva',
+        message: 'Selo e conhecimento salvos. A entrada ainda não foi gerada e a NFe continua Associada.',
+        type: 'success'
+      });
+      setShowMessage(true);
+      return;
+    }
+
     // Atualiza o status da NFe localmente (sem reload brusco)
     updateNFeStatus(nfeId, 'PROCESSADA');
 
     setMessageData({
-      title: 'NFe Processada com Sucesso!',
-      message: 'NFe processada com sucesso! Para gerar a entrada de estoque, acesse a tela de Entradas de Mercadorias.',
+      title: 'Entrada Gerada com Sucesso!',
+      message: `Entrada ${numeroEntrada} gerada. Confirme o preço e o estoque na tela de Entradas de Mercadorias.`,
       type: 'success'
     });
     setShowMessage(true);

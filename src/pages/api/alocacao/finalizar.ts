@@ -8,6 +8,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import { PoolClient } from 'pg';
+import { creditarSemReserva, liberarReserva, posicionarReserva } from '@/lib/compras/estoqueEntrada';
 
 interface FinalizarRequest {
   entradaId: string; // codent
@@ -67,6 +68,37 @@ export default async function handler(
     await client.query('BEGIN');
     await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
 
+    // Quantidade de cada produto: a recebida, limitada à da nota. O excesso não entra no
+    // estoque (como no Delphi, vale a nota) e a falta segue reservada até resolver a devolução.
+    const itensResult = await client.query(
+      `SELECT ie.codprod,
+              SUM(ie.quant) AS qtd_nota,
+              SUM(COALESCE(eir.qtd_recebida, ie.quant)) AS qtd_recebida,
+              COALESCE((SELECT SUM(da.qtd) FROM dbitent_armazem da
+                         WHERE da.codent = ie.codent AND da.codprod = ie.codprod), 0) AS qtd_alocada
+         FROM dbitent ie
+         LEFT JOIN entrada_itens_recebimento eir
+           ON eir.codent = ie.codent AND eir.produto_cod = ie.codprod
+          AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
+        WHERE ie.codent = $1
+        GROUP BY ie.codent, ie.codprod`,
+      [entradaId]);
+
+    const naoConfirmado = itensResult.rows.find(
+      (i: any) => Number(i.qtd_recebida) > 0 && Number(i.qtd_alocada) !== Number(i.qtd_recebida));
+    if (naoConfirmado) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `Confirme a alocacao do produto ${naoConfirmado.codprod}: recebido ${Number(naoConfirmado.qtd_recebida)}, alocado ${Number(naoConfirmado.qtd_alocada)}`,
+      });
+    }
+
+    const saldoProduto = new Map<string, number>(
+      itensResult.rows.map((i: any) => [
+        i.codprod,
+        Math.min(Number(i.qtd_nota), Number(i.qtd_recebida)),
+      ]));
+
     const finalizarResult = await client.query(
       `UPDATE entrada_operacoes
           SET status = 'ALOCADO', fim_alocacao = NOW(),
@@ -84,7 +116,7 @@ export default async function handler(
       `UPDATE dbent_recebimento SET status = 'DISPONIVEL_VENDA', updated_at = now() WHERE codent = $1`,
       [entradaId]);
 
-    // Estoque nos armazéns a partir do romaneio (dbitent_armazem)
+    // Confirma o romaneio nos armazéns (dbitent_armazem). O estoque já entrou na geração.
     let alocacoesResult;
     try {
       alocacoesResult = await client.query(GET_ALOCACOES_QUERY, [entradaId]);
@@ -97,25 +129,33 @@ export default async function handler(
     }
 
     for (const aloc of alocacoesResult.rows) {
-      const { cod_produto, arm_id, qtd, localizacao } = aloc;
-      const quantidade = parseFloat(qtd);
+      const { cod_produto, qtd, localizacao } = aloc;
+      const arm_id = Number(aloc.arm_id);
+      const saldo = saldoProduto.get(cod_produto) ?? 0;
+      const quantidade = Math.min(parseFloat(qtd), saldo);
+      saldoProduto.set(cod_produto, saldo - quantidade);
 
-      // 1. Libera reserva no produto geral
-      await client.query(
-        `UPDATE dbprod SET qtdreservada = GREATEST(COALESCE(qtdreservada, 0) - $1, 0) WHERE codprod = $2`,
-        [quantidade, cod_produto]);
+      if (quantidade > 0) {
+        // 1. Libera reserva no produto geral
+        const produtoResult = await client.query(
+          `SELECT COALESCE(qtdreservada, 0) AS reservada FROM dbprod WHERE codprod = $1 FOR UPDATE`,
+          [cod_produto]);
+        const reservadaProduto = parseFloat(produtoResult.rows[0]?.reservada ?? 0);
+        await client.query(
+          `UPDATE dbprod SET qtdreservada = GREATEST(COALESCE(qtdreservada, 0) - $1, 0) WHERE codprod = $2`,
+          [quantidade, cod_produto]);
 
-      // 2. Garante registro no armazém
-      await client.query(
-        `INSERT INTO cad_armazem_produto (arp_arm_id, arp_codprod, arp_qtest, arp_qtest_reservada, arp_bloqueado)
-         VALUES ($1, $2, 0, 0, 'N') ON CONFLICT (arp_arm_id, arp_codprod) DO NOTHING`,
-        [arm_id, cod_produto]);
+        // 2. Leva a reserva ao armazém escolhido e libera (o total não muda)
+        const semReserva = await posicionarReserva(client, cod_produto, arm_id, quantidade);
+        await liberarReserva(client, cod_produto, arm_id, quantidade - semReserva);
 
-      // 3. Incrementa estoque do armazém
-      await client.query(
-        `UPDATE cad_armazem_produto SET arp_qtest = COALESCE(arp_qtest, 0) + $1
-          WHERE arp_arm_id = $2 AND arp_codprod = $3`,
-        [quantidade, arm_id, cod_produto]);
+        // 3. Reservada só no produto: entrada gerada antes deste modelo, com qtest somado
+        //    e nada no armazém. Sem reserva também no produto, não há o que acertar.
+        const faltaNoArmazem = Math.min(semReserva, reservadaProduto);
+        if (faltaNoArmazem > 0) {
+          await creditarSemReserva(client, cod_produto, arm_id, faltaNoArmazem);
+        }
+      }
 
       // 4. Localização física
       if (localizacao && localizacao.trim() !== '') {

@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
+import { statusEntradaConfig } from '@/components/corpo/comprador/Entradas/colunasDbEntrada';
 
 // Interface para query params da API de entradas
 interface EntradasQueryParams {
@@ -9,6 +10,24 @@ interface EntradasQueryParams {
   search?: string;
   status?: string;
   filtros?: string; // JSON string dos filtros
+}
+
+const SQL_VALOR_PRODUTOS = '(SELECT COALESCE(SUM(quant*prunit), 0) FROM dbitent WHERE codent = e.codent)';
+const SQL_DATA_EMISSAO = 'COALESCE(nfe.demi, e.dtent)';
+const SQL_STATUS_EXIBIDO = `CASE COALESCE(rec.status, e.status) ${Object.entries(statusEntradaConfig)
+  .map(([codigo, { label }]) => `WHEN '${codigo}' THEN '${label}'`)
+  .join(' ')} ELSE COALESCE(rec.status, e.status) END`;
+
+const moedaExibida = (expressao: string) =>
+  `replace(to_char(${expressao}, 'FM9999999990.00'), '.', ',')`;
+
+/** Converte DD/MM/AAAA em AAAA-MM-DD; devolve null enquanto a data estiver incompleta ou inválida. */
+function dataDigitada(valor: string): string | null {
+  const partes = valor.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!partes) return null;
+  const [, dia, mes, ano] = partes;
+  const data = new Date(Number(ano), Number(mes) - 1, Number(dia));
+  return data.getMonth() === Number(mes) - 1 ? `${ano}-${mes}-${dia}` : null;
 }
 
 // Listagem de entradas — fonte: modelo Delphi dbent/dbitent (substitui entradas_estoque).
@@ -55,23 +74,50 @@ export default async function handle(
         try {
           const filtrosParsed = JSON.parse(filtros as string) as { campo: string; tipo: string; valor: string }[];
 
-          // Mapeamento de campos do frontend para colunas de dbent/dbitent
+          // Campos do frontend -> expressão com o texto mostrado na grade, para o
+          // filtro achar o que o usuário está vendo.
           const campoParaColuna: Record<string, string> = {
             numeroEntrada: 'e.codent',
-            numeroNF: 'nfe.nnf',
-            status: 'COALESCE(rec.status, e.status)',
+            numeroNF: 'COALESCE(nfe.nnf::text, e.codent)',
+            status: SQL_STATUS_EXIBIDO,
             temRomaneio: 'temRomaneio', // tratamento especial abaixo
             precoConfirmado: 'precoConfirmado', // tratamento especial abaixo
-            valorProdutos: '(SELECT COALESCE(SUM(quant*prunit), 0) FROM dbitent WHERE codent = e.codent)',
-            valorTotal: 'e.totalnf',
-            fornecedorNome: 'emit.xnome',
-            dataEmissao: 'nfe.demi',
-            dataEntrada: 'e.dtent',
-            serie: 'nfe.serie',
+            valorProdutos: moedaExibida(SQL_VALOR_PRODUTOS),
+            valorTotal: moedaExibida('e.totalnf'),
+            fornecedorNome: `COALESCE(emit.xnome, 'SISTEMA')`,
+            dataEmissao: `to_char(${SQL_DATA_EMISSAO}, 'DD/MM/YYYY')`,
+            dataEntrada: `to_char(e.dtent, 'DD/MM/YYYY')`,
+            serie: `COALESCE(nfe.serie::text, '001')`,
             tipoEntrada: 'e.operacao',
             observacoes: 'e.obs',
             totalItens: '(SELECT COUNT(*) FROM dbitent WHERE codent = e.codent)',
+            chaveNFe: 'e.chave',
           };
+
+          // Comparações de ordem usam o valor real, não o texto.
+          const colunasNumericas: Record<string, string> = {
+            numeroEntrada: `NULLIF(regexp_replace(e.codent, '[^0-9]', '', 'g'), '')`,
+            numeroNF: 'nfe.nnf',
+            serie: 'nfe.serie',
+            valorProdutos: SQL_VALOR_PRODUTOS,
+            valorTotal: 'e.totalnf',
+            totalItens: campoParaColuna.totalItens,
+          };
+          const colunasData: Record<string, string> = {
+            dataEmissao: SQL_DATA_EMISSAO,
+            dataEntrada: 'e.dtent',
+          };
+          const operadoresOrdem: Record<string, string> = {
+            maior: '>',
+            menor: '<',
+            maior_igual: '>=',
+            menor_igual: '<=',
+          };
+
+          // A grade envia o nome do campo em minúsculas.
+          const campoPorChave = Object.fromEntries(
+            Object.keys(campoParaColuna).map((c) => [c.toLowerCase(), c]),
+          );
 
           const camposBooleanos = ['temRomaneio', 'precoConfirmado'];
 
@@ -83,21 +129,23 @@ export default async function handle(
           };
 
           for (const filtro of filtrosParsed) {
-            if (!filtro.campo || !filtro.valor) continue;
+            const semValor = filtro.tipo === 'nulo' || filtro.tipo === 'nao_nulo';
+            if (!filtro.campo || (!filtro.valor && !semValor)) continue;
 
-            const coluna = campoParaColuna[filtro.campo];
-            if (!coluna) continue;
+            const campo = campoPorChave[filtro.campo.toLowerCase()];
+            if (!campo) continue;
+            const coluna = campoParaColuna[campo];
 
             // Tratamento especial para campos booleanos
-            if (camposBooleanos.includes(filtro.campo)) {
+            if (camposBooleanos.includes(campo)) {
               const valorBool = valorParaBooleano(filtro.valor);
               if (valorBool !== null) {
-                if (filtro.campo === 'precoConfirmado') {
+                if (campo === 'precoConfirmado') {
                   // Preço confirmado = passou pelo confirmar-preço (companheira) ou entrada fechada
                   whereConditions.push(valorBool
                     ? `((rec.status IS NOT NULL AND rec.data_confirmacao_preco IS NOT NULL) OR (rec.status IS NULL AND e.status = 'F'))`
                     : `((rec.status IS NOT NULL AND rec.data_confirmacao_preco IS NULL) OR (rec.status IS NULL AND e.status <> 'F'))`);
-                } else if (filtro.campo === 'temRomaneio') {
+                } else if (campo === 'temRomaneio') {
                   const cond = `(COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM dbitent_armazem WHERE codent = e.codent) > 0)`;
                   whereConditions.push(valorBool ? cond : `NOT ${cond}`);
                 }
@@ -105,38 +153,47 @@ export default async function handle(
               continue;
             }
 
+            const operador = operadoresOrdem[filtro.tipo];
+            if (operador) {
+              if (colunasData[campo]) {
+                const data = dataDigitada(filtro.valor);
+                if (data) {
+                  whereConditions.push(`${colunasData[campo]}::date ${operador} $${params.length + 1}::date`);
+                  params.push(data);
+                }
+              } else if (colunasNumericas[campo]) {
+                const numero = Number(filtro.valor.includes(',')
+                  ? filtro.valor.replace(/\./g, '').replace(',', '.')
+                  : filtro.valor);
+                if (Number.isFinite(numero)) {
+                  whereConditions.push(`(${colunasNumericas[campo]})::numeric ${operador} $${params.length + 1}`);
+                  params.push(numero);
+                }
+              }
+              continue;
+            }
+
+            // "1.900,22" e "857.78" precisam casar com o texto em moeda da grade.
+            const valor = campo === 'valorProdutos' || campo === 'valorTotal'
+              ? filtro.valor.replace(/\.(?=\d{3}(\D|$))/g, '').replace('.', ',')
+              : filtro.valor;
+
             switch (filtro.tipo) {
               case 'começa':
                 whereConditions.push(`${coluna}::text ILIKE $${params.length + 1}`);
-                params.push(`${filtro.valor}%`);
+                params.push(`${valor}%`);
                 break;
               case 'termina':
                 whereConditions.push(`${coluna}::text ILIKE $${params.length + 1}`);
-                params.push(`%${filtro.valor}`);
+                params.push(`%${valor}`);
                 break;
               case 'igual':
-                whereConditions.push(`${coluna}::text = $${params.length + 1}`);
-                params.push(filtro.valor);
+                whereConditions.push(`${coluna}::text ILIKE $${params.length + 1}`);
+                params.push(valor);
                 break;
               case 'diferente':
-                whereConditions.push(`${coluna}::text != $${params.length + 1}`);
-                params.push(filtro.valor);
-                break;
-              case 'maior':
-                whereConditions.push(`${coluna}::numeric > $${params.length + 1}`);
-                params.push(filtro.valor);
-                break;
-              case 'menor':
-                whereConditions.push(`${coluna}::numeric < $${params.length + 1}`);
-                params.push(filtro.valor);
-                break;
-              case 'maior_igual':
-                whereConditions.push(`${coluna}::numeric >= $${params.length + 1}`);
-                params.push(filtro.valor);
-                break;
-              case 'menor_igual':
-                whereConditions.push(`${coluna}::numeric <= $${params.length + 1}`);
-                params.push(filtro.valor);
+                whereConditions.push(`${coluna}::text NOT ILIKE $${params.length + 1}`);
+                params.push(valor);
                 break;
               case 'nulo':
                 whereConditions.push(`${coluna} IS NULL`);
@@ -147,7 +204,7 @@ export default async function handle(
               case 'contém':
               default:
                 whereConditions.push(`${coluna}::text ILIKE $${params.length + 1}`);
-                params.push(`%${filtro.valor}%`);
+                params.push(`%${valor}%`);
                 break;
             }
           }
@@ -184,7 +241,7 @@ export default async function handle(
           emit.cpf_cnpj as fornecedor_cnpj,
           emit.xnome as fornecedor_nome,
           (SELECT COUNT(*) FROM dbitent WHERE codent = e.codent) as total_itens,
-          (SELECT COALESCE(SUM(quant*prunit), 0) FROM dbitent WHERE codent = e.codent) as valor_produtos,
+          ${SQL_VALOR_PRODUTOS} as valor_produtos,
           (COALESCE(e.est_alocado,0) = 1 OR (SELECT COUNT(*) FROM dbitent_armazem WHERE codent = e.codent) > 0) as tem_romaneio
         ${fromJoin}
         ${whereSQL}

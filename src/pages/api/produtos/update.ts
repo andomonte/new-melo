@@ -4,6 +4,7 @@ import { PoolClient } from 'pg';
 import { Produto } from '@/data/produtos/produtos';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { recalcularPrecosProduto } from '@/lib/calcularPrecos';
+import { SQL_PROXIMO_COD_REF } from '@/lib/compras/refFabrica';
 
 export default async function handle(
   req: NextApiRequest,
@@ -107,7 +108,7 @@ export default async function handle(
         if (checkRef.rows.length > 0) {
           codId = checkRef.rows[0].cod_id;
         } else {
-          const maxId = await client.query('SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica');
+          const maxId = await client.query(SQL_PROXIMO_COD_REF);
           codId = maxId.rows[0].next_id;
           await client.query(
             `INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor) VALUES ($1, $2, $3, $4)`,

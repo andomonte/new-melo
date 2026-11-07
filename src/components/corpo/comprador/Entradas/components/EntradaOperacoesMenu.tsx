@@ -79,8 +79,8 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
     onOperacaoAtiva?.(algumModalOperacaoAberto);
   }, [algumModalOperacaoAberto, onOperacaoAtiva]);
 
-  // Pode fazer romaneio se ainda nao tem romaneio
-  const canFazerRomaneio = !entrada.temRomaneio;
+  // O romaneio nasce na geração; pode alterar até liberar para o recebimento
+  const canFazerRomaneio = entrada.status === 'PENDENTE' || entrada.status === 'PRECO_CONFIRMADO';
 
   // Pode confirmar preco se ainda nao foi confirmado
   const canConfirmarPreco = !entrada.precoConfirmado;

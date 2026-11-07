@@ -84,7 +84,8 @@ const UPDATE_LOCALIZACAO_QUERY = `
 `;
 
 const DELETE_ALOCACOES_ANTERIORES_QUERY = `
-  DELETE FROM dbitent_armazem WHERE codent = $1 AND codprod = $2
+  DELETE FROM dbitent_armazem
+   WHERE codent = $1 AND codprod = $2 AND COALESCE(codreq,'') = COALESCE($3,'')
 `;
 
 // Helper para verificar se é formato novo
@@ -190,6 +191,7 @@ export default async function handler(
       await client.query(DELETE_ALOCACOES_ANTERIORES_QUERY, [
         item.numero_entrada,
         item.produto_cod,
+        item.codreq || null,
       ]);
 
       // Inserir novas alocações

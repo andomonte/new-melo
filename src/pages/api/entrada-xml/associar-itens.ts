@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { registrarHistoricoNfe } from '@/lib/nfe/historicoNfeHelper';
+import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota } from '@/lib/compras/refFabrica';
 
 interface ItemAssociation {
   pedidoId: string;
@@ -410,19 +411,13 @@ export default async function handler(
       console.log('🧠 Iniciando aprendizado inteligente (pós-commit)...');
 
       // Buscar código do fornecedor da NFe (cod_credor com 5 dígitos)
-      const nfeDataResult = await client.query(`
-        SELECT c.cod_credor
-        FROM dbnfe_ent nfe
-        LEFT JOIN dbnfe_ent_emit emit ON nfe.codnfe_ent = emit.codnfe_ent
-        LEFT JOIN dbcredor c ON (
-          emit.cpf_cnpj = c.cpf_cgc OR
-          UPPER(TRIM(emit.xnome)) = UPPER(TRIM(c.nome))
-        )
-        WHERE nfe.codnfe_ent = $1
-        LIMIT 1
-      `, [nfeId]);
-
-      const codCredor = nfeDataResult.rows.length > 0 ? nfeDataResult.rows[0].cod_credor : null;
+      const emitente = await client.query(
+        'SELECT cpf_cnpj FROM dbnfe_ent_emit WHERE codnfe_ent = $1 LIMIT 1',
+        [nfeId],
+      );
+      const codCredor = credorParaAprender(
+        await credoresDaNota(client, emitente.rows[0]?.cpf_cnpj),
+      );
 
       if (codCredor) {
         console.log(`   Fornecedor da NFe: ${codCredor}`);
@@ -490,7 +485,7 @@ export default async function handler(
               } else {
                 // Criar nova referência
                 const maxIdResult = await client.query(
-                  'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica'
+                  SQL_PROXIMO_COD_REF
                 );
                 codId = maxIdResult.rows[0].next_id;
 

@@ -3,6 +3,8 @@ import { X, Search, FileText, Package, CheckCircle, AlertCircle, DollarSign, Tru
 import { ConfiguracaoPagamentoNFeModal } from './ConfiguracaoPagamentoNFeModal';
 import CadastroConhecimentoModal from './CadastroConhecimentoModal';
 import { toast } from 'sonner';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { hojeLocal, validarConhecimento, validarSelo } from '../utils/selo';
 
 interface DadosConhecimento {
   codtransp: string;
@@ -65,12 +67,13 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
   const [nfeSelecionada, setNfeSelecionada] = useState<NFEProcessada | null>(null);
   const [informarSelo, setInformarSelo] = useState(false); // opcional (Delphi: checkbox)
   const [numeroSelo, setNumeroSelo] = useState('');
-  const [dataSelo, setDataSelo] = useState<string>(new Date().toISOString().split('T')[0]); // Data atual como padrão
+  const [dataSelo, setDataSelo] = useState<string>(hojeLocal()); // Data atual como padrão
   const [numeroConhecimento, setNumeroConhecimento] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
+  const [showConfirmacao, setShowConfirmacao] = useState(false);
 
   // ✅ NOVO: Estado para modal de configuração de pagamento
   const [showConfigPagamento, setShowConfigPagamento] = useState(false);
@@ -191,25 +194,20 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
       return;
     }
 
-    // Validação do Selo
-    if (numeroSelo && numeroSelo.trim() !== '') {
-      // Se informou número do selo, a data é obrigatória
-      if (!dataSelo) {
-        setError('Informe a data do selo');
-        return;
-      }
-
-      // Validar se data do selo não é maior que hoje
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      const dataSeloDate = new Date(dataSelo);
-      dataSeloDate.setHours(0, 0, 0, 0);
-
-      if (dataSeloDate > hoje) {
-        setError('A data do selo não pode ser maior que a data atual');
-        return;
-      }
+    const erroDados =
+      validarSelo(numeroSelo, dataSelo) || validarConhecimento(temConhecimento, dadosConhecimento);
+    if (erroDados) {
+      setError(erroDados);
+      return;
     }
+
+    setError(null);
+    setShowConfirmacao(true);
+  };
+
+  const confirmarGeracao = async () => {
+    setShowConfirmacao(false);
+    if (!nfeSelecionada) return;
 
     setGerando(true);
     setError(null);
@@ -678,6 +676,18 @@ const GerarEntradaNFeModal: React.FC<GerarEntradaNFeModalProps> = ({
         </div>
       </div>
     </div>
+
+      <ConfirmationModal
+        isOpen={showConfirmacao}
+        onClose={() => setShowConfirmacao(false)}
+        onConfirm={confirmarGeracao}
+        title="Confirmar Geração da Entrada"
+        message="CONFIRMAR ESTA OPERAÇÃO? A entrada será gerada e o estoque será atualizado."
+        type="warning"
+        confirmText="Sim, Gerar Entrada"
+        cancelText="Cancelar"
+        loading={gerando}
+      />
 
       {/* Modal de Configuração de Pagamento */}
       {nfeSelecionada && (

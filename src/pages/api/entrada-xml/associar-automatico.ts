@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
+import { credoresDaNota, produtosDaReferencia } from '@/lib/compras/refFabrica';
 
 interface ItemNFeInput {
   nItem: string;
@@ -121,16 +122,9 @@ export default async function handler(
     console.log('🤖 [Auto] CNPJ fornecedor:', cnpjLimpo);
     console.log('🤖 [Auto] Total de itens NFe:', itens.length);
 
-    // 1. Buscar código do fornecedor (cod_credor) pelo CNPJ
-    const credorResult = await client.query(`
-      SELECT cod_credor
-      FROM dbcredor
-      WHERE regexp_replace(upper(COALESCE(cpf_cgc, '')), '[^0-9A-Z]', '', 'g') = $1
-      LIMIT 1
-    `, [cnpjLimpo]);
-
-    const codCredor = credorResult.rows.length > 0 ? credorResult.rows[0].cod_credor : null;
-    console.log('🤖 [Auto] Código credor:', codCredor);
+    // 1. Buscar os cadastros do fornecedor pelo CNPJ
+    const credores = await credoresDaNota(client, cnpjLimpo);
+    console.log('🤖 [Auto] Cadastros do fornecedor:', credores);
 
     // 2. Buscar TODAS as OCs ativas do fornecedor, ordenadas por data ASC (mais antiga primeiro)
     const ordensResult = await client.query(`
@@ -249,27 +243,16 @@ export default async function handler(
       }
 
       // Estratégia 3: Sugestão inteligente via dbref_fabrica (mesmo que sugerir-produto.ts)
-      if (!produtoEncontrado && codCredor && itemNFe.cProd) {
-        const refResult = await client.query(`
-          SELECT
-            p.codprod,
-            p.descr as descricao
-          FROM dbref_fabrica rf
-          INNER JOIN dbprod_ref_fabrica prf ON rf.cod_id = prf.cod_id
-          INNER JOIN dbprod p ON prf.codprod = p.codprod
-          WHERE rf.referencia = $1
-            AND rf.codcredor = $2
-            AND p.inf NOT IN ('D')
-            AND p.excluido <> 1
-          ORDER BY p.codprod
-          LIMIT 1
-        `, [itemNFe.cProd, codCredor]);
+      if (!produtoEncontrado && itemNFe.cProd) {
+        const candidatos = await produtosDaReferencia(client, itemNFe.cProd, credores);
+        // Com mais de um produto, só decide se um deles for o único com saldo em ordem.
+        const comSaldo = candidatos.filter(c =>
+          ordensResult.rows.some((o: any) => (qtdDisponivel.get(`${o.orc_id}|${c.codprod}`) || 0) > 0)
+        );
+        const escolhido = candidatos.length === 1 ? candidatos[0] : comSaldo.length === 1 ? comSaldo[0] : null;
 
-        if (refResult.rows.length > 0) {
-          produtoEncontrado = {
-            codprod: refResult.rows[0].codprod,
-            descricao: refResult.rows[0].descricao
-          };
+        if (escolhido) {
+          produtoEncontrado = { codprod: escolhido.codprod, descricao: escolhido.descricao };
           console.log(`🤖 [Auto] Item ${itemNFe.nItem}: Sugestão inteligente encontrou ${produtoEncontrado.codprod}`);
         }
       }

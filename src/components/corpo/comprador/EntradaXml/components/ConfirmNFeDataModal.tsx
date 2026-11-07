@@ -319,6 +319,8 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   // Corpo rolável do modal — para rolar com ↑/↓.
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
+  // Comprador e fornecedor chegam depois de abrir: avançar antes acusaria falta deles.
+  const [carregandoDados, setCarregandoDados] = useState(false);
   const [transportadoraXml, setTransportadoraXml] = useState<TransportadoraXml | null>(null);
   // Status do casamento automático por CNPJ (espelha CON_FORNECEDOR/CON_TRANSP
   // do Delphi): null=não avaliado, 'auto'=vinculado sozinho, 'salvo'=veio de
@@ -360,6 +362,8 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
   // Resetar e carregar dados quando o modal abre
   useEffect(() => {
     if (isOpen && nfe?.id) {
+      let ativo = true;
+      setCarregandoDados(true);
       // Resetar o formulário para valores padrão
       setFormData({
         operacao: 0,
@@ -389,41 +393,48 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
       // 1) carrega dados do XML e associação salva; 2) para o que não veio
       // salvo, casa o CNPJ com o cadastro (auto-vincula se achar exatamente 1).
       (async () => {
-        const transp = await fetchTransportadoraXml();
-        const aux = await fetchDadosAuxExistentes();
+        try {
+          const transp = await fetchTransportadoraXml();
+          const aux = await fetchDadosAuxExistentes();
 
-        // Auto-preenche o comprador pelo login logado (como no Delphi, que traz
-        // o comprador do operador). Só quando a nota ainda não tem comprador salvo.
-        if (!aux?.codcomprador && user?.usuario) {
-          try {
-            const r = await api.get('/api/usuarios/meu-comprador', {
-              params: { login: user.usuario, filial: user.filial },
-            });
-            const c = r.data;
-            if (c?.codcomprador) {
-              setFormData(prev =>
-                prev.comprador
-                  ? prev
-                  : { ...prev, comprador: { codigo: String(c.codcomprador), nome: c.nome || '' } },
-              );
+          // Auto-preenche o comprador pelo login logado (como no Delphi, que traz
+          // o comprador do operador). Só quando a nota ainda não tem comprador salvo.
+          if (!aux?.codcomprador && user?.usuario) {
+            try {
+              const r = await api.get('/api/usuarios/meu-comprador', {
+                params: { login: user.usuario, filial: user.filial },
+              });
+              const c = r.data;
+              if (c?.codcomprador) {
+                setFormData(prev =>
+                  prev.comprador
+                    ? prev
+                    : { ...prev, comprador: { codigo: String(c.codcomprador), nome: c.nome || '' } },
+                );
+              }
+            } catch {
+              // sem comprador vinculado ao login — segue sem pré-preencher
             }
-          } catch {
-            // sem comprador vinculado ao login — segue sem pré-preencher
           }
-        }
 
-        if (aux?.codcredor) {
-          setMatchFornec('salvo');
-        } else if (nfe.cnpjEmitente) {
-          await autoMatchCredor(nfe.cnpjEmitente, 'fornecedor');
-        }
+          if (aux?.codcredor) {
+            setMatchFornec('salvo');
+          } else if (nfe.cnpjEmitente) {
+            await autoMatchCredor(nfe.cnpjEmitente, 'fornecedor');
+          }
 
-        if (aux?.codtransp) {
-          setMatchTransp('salvo');
-        } else if (transp?.cpf_cnpj) {
-          await autoMatchCredor(transp.cpf_cnpj, 'transportadora');
+          if (aux?.codtransp) {
+            setMatchTransp('salvo');
+          } else if (transp?.cpf_cnpj) {
+            await autoMatchCredor(transp.cpf_cnpj, 'transportadora');
+          }
+        } finally {
+          if (ativo) setCarregandoDados(false);
         }
       })();
+      return () => {
+        ativo = false;
+      };
     }
   }, [isOpen, nfe?.id]);
 
@@ -887,6 +898,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     if (!isOpen || confirmacaoAberta) return;
     const onKey = (e: KeyboardEvent) => {
       if (loading) return;
+      if (e.key === 'Enter' && carregandoDados) return;
       const ae = document.activeElement as HTMLElement | null;
       const emCampo =
         !!ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable);
@@ -917,7 +929,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, confirmacaoAberta, loading]);
+  }, [isOpen, confirmacaoAberta, loading, carregandoDados]);
 
   if (!isOpen) return null;
 
@@ -1202,7 +1214,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
                 <CompradorAutocomplete
                   value={formData.comprador}
                   onChange={handleCompradorChange}
-                  placeholder="Selecione o comprador (opcional)"
+                  placeholder="Selecione o comprador"
                 />
               </div>
             </div>
@@ -1548,7 +1560,7 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
             <Button
               variant="outline"
               onClick={handleSave}
-              disabled={loading || saving}
+              disabled={loading || saving || carregandoDados}
             >
               {saving ? (
                 <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
@@ -1559,11 +1571,11 @@ export const ConfirmNFeDataModal: React.FC<ConfirmNFeDataModalProps> = ({
             </Button>
             <Button
               onClick={handleConfirm}
-              disabled={loading || saving}
+              disabled={loading || saving || carregandoDados}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <ArrowRight size={16} className="mr-2" />
-              Avançar
+              {carregandoDados ? 'Carregando...' : 'Avançar'}
             </Button>
           </div>
         </div>

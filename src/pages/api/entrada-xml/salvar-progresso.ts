@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { registrarHistoricoNfe } from '@/lib/nfe/historicoNfeHelper';
+import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota } from '@/lib/compras/refFabrica';
 
 interface ItemAssociation {
   pedidoId: string;
@@ -55,18 +56,9 @@ export default async function handler(
       WHERE nfe.codnfe_ent = $1
     `, [nfeId]);
 
-    let codCredor: string | null = null;
-    if (nfeDataResult.rows.length > 0) {
-      const cnpj = nfeDataResult.rows[0].cod_credor_cnpj;
-      // Buscar código do credor pelo CNPJ
-      const credorResult = await client.query(
-        'SELECT cod_credor FROM dbcredor WHERE cpf_cgc = $1',
-        [cnpj]
-      );
-      if (credorResult.rows.length > 0) {
-        codCredor = credorResult.rows[0].cod_credor;
-      }
-    }
+    const codCredor = credorParaAprender(
+      await credoresDaNota(client, nfeDataResult.rows[0]?.cod_credor_cnpj),
+    );
 
     // Limpar associações antigas para esta NFe
     await client.query(
@@ -195,7 +187,7 @@ export default async function handler(
             } else {
               // Criar nova referência
               const maxIdResult = await client.query(
-                'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica'
+                SQL_PROXIMO_COD_REF
               );
               codId = maxIdResult.rows[0].next_id;
 

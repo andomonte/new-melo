@@ -7,6 +7,7 @@ import ConfirmationModal from '@/components/common/ConfirmationModal';
 import MessageModal from '@/components/common/MessageModal';
 import { ConfiguracaoPagamentoNFeModal } from './ConfiguracaoPagamentoNFeModal';
 import CadastroConhecimentoModal from './CadastroConhecimentoModal';
+import { validarConhecimento, validarSelo } from '../utils/selo';
 
 interface DadosConhecimento {
   codtransp: string;
@@ -70,7 +71,7 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
   });
 
   // Ao finalizar: gerar a entrada agora (cria dbent) ou salvar e gerar depois (fila).
-  const [gerarAgora, setGerarAgora] = useState(false);
+  const [gerarAgora, setGerarAgora] = useState(true);
 
   const [confirmacoesPendentes, setConfirmacoesPendentes] = useState<string[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -179,7 +180,19 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
   };
 
   const handleGerarEntrada = async () => {
-    // Dados complementares agora são obrigatórios, sem confirmações
+    const erroSelo = validarSelo(dadosComplementares.numeroSelo, dadosComplementares.dataSelo);
+    if (erroSelo) {
+      setMessageData({ title: 'Selo inválido', message: erroSelo, type: 'error' });
+      setShowMessage(true);
+      return;
+    }
+    const erroConhecimento = validarConhecimento(temConhecimento, dadosConhecimento);
+    if (erroConhecimento) {
+      setMessageData({ title: 'Conhecimento obrigatório', message: erroConhecimento, type: 'error' });
+      setShowMessage(true);
+      return;
+    }
+
     // Confirmação final
     setShowConfirmation(true);
   };
@@ -205,7 +218,7 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
           nfeId,
           codtransp: dadosConhecimento?.codtransp || null,
           selo: dadosComplementares.numeroSelo || null,
-          dtselo: dadosComplementares.dataSelo || null,
+          dtselo: dadosComplementares.numeroSelo ? dadosComplementares.dataSelo || null : null,
           temConhecimento,
           conhecimento: temConhecimento ? dadosConhecimento : null,
         }),
@@ -245,7 +258,7 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
       } else {
         setMessageData({
           title: 'Configuração Salva!',
-          message: 'Selo e conhecimento salvos. A entrada ficou pendente — gere depois na tela de Entradas de Mercadorias.',
+          message: 'Selo e conhecimento salvos. A entrada ainda não foi gerada — gere depois na tela de Entradas de Mercadorias.',
           type: 'success',
         });
         setShowMessage(true);
@@ -411,7 +424,11 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
                   className="h-4 w-4"
                   checked={dadosComplementares.informarSelo}
                   onChange={(e) =>
-                    setDadosComplementares(prev => ({ ...prev, informarSelo: e.target.checked }))
+                    setDadosComplementares(prev => ({
+                      ...prev,
+                      informarSelo: e.target.checked,
+                      numeroSelo: e.target.checked ? prev.numeroSelo : '',
+                    }))
                   }
                 />
                 Informar Selo
@@ -615,10 +632,14 @@ export const GerarEntradaModal: React.FC<GerarEntradaModalProps> = ({
         isOpen={showConfirmation}
         onClose={() => setShowConfirmation(false)}
         onConfirm={handleConfirmarOperacao}
-        title="Confirmar Processamento"
-        message="CONFIRMAR ESTA OPERAÇÃO? O XML será processado no sistema."
+        title={gerarAgora ? 'Confirmar Geração da Entrada' : 'Salvar sem Gerar a Entrada'}
+        message={
+          gerarAgora
+            ? 'CONFIRMAR ESTA OPERAÇÃO? A entrada será gerada e o estoque será atualizado.'
+            : 'CONFIRMAR ESTA OPERAÇÃO? Serão salvos apenas selo e conhecimento. A entrada NÃO será gerada agora.'
+        }
         type="warning"
-        confirmText="Sim, Processar"
+        confirmText={gerarAgora ? 'Sim, Gerar Entrada' : 'Sim, Salvar'}
         cancelText="Cancelar"
         loading={loading}
       />

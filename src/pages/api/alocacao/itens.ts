@@ -50,7 +50,7 @@ const ITENS_QUERY = `
     COALESCE(eir.qtd_recebida, ie.quant) as qtd_recebida,
     COALESCE(aloc.qtd_alocada, 0) as qtd_alocada,
     CASE
-      WHEN COALESCE(aloc.qtd_alocada, 0) >= COALESCE(eir.qtd_recebida, ie.quant) THEN 'ALOCADO'
+      WHEN COALESCE(aloc.qtd_alocada, 0) = COALESCE(eir.qtd_recebida, ie.quant) THEN 'ALOCADO'
       WHEN COALESCE(aloc.qtd_alocada, 0) > 0 THEN 'PARCIAL'
       ELSE 'PENDENTE'
     END as status_alocacao,
@@ -61,9 +61,9 @@ const ITENS_QUERY = `
    AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
   LEFT JOIN dbprod p ON p.codprod = ie.codprod
   LEFT JOIN (
-    SELECT codprod, SUM(qtd) as qtd_alocada
-    FROM dbitent_armazem WHERE codent = $1 GROUP BY codprod
-  ) aloc ON aloc.codprod = ie.codprod
+    SELECT codprod, codreq, SUM(qtd) as qtd_alocada
+    FROM dbitent_armazem WHERE codent = $1 GROUP BY codprod, codreq
+  ) aloc ON aloc.codprod = ie.codprod AND COALESCE(aloc.codreq,'') = COALESCE(ie.codreq,'')
   WHERE ie.codent = $1
   ORDER BY ie.codprod
 `;

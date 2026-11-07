@@ -40,6 +40,8 @@ export interface ItemEntradaRecebimento {
   status_item: 'PENDENTE' | 'OK' | 'FALTA' | 'EXCESSO' | 'DANIFICADO' | 'ERRADO';
   observacao: string | null;
   unidade: string;
+  arm_id: number | null;
+  romaneio_dividido: boolean;
 }
 
 // Recebimento finalizado (histórico)
@@ -142,6 +144,11 @@ export async function conferirItem(payload: {
   await api.put('/api/entrada/recebimento/conferir-item', payload);
 }
 
+export interface ArmazemAlterado {
+  entradaItemId: number;
+  armId: number;
+}
+
 /**
  * Finalizar recebimento de uma entrada
  */
@@ -149,6 +156,7 @@ export async function finalizarRecebimento(payload: {
   entradaId: number;
   matricula: string;
   observacao?: string;
+  armazens?: ArmazemAlterado[];
 }): Promise<void> {
   await api.put('/api/entrada/recebimento/finalizar', payload);
 }

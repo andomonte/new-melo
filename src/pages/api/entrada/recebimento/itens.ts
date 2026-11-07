@@ -21,6 +21,8 @@ interface ItemEntradaRecebimento {
   status_item: string;
   observacao: string | null;
   unidade: string;
+  arm_id: number | null;
+  romaneio_dividido: boolean;
 }
 
 interface ItensResponse {
@@ -44,12 +46,19 @@ const ITENS_QUERY = `
     eir.qtd_recebida,
     COALESCE(eir.status_item, 'PENDENTE') as status_item,
     eir.observacao,
-    COALESCE(p.unimed, 'UN') as unidade
+    COALESCE(p.unimed, 'UN') as unidade,
+    rom.arm_ids
   FROM dbitent ie
   LEFT JOIN entrada_itens_recebimento eir
     ON eir.codent = ie.codent AND eir.produto_cod = ie.codprod
    AND COALESCE(eir.codreq,'') = COALESCE(ie.codreq,'')
   LEFT JOIN dbprod p ON p.codprod = ie.codprod
+  LEFT JOIN LATERAL (
+    SELECT array_agg(DISTINCT d.arm_id::int) as arm_ids
+      FROM dbitent_armazem d
+     WHERE d.codent = ie.codent AND d.codprod = ie.codprod
+       AND COALESCE(d.codreq,'') = COALESCE(ie.codreq,'')
+  ) rom ON true
   WHERE ie.codent = $1
   ORDER BY ie.codprod
 `;
@@ -79,7 +88,9 @@ export default async function handler(
 
     const result = await client.query(ITENS_QUERY, [entradaId]);
 
-    const itens: ItemEntradaRecebimento[] = result.rows.map(row => ({
+    const itens: ItemEntradaRecebimento[] = result.rows.map(row => {
+      const armIds: number[] = row.arm_ids || [];
+      return {
       id: parseInt(row.id),
       entrada_item_id: parseInt(row.entrada_item_id),
       produto_cod: row.produto_cod,
@@ -89,7 +100,10 @@ export default async function handler(
       status_item: row.status_item,
       observacao: row.observacao,
       unidade: row.unidade,
-    }));
+      arm_id: armIds.length === 1 ? armIds[0] : null,
+      romaneio_dividido: armIds.length > 1,
+      };
+    });
 
     const conferidos = itens.filter(i => i.status_item !== 'PENDENTE').length;
     const pendentes = itens.length - conferidos;

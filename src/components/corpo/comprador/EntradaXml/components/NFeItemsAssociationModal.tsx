@@ -751,7 +751,9 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
     try {
       // 1. Buscar produto pelo codprod
-      const response = await fetch(`/api/entrada-xml/produtos/search?search=${itemOC.codprod}`);
+      const response = await fetch(
+        `/api/entrada-xml/produtos/search?somenteCodprod=true&search=${encodeURIComponent(itemOC.codprod)}`,
+      );
       const data = await response.json();
 
       if (!data.success || !data.data?.length) {

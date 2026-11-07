@@ -91,7 +91,9 @@ export default async function handler(
          FROM dbent e
          LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
          LEFT JOIN entrada_operacoes op ON op.codent = e.codent
-        WHERE e.chave = $1 LIMIT 1`, [chaveLimpa]);
+        WHERE e.chave = $1
+        ORDER BY (COALESCE(e.status, '') = 'C'), e.codent DESC
+        LIMIT 1`, [chaveLimpa]);
     if (entradaResult.rows.length === 0) {
       return res.status(404).json({ error: 'Nenhuma entrada encontrada para esta NFe.' });
     }
@@ -121,8 +123,18 @@ export default async function handler(
       }
       return res.status(400).json({ error: `Esta entrada ja esta sendo recebida por ${entradaRow.recebedor_nome}` });
     }
-    if (entradaRow.op_status === 'RECEBIDO' || entradaRow.workflow_status === 'RECEBIDO') {
+    // Só entrada liberada pode iniciar: recomeçar uma já alocada somaria o estoque de novo.
+    if (entradaRow.workflow_status === 'CANCELADA') {
+      return res.status(400).json({ error: 'Esta entrada foi cancelada.' });
+    }
+    if (
+      ['RECEBIDO', 'EM_ALOCACAO', 'ALOCADO'].includes(entradaRow.op_status) ||
+      ['RECEBIDO', 'EM_ALOCACAO', 'DISPONIVEL_VENDA'].includes(entradaRow.workflow_status)
+    ) {
       return res.status(400).json({ error: 'Esta entrada ja foi recebida anteriormente.' });
+    }
+    if (entradaRow.workflow_status !== 'AGUARDANDO_RECEBIMENTO') {
+      return res.status(400).json({ error: 'Esta entrada ainda nao foi liberada para recebimento.' });
     }
 
     // 4. Operador já tem outro recebimento ativo?

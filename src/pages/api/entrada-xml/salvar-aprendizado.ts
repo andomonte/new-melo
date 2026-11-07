@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
+import { SQL_PROXIMO_COD_REF } from '@/lib/compras/refFabrica';
 
 interface AprendizadoRequest {
   referenciaNFe: string;  // código do produto na NFe (cProd)
@@ -75,7 +76,7 @@ export default async function handler(
     } else {
       // Criar nova referência
       const maxIdResult = await client.query(
-        'SELECT COALESCE(MAX(cod_id), 0) + 1 as next_id FROM dbref_fabrica'
+        SQL_PROXIMO_COD_REF
       );
       codId = maxIdResult.rows[0].next_id;
 

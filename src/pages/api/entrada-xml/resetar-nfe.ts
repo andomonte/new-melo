@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { recalcularPrecosProduto } from '@/lib/calcularPrecos';
+import { liberarReserva, posicionarReserva } from '@/lib/compras/estoqueEntrada';
 
 /**
  * ENDPOINT DE TESTE - Resetar NFe COMPLETO
@@ -108,12 +109,15 @@ export default async function handler(
     const nfeChaveRes = await client.query(`SELECT chave FROM dbnfe_ent WHERE codnfe_ent = $1`, [nfeId]);
     const nfeChave = nfeChaveRes.rows[0]?.chave || null;
     const entradasResult = await client.query(`
-      SELECT codent FROM dbent WHERE chave = $1
+      SELECT codent, status FROM dbent WHERE chave = $1
     `, [nfeChave]);
 
     // No modelo Delphi a chave da entrada é o próprio codent
     const entradaIds = entradasResult.rows.map(e => e.codent);
-    const numerosEntrada = entradaIds;
+    // A cancelada já devolveu estoque e pedido: só apaga, para não reverter duas vezes.
+    const entradasAtivas = entradasResult.rows
+      .filter((e) => e.status !== 'C')
+      .map((e) => e.codent);
     console.log(`📦 Entradas encontradas: ${entradaIds.length}`);
 
     if (entradaIds.length > 0) {
@@ -122,7 +126,7 @@ export default async function handler(
                ie.codreq AS req_id, ie.prunit AS valor_unitario
         FROM dbitent ie
         WHERE ie.codent = ANY($1)
-      `, [entradaIds]);
+      `, [entradasAtivas]);
 
       // 2.1 Reverter custo medio e estoque (dbprod)
       // Agrupar quantidades por produto (pode ter o mesmo produto em mais de uma linha)
@@ -234,23 +238,28 @@ export default async function handler(
       }
 
       // 2.3 Reverter estoque por armazém (cad_armazem_produto) e deletar romaneio (dbitent_armazem)
-      if (numerosEntrada.length > 0) {
+      if (entradaIds.length > 0) {
         // Primeiro, buscar as alocações para reverter o estoque por armazém
         const alocacoesResult = await client.query(`
-          SELECT da.codprod, da.arm_id, da.qtd
+          SELECT da.codprod, da.arm_id, da.qtd, rec.status
           FROM dbitent_armazem da
+          LEFT JOIN dbent_recebimento rec ON rec.codent = da.codent
           WHERE da.codent = ANY($1)
-        `, [numerosEntrada]);
+        `, [entradasAtivas]);
 
         // Reverter estoque em cad_armazem_produto
         for (const aloc of alocacoesResult.rows) {
           const quantidade = parseFloat(aloc.qtd) || 0;
           if (quantidade > 0 && aloc.arm_id) {
+            const armId = Number(aloc.arm_id);
+            const reservado = aloc.status !== 'DISPONIVEL_VENDA';
+            if (reservado) await posicionarReserva(client, aloc.codprod, armId, quantidade);
             await client.query(`
               UPDATE cad_armazem_produto
               SET arp_qtest = GREATEST(COALESCE(arp_qtest, 0) - $1, 0)
               WHERE arp_arm_id = $2 AND arp_codprod = $3
-            `, [quantidade, aloc.arm_id, aloc.codprod]);
+            `, [quantidade, armId, aloc.codprod]);
+            if (reservado) await liberarReserva(client, aloc.codprod, armId, quantidade);
             dadosRemovidos.estoqueArmazemRevertido++;
           }
         }
@@ -260,7 +269,7 @@ export default async function handler(
         const romaneioResult = await client.query(`
           DELETE FROM dbitent_armazem
           WHERE codent = ANY($1)
-        `, [numerosEntrada]);
+        `, [entradaIds]);
         dadosRemovidos.romaneio = romaneioResult.rowCount || 0;
         console.log(`🗑️ Romaneio removido: ${dadosRemovidos.romaneio} registros`);
       }

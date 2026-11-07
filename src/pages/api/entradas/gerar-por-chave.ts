@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { registrarHistoricoOrdem } from '@/lib/compras/ordemHistoricoHelper';
 import { gerarEntradaDbent } from '@/lib/compras/gerarEntradaDbent';
+import { ARMAZEM_GERAL, creditarReservado } from '@/lib/compras/estoqueEntrada';
 
 /**
  * POST /api/entradas/gerar-por-chave
@@ -77,9 +78,9 @@ export default async function handler(
       return res.status(400).json({ error: `Esta NFe está ${statusLabel}. Associe os itens primeiro na tela de Entrada XML.` });
     }
 
-    // 3. Já existe entrada (dbent) para esta chave?
+    // 3. Já existe entrada ativa para esta chave? A cancelada não conta (Delphi: CHECAR_ENTRADA_EXISTE)
     const entradaExistente = await client.query(
-      `SELECT codent FROM dbent WHERE chave = $1 LIMIT 1`, [chaveLimpa]);
+      `SELECT codent FROM dbent WHERE chave = $1 AND COALESCE(status, '') <> 'C' LIMIT 1`, [chaveLimpa]);
     if (entradaExistente.rows.length > 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: `Já existe entrada gerada para esta NFe: ${entradaExistente.rows[0].codent}` });
@@ -272,6 +273,16 @@ export default async function handler(
         SET qtest = COALESCE(qtest, 0) + $1, qtdreservada = COALESCE(qtdreservada, 0) + $1
         WHERE codprod = $2
       `, [quantidade, codprod])));
+
+    // 10.1 Romaneio no GERAL e estoque reservado no armazém (Delphi: INC_AUXITENT + ALT_ROMANEIO).
+    //      A alocação só libera a reserva; não soma de novo.
+    for (const item of rDbent.itens) {
+      await client.query(
+        `INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd) VALUES ($1, $2, $3, $4, $5)`,
+        [codent, item.codprod, item.codreq, ARMAZEM_GERAL, item.quant]);
+      await creditarReservado(client, item.codprod, ARMAZEM_GERAL, Number(item.quant));
+    }
+    await client.query(`UPDATE dbent SET romaneio = 'S' WHERE codent = $1`, [codent]);
 
     // 11. Importação: atualizar codent na fatura da DI
     if (nfe.natop === 'ENTRADA_IMPORTACAO' && nfe.infcpl) {

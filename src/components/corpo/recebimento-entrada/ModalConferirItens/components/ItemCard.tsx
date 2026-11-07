@@ -113,8 +113,11 @@ const ItemCard: React.FC<ItemCardProps> = ({
           <select
             value={item.armazemId || ''}
             onChange={(e) => onArmazemChange(index, parseInt(e.target.value))}
-            className="w-full px-3 py-2.5 text-base border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-zinc-700 dark:text-white"
+            disabled={item.romaneio_dividido}
+            title={item.romaneio_dividido ? 'Romaneio dividido em varios armazens' : undefined}
+            className="w-full px-3 py-2.5 text-base border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-zinc-700 dark:text-white disabled:opacity-60"
           >
+            {item.romaneio_dividido && <option value="">Varios (romaneio)</option>}
             {armazens.map((arm) => (
               <option key={arm.arm_id} value={arm.arm_id}>
                 {arm.arm_descricao}

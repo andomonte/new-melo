@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPoolFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
+import { SQL_PROXIMO_COD_REF } from '@/lib/compras/refFabrica';
 
 export default async function handle(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
@@ -21,7 +22,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Já existe essa referência para essa marca/fornecedor.' });
     }
-    const maxRes = await client.query('SELECT COALESCE(MAX(cod_id),0)+1 AS next_id FROM dbref_fabrica');
+    const maxRes = await client.query(SQL_PROXIMO_COD_REF);
     const codId = maxRes.rows[0].next_id;
     const r = await client.query(
       `INSERT INTO dbref_fabrica (cod_id, codmarca, referencia, codcredor)

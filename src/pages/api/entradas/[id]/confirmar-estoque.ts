@@ -39,7 +39,7 @@ export default async function handler(
   const cookies = parseCookies({ req });
   const filial = cookies.filial_melo || cookies.filial || 'MANAUS';
 
-  const ARMAZEM_PADRAO = 1003;
+  const ARMAZEM_PADRAO = 1001; // GERAL, como no Delphi
 
   let client;
 
