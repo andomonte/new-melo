@@ -140,6 +140,25 @@ export interface NotaNacionalizacaoGerada {
 
 const LIMITE_ITENS_NFE = 990;
 
+/** Texto no tamanho máximo do leiaute da NF-e (a SEFAZ rejeita acima, erro 215). */
+function limitar(valor: unknown, max: number): string {
+  return String(valor ?? '').replace(/\s+/g, ' ').trim().slice(0, max).trim();
+}
+
+/**
+ * Logradouro tem 60 caracteres no leiaute; endereço de exportador costuma passar disso.
+ * O excedente vai para o complemento (xCpl, também 60), cortando entre palavras.
+ */
+function dividirEndereco(ender: string): { xLgr: string; xCpl?: string } {
+  const texto = limitar(ender, 500);
+  if (texto.length <= 60) return { xLgr: texto };
+  let corte = texto.lastIndexOf(' ', 60);
+  if (corte < 30) corte = 60;
+  const xLgr = texto.slice(0, corte).replace(/[\s,;-]+$/, '');
+  const xCpl = limitar(texto.slice(corte).replace(/^[\s,;-]+/, ''), 60);
+  return xCpl ? { xLgr, xCpl } : { xLgr };
+}
+
 /** Grupo II (Imposto de Importação) por item. */
 function montarGrupoII(adi?: AdicaoImportacao): Record<string, string> {
   return {
@@ -237,22 +256,25 @@ function montarUmaNota(
 
   // Destinatário EXTERIOR
   const dest = dados.destExterior ?? {};
+  const enderecoDest = dividirEndereco(dest.xLgr || 'EXTERIOR');
   const destBlock: any = {
-    idEstrangeiro: dest.idEstrangeiro || '',
+    idEstrangeiro: limitar(dest.idEstrangeiro, 20),
     xNome:
       tpAmb === '2'
         ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
-        : dest.nome || codExportador || 'EXPORTADOR EXTERIOR',
+        : limitar(dest.nome || codExportador || 'EXPORTADOR EXTERIOR', 60),
     enderDest: {
-      xLgr: dest.xLgr || 'EXTERIOR',
-      nro: dest.nro || 'S/N',
-      xBairro: dest.xBairro || 'EXTERIOR',
+      // Ordem do leiaute: xLgr, nro, xCpl, xBairro.
+      xLgr: enderecoDest.xLgr,
+      nro: limitar(dest.nro || 'S/N', 60),
+      ...(enderecoDest.xCpl ? { xCpl: enderecoDest.xCpl } : {}),
+      xBairro: limitar(dest.xBairro || 'EXTERIOR', 60),
       cMun: '9999999',
       xMun: 'EXTERIOR',
       UF: 'EX',
       CEP: (dest.cep || '99999999').replace(/\D/g, ''),
       cPais: dest.cPais || '9999',
-      xPais: dest.xPais || 'EXTERIOR',
+      xPais: limitar(dest.xPais || 'EXTERIOR', 60),
     },
     indIEDest: '9',
   };
@@ -271,7 +293,7 @@ function montarUmaNota(
     const cProd = ('00000000000000' + String(item.codprod ?? '').replace(/\D/g, '')).slice(-14);
     const ean = String(item.cEAN ?? '').replace(/[^0-9A-Za-z]/g, '');
     const cEAN = /^\d{8,14}$/.test(ean) ? ean : 'SEM GTIN';
-    const xProd = (item.ref ? `${item.ref} - ${item.descricao ?? ''}` : (item.descricao ?? '')).trim() || `Produto ${index + 1}`;
+    const xProd = limitar(item.ref ? `${item.ref} - ${item.descricao ?? ''}` : (item.descricao ?? ''), 120) || `Produto ${index + 1}`;
     const vOutroItem = Number(item.vOutro ?? 0);
     const icms = { ...(item.icms ?? {}), origem: '1' }; // estrangeira — importação direta
     const grupoICMS: any = montarGrupoICMS(icms, vProd.toFixed(2));
