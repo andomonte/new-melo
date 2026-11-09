@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Eye, Trash2, MoreHorizontal } from 'lucide-react';
+import { Plus, Eye, Trash2, MoreHorizontal, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -99,6 +99,7 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
   const [filtros, setFiltros] = useState<{ campo: string; tipo: string; valor: string }[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<ImportacaoRow | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [abrindoNota, setAbrindoNota] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -150,6 +151,30 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
     }
   };
 
+  // DANFE da nota de nacionalização emitida (montado do XML autorizado). A aba é
+  // aberta antes do fetch para o navegador não bloquear como pop-up.
+  const handleVerNota = async (row: ImportacaoRow) => {
+    if (abrindoNota) return;
+    const aba = window.open('', '_blank');
+    if (aba) aba.document.write('<p style="font-family:sans-serif">Gerando o DANFE da nota de nacionalização...</p>');
+    setAbrindoNota(row.id);
+    try {
+      const resp = await fetch(`/api/faturamento/danfe-nacionalizacao?importacaoId=${row.id}`);
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j.message || 'Não foi possível gerar o DANFE da nota.');
+      }
+      const url = URL.createObjectURL(await resp.blob());
+      if (aba) aba.location.href = url;
+      else window.open(url, '_blank');
+    } catch (err: any) {
+      if (aba) aba.close();
+      window.alert(err?.message || 'Não foi possível gerar o DANFE da nota.');
+    } finally {
+      setAbrindoNota(null);
+    }
+  };
+
   const statusCell = (row: ImportacaoRow) => {
     if (row.status === 'N' && row.nota_emitida) {
       const tip = [row.nfe_numero ? `NF ${row.nfe_numero}` : '', row.nfe_chave || ''].filter(Boolean).join(' · ');
@@ -178,6 +203,12 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
             <DropdownMenuItem onClick={() => onVerDetalhe(row.id)}>
               <Eye className="mr-2 h-4 w-4" /> Ver
             </DropdownMenuItem>
+            {row.nota_emitida && (
+              <DropdownMenuItem onClick={() => handleVerNota(row)} disabled={abrindoNota === row.id}>
+                <FileText className="mr-2 h-4 w-4" />
+                {abrindoNota === row.id ? 'Gerando nota...' : `Ver nota${row.nfe_numero ? ` ${row.nfe_numero}` : ''}`}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => setConfirmDelete(row)}
               className="text-red-600 dark:text-red-400 focus:text-red-600"

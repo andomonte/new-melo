@@ -35,6 +35,7 @@ export default async function handler(
         f.tipofat,
         f.selo,
         f.serie,
+        f.importacao_id,
         f.cfop1,
         f.cfop2,
         f.totalfrete,
@@ -198,6 +199,8 @@ export default async function handler(
       tipofat: firstRow.tipofat,
       selo: firstRow.selo,
       serie: firstRow.serie,
+      // Nota de nacionalização (DI): o preview usa o DANFE próprio, montado do XML.
+      importacao_id: firstRow.importacao_id ?? null,
       cfop1: firstRow.cfop1,
       cfop2: firstRow.cfop2,
       // FRETE: totalfrete é a coluna real da dbfatura. Expõe também como vlrfrete

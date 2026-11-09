@@ -99,7 +99,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       aliquota_cbs: 0.9,
     }));
 
-    const venda = { nrovenda: '', obs: `NACIONALIZACAO DI ${di.nro_di} | PEDIDOS ${nota.pedidos.join(',')}`, transp: '' };
+    // infCpl = o mesmo texto que vai no XML da nota.
+    const venda = {
+      nrovenda: '',
+      obs: `NACIONALIZACAO DI ${di.nro_di} | PEDIDOS ${nota.pedidos.join(',')}`,
+      transp: '',
+      infCpl: nota.infCpl,
+    };
     const dadosNFe = { numeroNFe: '0', serieNFe: '1', chaveAcesso: '', protocolo: 'SEM VALIDADE', dataEmissao: '' };
 
     // Mesmo caminho das vendas (injeta logo data-URI + barcode no servidor), para o

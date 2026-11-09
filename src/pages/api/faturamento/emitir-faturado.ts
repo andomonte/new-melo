@@ -8,6 +8,7 @@ import {
   type DadosNacionalizacao,
 } from '@/components/services/sefazNfe/gerarXmlImportacao';
 import { construirNotasNacionalizacao } from '@/lib/compras/construirNotasNacionalizacao';
+import { danfeDoXmlNfe } from '@/lib/danfe/danfeDoXmlNfe';
 import { assinarXMLComCertificados } from '@/components/services/sefazNfe/assinarXml';
 import { gerarXmlCupomFiscal } from '@/utils/gerarXmlCupomFiscal';
 import { adicionarQRCodeNFCe } from '@/utils/adicionarQRCodeNFCe';
@@ -683,16 +684,31 @@ export default async function handler(
       try {
         // Nota de nacionalização (importacao_id) → DANFE do gerador próprio (paginado),
         // sem tocar no DANFE de vendas.
-        const tipoDanfe = dbfatura.importacao_id ? 'nfe-importacao' : (isPessoaFisica ? 'nfce' : 'nfe');
-        pdfBuffer = await gerarPdfNotaHtml(
-          tipoDanfe,
-          faturaParaPdf,
-          produtos,
-          dbvenda || {},
-          emitente,
-          dadosNFe,
-          { homologacao: isHomologacao, entrada: !!dbfatura.importacao_id },
-        );
+        if (dbfatura.importacao_id) {
+          // Nacionalização: o DANFE sai do próprio XML assinado — itens na ordem da DI
+          // (adição/item, sem agrupar por produto), totais e informações complementares
+          // iguais aos da nota. Os itens da fatura (dbitvenda) vêm agrupados por produto.
+          const dx = danfeDoXmlNfe(xmlAssinado, { protocolo });
+          pdfBuffer = await gerarPdfNotaHtml(
+            'nfe-importacao',
+            dx.fatura,
+            dx.produtos,
+            dx.venda,
+            { ...emitente, ...dx.emitente, telefone: emitente?.telefone || dx.emitente.telefone },
+            dadosNFe,
+            { homologacao: isHomologacao, entrada: true },
+          );
+        } else {
+          pdfBuffer = await gerarPdfNotaHtml(
+            isPessoaFisica ? 'nfce' : 'nfe',
+            faturaParaPdf,
+            produtos,
+            dbvenda || {},
+            emitente,
+            dadosNFe,
+            { homologacao: isHomologacao },
+          );
+        }
       } catch (errHtml) {
         console.warn('⚠️ HTML→PDF falhou (emitir-faturado), usando jsPDF (fallback):', errHtml);
         const pdfDoc = isPessoaFisica

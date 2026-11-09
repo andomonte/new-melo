@@ -43,7 +43,7 @@ export async function gerarPdfNotaHtml(
   venda: any,
   dadosEmpresa: any,
   dadosNFe?: any,
-  opts: { homologacao?: boolean; entrada?: boolean; marcaDagua?: string } = {},
+  opts: { homologacao?: boolean; entrada?: boolean; marcaDagua?: string; cancelada?: boolean } = {},
 ): Promise<Buffer> {
   const logoSrc = logoDataUri();
   const homologacao = !!opts.homologacao;
@@ -58,6 +58,7 @@ export async function gerarPdfNotaHtml(
       homologacao,
       entrada: opts.entrada,
       marcaDagua: opts.marcaDagua,
+      cancelada: opts.cancelada,
     });
   } else if (tipo === 'nfce') {
     let qrCodeDataUrl = '';

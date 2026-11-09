@@ -1,20 +1,59 @@
 // src/lib/danfe/gerarDanfeNacionalizacaoHtml.ts
 //
-// DANFE da NOTA DE NACIONALIZAÇÃO (importação) — gerador SEPARADO do DANFE de vendas.
-// O `gerarDanfeHtml.ts` (vendas) fica INTACTO. Este é paginado no estilo MELO: o
+// DANFE PAGINADO — criado para a NOTA DE NACIONALIZAÇÃO (importação).
+// Paginado no estilo MELO: o
 // cabeçalho (emitente/DANFE/chave) e as barras laterais (NOTA FISCAL Nº, recibo)
 // repetem em CADA página; destinatário/DUP/IMPOSTO/TRANSPORTE só na 1ª; os totais do
 // rodapé + informações complementares só na ÚLTIMA. Assim, com muitos itens (243),
 // nada sobrepõe. Mesmos dados de entrada que `gerarDanfeHtmlNFe`.
 //
-// Usado pela prévia (preview-danfe.ts) e pela emissão (branch importacao_id).
+// Usado pela prévia (preview-danfe.ts), pela emissão (branch importacao_id), pela
+// reimpressão (danfe-nacionalizacao.ts) e pelo DANFE de VENDA quando os itens não
+// cabem numa folha (gerarDanfeHtmlNFe delega para cá — ver cabeNumaFolha).
 
 type Any = Record<string, any>;
 
-// Itens por página (conservador p/ não transbordar; ajustável). 1ª página tem o
-// cabeçalho grande + destinatário/impostos/transporte → cabe menos.
-const ITENS_PRIMEIRA = 13;
-const ITENS_OUTRAS = 26;
+// Paginação pela ALTURA dos itens (em "unidades" = 1 linha de item). Um item cuja
+// descrição quebra em 2 linhas ocupa mais. A 1ª página tem o cabeçalho grande +
+// destinatário/impostos/transporte → cabe menos; a última reserva espaço para os
+// totais + informações complementares.
+// Medido no PDF: linha de item = 10,2pt; 1ª folha cabe 21, demais 40; o rodapé
+// (totais + inf. complementares) ocupa ~8 linhas na última.
+const CAP_PRIMEIRA = 21;
+const CAP_OUTRAS = 40;
+const RESERVA_RODAPE = 8;
+// Limite do layout de UMA folha do DANFE de venda (gerarDanfeHtml), que tem
+// espaçamentos um pouco diferentes: medido 8 itens de 2 linhas com folga.
+const CAP_FOLHA_UNICA = 13;
+const CHARS_POR_LINHA = 88; // coluna de descrição (5,6pt), com folga
+const ALTURA_LINHA_EXTRA = 0.6; // cada linha a mais de texto, em unidades
+
+const alturaItem = (descricao: string, temRef: boolean): number => {
+  const linhas = (temRef ? 1 : 0) + Math.max(1, Math.ceil(descricao.length / CHARS_POR_LINHA));
+  return 1 + (linhas - 1) * ALTURA_LINHA_EXTRA;
+};
+
+/**
+ * Unidade como sai no DANFE: "PECA"/"PECAS"/"PC" (a DI traz por extenso) → "PÇ";
+ * o resto fica como está, limitado à largura da coluna. Só a impressão: o XML
+ * mantém a unidade que foi transmitida.
+ */
+export function unidadeDanfe(u: any): string {
+  const t = String(u ?? '').trim().toUpperCase();
+  if (!t) return 'UN';
+  if (/^(PE[CÇ]AS?|P[CÇ]S?)$/.test(t)) return 'PÇ';
+  return t.slice(0, 4);
+}
+
+const descricaoDe = (p: Any) => getValue(p.descr || p.dbprod?.descr || p.descricao || `PRODUTO ${p.codprod}`);
+const refDe = (p: Any) => getValue(p.ref || p.referencia || p.dbprod?.ref);
+
+/** Os itens cabem numa folha só (com cabeçalho, impostos e rodapé)? */
+export function cabeNumaFolha(produtos: Any[]): boolean {
+  const itens = Array.isArray(produtos) ? produtos : [];
+  const total = itens.reduce((s, p) => s + alturaItem(descricaoDe(p), !!refDe(p)), 0);
+  return total <= CAP_FOLHA_UNICA;
+}
 
 const getValue = (v: any, d = ''): string =>
   v !== null && v !== undefined && v !== '' ? String(v) : String(d);
@@ -51,6 +90,8 @@ export interface DanfeNacOpts {
   homologacao?: boolean;
   cancelada?: boolean;
   entrada?: boolean;
+  /** CFOP quando o item/fatura não informa (nacionalização 3102; venda 5405). */
+  cfopPadrao?: string;
 }
 
 const HOMOLOG_NOME = 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -96,11 +137,17 @@ export function gerarDanfeNacionalizacaoHtml(
 
   // ---- Totais + IBS/CBS ----
   const totalItem = (p: Any) => num(p.total_item ?? p.totalproduto ?? num(p.qtd) * num(p.prunit));
-  const totalIBS = itens.reduce((a, p) => a + (num(p.aliquota_ibs ?? p.aliq_ibs ?? 0.1) / 100) * totalItem(p), 0);
-  const totalCBS = itens.reduce((a, p) => a + (num(p.aliquota_cbs ?? p.aliq_cbs ?? 0.9) / 100) * totalItem(p), 0);
+  // Quando os dados vêm do XML (danfeDoXmlNfe), usa os totais da própria nota.
+  const totalIBS = fatura.vIBS != null
+    ? num(fatura.vIBS)
+    : itens.reduce((a, p) => a + (num(p.aliquota_ibs ?? p.aliq_ibs ?? 0.1) / 100) * totalItem(p), 0);
+  const totalCBS = fatura.vCBS != null
+    ? num(fatura.vCBS)
+    : itens.reduce((a, p) => a + (num(p.aliquota_cbs ?? p.aliq_cbs ?? 0.9) / 100) * totalItem(p), 0);
   const aliqIBSExib = num(fatura.aliquota_ibs ?? (itens[0] as Any)?.aliquota_ibs ?? 0.1);
   const aliqCBSExib = num(fatura.aliquota_cbs ?? (itens[0] as Any)?.aliquota_cbs ?? 0.9);
   const valorTotalNota = (() => {
+    if (fatura.vNF != null) return num(fatura.vNF);
     const calc =
       num(fatura.totalprod) + num(fatura.valor_icms) + num(fatura.valor_ipi) +
       num(fatura.vlrfrete) + num(fatura.vlrseg) + num(fatura.vlrdesp) -
@@ -114,22 +161,24 @@ export function gerarDanfeNacionalizacaoHtml(
   const dupFontPx = dupTexto.length > 150 ? 5 : dupTexto.length > 95 ? 6 : dupTexto.length > 55 ? 7 : 8;
 
   // ---- Linhas de produto (uma string <tr> por item) ----
+  const alturas: number[] = [];
   const linhas: string[] = itens.map((p) => {
-    const descricao = getValue(p.descr || p.dbprod?.descr || p.descricao || `PRODUTO ${p.codprod}`);
-    const ref = getValue(p.ref || p.referencia || p.dbprod?.ref);
+    const descricao = descricaoDe(p);
+    const ref = refDe(p);
     const cod = (() => {
       const raw = String(p.codprod || '');
       return /^\d+$/.test(raw) ? raw.padStart(9, '0') : raw || 'SEM_CODIGO';
     })();
     const cst = `${getValue(p.origem ?? p.origemcom ?? '0')}${getValue(p.cst ?? p.csticms ?? '00')}`;
-    const cfop = getValue(fatura.cfop2 || p.cfop || '3102');
-    const un = getValue(p.unimed || p.dbprod?.unimed || 'UN');
+    const cfop = getValue(fatura.cfop2 || p.cfop || opts.cfopPadrao || '3102');
+    const un = unidadeDanfe(p.unimed || p.dbprod?.unimed);
     const vtot = totalItem(p);
     const aliqIbs = num(p.aliquota_ibs ?? p.aliq_ibs ?? 0.1);
     const aliqCbs = num(p.aliquota_cbs ?? p.aliq_cbs ?? 0.9);
     const aliqIcms = num(p.aliquota_icms ?? p.aliq_icms);
     const aliqIpi = num(p.aliquota_ipi ?? p.aliq_ipi);
     const descCell = ref ? `<b>${esc(ref)}</b><br>${esc(descricao)}` : esc(descricao);
+    alturas.push(alturaItem(descricao, !!ref));
     return (
       `<tr>` +
       `<td class="l">${esc(cod)}</td>` +
@@ -148,8 +197,8 @@ export function gerarDanfeNacionalizacaoHtml(
       `<td class="r">${formatPercent(aliqIpi)}</td>` +
       `<td class="r">${formatPercent(aliqIbs)}</td>` +
       `<td class="r">${formatPercent(aliqCbs)}</td>` +
-      `<td class="r">${formatValue((aliqIbs / 100) * vtot)}</td>` +
-      `<td class="r">${formatValue((aliqCbs / 100) * vtot)}</td>` +
+      `<td class="r">${formatValue(p.valor_ibs != null ? p.valor_ibs : (aliqIbs / 100) * vtot)}</td>` +
+      `<td class="r">${formatValue(p.valor_cbs != null ? p.valor_cbs : (aliqCbs / 100) * vtot)}</td>` +
       `</tr>`
     );
   });
@@ -164,8 +213,13 @@ export function gerarDanfeNacionalizacaoHtml(
     `VALORES REFERENTES AO IBS (${formatPercent(aliqIBSExib)}%) E CBS (${formatPercent(aliqCBSExib)}%) CALCULADOS PARA FINS DE ` +
     `TRANSIÇÃO E APRENDIZADO, CONFORME LEI COMPLEMENTAR Nº 214/2025. ESTES VALORES NÃO COMPÕEM O TOTAL DA OPERAÇÃO NESTE ` +
     `PERÍODO. VALOR IBS: R$ ${formatValue(totalIBS)} | VALOR CBS: R$ ${formatValue(totalCBS)}`;
+  // Com o texto da nota (infCpl do XML), mostra exatamente o que foi transmitido.
+  const infCpl = getValue(venda.infCpl).trim();
+  const infFisco = getValue(venda.infAdFisco).trim();
   const infComplement =
-    `Venda: ${esc(getValue(venda.nrovenda))} | Vendedor: ${esc(getValue(fatura.nomevendedor))} | Obs: ${esc(getValue(venda.obs))}<br>` +
+    (infCpl
+      ? `${esc(infCpl)}<br>${infFisco ? esc(infFisco) + '<br>' : ''}`
+      : `Venda: ${esc(getValue(venda.nrovenda))} | Vendedor: ${esc(getValue(fatura.nomevendedor))} | Obs: ${esc(getValue(venda.obs))}<br>`) +
     regimeTxt +
     obsIBSCBS;
 
@@ -178,13 +232,35 @@ export function gerarDanfeNacionalizacaoHtml(
 
   // ---- Paginação: fatia os itens ----
   const paginas: string[][] = [];
-  if (linhas.length === 0) {
-    paginas.push([]);
-  } else {
-    paginas.push(linhas.slice(0, ITENS_PRIMEIRA));
-    for (let i = ITENS_PRIMEIRA; i < linhas.length; i += ITENS_OUTRAS) {
-      paginas.push(linhas.slice(i, i + ITENS_OUTRAS));
+  {
+    let atual: string[] = [];
+    let usado = 0;
+    let cap = CAP_PRIMEIRA;
+    linhas.forEach((linha, i) => {
+      if (atual.length > 0 && usado + alturas[i] > cap) {
+        paginas.push(atual);
+        atual = [];
+        usado = 0;
+        cap = CAP_OUTRAS;
+      }
+      atual.push(linha);
+      usado += alturas[i];
+    });
+    // A última página precisa caber o rodapé (totais + inf. complementares): se os
+    // itens dela passarem do limite, o excedente vai para uma página nova.
+    const capUltima = cap - RESERVA_RODAPE;
+    if (usado > capUltima) {
+      const inicio = linhas.length - atual.length;
+      let soma = 0;
+      let corte = atual.length;
+      for (let k = 0; k < atual.length; k++) {
+        soma += alturas[inicio + k];
+        if (soma > capUltima) { corte = k; break; }
+      }
+      paginas.push(atual.slice(0, corte));
+      atual = atual.slice(corte);
     }
+    paginas.push(atual);
   }
   const totalPag = paginas.length;
 
@@ -207,7 +283,7 @@ export function gerarDanfeNacionalizacaoHtml(
         <div class="nsf"><span>SÉRIE <b>${esc(serie)}</b></span><span>FOLHA <b>${pageNum}/${totalPag}</b></span></div>
       </div>
       <div class="chave">
-        <div class="barwrap"><svg class="barcode"></svg></div>
+        <div class="barwrap">${opts.barcodeSvg || '<svg class="barcode"></svg>'}</div>
         <div class="lin"><div class="k">CHAVE DE ACESSO</div><div class="chv">${esc(chaveEmGrupos(chave))}</div></div>
         <div class="lin"><div class="k">Consulta de autenticidade no portal nacional da NF-e www.nfe.fazenda.gov.br/portal ou no Site da Sefaz Autorizadora</div></div>
         <div class="lin"><div class="k">PROTOCOLO DE AUTORIZAÇÃO DE USO</div><div class="v">${esc(protocolo)}${dadosNFe.dataEmissao ? ' ' + dataEmissao : ''}</div></div>
@@ -334,7 +410,7 @@ export function gerarDanfeNacionalizacaoHtml(
           <tbody>${rows.join('')}</tbody>
         </table>
         <div class="fill"><div class="cols">
-          <span style="width:17mm"></span><span style="flex:1"></span><span style="width:12mm"></span><span style="width:6mm"></span><span style="width:7mm"></span><span style="width:6mm"></span><span style="width:8mm"></span><span style="width:12mm"></span><span style="width:13mm"></span><span style="width:11mm"></span><span style="width:11mm"></span><span style="width:9mm"></span><span style="width:8mm"></span><span style="width:8mm"></span><span style="width:7mm"></span><span style="width:7mm"></span><span style="width:8mm"></span><span style="width:8mm"></span>
+          <span style="width:17mm"></span><span style="flex:1"></span><span style="width:12mm"></span><span style="width:6mm"></span><span style="width:7mm"></span><span style="width:6mm"></span><span style="width:10mm"></span><span style="width:12mm"></span><span style="width:14mm"></span><span style="width:11mm"></span><span style="width:11mm"></span><span style="width:9mm"></span><span style="width:8mm"></span><span style="width:8mm"></span><span style="width:7mm"></span><span style="width:7mm"></span><span style="width:10mm"></span><span style="width:11mm"></span>
         </div></div>
       </div>
     </div>`;
@@ -390,8 +466,9 @@ export function gerarDanfeNacionalizacaoHtml(
 
   const paginasHtml = paginas.map((rows, i) => paginaHtml(rows, i + 1)).join('');
 
-  const barcodeScript =
-    opts.jsBarcodeSrc && chaveNum
+  const barcodeScript = opts.barcodeSvg
+    ? ''
+    : opts.jsBarcodeSrc && chaveNum
       ? `<script>${opts.jsBarcodeSrc}</script><script>try{document.querySelectorAll('.barcode').forEach(function(el){JsBarcode(el,${JSON.stringify(chaveNum)},{format:'CODE128C',displayValue:false,margin:10,height:40,width:1.4});});}catch(e){}</script>`
       : `<script>window.__CHAVE__=${JSON.stringify(chaveNum)};</script>`;
 
@@ -446,14 +523,14 @@ export function gerarDanfeNacionalizacaoHtml(
   table.itens th, table.itens td { border: 0.3mm solid #000; font-size: 5.6pt; padding: 0.3mm 0.6mm; overflow: hidden; }
   table.itens thead th { font-weight: 700; text-align: center; font-size: 5pt; line-height: 1.05; }
   table.itens td { height: 3.6mm; vertical-align: top; }
-  table.itens td.l { text-align: left; } table.itens td.r { text-align: right; } table.itens td.c { text-align: center; }
+  table.itens td.l { text-align: left; overflow-wrap: anywhere; } table.itens td.r { text-align: right; } table.itens td.c { text-align: center; }
   .prod .fill { flex: 1; border: 0.3mm solid #000; border-top: none; }
   .prod .fill .cols { display: flex; height: 100%; }
   .prod .fill .cols span { border-right: 0.3mm solid #000; } .prod .fill .cols span:last-child { border-right: none; }
   col.c-cod { width: 17mm; } col.c-ncm { width: 12mm; } col.c-cst { width: 6mm; } col.c-cfop { width: 7mm; }
-  col.c-un { width: 6mm; } col.c-qtd { width: 8mm; } col.c-vu { width: 12mm; } col.c-vt { width: 13mm; }
+  col.c-un { width: 6mm; } col.c-qtd { width: 10mm; } col.c-vu { width: 12mm; } col.c-vt { width: 14mm; }
   col.c-bic { width: 11mm; } col.c-vic { width: 11mm; } col.c-vipi { width: 9mm; } col.c-aic { width: 8mm; } col.c-aipi { width: 8mm; }
-  col.c-pibs { width: 7mm; } col.c-pcbs { width: 7mm; } col.c-vibs { width: 8mm; } col.c-vcbs { width: 8mm; }
+  col.c-pibs { width: 7mm; } col.c-pcbs { width: 7mm; } col.c-vibs { width: 10mm; } col.c-vcbs { width: 11mm; }
   .foot .compl { display: flex; }
   .foot .compl .ic { flex: 0.62; border-right: 0.4mm solid #000; padding: 1mm; min-height: 16mm; }
   .foot .compl .rf { flex: 0.38; padding: 1mm; }

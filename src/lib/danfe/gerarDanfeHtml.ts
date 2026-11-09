@@ -7,6 +7,8 @@
 //
 // O jsPDF (gerarPreviewNF) segue INTACTO como fallback — este módulo é a via nova.
 
+import { cabeNumaFolha, gerarDanfeNacionalizacaoHtml, unidadeDanfe } from './gerarDanfeNacionalizacaoHtml';
+
 type Any = Record<string, any>;
 
 const getValue = (v: any, d = ''): string =>
@@ -61,6 +63,23 @@ export function gerarDanfeHtmlNFe(
   dadosEmpresa = dadosEmpresa || {};
   dadosNFe = dadosNFe || {};
   const itens = Array.isArray(produtos) ? produtos : [];
+
+  // Nota longa: este layout é de UMA folha (FOLHA 1/1). Com muitos itens a tabela
+  // estourava a folha e o rodapé (totais + inf. complementares) saía sobreposto aos
+  // itens na última página. Nesse caso usa o layout paginado (mesmo desenho, com o
+  // cabeçalho em todas as folhas, FOLHA x/N e o rodapé só na última).
+  if (!cabeNumaFolha(itens)) {
+    return gerarDanfeNacionalizacaoHtml(fatura, itens, venda, dadosEmpresa, dadosNFe, {
+      logoSrc: opts.logoSrc,
+      jsBarcodeSrc: opts.jsBarcodeSrc,
+      barcodeSvg: opts.barcodeSvg,
+      marcaDagua: opts.marcaDagua,
+      homologacao: opts.homologacao,
+      cancelada: opts.cancelada,
+      entrada: opts.entrada,
+      cfopPadrao: '5405',
+    });
+  }
 
   const logoSrc = opts.logoSrc || '/images/logoPdf.png';
 
@@ -130,7 +149,7 @@ export function gerarDanfeHtmlNFe(
       })();
       const cst = `${getValue(p.origem ?? p.origemcom ?? '0')}${getValue(p.cst ?? p.csticms ?? '00')}`;
       const cfop = getValue(fatura.cfop2 || p.cfop || '5405');
-      const un = getValue(p.unimed || p.dbprod?.unimed || 'UN');
+      const un = unidadeDanfe(p.unimed || p.dbprod?.unimed);
       const vtot = totalItem(p);
       const aliqIbs = num(p.aliquota_ibs ?? p.aliq_ibs ?? 0.1);
       const aliqCbs = num(p.aliquota_cbs ?? p.aliq_cbs ?? 0.9);

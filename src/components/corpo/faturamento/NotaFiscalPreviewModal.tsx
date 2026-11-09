@@ -29,6 +29,8 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
   const [infoNfe, setInfoNfe] = useState<any | null>(null);
   const [eventosAbertos, setEventosAbertos] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  // PDF pronto vindo do servidor (nota de nacionalização): Imprimir/Salvar usam ele.
+  const pdfBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     const carregarEGerarPDF = async () => {
@@ -44,6 +46,7 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
       setErro(null);
       setStatusNota(null);
       setInfoNfe(null);
+      pdfBlobRef.current = null;
 
       try {
         console.log('🏢 Buscando dados da empresa...');
@@ -181,6 +184,26 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
           });
         }
 
+        // Nota de NACIONALIZAÇÃO (fatura ligada a uma DI): o DANFE é montado no
+        // servidor a partir do XML autorizado — itens na ordem da DI (adição/item),
+        // entrada, natureza e informações complementares da nota. O DANFE de venda
+        // abaixo usaria os itens da fatura (agrupados por produto) e sairia como SAÍDA.
+        if (dadosCompletos.dbfatura?.importacao_id) {
+          const resp = await fetch(
+            `/api/faturamento/danfe-nacionalizacao?codfat=${encodeURIComponent(fatura.codfat)}`,
+          );
+          if (!resp.ok) {
+            const j = await resp.json().catch(() => ({}));
+            throw new Error(
+              j.message || 'Não foi possível gerar o DANFE da nota de nacionalização.',
+            );
+          }
+          const blob = await resp.blob();
+          pdfBlobRef.current = blob;
+          setPdfUrl(URL.createObjectURL(blob));
+          return;
+        }
+
         if (isPessoaFisica) {
           // Pessoa física - NFC-e em HTML (layout MELO, reconstruído do Rave)
           console.log('📄 Gerando NFC-e (HTML) para pessoa física...');
@@ -266,6 +289,7 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
   // Gera o PDF da NF-e HTML no SERVIDOR (puppeteer, landscape garantido — o print do
   // navegador ignora @page e sai em retrato).
   const gerarPdfBlob = async (): Promise<Blob> => {
+    if (pdfBlobRef.current) return pdfBlobRef.current;
     const codigo = fatura?.codfat || venda?.codvenda || venda?.nrovenda || 'danfe';
     const resp = await axios.post(
       '/api/faturamento/danfe-html-pdf',
@@ -276,8 +300,10 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
   };
 
   // Salvar PDF (download)
+  const temDocumento = !!htmlContent || !!pdfUrl;
+
   const handleSalvarPdf = async () => {
-    if (!htmlContent || gerandoPdf || imprimindo) return;
+    if (!temDocumento || gerandoPdf || imprimindo) return;
     setGerandoPdf(true);
     try {
       const codigo = fatura?.codfat || venda?.codvenda || venda?.nrovenda || 'danfe';
@@ -299,7 +325,7 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
 
   // Imprimir direto (sem salvar): imprime o PDF em paisagem num iframe oculto
   const handleImprimir = async () => {
-    if (!htmlContent || gerandoPdf || imprimindo) return;
+    if (!temDocumento || gerandoPdf || imprimindo) return;
     setImprimindo(true);
     try {
       const url = URL.createObjectURL(await gerarPdfBlob());
@@ -327,18 +353,6 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
       alert('Erro ao imprimir a nota.');
     } finally {
       setImprimindo(false);
-    }
-  };
-
-  const handleDownload = () => {
-    if (pdfUrl) {
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      const codigo = fatura?.codfat || venda?.codvenda || venda?.nrovenda || 'preview';
-      link.download = `nota-fiscal-${codigo}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     }
   };
 
@@ -373,17 +387,7 @@ export default function NotaFiscalPreviewModal({ isOpen, onClose, fatura, produt
             )}
           </DialogTitle>
           <div className="flex gap-2">
-            {pdfUrl && (
-              <Button
-                onClick={handleDownload}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                size="sm"
-              >
-                <Download size={16} />
-                Download PDF
-              </Button>
-            )}
-            {htmlContent && (
+            {temDocumento && (
               <>
                 <Button
                   onClick={handleImprimir}
