@@ -66,11 +66,17 @@ interface VinculacaoResult {
   orc_id: string;
 }
 
+// Compara os nomes só por letras e números (a DI traz "CO LTD", o cadastro "CO.,LTD")
+// e trata INTERNACIONAL = INTERNATIONAL (grafia em português no cadastro). Prefixo:
+// o nome na DI costuma vir truncado (30 caracteres).
+const NOME_NORMALIZADO = (col: string) =>
+  `regexp_replace(replace(UPPER(${col}), 'INTERNACIONAL', 'INTERNATIONAL'), '[^A-Z0-9]', '', 'g')`;
 const QUERY_RESOLVER_FORNECEDOR = `
   SELECT cod_credor, nome
   FROM dbcredor
-  WHERE UPPER(TRIM(nome)) LIKE UPPER(TRIM($1)) || '%'
-  ORDER BY cod_credor
+  WHERE ${NOME_NORMALIZADO('nome')} LIKE ${NOME_NORMALIZADO('$1')} || '%'
+    AND length(${NOME_NORMALIZADO('$1')}) >= 6
+  ORDER BY (UPPER(TRIM(nome)) LIKE UPPER(TRIM($1)) || '%') DESC, cod_credor
   LIMIT 1
 `;
 

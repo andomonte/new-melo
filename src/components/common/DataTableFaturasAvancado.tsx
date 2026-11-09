@@ -1172,7 +1172,8 @@ export default function DataTableFaturasAvancado({
       await axios.post('/api/faturamento/cancelar-fatura', {
         codfat: fatura.codfat,
         motivo: motivoCancelFatura.trim(),
-        cancelarVendas: cancelarVendasFatura,
+        // Nacionalização: o servidor ignora e nunca devolve estoque.
+        cancelarVendas: fatura.importacao_id ? false : cancelarVendasFatura,
         ignorarNfe: notaForaPrazo,
         usuario: user?.usuario || user?.codusr || '',
       });
@@ -2471,19 +2472,30 @@ const handleCancelarNota = async () => {
               </p>
             </div>
 
-            <label className="flex items-center gap-2 mt-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={cancelarVendasFatura}
-                onChange={(e) => setCancelarVendasFatura(e.target.checked)}
-                disabled={isCancelandoFatura}
-                className="size-4"
-              />
-              Cancelar as vendas referentes a este faturamento?
-              <span className="text-xs text-gray-500">
-                (devolve o estoque; senão a venda volta para “Liberada”)
-              </span>
-            </label>
+            {faturaCancelFatura?.importacao_id ? (
+              // Nota de nacionalização: não baixou estoque (as peças entram pela
+              // entrada da importação). O servidor cancela a venda junto, sem
+              // devolver estoque — não há escolha a fazer aqui.
+              <p className="mt-2 rounded bg-blue-50 dark:bg-blue-900/30 px-3 py-2 text-sm text-blue-800 dark:text-blue-200">
+                Nota de <b>nacionalização</b>: o estoque não é alterado e a venda dela é
+                cancelada junto. Depois do cancelamento, a DI volta a ficar disponível
+                para emitir uma nova nota na tela de Importação.
+              </p>
+            ) : (
+              <label className="flex items-center gap-2 mt-2 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cancelarVendasFatura}
+                  onChange={(e) => setCancelarVendasFatura(e.target.checked)}
+                  disabled={isCancelandoFatura}
+                  className="size-4"
+                />
+                Cancelar as vendas referentes a este faturamento?
+                <span className="text-xs text-gray-500">
+                  (devolve o estoque; senão a venda volta para “Liberada”)
+                </span>
+              </label>
+            )}
 
             <div className="flex justify-end gap-2 mt-4">
               <button

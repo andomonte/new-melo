@@ -12,11 +12,10 @@
  */
 
 import React, { useState } from 'react';
-import { Plus, ShoppingCart, Wand2, Loader2, CheckCircle2, Link, Users, Star } from 'lucide-react';
+import { ShoppingCart, Wand2, Loader2, CheckCircle2, Link, Users, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { FaturaImportacao, ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { FaturaCard } from './FaturaCard';
-import { AdicionarFaturaModal } from './AdicionarFaturaModal';
 import { VincularFornecedoresModal } from './VincularFornecedoresModal';
 import { MoverItensModal } from './MoverItensModal';
 import type { ItemPedidoSelecionado } from './ImportarPedidoModal';
@@ -82,7 +81,6 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
   onMoverItens,
   readOnly = false,
 }) => {
-  const [modalFaturaAberto, setModalFaturaAberto] = useState(false);
   const [modalVincularAberto, setModalVincularAberto] = useState(false);
   const [moverFaturaIdx, setMoverFaturaIdx] = useState<number>(-1);
 
@@ -234,16 +232,6 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
               {associandoEVinculando ? 'Processando...' : 'Associar e Vincular'}
             </Button>
           )}
-          {!readOnly && (
-            <Button
-              size="sm"
-              onClick={() => setModalFaturaAberto(true)}
-              className="flex items-center gap-1 bg-[#347AB6] hover:bg-[#2a5f8f] text-white"
-            >
-              <Plus size={14} />
-              Adicionar Fatura
-            </Button>
-          )}
         </div>
       </div>
 
@@ -283,21 +271,6 @@ export const FaturasTab: React.FC<FaturasTabProps> = ({
           ))}
         </div>
       )}
-      {/* Modal de adicionar fatura */}
-      <AdicionarFaturaModal
-        aberto={modalFaturaAberto}
-        onFechar={() => setModalFaturaAberto(false)}
-        onConfirmar={(dados) => {
-          onAddFatura({
-            cod_credor: dados.cod_credor,
-            fornecedor_nome: dados.fornecedor_nome,
-            cod_cliente: dados.cod_cliente,
-            cod_comprador: dados.cod_comprador,
-          });
-          setModalFaturaAberto(false);
-        }}
-      />
-
       {/* Modal de vínculo fornecedor↔cliente */}
       {importacaoId && onVincularCliente && (
         <VincularFornecedoresModal

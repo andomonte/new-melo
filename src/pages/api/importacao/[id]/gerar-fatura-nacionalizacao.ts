@@ -29,6 +29,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     client = await pool.connect();
+
+    // Já há nota AUTORIZADA (e não cancelada) para esta DI: reemitir retransmitiria o
+    // mesmo número. Para emitir outra, a nota tem de ser cancelada no Faturamento.
+    const autorizada = await client.query(
+      `SELECT f.codfat, f.nroform
+         FROM dbfatura f
+         JOIN dbfat_nfe nf ON nf.codfat = f.codfat
+        WHERE f.importacao_id = $1 AND COALESCE(f.cancel,'N') <> 'S' AND nf.status = '100'
+        LIMIT 1`,
+      [importacaoId],
+    );
+    if (autorizada.rows.length > 0) {
+      const a = autorizada.rows[0];
+      return res.status(409).json({
+        message:
+          `Esta DI já tem a nota de nacionalização ${a.nroform} autorizada (fatura ${a.codfat}). ` +
+          'Para emitir outra, cancele esta nota na Consulta de Faturas.',
+      });
+    }
+
     await client.query('BEGIN');
     const fat = await gerarFaturaNacionalizacao(client, importacaoId, {
       codusr: (req.body?.codusr ? String(req.body.codusr) : undefined),

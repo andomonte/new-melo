@@ -1,3 +1,4 @@
+import { infoNacionalizacaoDaFatura } from '@/lib/importacao/travaCancelamentoNacionalizacao';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import fs from 'fs';
@@ -29,6 +30,15 @@ export default async function handler(
   );
 
   try {
+    // 0. Nota de nacionalização com a entrada da DI já gerada: não cancela na SEFAZ
+    //    (a entrada ficaria apontando para uma nota cancelada).
+    {
+      const nac = await infoNacionalizacaoDaFatura(await getPgPoolFilial(req), String(codfat));
+      if (nac?.bloqueio) {
+        return res.status(409).json({ sucesso: false, erro: nac.bloqueio, motivo: nac.bloqueio });
+      }
+    }
+
     // 1. Buscar dados da nota na base
     const client = await (await getPgPoolFilial(req)).connect();
     let nota;

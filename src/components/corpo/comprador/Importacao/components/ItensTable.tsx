@@ -19,7 +19,6 @@ import api from '@/components/services/api';
 import type { ItemImportacao, AdicaoImportacao } from '../types/importacao';
 import { fmtDecimal, codigoDescricaoDI, descricaoSemPrefixoDI } from '../utils/formatters';
 import { BuscarProdutoModal } from './BuscarProdutoModal';
-import { ImportarPedidoModal } from './ImportarPedidoModal';
 import type { ItemPedidoSelecionado } from './ImportarPedidoModal';
 import { AssociarOrdemModal } from './AssociarOrdemModal';
 import type { AlocacaoOrdem } from './AssociarOrdemModal';
@@ -149,7 +148,6 @@ export const ItensTable: React.FC<ItensTableProps> = ({
   readOnly = false,
 }) => {
   const [modalAberto, setModalAberto] = useState(false);
-  const [modalPedidoAberto, setModalPedidoAberto] = useState(false);
   const [modalOrdemAberto, setModalOrdemAberto] = useState(false);
   const [modalDividirAberto, setModalDividirAberto] = useState(false);
   const [itemSelecionadoIdx, setItemSelecionadoIdx] = useState<number>(-1);
@@ -405,17 +403,6 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         </div>
         {!readOnly && (
           <div className="flex gap-2 shrink-0">
-            {(codCredor || fornecedorNome) && onImportarDoPedido && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setModalPedidoAberto(true)}
-                className="flex items-center gap-1 text-xs h-7"
-              >
-                <ShoppingCart size={12} />
-                Importar do Pedido
-              </Button>
-            )}
             <Button size="sm" disabled className="flex items-center gap-1 text-xs h-7 bg-[#347AB6] hover:bg-[#2a5f8f] text-white">
               <Plus size={12} />
               Adicionar Item
@@ -557,20 +544,6 @@ export const ItensTable: React.FC<ItensTableProps> = ({
         onSelecionar={handleProdutoSelecionado}
         descricaoItem={itemSelecionadoIdx >= 0 && itemSelecionadoIdx < itens.length ? itens[itemSelecionadoIdx]?.descricao : undefined}
       />
-
-      {/* Modal de importar do pedido */}
-      {(codCredor || fornecedorNome) && onImportarDoPedido && (
-        <ImportarPedidoModal
-          aberto={modalPedidoAberto}
-          onFechar={() => setModalPedidoAberto(false)}
-          onConfirmar={(itensPedido) => {
-            onImportarDoPedido(itensPedido);
-            setModalPedidoAberto(false);
-          }}
-          codCredor={codCredor}
-          fornecedorNome={fornecedorNome}
-        />
-      )}
 
       {/* Modal de associar à ordem (alocação multi-ordem, por item) */}
       {(codCredor || fornecedorNome) && onAssociarOrdens && (

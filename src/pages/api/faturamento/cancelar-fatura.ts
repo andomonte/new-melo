@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPoolFilial } from '@/lib/pg';
+import { infoNacionalizacaoDaFatura } from '@/lib/importacao/travaCancelamentoNacionalizacao';
 
 /**
  * POST /api/faturamento/cancelar-fatura
@@ -17,6 +18,10 @@ import { getPgPoolFilial } from '@/lib/pg';
  *
  * OBS: NÃO mexe em dbclien.debito — o faturamento web não movimenta o débito do
  * cliente (o Delphi usa red_debcli, mas o web não), então reduzir aqui corromperia.
+ *
+ * NOTA DE NACIONALIZAÇÃO (dbfatura.importacao_id): não baixou estoque, então NUNCA
+ * devolve estoque; a venda dela é cancelada (não volta para 'L'), ignorando
+ * cancelarVendas. Bloqueado se a entrada da DI já foi gerada.
  *
  * A NF-e na SEFAZ deve ter sido cancelada ANTES (o fluxo chama cancelar-nfe primeiro).
  * Guarda de segurança: recusa se ainda houver NF-e autorizada não cancelada.
@@ -38,6 +43,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     if (fat.rows.length === 0) {
       return res.status(404).json({ erro: 'Fatura não encontrada.' });
+    }
+
+    const nacionalizacao = await infoNacionalizacaoDaFatura(client, String(codfat));
+    if (nacionalizacao?.bloqueio) {
+      return res.status(409).json({ erro: nacionalizacao.bloqueio });
     }
 
     // Guarda: NF-e autorizada e não cancelada precisa ir à SEFAZ antes.
@@ -84,7 +94,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
       // 3. Vendas.
-      if (cancelarVendas) {
+      if (nacionalizacao) {
+        // Nacionalização: sem devolução de estoque (nada foi baixado); só cancela a
+        // venda, para ela não ficar "Liberada" e ser faturada como venda nacional.
+        if (codVendas.length > 0) {
+          await client.query(
+            `UPDATE dbvenda SET cancel = 'S' WHERE codvenda = ANY($1)`,
+            [codVendas],
+          );
+        }
+      } else if (cancelarVendas) {
         for (const cv of codVendas) {
           // Devolve o estoque de cada item (reverte a baixa do faturamento).
           const itens = await client.query(

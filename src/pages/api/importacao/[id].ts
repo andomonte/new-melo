@@ -11,10 +11,26 @@ import type { PoolClient } from 'pg';
 
 // --- GET Queries ---
 
+// Inclui a nota de nacionalização AUTORIZADA e não cancelada (mesma regra da
+// listagem): a tela bloqueia "Emitir Nota" enquanto ela existir.
 const QUERY_CABECALHO = `
-  SELECT *
-  FROM dbent_importacao
-  WHERE id = $1
+  SELECT i.*,
+         (nac.chave IS NOT NULL) AS nota_emitida,
+         nac.codfat  AS nfe_codfat,
+         nac.nroform AS nfe_numero,
+         nac.chave   AS nfe_chave
+  FROM dbent_importacao i
+  LEFT JOIN LATERAL (
+    SELECT f.codfat, f.nroform, nf.chave
+      FROM dbfatura f
+      JOIN dbfat_nfe nf ON nf.codfat = f.codfat
+     WHERE f.importacao_id = i.id
+       AND COALESCE(f.cancel,'N') <> 'S'
+       AND nf.status = '100'
+     ORDER BY nf.codfat DESC
+     LIMIT 1
+  ) nac ON true
+  WHERE i.id = $1
 `;
 
 const QUERY_CONTRATOS = `

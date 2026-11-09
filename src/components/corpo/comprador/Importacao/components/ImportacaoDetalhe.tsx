@@ -46,6 +46,7 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
     resumoCustos,
     readOnly,
     salvar,
+    fetchData,
     addContrato,
     removeContrato,
     updateContrato,
@@ -215,7 +216,9 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
       }
       setPasso(2, 'done');
 
-      // 4) autorizada
+      // 4) autorizada → recarrega a DI (passa a constar "nota emitida" e o
+      //    Emitir Nota fica bloqueado)
+      void fetchData();
       const chave = je.chaveAcesso || je.chave || '';
       aplicar({
         status: 'success',
@@ -264,6 +267,15 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
           ? 'Vincule todos os fornecedores a um cliente (aba Faturas) antes de gerar a nota.'
           : '';
 
+  // Já existe nota de nacionalização autorizada (e não cancelada): reemitir
+  // retransmitiria o mesmo número (SEFAZ rejeita por duplicidade). Para emitir de
+  // novo, a nota precisa ser cancelada na Consulta de Faturas.
+  const cabNota = cabecalho as any;
+  const bloqueioEmissao = cabNota?.nota_emitida
+    ? `Nota de nacionalização ${cabNota.nfe_numero || ''} já autorizada (fatura ${cabNota.nfe_codfat || ''}). ` +
+      'Para emitir outra, cancele esta nota na Consulta de Faturas.'
+    : bloqueioNacionalizacao;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-4">
       <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg shadow-lg w-full max-w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
@@ -308,9 +320,9 @@ export const ImportacaoDetalhe: React.FC<ImportacaoDetalheProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={emitindo || !!bloqueioNacionalizacao}
+                  disabled={emitindo || !!bloqueioEmissao}
                   onClick={handleEmitirNota}
-                  title={bloqueioNacionalizacao || 'Gera a fatura e transmite a NF-e de nacionalização à SEFAZ'}
+                  title={bloqueioEmissao || 'Gera a fatura e transmite a NF-e de nacionalização à SEFAZ'}
                   className="flex items-center gap-1"
                 >
                   {emitindo ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
