@@ -149,19 +149,23 @@ export default async function handle(
       params.push(id_token);
     }
 
-    if (token !== undefined) {
+    // Segredos (token, certificado): a tela de edição NÃO recebe esses valores (não vão
+    // ao navegador) e reenvia null ao salvar. Gravar null apagava o certificado da
+    // empresa ao corrigir qualquer outro campo. Só grava quando vier um valor novo.
+    const temValor = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
+    if (temValor(token)) {
       updates.push(`token = $${paramIndex++}`);
       params.push(await encrypt(token));
     }
-    if (certificadoKey !== undefined) {
+    if (temValor(certificadoKey)) {
       updates.push(`"certificadoKey" = $${paramIndex++}`);
       params.push(await encrypt(certificadoKey));
     }
-    if (certificadoCrt !== undefined) {
+    if (temValor(certificadoCrt)) {
       updates.push(`"certificadoCrt" = $${paramIndex++}`);
       params.push(await encrypt(certificadoCrt));
     }
-    if (cadeiaCrt !== undefined) {
+    if (temValor(cadeiaCrt)) {
       updates.push(`"cadeiaCrt" = $${paramIndex++}`);
       params.push(await encrypt(cadeiaCrt));
     }
