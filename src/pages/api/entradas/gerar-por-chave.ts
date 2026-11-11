@@ -3,6 +3,7 @@ import { getPgPool } from '@/lib/pgClient';
 import { registrarHistoricoOrdem } from '@/lib/compras/ordemHistoricoHelper';
 import { gerarEntradaDbent } from '@/lib/compras/gerarEntradaDbent';
 import { ARMAZEM_GERAL, creditarReservado } from '@/lib/compras/estoqueEntrada';
+import { resolverCredorPorNome } from '@/lib/importacao/resolverCredor';
 
 /**
  * POST /api/entradas/gerar-por-chave
@@ -186,14 +187,37 @@ export default async function handler(
       }
     }
 
+    // 7.1 Entrada de IMPORTAÇÃO (uma por fatura da DI): fornecedor, comprador e dados da DI
+    //     vêm da fatura/DI — Oracle ENTRADA_IMPORTACAO.GERAR_ENTRADAS → ENTRADA_INCLUIR.
+    let imp: { nro_di: string; data_di: any; taxa_dolar: any; id_importacao: number; cod_comprador: string | null } | null = null;
+    if (nfe.natop === 'ENTRADA_IMPORTACAO' && nfe.infcpl) {
+      const [tag, idImp, idFat] = String(nfe.infcpl).split(':');
+      if (tag === 'IMPORTACAO' && Number(idImp) && Number(idFat)) {
+        const r = (await client.query(
+          `SELECT i.id AS id_importacao, i.nro_di, i.data_di, i.taxa_dolar,
+                  f.cod_credor, f.fornecedor_nome, f.cod_comprador
+             FROM dbent_importacao i
+             JOIN dbent_importacao_entrada f ON f.id_importacao = i.id
+            WHERE i.id = $1 AND f.id = $2`, [Number(idImp), Number(idFat)])).rows[0];
+        if (r) {
+          imp = r;
+          codCredor = r.cod_credor || (await resolverCredorPorNome(client, r.fornecedor_nome)) || codCredor;
+        }
+      }
+      if (!codCredor) {
+        throw new Error('Fornecedor da fatura da importação não encontrado no cadastro de credores.');
+      }
+    }
+
     // 8. Gerar a entrada (dbent + dbitent + dbent_recebimento)
     const rDbent = await gerarEntradaDbent(client, {
       nfeId,
       chave: chaveLimpa,
       empresa,
       codCredor,
-      codTransp: aux.codtransp || null,
-      codComprador: aux.codcomprador || null,
+      // Importação: transportadora fixa 00051 (CLIENTE RETIRA), como no Oracle.
+      codTransp: aux.codtransp || (imp ? '00051' : null),
+      codComprador: aux.codcomprador || imp?.cod_comprador || null,
       header: {
         custofin: Number(aux.custofin || 0),
         desconto: Number(aux.desconto || 0),
@@ -202,16 +226,36 @@ export default async function handler(
         operacao: aux.operacao != null ? String(aux.operacao) : '0',
         cfop: aux.cfop != null ? String(aux.cfop) : null,
         temcusto: aux.temcusto || 'S',
-        zerar_ipi: aux.zerar_ipi || 'N',
-        zerar_st: aux.zerar_st || 'N',
-        // Selo e conhecimento (Delphi: ENTRADA_INCLUIR grava selo/dtselo/temcon/nrocon no dbent)
+        // Importação: o Oracle zera IPI e ST da entrada.
+        zerar_ipi: aux.zerar_ipi || (imp ? 'S' : 'N'),
+        zerar_st: aux.zerar_st || (imp ? 'S' : 'N'),
+        // Selo e conhecimento (Delphi: ENTRADA_INCLUIR grava selo/dtselo/temcon/nrocon no dbent).
+        // Importação sem selo informado: selo 'IMPORT' com a data da DI (Oracle).
         temcon: aux.temcon || 'N',
         nrocon: aux.nrocon || null,
-        selo: aux.selo || null,
-        dtselo: aux.dtselo || null,
+        selo: aux.selo || (imp ? 'IMPORT' : null),
+        dtselo: aux.dtselo || (imp ? imp.data_di : null),
       },
     });
     const codent = rDbent.codent;
+
+    // 8.1 Importação: dados da DI no cabeçalho (Oracle ENTRADA_INCLUIR): nº da nota =
+    //     nº da DI sem pontuação (9 dígitos), série 001, datas = data da DI, origem 'B',
+    //     cotação = taxa do dólar da DI e a observação de origem.
+    if (imp) {
+      await client.query(
+        `UPDATE dbent SET nroform = $2, serie = '001', dtnota = $3, nrodi = $4, dtdi = $3,
+                origem = 'B', obs = $5, valordolar = $6
+          WHERE codent = $1`,
+        [
+          codent,
+          String(imp.nro_di || '').replace(/\D/g, '').slice(0, 9) || null,
+          imp.data_di,
+          String(imp.nro_di || '').slice(0, 15) || null,
+          `ENTRADA GERADA POR IMP. ID:${imp.id_importacao}.`.slice(0, 50),
+          Number(imp.taxa_dolar) || null,
+        ]);
+    }
     const itensProcessados = rDbent.itens.length;
 
     // Marca a NFe como PROCESSADA ('S') SÓ agora que o dbent existe (geração

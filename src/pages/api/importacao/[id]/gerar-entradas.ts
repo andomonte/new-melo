@@ -9,6 +9,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import type { PoolClient } from 'pg';
+import { resolverCredorPorNome } from '@/lib/importacao/resolverCredor';
 
 export default async function handler(
   req: NextApiRequest,
@@ -73,6 +74,17 @@ export default async function handler(
       return res.status(400).json({ message: 'Nenhuma fatura encontrada na DI' });
     }
 
+    // Item sem produto ficaria FORA da entrada (a busca abaixo só pega codprod não nulo):
+    // bloqueia antes, para a entrada não sair incompleta.
+    const semProduto = await client.query(
+      `SELECT count(*)::int AS n FROM dbent_importacao_it_ent WHERE id_importacao = $1 AND codprod IS NULL`, [id]);
+    if (Number(semProduto.rows[0]?.n) > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: `${semProduto.rows[0].n} item(ns) da DI sem produto associado. Associe todos antes de gerar a entrada.`,
+      });
+    }
+
     const nfesCriadas: { faturaId: number; codnfe_ent: string; itensProcessados: number }[] = [];
 
     // Produto importado (Delphi ENTRADA_IMPORTACAO / doc COMPRAS_INTERNACIONAIS_LEGADO):
@@ -81,7 +93,6 @@ export default async function handler(
     // prcompra*txdolarcompra. Então a base de custo da entrada é o custo em USD, e
     // ao final marcamos dolar/txdolarcompra nos produtos desta DI.
     const codprodsImport = new Set<string>();
-    let txEfetiva = 0;
 
     for (const fatura of faturasResult.rows) {
       if (fatura.codent) {
@@ -99,6 +110,20 @@ export default async function handler(
       `, [id, fatura.id]);
 
       if (itensResult.rows.length === 0) continue;
+
+      // Fornecedor da fatura (Delphi: dbent_importacao_entrada.cod_credor → dbent.cod_credor).
+      // A DI importada traz só o nome; resolve pelo cadastro e grava na fatura, para a
+      // entrada sair com o fornecedor certo.
+      if (!fatura.cod_credor) {
+        fatura.cod_credor = await resolverCredorPorNome(client, fatura.fornecedor_nome);
+        if (!fatura.cod_credor) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            message: `Fornecedor "${fatura.fornecedor_nome || fatura.id}" da fatura não encontrado no cadastro de credores.`,
+          });
+        }
+        await client.query(`UPDATE dbent_importacao_entrada SET cod_credor = $1 WHERE id = $2`, [fatura.cod_credor, fatura.id]);
+      }
 
       // Validar custos calculados
       const semCusto = itensResult.rows.filter(i => !i.custo_unit_dolar);
@@ -171,9 +196,8 @@ export default async function handler(
         } else {
           grupos.set(key, { codprod: item.codprod, descricao: item.descricao || '', idOrc, qtd, total });
         }
-        // produto importado: coleta p/ marcar dolar='S' + txdolarcompra no final
+        // produto importado: coleta p/ marcar dolar='S' no final
         codprodsImport.add(item.codprod);
-        if (!txEfetiva && item.tx_dolar_medio) txEfetiva = parseFloat(String(item.tx_dolar_medio)) + 0.10;
       }
 
       let nitem = 1;
@@ -251,14 +275,13 @@ export default async function handler(
     //    atualização/finalização passou a ser feita só lá, por fatura, no momento
     //    em que a entrada é realmente gerada (igual ao fluxo nacional).
 
-    // 9b. Produto importado: marca dolar='S' e grava a taxa usada (tx_dolar_medio+0.10).
-    //     Assim a média (confirmar-preço) pondera prcompra em USD×USD e o custo real
-    //     volta por prcompra*txdolarcompra — fiel ao Delphi ENTRADA_IMPORTACAO.
-    if (codprodsImport.size > 0 && txEfetiva > 0) {
-      await client.query(`
-        UPDATE dbprod SET txdolarcompra = $1, dolar = 'S' WHERE codprod = ANY($2)
-      `, [txEfetiva, Array.from(codprodsImport)]);
-      console.log(`[gerar-entradas] ${codprodsImport.size} produto(s) marcados dolar='S' txdolarcompra=${txEfetiva}`);
+    // 9b. Produto importado: marca dolar='S' (prcompra do importado é em USD).
+    //     A TAXA do dólar NÃO é gravada aqui: no Oracle ela é feita no Confirmar Preço
+    //     (MARIOIMPRCUSTO), como média ponderada com o estoque livre — ver
+    //     lib/importacao/custoImportacao.ts. Gravar aqui sobrescrevia a taxa do estoque.
+    if (codprodsImport.size > 0) {
+      await client.query(`UPDATE dbprod SET dolar = 'S' WHERE codprod = ANY($1)`, [Array.from(codprodsImport)]);
+      console.log(`[gerar-entradas] ${codprodsImport.size} produto(s) marcados dolar='S'`);
     }
 
     // 10. UPDATE status da DI para 'E' (Entrada Gerada)

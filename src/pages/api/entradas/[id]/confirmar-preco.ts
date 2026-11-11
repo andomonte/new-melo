@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPool } from '@/lib/pgClient';
 import { confirmarPrecoEntrada } from '@/lib/compras/gerarEntradaDbent';
+import { aplicarCustoImportacao } from '@/lib/importacao/custoImportacao';
 
 interface ItemEditado {
   id?: string;
@@ -103,6 +104,13 @@ export default async function handler(
     const r = await confirmarPrecoEntrada(client, id, empresa, 0, {
       atualizarProdutoOverride: semCusto ? false : undefined,
     });
+
+    // Entrada de IMPORTAÇÃO: taxa do dólar (média com o estoque), CIF e preço de
+    // venda do produto importado — Oracle Confirmar_Preco → MARIOIMPRCUSTO.
+    // Sem efeito em entrada que não veio de DI.
+    if (!semCusto) {
+      await aplicarCustoImportacao(client, id);
+    }
 
     // Fecha a entrada (custo feito) e avança o workflow físico
     await client.query(`UPDATE dbent SET status = 'F' WHERE codent = $1`, [id]);

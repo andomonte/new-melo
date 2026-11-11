@@ -111,8 +111,24 @@ export default async function handler(
         i.data_entrada_brasil, i.codusr, i.data_cad,
         (nac.chave IS NOT NULL) AS nota_emitida,
         nac.nroform AS nfe_numero,
-        nac.chave   AS nfe_chave
+        nac.chave   AS nfe_chave,
+        -- Andamento das entradas (uma por fatura): quantas existem e quantas já tiveram
+        -- o preço confirmado. A DI vai para 'E' ao GERAR (Delphi); o preço é confirmado
+        -- entrada a entrada — sem isto, "Entrada Gerada" parecia trabalho concluído.
+        COALESCE(ent.total, 0)       AS entradas_total,
+        COALESCE(ent.confirmadas, 0) AS entradas_confirmadas
       FROM dbent_importacao i
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int AS total,
+               count(*) FILTER (
+                 WHERE COALESCE(rec.status, CASE WHEN e.status = 'F' THEN 'PRECO_CONFIRMADO' ELSE 'PENDENTE' END)
+                       <> 'PENDENTE'
+               )::int AS confirmadas
+          FROM dbent_importacao_entrada f
+          JOIN dbent e ON e.codent = f.codent AND COALESCE(e.status, '') <> 'C'
+          LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
+         WHERE f.id_importacao = i.id
+      ) ent ON true
       LEFT JOIN LATERAL (
         SELECT f.nroform, nf.chave
           FROM dbfatura f

@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Eye, Trash2, MoreHorizontal, FileText } from 'lucide-react';
+import { Plus, Eye, Trash2, MoreHorizontal, FileText, PackagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,6 +18,8 @@ import DataTable from '@/components/common/DataTablePadrao';
 import type { Meta } from '@/data/common/meta';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import api from '@/components/services/api';
+import { GerarEntradaDetalhe } from './GerarEntradaDetalhe';
+import { StatusEntradaBadge } from './StatusEntradaBadge';
 
 interface ImportacaoListProps {
   onNovaImportacao: () => void;
@@ -34,6 +36,8 @@ interface ImportacaoRow {
   nota_emitida?: boolean;
   nfe_numero?: string | null;
   nfe_chave?: string | null;
+  entradas_total?: number;
+  entradas_confirmadas?: number;
   taxa_dolar: number;
   total_mercadoria: number;
   total_cif: number;
@@ -100,6 +104,9 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
   const [confirmDelete, setConfirmDelete] = useState<ImportacaoRow | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [abrindoNota, setAbrindoNota] = useState<number | null>(null);
+  // Painel de entrada da DI (mesmo da tela "Gerar Entrada (Importação)"):
+  // calcular custos → gerar as entradas (uma por fatura/fornecedor) → confirmar preço.
+  const [entradaDiId, setEntradaDiId] = useState<number | undefined>();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -184,6 +191,9 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
         </Badge>
       );
     }
+    if (row.status === 'E') {
+      return <StatusEntradaBadge total={row.entradas_total} confirmadas={row.entradas_confirmadas} />;
+    }
     const info = STATUS_MAP[row.status] || { label: row.status, variant: 'secondary' as const };
     return <Badge variant={info.variant}>{info.label}</Badge>;
   };
@@ -203,6 +213,14 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
             <DropdownMenuItem onClick={() => onVerDetalhe(row.id)}>
               <Eye className="mr-2 h-4 w-4" /> Ver
             </DropdownMenuItem>
+            {/* Gerar Entrada: só com a nota de nacionalização autorizada (fluxo web:
+                nota → entrada). Depois de gerada, o mesmo painel confirma o preço. */}
+            {row.nota_emitida && (row.status === 'N' || row.status === 'E') && (
+              <DropdownMenuItem onClick={() => setEntradaDiId(row.id)}>
+                <PackagePlus className="mr-2 h-4 w-4" />
+                {row.status === 'E' ? 'Entradas / Confirmar Preço' : 'Gerar Entrada'}
+              </DropdownMenuItem>
+            )}
             {row.nota_emitida && (
               <DropdownMenuItem onClick={() => handleVerNota(row)} disabled={abrindoNota === row.id}>
                 <FileText className="mr-2 h-4 w-4" />
@@ -231,6 +249,14 @@ export const ImportacaoList: React.FC<ImportacaoListProps> = ({
 
   return (
     <>
+      <GerarEntradaDetalhe
+        isOpen={!!entradaDiId}
+        importacaoId={entradaDiId}
+        onClose={() => {
+          setEntradaDiId(undefined);
+          fetchData();
+        }}
+      />
       <ConfirmationModal
         isOpen={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}

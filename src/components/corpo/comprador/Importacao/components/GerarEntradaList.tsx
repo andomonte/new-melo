@@ -9,6 +9,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, PackagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { StatusEntradaBadge } from './StatusEntradaBadge';
 import Carregamento from '@/utils/carregamento';
 import SearchInput from '@/components/common/SearchInput2';
 import SelectInput from '@/components/common/SelectPadrao';
@@ -29,6 +30,8 @@ interface ImportacaoRow {
   total_cif: number;
   navio?: string;
   qtd_adicoes?: number;
+  entradas_total?: number;
+  entradas_confirmadas?: number;
 }
 
 interface Pagination {
@@ -128,6 +131,9 @@ export const GerarEntradaList: React.FC<GerarEntradaListProps> = ({ onAbrir, ref
           </Button>
         );
       case 'status': {
+        if (row.status === 'E') {
+          return <StatusEntradaBadge total={row.entradas_total} confirmadas={row.entradas_confirmadas} />;
+        }
         const info = STATUS_MAP[row.status] || { label: row.status, variant: 'secondary' as const };
         return <Badge variant={info.variant}>{info.label}</Badge>;
       }

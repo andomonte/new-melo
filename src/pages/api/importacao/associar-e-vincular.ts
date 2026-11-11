@@ -26,6 +26,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
 import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import type { PoolClient } from 'pg';
+import { SQL_RESOLVER_CREDOR_POR_NOME } from '@/lib/importacao/resolverCredor';
 import {
   extrairRefs,
   extrairMarca,
@@ -66,19 +67,9 @@ interface VinculacaoResult {
   orc_id: string;
 }
 
-// Compara os nomes só por letras e números (a DI traz "CO LTD", o cadastro "CO.,LTD")
-// e trata INTERNACIONAL = INTERNATIONAL (grafia em português no cadastro). Prefixo:
-// o nome na DI costuma vir truncado (30 caracteres).
-const NOME_NORMALIZADO = (col: string) =>
-  `regexp_replace(replace(UPPER(${col}), 'INTERNACIONAL', 'INTERNATIONAL'), '[^A-Z0-9]', '', 'g')`;
-const QUERY_RESOLVER_FORNECEDOR = `
-  SELECT cod_credor, nome
-  FROM dbcredor
-  WHERE ${NOME_NORMALIZADO('nome')} LIKE ${NOME_NORMALIZADO('$1')} || '%'
-    AND length(${NOME_NORMALIZADO('$1')}) >= 6
-  ORDER BY (UPPER(TRIM(nome)) LIKE UPPER(TRIM($1)) || '%') DESC, cod_credor
-  LIMIT 1
-`;
+// Busca do credor pelo nome da DI (ignora pontuação e NATIONAL/NACIONAL): compartilhada
+// com a geração das entradas.
+const QUERY_RESOLVER_FORNECEDOR = SQL_RESOLVER_CREDOR_POR_NOME;
 
 const QUERY_PEDIDOS_POR_PRODUTO = `
   SELECT
