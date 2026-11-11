@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
        FROM dbusuario_delphi
        ${where}
        ORDER BY nomeusr, codusr
-       LIMIT 500`,
+       LIMIT 2000`,
       params,
     );
     return res.status(200).json({ sucesso: true, filial, usuarios: rows });

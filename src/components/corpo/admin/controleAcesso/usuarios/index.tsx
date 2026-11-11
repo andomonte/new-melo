@@ -601,6 +601,11 @@ const UsuariosPage = () => {
                               cod_conta:
                                 (f as { cod_conta?: string | null }).cod_conta ??
                                 null, // operador de caixa por filial
+                              // Sem isto o Editar abre com o Código Delphi vazio e, ao
+                              // salvar, o update (que reinsere tb_user_perfil) apaga o código.
+                              codusr_delphi:
+                                (f as { codusr_delphi?: string | null })
+                                  .codusr_delphi ?? null,
                               funcoesDoUsuario: perfil?.funcoesDoUsuario || [],
                             })),
                           })),
