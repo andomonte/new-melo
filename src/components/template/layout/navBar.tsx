@@ -29,6 +29,8 @@ interface SubMenuItem {
   hasSubmenu?: boolean;
   subMenuItems?: ThirdLevelItem[];
   openInNewTab?: boolean;
+  /** Tela solta por filial: abre `${linkFilial}/${codigo da filial logada}` em nova aba. */
+  linkFilial?: string;
 }
 
 interface MenuItem {
@@ -71,6 +73,29 @@ const NavBar = ({
   );
 
   const [ampliar2, setAmpliar2] = useState(ampliar);
+
+  // Código de cada filial (MANAUS → 1...), para os links das telas soltas.
+  // A filial logada vem do cookie filial_melo (só o nome).
+  const [codigosFiliais, setCodigosFiliais] = useState<Record<string, number>>({});
+  useEffect(() => {
+    fetch('/api/pedidos/tv/filiais', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const m: Record<string, number> = {};
+        for (const f of d?.filiais ?? []) m[String(f.nome_filial).toUpperCase()] = Number(f.codigo_filial);
+        setCodigosFiliais(m);
+      })
+      .catch(() => { /* sem o código, o link abre a tela com escolha de filial */ });
+  }, []);
+  const hrefFilial = (base: string) => {
+    let nome = '';
+    if (typeof document !== 'undefined') {
+      const c = document.cookie.split('; ').find((x) => x.startsWith('filial_melo='));
+      nome = c ? decodeURIComponent(c.split('=')[1]).toUpperCase() : '';
+    }
+    const cod = codigosFiliais[nome];
+    return cod ? `${base}/${cod}` : base;
+  };
 
   useEffect(() => {
     setAmpliar2(ampliar);
@@ -271,11 +296,11 @@ const NavBar = ({
                               return (
                                 <Link
                                   key={sub.name}
-                                  href={sub.href || '#'}
-                                  target={sub.openInNewTab ? '_blank' : undefined}
-                                  rel={sub.openInNewTab ? 'noopener noreferrer' : undefined}
+                                  href={sub.linkFilial ? hrefFilial(sub.linkFilial) : sub.href || '#'}
+                                  target={sub.openInNewTab || sub.linkFilial ? '_blank' : undefined}
+                                  rel={sub.openInNewTab || sub.linkFilial ? 'noopener noreferrer' : undefined}
                                   onClick={(e) => {
-                                    if (sub.openInNewTab) {
+                                    if (sub.openInNewTab || sub.linkFilial) {
                                       // Não atualiza o estado interno, apenas abre em nova aba
                                       return;
                                     }

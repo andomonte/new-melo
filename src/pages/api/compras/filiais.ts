@@ -1,9 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 
+// Unidades Melo (cad_unidade_melo) para "Entrega em" / "Destinado para".
+// Devolve TODAS (ativas e inativas): a tela de nova requisição mostra só as
+// ativas; a de edição mantém a unidade já gravada mesmo se foi inativada; a de
+// visualização só precisa do nome. nome_filial = filial do sistema ligada
+// (define a unidade padrão de quem está logado nela).
 interface Filial {
   unm_id: string;
   unm_nome: string;
+  unm_ativo: string;
+  unm_codigo_filial: string | null;
+  nome_filial: string | null;
 }
 
 export default async function handler(
@@ -19,9 +27,12 @@ export default async function handler(
     const client = await pool.connect();
     
     const result = await client.query<Filial>(`
-      SELECT unm_id, unm_nome 
-      FROM cad_unidade_melo 
-      ORDER BY unm_nome
+      SELECT u.unm_id, u.unm_nome,
+             COALESCE(u.unm_ativo, 'S') AS unm_ativo,
+             u.unm_codigo_filial, f.nome_filial
+        FROM cad_unidade_melo u
+        LEFT JOIN tb_filial f ON f.codigo_filial = u.unm_codigo_filial
+       ORDER BY u.unm_nome
     `);
     
     client.release();

@@ -21,8 +21,8 @@ export interface ApiArquivo<T> {
   excluir: (id: string | number) => Promise<void>;
 }
 
-export function criarApiArquivo<T>(recurso: string): ApiArquivo<T> {
-  const base = `/api/financeiro/arquivos/${recurso}`;
+export function criarApiArquivo<T>(recurso: string, baseApi = '/api/financeiro/arquivos'): ApiArquivo<T> {
+  const base = `${baseApi}/${recurso}`;
 
   return {
     // A listagem vai por POST (mesmo padrão do /api/cfop) para caber os
@@ -53,8 +53,8 @@ export function criarApiArquivo<T>(recurso: string): ApiArquivo<T> {
 }
 
 /** Adapta a fábrica ao formato esperado pelo GenericCrudPage. */
-export function paraCrudApi<T>(recurso: string) {
-  const a = criarApiArquivo<T>(recurso);
+export function paraCrudApi<T>(recurso: string, baseApi?: string) {
+  const a = criarApiArquivo<T>(recurso, baseApi);
   return {
     list: a.listar,
     getById: a.obter,

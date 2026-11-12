@@ -18,7 +18,19 @@ export interface Fornecedor {
 export interface Filial {
   unm_id: string;
   unm_nome: string;
+  /** 'S' ativa (aparece nas listas) · 'N' inativa. */
+  unm_ativo?: string;
+  /** Filial do sistema ligada (tb_filial) — define a unidade padrão. */
+  unm_codigo_filial?: string | null;
+  nome_filial?: string | null;
 }
+
+/** Unidade aparece na lista se estiver ativa ou se já for a escolhida. */
+export const unidadeVisivel = (
+  f: { unm_id: string | number; unm_ativo?: string },
+  selecionada?: string,
+) =>
+  (f.unm_ativo ?? 'S') === 'S' || String(f.unm_id) === String(selecionada ?? '');
 
 export interface Comprador {
   codcomprador: string;

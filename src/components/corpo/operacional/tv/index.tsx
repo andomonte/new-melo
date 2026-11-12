@@ -9,7 +9,10 @@ import {
 } from '@/data/pedidos/pedidosService';
 import { RefreshCw } from 'lucide-react';
 
-const TelaTVPage = () => {
+/** codigoFilial: link fixo por filial (/tv/1 = MANAUS); sem ele, escolhe no gate. */
+const TelaTVPage = ({ codigoFilial }: { codigoFilial?: number } = {}) => {
+  // Cada link fixo guarda a liberação à parte, para um não destravar o outro.
+  const gateKey = codigoFilial !== undefined ? `gate_tv_filial_${codigoFilial}` : 'gate_tv_filial';
   const [pedidos, setPedidos] = useState<PedidoTV[]>([]);
   const [loading, setLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -82,18 +85,18 @@ const TelaTVPage = () => {
   // Se a filial já foi destravada nesta sessão, não re-pede o código no reload.
   useEffect(() => {
     try {
-      const f = sessionStorage.getItem('gate_tv_filial');
+      const f = sessionStorage.getItem(gateKey);
       if (f) { setFilial(f); filialRef.current = f; setLocked(false); }
     } catch { /* ignore */ }
   }, []);
 
   const onUnlockFilial = (f: string) => {
     setFilial(f); filialRef.current = f;
-    try { sessionStorage.setItem('gate_tv_filial', f); } catch { /* ignore */ }
+    try { sessionStorage.setItem(gateKey, f); } catch { /* ignore */ }
     setLocked(false);
   };
   const trocarFilial = () => {
-    try { sessionStorage.removeItem('gate_tv_filial'); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(gateKey); } catch { /* ignore */ }
     setLocked(true);
   };
 
@@ -172,8 +175,8 @@ const TelaTVPage = () => {
         />
       </Head>
       {/* Header Compacto */}
-      <div className="flex justify-between items-center py-2 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
-        <div className="flex items-center space-x-4">
+      <div className="tv-header flex justify-between items-center py-2 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        <div className="tv-titulo flex items-center space-x-4">
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">
             Monitor de Pedidos (TV)
           </h1>
@@ -202,6 +205,7 @@ const TelaTVPage = () => {
             <span className="px-3 py-1.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 font-semibold">
               {filial}
             </span>
+            {codigoFilial === undefined && (
             <button
               onClick={trocarFilial}
               className="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm hover:border-blue-500"
@@ -209,6 +213,7 @@ const TelaTVPage = () => {
             >
               Trocar filial
             </button>
+            )}
           </div>
           <div className="text-right">
             <div
@@ -396,7 +401,9 @@ const TelaTVPage = () => {
           --linhas: 10;
           --altura-cabecalho: 12vh;
           --altura-linha: calc((100vh - var(--altura-cabecalho)) / var(--linhas));
-          --fonte-linha: calc(var(--altura-linha) * 0.42);
+          /* Limitada também pela largura: em TV 4:3 a letra pela altura estourava as colunas.
+             Em 16:9 o limite (2.1vw) fica acima do valor pela altura — nada muda. */
+          --fonte-linha: min(calc(var(--altura-linha) * 0.42), 2.1vw);
           font-family: 'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
         }
         /* Números em Oswald + tabular-nums (nr venda, horário, cronômetro,
@@ -448,13 +455,24 @@ const TelaTVPage = () => {
           padding: 0.15em 0.7em;
         }
         /* Contagens por status no cabeçalho (substituem os cards) */
-        .tv-monitor .tv-counts { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-        .tv-monitor .tvc {
-          display: inline-flex; align-items: center; gap: 8px;
-          padding: 5px 14px; border-radius: 10px; border: 1px solid transparent;
-          font-size: 1.9vh; font-weight: 500; letter-spacing: 0.02em; white-space: nowrap;
+        /* Sempre numa linha só: o tamanho acompanha o MENOR entre altura e largura
+           (min(vh, vw)), então nenhuma contagem desce em TV estreita ou de outra
+           proporção. O cabeçalho não quebra; o título é quem cede espaço. */
+        .tv-monitor .tv-header { gap: 1.2vw; flex-wrap: nowrap; }
+        .tv-monitor .tv-titulo { flex: 0 1 auto; min-width: 0; }
+        .tv-monitor .tv-titulo h1 { white-space: nowrap; }
+        .tv-monitor .tv-titulo span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .tv-monitor .tv-counts {
+          display: flex; flex-wrap: nowrap; align-items: center; justify-content: center;
+          gap: min(1.2vh, 0.7vw); flex: 0 1 auto; min-width: 0;
         }
-        .tv-monitor .tvc b { font-size: 3.4vh; font-weight: 500; line-height: 1; }
+        .tv-monitor .tvc {
+          display: inline-flex; align-items: center; gap: 0.45em;
+          padding: min(0.5vh, 0.3vw) min(1.4vh, 0.8vw); border-radius: 10px; border: 1px solid transparent;
+          font-size: min(1.9vh, 1.05vw); font-weight: 500; letter-spacing: 0.02em; white-space: nowrap;
+          flex: 0 0 auto;
+        }
+        .tv-monitor .tvc b { font-size: min(3.4vh, 1.9vw); font-weight: 500; line-height: 1; }
         .tv-monitor .c-aguard { background: #fef9e7; color: #8a6d1a; border-color: #f2e2a8; }
         .tv-monitor .c-sep    { background: #e8f1fb; color: #1e5aa0; border-color: #bcd6f2; }
         .tv-monitor .c-separ  { background: #e7f5ec; color: #1c7a43; border-color: #b6e0c4; }
@@ -464,7 +482,7 @@ const TelaTVPage = () => {
         .dark .tv-monitor .c-separ  { background: rgba(28,122,67,.15);  color: #5cc48a; border-color: rgba(28,122,67,.35); }
         .dark .tv-monitor .c-conf   { background: rgba(168,93,26,.15);  color: #e0a45b; border-color: rgba(168,93,26,.35); }
         /* Relógio */
-        .tv-monitor .tv-relogio { font-size: 6vh; font-weight: 500; line-height: 1; }
+        .tv-monitor .tv-relogio { font-size: min(6vh, 3.2vw); font-weight: 500; line-height: 1; white-space: nowrap; }
       `}</style>
 
       {locked && (
@@ -473,6 +491,7 @@ const TelaTVPage = () => {
           initialFilial={filial}
           titulo="Monitor de Pedidos (TV)"
           onUnlock={onUnlockFilial}
+          codigoFilialFixo={codigoFilial}
         />
       )}
     </div>

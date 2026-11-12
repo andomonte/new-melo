@@ -68,6 +68,11 @@ export interface Comprador {
 export interface Filial {
   unm_id: string;
   unm_nome: string;
+  /** 'S' ativa · 'N' inativa (Compras > Unidades Melo). */
+  unm_ativo?: string;
+  /** Filial do sistema ligada (tb_filial) e o nome dela. */
+  unm_codigo_filial?: string | null;
+  nome_filial?: string | null;
   endereco?: string;
   cidade?: string;
   estado?: string;

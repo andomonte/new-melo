@@ -16,6 +16,13 @@ interface Props {
   initialFilial?: string;
   titulo?: string;
   onUnlock: (filial: string) => void;
+  /**
+   * Link fixo por filial (ex.: /conferencia-estacao/1). A filial vem do código
+   * (tb_login_filiais.codigo_filial) e não pode ser trocada. O próprio link já
+   * identifica a filial, então NÃO pede o código de acesso: entra direto. O gate
+   * só aparece enquanto carrega ou se o código da URL não existir.
+   */
+  codigoFilialFixo?: number;
 }
 
 const C = {
@@ -30,7 +37,9 @@ const C = {
   danger: '#e0664f',
 };
 
-export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titulo = 'Selecione a filial', onUnlock }: Props) {
+export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titulo = 'Selecione a filial', onUnlock, codigoFilialFixo }: Props) {
+  const fixo = codigoFilialFixo !== undefined;
+  const [fixoInvalido, setFixoInvalido] = useState(false);
   const [filiais, setFiliais] = useState<FilialItem[]>([]);
   const [filial, setFilial] = useState(initialFilial);
   const [codigo, setCodigo] = useState('');
@@ -41,6 +50,15 @@ export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titul
     fetch(filiaisUrl, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (fixo) {
+          const f = (d?.filiais ?? []).find((x: FilialItem) => Number(x.codigo_filial) === Number(codigoFilialFixo));
+          if (!f) { setFixoInvalido(true); return; }
+          setFiliais([f]);
+          setFilial(f.nome_filial);
+          // O link da filial dispensa o código de acesso: entra direto.
+          onUnlock(f.nome_filial);
+          return;
+        }
         if (d?.filiais?.length) {
           setFiliais(d.filiais);
           setFilial((cur) => (d.filiais.some((f: FilialItem) => f.nome_filial === cur) ? cur : d.filiais[0].nome_filial));
@@ -51,6 +69,7 @@ export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titul
   }, []);
 
   const atual = filiais.find((f) => f.nome_filial === filial);
+  const carregandoFixo = fixo && !atual && !fixoInvalido;
   const exige = atual ? atual.exige_codigo : true; // enquanto carrega, assume que pode exigir
 
   async function entrar() {
@@ -101,8 +120,26 @@ export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titul
           <span style={S.t1}>MELO</span>
         </div>
         <h2 style={S.h}>{titulo}</h2>
-        <p style={S.sub}>Escolha a filial e informe o código de acesso do setor para continuar.</p>
+        <p style={S.sub}>
+          {fixo
+            ? (fixoInvalido ? 'Link de filial inválido.' : 'Informe o código de acesso do setor para continuar.')
+            : 'Escolha a filial e informe o código de acesso do setor para continuar.'}
+        </p>
 
+        {fixo ? (
+          fixoInvalido ? (
+            <div style={{ ...S.erro, minHeight: 0, marginBottom: 8 }}>
+              Filial de código {String(codigoFilialFixo)} não encontrada. Confira o link.
+            </div>
+          ) : (
+            <div>
+              <span style={S.lbl}>Filial</span>
+              <div style={{ ...S.sel, display: 'flex', alignItems: 'center', cursor: 'default' }}>
+                {carregandoFixo ? 'Carregando…' : filial}
+              </div>
+            </div>
+          )
+        ) : (
         <label>
           <span style={S.lbl}>Filial</span>
           <select
@@ -115,8 +152,9 @@ export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titul
             ))}
           </select>
         </label>
+        )}
 
-        {exige ? (
+        {fixo && (fixoInvalido || carregandoFixo) ? null : exige ? (
           <label>
             <span style={S.lbl}>Código da filial</span>
             <input
@@ -136,7 +174,7 @@ export default function FilialGate({ filiaisUrl, initialFilial = 'MANAUS', titul
         )}
 
         <div style={S.erro}>{erro}</div>
-        <button style={S.btn} disabled={busy} onClick={entrar}>
+        <button style={S.btn} disabled={busy || fixoInvalido || carregandoFixo} onClick={entrar}>
           {busy ? 'Verificando…' : 'Entrar'}
         </button>
       </div>

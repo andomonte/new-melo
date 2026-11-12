@@ -37,7 +37,10 @@ function durTxt(ms: number) {
 
 const noUpper = { textTransform: 'none' as const };
 
-export default function ConferenciaEstacao() {
+/** codigoFilial: link fixo por filial (/conferencia-estacao/1 = MANAUS); sem ele, escolhe no gate. */
+export default function ConferenciaEstacao({ codigoFilial }: { codigoFilial?: number } = {}) {
+  // Cada link fixo guarda a liberação à parte, para um não destravar o outro.
+  const gateKey = codigoFilial !== undefined ? `gate_conf_filial_${codigoFilial}` : 'gate_conf_filial';
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [now, setNow] = useState(Date.now());
 
@@ -45,11 +48,11 @@ export default function ConferenciaEstacao() {
   const [locked, setLocked] = useState(true);
   const onUnlockFilial = (f: string) => {
     setFilial(f);
-    try { sessionStorage.setItem('gate_conf_filial', f); } catch { /* ignore */ }
+    try { sessionStorage.setItem(gateKey, f); } catch { /* ignore */ }
     setLocked(false);
   };
   const trocarFilial = () => {
-    try { sessionStorage.removeItem('gate_conf_filial'); } catch { /* ignore */ }
+    try { sessionStorage.removeItem(gateKey); } catch { /* ignore */ }
     setLocked(true);
   };
 
@@ -88,7 +91,7 @@ export default function ConferenciaEstacao() {
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
     } catch { /* ignore */ }
     try {
-      const f = sessionStorage.getItem('gate_conf_filial');
+      const f = sessionStorage.getItem(gateKey);
       if (f) { setFilial(f); setLocked(false); }
     } catch { /* ignore */ }
   }, []);
@@ -210,7 +213,9 @@ export default function ConferenciaEstacao() {
           <div className="htitle">Conferência de Pedidos</div>
           <div className="spacer" />
           <span className="chip"><span className="dot" />{filial}</span>
-          <button className="trocar-filial" onClick={trocarFilial} title="Trocar filial (pede o código)">Trocar filial</button>
+          {codigoFilial === undefined && (
+            <button className="trocar-filial" onClick={trocarFilial} title="Trocar filial (pede o código)">Trocar filial</button>
+          )}
           <span className="clock">{new Date(now).toLocaleTimeString('pt-BR')}</span>
           <button className="iconbtn" title="Alternar tema" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>◐</button>
         </header>
@@ -366,6 +371,7 @@ export default function ConferenciaEstacao() {
           initialFilial={filial}
           titulo="Estação de Conferência"
           onUnlock={onUnlockFilial}
+          codigoFilialFixo={codigoFilial}
         />
       )}
 

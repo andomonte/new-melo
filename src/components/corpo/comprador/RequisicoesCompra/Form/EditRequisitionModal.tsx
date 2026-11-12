@@ -13,6 +13,7 @@ import { useConfirmarSalvar } from '@/hooks/useConfirmarSalvar';
 import { Toaster } from '@/components/ui/toaster';
 import FormFooter2 from '@/components/common/FormFooter2';
 import { AdicionarProdutosModal } from '../components/AdicionarProdutosModal';
+import { unidadeVisivel } from '../types';
 import { TiShoppingCart } from 'react-icons/ti';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -545,7 +546,7 @@ export default function EditRequisitionModal({
                       required
                     >
                       <option value="">Selecione a filial de entrega...</option>
-                      {filiais.map((filial) => (
+                      {filiais.filter((f) => unidadeVisivel(f, formData.entrega_em)).map((filial) => (
                         <option key={filial.unm_id} value={filial.unm_id}>
                           {filial.unm_nome}
                         </option>
@@ -567,7 +568,7 @@ export default function EditRequisitionModal({
                       required
                     >
                       <option value="">Selecione o destino...</option>
-                      {filiais.map((filial) => (
+                      {filiais.filter((f) => unidadeVisivel(f, formData.destinado_para)).map((filial) => (
                         <option key={filial.unm_id} value={filial.unm_id}>
                           {filial.unm_nome}
                         </option>

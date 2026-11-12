@@ -138,6 +138,8 @@ const GerarEntradaImportacaoMain = lazy(() =>
   )
 );
 const DevolucaoMain = lazy(() => import('@/components/corpo/comprador/Devolucao'));
+// Cadastro das unidades de "Entrega em"/"Destinado para" (cad_unidade_melo)
+const UnidadesMeloMain = lazy(() => import('@/components/corpo/comprador/UnidadesMelo'));
 
 // Relatórios / Config / Acessos / Estoque
 import Estoque from '@/components/corpo/admin/estoque';
@@ -217,6 +219,14 @@ export const menus = [
         icon: DiamondPlusIcon,
         corpo: '',
         subItems: [
+          // Unidades de "Entrega em"/"Destinado para" das compras. Mantém o href
+          // /compras/unidades: a permissão de tela (tb_telas) é por href.
+          {
+            name: 'Unidades Melo',
+            icon: WarehouseIcon,
+            href: '/compras/unidades',
+            corpo: UnidadesMeloMain,
+          },
           {
             name: 'Dados Empresa',
             href: '/admin/cadastros/dadosEmpresa',
@@ -549,36 +559,8 @@ export const menus = [
           //   icon: WarehouseIcon,
           //   corpo: LocaisPecasPage,
           // },
-          {
-            name: 'Separação',
-            href: '/vendas/separacao',
-            icon: PackageCheck,
-            corpo: SeparacaoPage,
-          },
-          {
-            name: 'Conferência',
-            href: '/vendas/conferencia',
-            icon: CheckCircle,
-            corpo: ConferenciaPage,
-          },
-          {
-            name: 'Pedidos Conferidos',
-            href: '/vendas/conferidos',
-            icon: FileCheck,
-            corpo: TelaFinalizarPage,
-          },
-          {
-            name: 'Tela TV',
-            href: '/vendas/operacional/tv',
-            icon: Tv,
-            corpo: TelaTVPage,
-          },
-          {
-            name: 'Recebimento',
-            href: '/vendas/operacional/recebimento',
-            icon: Printer,
-            corpo: TelaRecebimentoPage,
-          },
+          // Separação, Conferência, Pedidos Conferidos, Tela TV e Recebimento
+          // foram para o menu Estoque.
         ],
       },
 
@@ -660,11 +642,56 @@ export const menus = [
         ],
       },
 
+      // ======= ESTOQUE =======
+      // Os itens mantêm o href antigo (de Vendas) porque a permissão de tela é
+      // pelo href. Tela TV, Conferência e Separação abrem, em nova aba, a tela
+      // solta da FILIAL LOGADA (linkFilial + código: /tv/1 = MANAUS).
       {
         name: 'Estoque',
         icon: WarehouseIcon,
-        href: '/admin/estoque',
-        corpo: Estoque,
+        href: '',
+        corpo: '',
+        subItems: [
+          {
+            name: 'Estoque',
+            href: '/admin/estoque',
+            icon: WarehouseIcon,
+            corpo: Estoque,
+          },
+          {
+            name: 'Tela TV',
+            href: '/vendas/operacional/tv',
+            icon: Tv,
+            corpo: TelaTVPage,
+            linkFilial: '/tv',
+          },
+          {
+            name: 'Conferência',
+            href: '/vendas/conferencia',
+            icon: CheckCircle,
+            corpo: ConferenciaPage,
+            linkFilial: '/conferencia-estacao',
+          },
+          {
+            name: 'Separação',
+            href: '/vendas/separacao',
+            icon: PackageCheck,
+            corpo: SeparacaoPage,
+            linkFilial: '/separacao-estacao',
+          },
+          {
+            name: 'Recebimento',
+            href: '/vendas/operacional/recebimento',
+            icon: Printer,
+            corpo: TelaRecebimentoPage,
+          },
+          {
+            name: 'Pedidos Conferidos',
+            href: '/vendas/conferidos',
+            icon: FileCheck,
+            corpo: TelaFinalizarPage,
+          },
+        ],
       },
       {
         name: 'Relatórios',
@@ -801,6 +828,8 @@ interface SubMenuItem {
   hasSubmenu?: boolean;
   subMenuItems?: SubMenuItemThirdLevel[];
   openInNewTab?: boolean;
+  /** Abre em nova aba a tela solta da filial logada: `${linkFilial}/${codigo_filial}`. */
+  linkFilial?: string;
 }
 
 interface MenuItem {

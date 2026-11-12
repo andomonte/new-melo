@@ -208,7 +208,7 @@ async function proximoCodigo(
   // que duas inclusões simultâneas cheguem ao mesmo código.
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cfg.tabela]);
   const { rows } = await client.query(
-    `SELECT COALESCE(MAX(NULLIF(regexp_replace(${q(cfg.pk.coluna)}, '\\D', '', 'g'), '')::bigint), 0) + 1 AS proximo
+    `SELECT COALESCE(MAX(NULLIF(regexp_replace(${q(cfg.pk.coluna)}::text, '\\D', '', 'g'), '')::bigint), 0) + 1 AS proximo
      FROM ${cfg.tabela}`,
   );
   return zeroEsquerda(String(rows[0].proximo), cfg.pkGerada!.tamanho);

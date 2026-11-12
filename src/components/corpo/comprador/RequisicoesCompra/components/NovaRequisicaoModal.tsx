@@ -8,6 +8,7 @@ import { FornecedorAutocomplete } from './FornecedorAutocomplete';
 import { CompradorAutocomplete } from './CompradorAutocomplete';
 import api from '@/components/services/api';
 import type { ModalProps } from '../types';
+import { unidadeVisivel } from '../types';
 import {
   NovaRequisicaoForm,
   CreateRequisitionResponse,
@@ -246,12 +247,16 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
       const filiaisData: Filial[] = filiaisRes.data || [];
       setFiliais(filiaisData);
 
-      // Nova requisição (não é duplicação): já vem MELO MAO como padrão em
-      // Entrega e Destino. O usuário pode trocar no select.
+      // Nova requisição (não é duplicação): Entrega e Destino já vêm com a
+      // unidade ligada à filial logada (Compras > Unidades Melo). Sem ligação,
+      // cai na MELO MAO como antes. Só unidades ativas. O usuário pode trocar.
       if (!initialData) {
-        const padrao = filiaisData.find(
-          (f) => String(f.unm_id) === '1' || f.unm_nome === 'MELO MAO',
-        );
+        const ativas = filiaisData.filter((f) => unidadeVisivel(f));
+        const filialLogada = String(user?.filial ?? '').toUpperCase();
+        const padrao =
+          ativas.find((f) => filialLogada && String(f.nome_filial ?? '').toUpperCase() === filialLogada) ??
+          ativas.find((f) => String(f.unm_id) === '1' || f.unm_nome === 'MELO MAO') ??
+          ativas[0];
         if (padrao) {
           setFormData((prev) => ({
             ...prev,
@@ -580,7 +585,9 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
                     </Label>
                     <ComboboxInput
                       className="mt-1"
-                      options={filiais.map((filial) => ({ value: String(filial.unm_id), label: filial.unm_nome }))}
+                      options={filiais
+                        .filter((f) => unidadeVisivel(f, formData.entrega_em))
+                        .map((filial) => ({ value: String(filial.unm_id), label: filial.unm_nome }))}
                       value={formData.entrega_em}
                       onValueChange={(v) => handleFieldChange('entrega_em', v)}
                       required
@@ -595,7 +602,9 @@ export const NovaRequisicaoModal: React.FC<NovaRequisicaoModalProps> = ({
                     </Label>
                     <ComboboxInput
                       className="mt-1"
-                      options={filiais.map((filial) => ({ value: String(filial.unm_id), label: filial.unm_nome }))}
+                      options={filiais
+                        .filter((f) => unidadeVisivel(f, formData.destinado_para))
+                        .map((filial) => ({ value: String(filial.unm_id), label: filial.unm_nome }))}
                       value={formData.destinado_para}
                       onValueChange={(v) => handleFieldChange('destinado_para', v)}
                       required
