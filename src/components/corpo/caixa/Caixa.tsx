@@ -989,7 +989,8 @@ export default function Caixa() {
     setPreVendasSel((prev) => [...prev, pv]);
     if (preVendaDetalhesMap[pv.codvenda]) return; // detalhe já em cache
     try {
-      const r = await fetch(`/api/faturamento/detalhes-venda?nrovenda=${encodeURIComponent(pv.nrovenda)}`);
+      // por codvenda (exato): o nrovenda de um pedido pode ser o codvenda de outra venda
+      const r = await fetch(`/api/faturamento/detalhes-venda?codvenda=${encodeURIComponent(pv.codvenda)}`);
       const d = await r.json();
       if (r.ok && d?.resumoFinanceiro) {
         // usa o total da FATURA (totalGeral) — pode diferir do total da lista

@@ -13,7 +13,8 @@ import { infoNacionalizacaoDaFatura } from '@/lib/importacao/travaCancelamentoNa
  *        - cancelarVendas=true  → dbvenda.cancel='S' + DEVOLVE estoque
  *          (dbprod.qtest e cad_armazem_produto.arp_qtest, revertendo a baixa do
  *          faturamento) + cancela a pré-nota (dbprenota) quando tipo='1'.
- *        - cancelarVendas=false → dbvenda.status='L' (libera p/ refaturar).
+ *        - cancelarVendas=false → dbvenda.status='L' (libera p/ refaturar) + devolve
+ *          estoque e reserva da venda (o refaturamento baixa de novo).
  *   4. Log dbacao ('CANCELAR','DBFATURA', COD:<codfat> | MOTIVO:...).
  *
  * OBS: NÃO mexe em dbclien.debito — o faturamento web não movimenta o débito do
@@ -142,7 +143,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             .catch(() => {});
         }
       } else if (codVendas.length > 0) {
-        // Libera as vendas (volta para 'L', disponível p/ refaturar).
+        // Libera as vendas (volta para 'L', disponível p/ refaturar). O faturamento
+        // baixou o estoque (dbprod.qtest e arp_qtest) e consumiu a reserva da venda
+        // (arp_qtest_reservada); como o refaturamento baixa de novo, devolve os três
+        // para o estado de antes do faturamento — senão a baixa sai em dobro.
+        for (const cv of codVendas) {
+          const itens = await client.query(
+            `SELECT codprod, qtd, arm_id FROM dbitvenda WHERE codvenda = $1`,
+            [cv],
+          );
+          for (const it of itens.rows) {
+            const qtd = Number(it.qtd) || 0;
+            if (!qtd || !it.codprod) continue;
+            await client.query(
+              `UPDATE dbprod SET qtest = COALESCE(qtest, 0) + $1 WHERE codprod = $2`,
+              [qtd, it.codprod],
+            );
+            if (it.arm_id != null) {
+              await client.query(
+                `UPDATE cad_armazem_produto
+                    SET arp_qtest = COALESCE(arp_qtest, 0) + $1,
+                        arp_qtest_reservada = COALESCE(arp_qtest_reservada, 0) + $1
+                  WHERE arp_codprod = $2 AND arp_arm_id = $3`,
+                [qtd, it.codprod, it.arm_id],
+              );
+            }
+          }
+        }
         await client.query(
           `UPDATE dbvenda SET status = 'L' WHERE codvenda = ANY($1)`,
           [codVendas],

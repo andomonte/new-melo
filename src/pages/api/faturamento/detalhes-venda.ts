@@ -41,10 +41,16 @@ export default async function handler(
       FROM dbvenda
       WHERE codvenda = ANY($1)
     `
-      : `
-      SELECT codvenda
-      FROM dbvenda
-      WHERE nrovenda = ANY($1) OR codvenda = ANY($1)
+      : // Um registro por número informado. nrovenda e codvenda são sequências
+        // paralelas (o nº de um pedido costuma ser o codvenda de OUTRA venda), então o
+        // nrovenda tem prioridade; o codvenda só vale quando nenhum nrovenda casa.
+        // Antes vinham as duas vendas e a tela pegava qualquer uma (o caixa faturava
+        // a venda errada).
+        `
+      SELECT DISTINCT ON (n.num) v.codvenda
+      FROM unnest($1::text[]) AS n(num)
+      JOIN dbvenda v ON v.nrovenda = n.num OR v.codvenda = n.num
+      ORDER BY n.num, (v.nrovenda = n.num) DESC, v.codvenda DESC
     `;
     const codvendaResult = await client.query(codvendaQuery, [numeros]);
     const codigos = codvendaResult.rows.map((r: any) => r.codvenda);
