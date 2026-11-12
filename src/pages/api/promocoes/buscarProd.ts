@@ -66,7 +66,7 @@ export default async function searchProductsPaginated(
     const countQuerySql = `
       SELECT COUNT(*)
       FROM dbprod p
-      JOIN cmp_produto cp ON p.codprod = cp."CODPROD"
+      JOIN DBMARCAS M ON m.codmarca = p.codmarca -- mesmo JOIN da listagem (cmp_produto duplicava a contagem)
       JOIN dbformacaoprvenda fp ON p.codprod = fp."CODPROD"
       WHERE fp."PRECOVENDA" > 0
           AND (p.descr ILIKE $1 OR p.ref ILIKE $2)

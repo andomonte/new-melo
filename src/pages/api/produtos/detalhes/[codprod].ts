@@ -46,21 +46,17 @@ export default async function getProdutoEnriquecido(
           p.qtest AS qtest,
           (p.qtest - p.qtdreservada) AS qtddisponivel,
           p.dolar AS dolar,
-          cp."MARCA" AS codmarca,
+          m.descr AS codmarca,
           fp."PRECOVENDA" AS prvenda,
           p.unimed AS unidadeMedida,
-          -- Lógica de precificação final
-          CASE
-              WHEN $2::text IS NOT NULL THEN (
-                  -- Implemente a lógica real aqui, por exemplo:
-                  fp."PRECOVENDA" * (1 - COALESCE(cr.desconto, 0)) -- Ex: preco com desconto do cliente
-              )
-              ELSE fp."PRECOVENDA"
-          END AS precoFinalCalculado
+          -- Preço final = preço de tabela. Não há regra de desconto por cliente
+          -- (a tabela cliente_regras_preco do exemplo original não existe e
+          -- fazia esta rota sempre dar erro). $2 (clienteId) fica reservado.
+          CASE WHEN $2::text IS NOT NULL THEN fp."PRECOVENDA" ELSE fp."PRECOVENDA" END
+            AS precoFinalCalculado
       FROM dbprod p
-      JOIN cmp_produto cp ON p.codprod = cp."CODPROD"
+      LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca -- marca do cadastro (cmp_produto: foto antiga do Oracle, sem os produtos novos)
       JOIN dbformacaoprvenda fp ON p.codprod = fp."CODPROD"
-      LEFT JOIN cliente_regras_preco cr ON p.codprod = cr.codprod AND cr.cliente_id = $2 -- Exemplo de join para regras de cliente
       WHERE p.codprod = $1 AND fp."PRECOVENDA" > 0 AND fp."TIPOPRECO" = $3; -- Certifique-se de que o tipo de preço seja aplicável
     `;
 

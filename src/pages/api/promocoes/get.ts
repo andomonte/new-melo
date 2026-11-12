@@ -113,7 +113,7 @@ export default async function handle(
                      pi.qtdFaturado,
                      pi.qtd_total_item,
                      pi.origem,
-                     cp."MARCA"                                    AS marca,
+                     dm.descr                                      AS marca,
                      COALESCE((
                        SELECT SUM(cap.arp_qtest)
                        FROM cad_armazem_produto cap
@@ -221,7 +221,7 @@ export default async function handle(
               INNER JOIN dbpromocao p2 ON p2.id_promocao = pi.id_promocao
               LEFT JOIN dbprod    dp ON dp.codprod = pi.codprod
               LEFT JOIN dbgpprod  dg ON dg.codgpp  = pi.codgpp
-              LEFT JOIN cmp_produto cp ON cp."CODPROD" = pi.codprod
+              LEFT JOIN dbmarcas  dm ON dm.codmarca = dp.codmarca
               LEFT JOIN (
                 SELECT DISTINCT ON ("CODPROD", "TIPOPRECO")
                        "CODPROD", "TIPOPRECO", "PRECOVENDA"

@@ -261,15 +261,11 @@ export default async function listaProdutosEnriquecida(
           cp_filtered."MARCA" AS codmarca,
           fp_filtered.prvenda AS prvenda
       FROM dbprod p
-      JOIN (
-          SELECT DISTINCT ON ("CODPROD")
-              "CODPROD",
-              "MARCA"
-          FROM cmp_produto
-          ORDER BY "CODPROD",
-                   CASE WHEN "MARCA" = 'ARTEB' THEN 0 ELSE 1 END,
-                   "MARCA"
-      ) cp_filtered ON p.codprod = cp_filtered."CODPROD"
+      -- Marca do cadastro atual (dbprod.codmarca). A cmp_produto era uma foto do
+      -- Oracle com carga em dobro e sem ~55 mil produtos novos.
+      LEFT JOIN (
+          SELECT codmarca, descr AS "MARCA" FROM dbmarcas
+      ) cp_filtered ON cp_filtered.codmarca = p.codmarca
       JOIN (
           SELECT DISTINCT ON ("CODPROD", "TIPOPRECO")
               "CODPROD",
@@ -300,15 +296,11 @@ export default async function listaProdutosEnriquecida(
     const countQuerySql = `
       SELECT COUNT(*)
       FROM dbprod p
-      JOIN (
-          SELECT DISTINCT ON ("CODPROD")
-              "CODPROD",
-              "MARCA"
-          FROM cmp_produto
-          ORDER BY "CODPROD",
-                   CASE WHEN "MARCA" = 'ARTEB' THEN 0 ELSE 1 END,
-                   "MARCA"
-      ) cp_filtered ON p.codprod = cp_filtered."CODPROD"
+      -- Marca do cadastro atual (dbprod.codmarca). A cmp_produto era uma foto do
+      -- Oracle com carga em dobro e sem ~55 mil produtos novos.
+      LEFT JOIN (
+          SELECT codmarca, descr AS "MARCA" FROM dbmarcas
+      ) cp_filtered ON cp_filtered.codmarca = p.codmarca
       JOIN (
           SELECT DISTINCT ON ("CODPROD", "TIPOPRECO")
               "CODPROD",
