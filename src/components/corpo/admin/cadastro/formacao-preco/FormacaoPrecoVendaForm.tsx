@@ -9,7 +9,9 @@ export const FormacaoPrecoVendaForm: React.FC<
   FormComponentProps<FormacaoPrecoVenda>
 > = ({ formData, onFormChange, errors }) => {
   // Verificar se estamos no modo de edição
-  const isEditMode = Boolean(formData.CODPROD && formData.CODPROD !== '');
+  // Linha já gravada vem da API com CHAVE (CODPROD-TIPOPRECO): produto e tipo
+  // formam a chave e ficam travados na edição.
+  const isEditMode = Boolean(formData.CHAVE);
 
   // Função para notificar o componente pai sobre a mudança em um campo
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,12 +57,13 @@ export const FormacaoPrecoVendaForm: React.FC<
       />
       <FormInput
         name="TIPOPRECO"
-        label="Tipo Preço"
+        label="Tipo Preço (0 a 7)"
         type="number"
-        value={formData.TIPOPRECO || ''}
+        value={formData.TIPOPRECO ?? ''}
         onChange={handleInputChange}
         error={errors.TIPOPRECO}
         required
+        disabled={isEditMode}
       />
       <FormInput
         name="ICMS"

@@ -9,7 +9,7 @@ import { calcularPrecoVenda, TIPOS_PRECO, type ComponentesPreco } from '@/lib/ca
  *
  * Edita a MARGEM LÍQUIDA de UMA faixa (tipo de preço) e recalcula o PREÇO DE
  * VENDA com o motor validado (calcularPrecoVenda). Grava na hora em
- * DBFORMACAOPRVENDA (+ dbprod.prvenda quando ZFM). Modelo Delphi
+ * dbformacaoprvenda (+ dbprod.prvenda quando ZFM). Modelo Delphi
  * ATUALIZAR_PRECO(pTipoAtualizacao='MARGEM'). Fase 1: só edição de margem.
  */
 const round2 = (x: number) => {
@@ -60,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Linha da política (tributos vigentes desta faixa)
     const fRes = await client.query(
       `SELECT "ICMSDEVOL", "ICMS", "IPI", "PIS", "COFINS", "DCI", "COMISSAO", "TAXACARTAO"
-         FROM "DBFORMACAOPRVENDA" WHERE "CODPROD" = $1 AND "TIPOPRECO" = $2`,
+         FROM dbformacaoprvenda WHERE "CODPROD" = $1 AND "TIPOPRECO" = $2`,
       [codprod, tp],
     );
     if (fRes.rows.length === 0) throw new Error('Faixa de preço não encontrada para este produto');
@@ -87,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const precoFinal = round2(preco);
 
     await client.query(
-      `UPDATE "DBFORMACAOPRVENDA"
+      `UPDATE dbformacaoprvenda
           SET "MARGEMLIQUIDA" = $1, "PRECOVENDA" = $2
         WHERE "CODPROD" = $3 AND "TIPOPRECO" = $4`,
       [novaMargem, precoFinal, codprod, tp],

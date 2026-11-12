@@ -32,6 +32,8 @@ export interface FormacaoPrecoVenda {
   FATORDESPESAS: number;
   PRECOVENDA: number;
   TAXACARTAO: number | null; // Pode ser nulo
+  /** "CODPROD-TIPOPRECO", devolvido pela API: identifica a linha. */
+  CHAVE?: string;
 }
 
 /**

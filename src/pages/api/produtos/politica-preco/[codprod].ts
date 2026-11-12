@@ -7,7 +7,7 @@ import { getPgPoolPorNomeFilial } from '@/lib/pg';
  *
  * Política de preço de venda de UM produto (grade detalhe da "Análise de
  * Margem", porte do Delphi uniMargemPrecoVendasNovo). Retorna uma linha por
- * tipo de preço (DBFORMACAOPRVENDA) com custo base, tributos, margem e preço.
+ * tipo de preço (dbformacaoprvenda) com custo base, tributos, margem e preço.
  */
 
 // TIPOPRECO -> rótulo (igual ao legado Oracle).
@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const polRes = await client.query(
       `SELECT "TIPOPRECO", "MARGEMLIQUIDA", "ICMSDEVOL", "ICMS", "IPI", "PIS",
               "COFINS", "DCI", "COMISSAO", "FATORDESPESAS", "TAXACARTAO", "PRECOVENDA"
-         FROM "DBFORMACAOPRVENDA"
+         FROM dbformacaoprvenda
         WHERE "CODPROD" = $1
         ORDER BY "TIPOPRECO"`,
       [codprod],

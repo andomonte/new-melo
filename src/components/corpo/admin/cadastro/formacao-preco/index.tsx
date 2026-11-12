@@ -33,6 +33,7 @@ const formacaoPrecoApi: CrudApi<FormacaoPrecoVenda> = {
 // 3. DEFINIR AS COLUNAS DA TABELA
 const formacaoPrecoColumns: CrudColumn<FormacaoPrecoVenda>[] = [
   { header: 'Cód. Produto', cell: (item) => item.CODPROD },
+  { header: 'Tipo', cell: (item) => item.TIPOPRECO },
   {
     header: 'Preço Venda',
     cell: (item) =>
@@ -72,6 +73,8 @@ const formacaoPrecoSchema = z.object({
   COMISSAO: z.coerce.number().min(0, 'A Comissão é obrigatória.'),
   FATORDESPESAS: z.coerce.number().min(0, 'O Fator Despesas é obrigatório.'),
   TAXACARTAO: z.coerce.number().min(0).nullable(),
+  // "CODPROD-TIPOPRECO", vem da API (só nas linhas já gravadas)
+  CHAVE: z.string().optional(),
 });
 
 const formacaoPrecoEmptyState: FormacaoPrecoVenda = {
@@ -102,7 +105,7 @@ const FormacaoPrecoVendaPage = () => {
     <GenericCrudPage
       title="Formação de Preço de Venda"
       entityName="Formação de Preço"
-      idKey="CODPROD" // Chave primária do seu modelo
+      idKey="CHAVE" // CODPROD-TIPOPRECO: uma linha por tipo de preço
       api={formacaoPrecoApi}
       columns={formacaoPrecoColumns}
       permissions={userPermissions}

@@ -2,7 +2,7 @@
  * Biblioteca para cálculo automático de preços por categoria (TIPOPRECO)
  *
  * Replica a lógica da procedure Oracle ATUALIZAR_PRECO_MARGEM:
- * - Lê registros existentes da DBFORMACAOPRVENDA
+ * - Lê registros existentes da dbformacaoprvenda (a mesma tabela que a venda lê)
  * - Recalcula PRECOVENDA usando a MARGEMLIQUIDA já salva + novo custo base
  * - Preserva MARGEMLIQUIDA e demais campos
  */
@@ -150,7 +150,7 @@ export function calcularPrecoVenda(
 /**
  * Recalcula preços de venda para um produto baseado nas formações existentes.
  * Replica a lógica legada ATUALIZAR_PRECO_MARGEM:
- * 1. Lê registros existentes da DBFORMACAOPRVENDA
+ * 1. Lê registros existentes da dbformacaoprvenda (a mesma tabela que a venda lê)
  * 2. Para cada registro, recalcula PRECOVENDA usando MARGEMLIQUIDA existente + novo custo
  * 3. Preserva MARGEMLIQUIDA e demais campos (ICMS, PIS, COFINS, etc.)
  * 4. Se não existir registro, NÃO cria (manter comportamento legado)
@@ -160,7 +160,7 @@ export async function recalcularPrecosProduto(
   produto: DadosProduto,
   schema?: string
 ): Promise<void> {
-  const tableName = schema ? `${schema}."DBFORMACAOPRVENDA"` : '"DBFORMACAOPRVENDA"';
+  const tableName = schema ? `${schema}.dbformacaoprvenda` : 'dbformacaoprvenda';
 
   // 1. Ler registros existentes
   const existentes = await client.query(
@@ -173,7 +173,7 @@ export async function recalcularPrecosProduto(
   );
 
   if (existentes.rows.length === 0) {
-    console.log(`Produto ${produto.codprod}: sem registros em DBFORMACAOPRVENDA, nada a recalcular`);
+    console.log(`Produto ${produto.codprod}: sem registros em dbformacaoprvenda, nada a recalcular`);
     return;
   }
 
@@ -340,9 +340,9 @@ async function atualizarDbpreco(
 export async function deletarPrecosProduto(
   client: PoolClient,
   codprod: string,
-  schema: string = 'public'
+  schema?: string
 ): Promise<void> {
-  const tableName = schema ? `${schema}."DBFORMACAOPRVENDA"` : '"DBFORMACAOPRVENDA"';
+  const tableName = schema ? `${schema}.dbformacaoprvenda` : 'dbformacaoprvenda';
 
   await client.query(`DELETE FROM ${tableName} WHERE "CODPROD" = $1`, [codprod]);
 

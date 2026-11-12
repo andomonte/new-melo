@@ -126,14 +126,14 @@ const handleGetListWithFilters = async (
     const whereClause =
       whereGroups.length > 0 ? `WHERE ${whereGroups.join(' AND ')}` : '';
 
-    const totalQuery = `SELECT COUNT(*) FROM "DBFORMACAOPRVENDA" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM dbformacaoprvenda ${whereClause}`;
     const totalResult = await client.query(totalQuery, params);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     const dataQuery = `
-      SELECT * FROM "DBFORMACAOPRVENDA"
+      SELECT *, "CODPROD" || '-' || "TIPOPRECO" AS "CHAVE" FROM dbformacaoprvenda
       ${whereClause}
-      ORDER BY "CODPROD" ASC
+      ORDER BY "CODPROD" ASC, "TIPOPRECO" ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2};
     `;
 
@@ -180,21 +180,22 @@ const handleGetList = async (req: NextApiRequest, res: NextApiResponse) => {
     const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
-    // Busca por REFERÊNCIA (nunca pelo codprod interno). A view DBFORMACAOPRVENDA só
+    // Busca por REFERÊNCIA (nunca pelo codprod interno). A tabela dbformacaoprvenda só
     // tem CODPROD, então filtra os codprod cuja referência (dbprod.ref) casa com o termo.
-    const whereClause = search
-      ? `WHERE "CODPROD" IN (SELECT codprod FROM dbprod WHERE ref ILIKE $3)`
-      : '';
+    // O termo é $1 na contagem e $3 na listagem (depois de LIMIT/OFFSET).
+    const filtroRef = (n: number) =>
+      search ? `WHERE "CODPROD" IN (SELECT codprod FROM dbprod WHERE ref ILIKE $${n})` : '';
+    const whereClause = filtroRef(3);
     const searchParam = search ? [`%${search}%`] : [];
 
-    const totalQuery = `SELECT COUNT(*) FROM "DBFORMACAOPRVENDA" ${whereClause}`;
+    const totalQuery = `SELECT COUNT(*) FROM dbformacaoprvenda ${filtroRef(1)}`;
     const totalResult = await client.query(totalQuery, searchParam);
     const total = parseInt(totalResult.rows[0].count, 10);
 
     const dataQuery = `
-      SELECT * FROM "DBFORMACAOPRVENDA"
+      SELECT *, "CODPROD" || '-' || "TIPOPRECO" AS "CHAVE" FROM dbformacaoprvenda
       ${whereClause}
-      ORDER BY "CODPROD" ASC
+      ORDER BY "CODPROD" ASC, "TIPOPRECO" ASC
       LIMIT $1 OFFSET $2;
     `;
     const offset = (page - 1) * perPage;
@@ -312,11 +313,11 @@ const handleCreate = async (req: NextApiRequest, res: NextApiResponse) => {
     client = await pool.connect();
 
     const query = `
-      INSERT INTO "DBFORMACAOPRVENDA" (
+      INSERT INTO dbformacaoprvenda (
         "CODPROD", "TIPOPRECO", "MARGEMLIQUIDA", "ICMSDEVOL", "ICMS", "IPI", "PIS",
         "COFINS", "DCI", "COMISSAO", "FATORDESPESAS", "PRECOVENDA", "TAXACARTAO"
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING *;
+      RETURNING *, "CODPROD" || '-' || "TIPOPRECO" AS "CHAVE";
     `;
     const values = [
       CODPROD,
