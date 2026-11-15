@@ -25,6 +25,9 @@ interface PromocaoPayload {
   criado_por: string; // Confirmado que vem do payload
   observacoes: string | null;
   // 'criado_em' não é esperado no payload, é gerado pelo BD.
+  clientes_vinculados?: unknown[] | null;
+  vendedores_vinculados?: unknown[] | null;
+  permite_balcao?: boolean;
   // 'itens_promocao' não é esperado no payload da Promocao, mas sim como array 'itens' separado.
 }
 
@@ -98,6 +101,11 @@ export default async function handler(
     await client.query('BEGIN'); // INICIA A TRANSAÇÃO: Tudo a partir daqui será atômico.
 
     let currentPromocaoId: number; // Para armazenar o ID da promoção (existente ou recém-criado)
+    // Itens da promoção antes da edição, por "codprod|codgpp" (vazio na criação).
+    const itensAnteriores = new Map<
+      string,
+      { id_promocao_item: number; qtdvendido: number | null; qtdfaturado: number | null }
+    >();
 
     if (promocao.id_promocao && promocao.id_promocao !== 0) {
       // --- É uma ATUALIZAÇÃO de Promoção Existente ---
@@ -150,7 +158,19 @@ export default async function handler(
       );
       currentPromocaoId = updateResult.rows[0].id_promocao;
 
-      // 2. Deleta todos os itens antigos associados a esta promoção
+      // 2. Guarda id e contadores dos itens atuais e apaga todos. Os itens que
+      // continuam na promoção são regravados com o MESMO id e os mesmos
+      // qtdvendido/qtdfaturado: sem isso, prorrogar a promoção zerava o que já foi
+      // vendido (os limites de quantidade deixavam de valer) e as vendas
+      // (dbitvenda.id_promocao_item) ficavam apontando para item inexistente.
+      const antigos = await client.query(
+        `SELECT id_promocao_item, codprod, codgpp, qtdvendido, qtdfaturado
+           FROM dbpromocao_item WHERE id_promocao = $1`,
+        [currentPromocaoId],
+      );
+      for (const a of antigos.rows) {
+        itensAnteriores.set(`${a.codprod ?? ''}|${a.codgpp ?? ''}`, a);
+      }
       await client.query(
         'DELETE FROM dbpromocao_item WHERE id_promocao = $1;',
         [currentPromocaoId],
@@ -196,44 +216,44 @@ export default async function handler(
 
     // 2. Insere os novos itens da promoção (para ambos, criação e atualização)
     if (itens && itens.length > 0) {
-      // Constrói a lista de valores para a inserção em lote
-      // 1. Atualiza os placeholders (9 colunas)
-      const valuesPlaceholders = itens
-        .map((_, index) => {
-          const offset = index * 9;
-          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${
-            offset + 4
-          }, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${
-            offset + 9
-          })`;
-        })
-        .join(',');
-
-      // 2. Atualiza os valores enviados para o INSERT
-      const itemValues = itens.flatMap((item: ItemPromocao) => [
-        currentPromocaoId,
-        promocao.tipo_promocao === 'PROD' ? item.codprod : null,
-        promocao.tipo_promocao === 'GRUPO' ? item.codprod : null,
-        item.valor_desconto_item,
-        item.tipo_desconto_item,
-        item.qtde_minima_item,
-        item.qtde_maxima_item,
-        item.qtd_total_item ?? null, // ✅ NOVO CAMPO
-        item.origem ?? null, // ✅ NOVO CAMPO
-      ]);
-
-      // 3. Atualiza o SQL INSERT
-      const insertItemsQuery = `
-  INSERT INTO dbpromocao_item (
-    id_promocao, codprod, codgpp,
-    valor_desconto_item, tipo_desconto_item,
-    qtde_minima_item, qtde_maxima_item,
-    qtd_total_item, origem
-  )
-  VALUES ${valuesPlaceholders};
-`;
-
-      await client.query(insertItemsQuery, itemValues);
+      for (const item of itens as ItemPromocao[]) {
+        const codprod = promocao.tipo_promocao === 'PROD' ? item.codprod : null;
+        const codgpp = promocao.tipo_promocao === 'GRUPO' ? item.codprod : null;
+        const anterior = itensAnteriores.get(`${codprod ?? ''}|${codgpp ?? ''}`);
+        const valores = [
+          currentPromocaoId,
+          codprod,
+          codgpp,
+          item.valor_desconto_item,
+          item.tipo_desconto_item,
+          item.qtde_minima_item,
+          item.qtde_maxima_item,
+          item.qtd_total_item ?? null,
+          item.origem ?? null,
+          anterior?.qtdvendido ?? null,
+          anterior?.qtdfaturado ?? null,
+        ];
+        if (anterior) {
+          // item que já existia: mesmo id e contadores preservados
+          await client.query(
+            `INSERT INTO dbpromocao_item (
+               id_promocao, codprod, codgpp, valor_desconto_item, tipo_desconto_item,
+               qtde_minima_item, qtde_maxima_item, qtd_total_item, origem,
+               qtdvendido, qtdfaturado, id_promocao_item)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [...valores, anterior.id_promocao_item],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO dbpromocao_item (
+               id_promocao, codprod, codgpp, valor_desconto_item, tipo_desconto_item,
+               qtde_minima_item, qtde_maxima_item, qtd_total_item, origem,
+               qtdvendido, qtdfaturado)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            valores,
+          );
+        }
+      }
     }
 
     await client.query('COMMIT'); // COMMITA A TRANSAÇÃO: Se chegou aqui, tudo deu certo.

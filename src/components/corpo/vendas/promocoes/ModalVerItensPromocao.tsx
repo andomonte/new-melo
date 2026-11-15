@@ -1,5 +1,6 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, Copy, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { PromocaoComItensFixos } from '@/data/promocoes/promocoes';
 
 interface ModalVerItensPromocaoProps {
@@ -13,6 +14,40 @@ const ModalVerItensPromocao: React.FC<ModalVerItensPromocaoProps> = ({
   onClose,
   promocao,
 }) => {
+  // Referência copiada por último (o ícone vira "check" por um instante).
+  const [copiada, setCopiada] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const copiarReferencia = async (ref: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(ref);
+      } else {
+        // fallback p/ navegador sem Clipboard API (página em http)
+        const ta = document.createElement('textarea');
+        ta.value = ref;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopiada(ref);
+      toast.success(`Referência ${ref} copiada.`);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopiada(null), 1500);
+    } catch {
+      toast.error('Não foi possível copiar a referência.');
+    }
+  };
+
   if (!isOpen || !promocao) return null;
 
   const itens = promocao.itens_promocao || [];
@@ -59,6 +94,9 @@ const ModalVerItensPromocao: React.FC<ModalVerItensPromocaoProps> = ({
               <table className="min-w-full divide-y divide-gray-200 dark:divide-zinc-700">
                 <thead className="bg-gray-50 dark:bg-zinc-800 sticky top-0 z-10">
                   <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      REFERÊNCIA
+                    </th>
                     <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       PRODUTO
                     </th>
@@ -83,6 +121,25 @@ const ModalVerItensPromocao: React.FC<ModalVerItensPromocaoProps> = ({
                       key={rowKey(item, index)}
                       className="hover:bg-gray-50 dark:hover:bg-zinc-800"
                     >
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {item.ref ? (
+                          <button
+                            type="button"
+                            onClick={() => copiarReferencia(String(item.ref))}
+                            title="Copiar referência"
+                            className="group inline-flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 font-mono text-base font-bold text-blue-800 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-200 dark:hover:bg-blue-900/50"
+                          >
+                            <span className="select-all">{item.ref}</span>
+                            {copiada === String(item.ref) ? (
+                              <Check size={16} className="text-green-600 dark:text-green-400" />
+                            ) : (
+                              <Copy size={16} className="opacity-60 group-hover:opacity-100" />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-200">
                         <div className="flex items-center gap-2">
                           <img

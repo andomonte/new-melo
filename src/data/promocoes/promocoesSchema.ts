@@ -74,7 +74,10 @@ export const promocaoSchema = z
       .nullable()
       .optional(),
     ativa: z.boolean().default(true),
-    criado_em: z.string().datetime().optional(), // Este campo geralmente é gerado pelo backend na criação
+    // Gerado pelo banco e ignorado no salvar (add.ts). Vem do PG como texto
+    // "2026-11-12 12:34:16.296785" (sem o "T" do ISO); exigir .datetime() barrava
+    // TODA edição de promoção com "criado_em: Invalid datetime".
+    criado_em: z.string().nullable().optional(),
     criado_por: z.string().min(1, 'Criador da promoção é obrigatório.'),
     observacoes: z
       .string()
