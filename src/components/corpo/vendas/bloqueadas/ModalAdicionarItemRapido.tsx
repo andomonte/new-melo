@@ -452,7 +452,10 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       nrequis: chkRequisicao ? nrequisInput.trim().padStart(15, '0') : '',
       nritem: chkRequisicao ? nritemInput.trim().padStart(6, '0') : '',
       promocao: produto.promocao || null,
-      promoAtiva: !!produto.promocao,
+      // Promoção entra DESATIVADA ("P" cinza, preço de tabela). O vendedor ativa
+      // clicando no "P", que aplica o desconto (togglePromo). Antes entrava como
+      // ativa sem aplicar o desconto: P verde com preço cheio.
+      promoAtiva: false,
       _novo: true,
     };
 

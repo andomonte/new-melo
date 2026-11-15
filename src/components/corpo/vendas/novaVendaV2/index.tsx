@@ -340,78 +340,135 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     }
   }, [user]);
 
-  // ---------- Persistência largura colunas ----------
+  // ---------- Layout das colunas por usuário (ordem e largura) ----------
+  // Fonte: tb_user_screen_preferences (servidor) + cópia no localStorage, aplicada
+  // assim que a tela monta (fechar/abrir a Nova Venda remonta o componente).
+  // Regras:
+  //  - só grava ação do USUÁRIO (eventos com source 'ui...'); resets do grid não;
+  //  - nunca grava antes de as preferências terem sido aplicadas (senão o layout
+  //    padrão ia por cima do salvo — era o que acontecia ao fechar/abrir);
+  //  - reaplica sempre que o grid recarrega as colunas (troca de cliente, rascunho).
   const SCREEN_KEY = 'nova-venda-v2';
+  type PrefsGrid = { colOrder?: string[]; colWidths?: Record<string, number> };
   const saveColTimeoutRef = useRef<any>(null);
+  const prefsGridRef = useRef<PrefsGrid | null>(null);
+  const prefsAplicadasRef = useRef(false);
+  const chaveLocalPrefs = user?.usuario ? `gridprefs:${SCREEN_KEY}:${user.usuario}` : null;
+
+  const aplicarPrefsGrid = useCallback(() => {
+    const a = gridRef.current?.api;
+    const prefs = prefsGridRef.current;
+    if (!a || !prefs) return;
+    const ordem = Array.isArray(prefs.colOrder) ? prefs.colOrder : [];
+    const larg = prefs.colWidths && typeof prefs.colWidths === 'object' ? prefs.colWidths : {};
+    const ids = ordem.length ? ordem : Object.keys(larg);
+    if (!ids.length) return;
+    try {
+      a.applyColumnState({
+        // largura salva desliga o flex da coluna (descr/marca são flex e
+        // ignoravam a largura restaurada)
+        state: ids.map((colId) => (larg[colId] ? { colId, width: larg[colId], flex: null } : { colId })),
+        applyOrder: ordem.length > 0,
+      });
+      prefsAplicadasRef.current = true;
+    } catch {
+      /* coluna inexistente nesta versão: ignora */
+    }
+  }, []);
+
+  // Carrega: localStorage na hora (sem esperar a rede) e depois o servidor.
+  useEffect(() => {
+    if (!user?.usuario) return;
+    try {
+      const local = chaveLocalPrefs ? localStorage.getItem(chaveLocalPrefs) : null;
+      if (local) {
+        prefsGridRef.current = JSON.parse(local);
+        aplicarPrefsGrid();
+      }
+    } catch {
+      /* localStorage indisponível */
+    }
+    let ativo = true;
+    fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=${encodeURIComponent(SCREEN_KEY)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ativo) return;
+        const prefs = data?.preferences;
+        if (prefs) {
+          prefsGridRef.current = prefs;
+          try {
+            if (chaveLocalPrefs) localStorage.setItem(chaveLocalPrefs, JSON.stringify(prefs));
+          } catch {
+            /* ignore */
+          }
+          aplicarPrefsGrid();
+        } else if (!prefsGridRef.current) {
+          // usuário sem layout salvo: o padrão vale e já pode gravar
+          prefsAplicadasRef.current = true;
+        }
+      })
+      .catch(() => {
+        if (!prefsGridRef.current) prefsAplicadasRef.current = true;
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [user?.usuario, chaveLocalPrefs, aplicarPrefsGrid]);
 
   const salvarPrefsGrid = useCallback(() => {
-    if (!user?.usuario) return;
+    if (!user?.usuario || !prefsAplicadasRef.current) return;
     if (saveColTimeoutRef.current) clearTimeout(saveColTimeoutRef.current);
     saveColTimeoutRef.current = setTimeout(() => {
       const a = gridRef.current?.api;
       if (!a) return;
-      const cols = a.getAllDisplayedColumns();
       const colWidths: Record<string, number> = {};
       const colOrder: string[] = [];
-      cols.forEach((col: any) => {
+      a.getAllDisplayedColumns().forEach((col: any) => {
         const id = col.getColId();
         colWidths[id] = col.getActualWidth();
         colOrder.push(id);
       });
+      const prefs = { colWidths, colOrder };
+      prefsGridRef.current = prefs;
+      try {
+        if (chaveLocalPrefs) localStorage.setItem(chaveLocalPrefs, JSON.stringify(prefs));
+      } catch {
+        /* ignore */
+      }
       fetch('/api/userPreferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: user.usuario, screen: SCREEN_KEY, preferences: { colWidths, colOrder } }),
+        body: JSON.stringify({ user: user.usuario, screen: SCREEN_KEY, preferences: prefs }),
       }).catch(() => {});
-    }, 1000);
-  }, [user]);
+    }, 800);
+  }, [user, chaveLocalPrefs]);
+
+  const acaoDoUsuario = (e: any) => String(e?.source || '').startsWith('ui');
 
   const onColumnResized = useCallback((e: any) => {
-    if (e.finished && e.column) salvarPrefsGrid();
+    if (e.finished && e.column && acaoDoUsuario(e)) salvarPrefsGrid();
   }, [salvarPrefsGrid]);
 
   const onColumnMoved = useCallback((e: any) => {
-    if (e.finished) salvarPrefsGrid();
+    if (e.finished !== false && acaoDoUsuario(e)) salvarPrefsGrid();
   }, [salvarPrefsGrid]);
 
-  const prefsCarregadasRef = useRef(false);
-  const restaurarPrefsGrid = useCallback(() => {
-    if (!user?.usuario || prefsCarregadasRef.current) return;
-    fetch(`/api/userPreferences?user=${encodeURIComponent(user.usuario)}&screen=${encodeURIComponent(SCREEN_KEY)}`)
-      .then(r => r.json())
-      .then(data => {
-        const prefs = data?.preferences;
-        if (!prefs) return;
-        const a = gridRef.current?.api;
-        if (!a) return;
-        prefsCarregadasRef.current = true;
-
-        // Restaurar ordem das colunas
-        if (Array.isArray(prefs.colOrder) && prefs.colOrder.length > 0) {
-          try { a.moveColumns(prefs.colOrder, 0); } catch {}
-        }
-
-        // Restaurar larguras
-        if (prefs.colWidths && typeof prefs.colWidths === 'object') {
-          Object.entries(prefs.colWidths).forEach(([colId, width]) => {
-            try { a.setColumnWidths([{ key: colId, newWidth: width as number }]); } catch {}
-          });
-        }
-      })
-      .catch(() => {});
-  }, [user]);
-
   const onGridReady = useCallback(() => {
-    setTimeout(() => restaurarPrefsGrid(), 300);
-  }, [restaurarPrefsGrid]);
+    aplicarPrefsGrid();
+  }, [aplicarPrefsGrid]);
 
-  // Reaplicar larguras quando columnDefs mudam (ex: troca de cliente muda header)
-  useEffect(() => {
-    if (prefsCarregadasRef.current) {
-      prefsCarregadasRef.current = false;
-      setTimeout(() => restaurarPrefsGrid(), 300);
-    }
-  }, [clienteSelecionado?.tipoPreco, restaurarPrefsGrid]);
+  // Grid recarregou as colunas (columnDefs novos: troca de cliente/tipo de preço,
+  // rascunho restaurado...): reaplica o layout do usuário.
+  const onNewColumnsLoaded = useCallback(() => {
+    aplicarPrefsGrid();
+  }, [aplicarPrefsGrid]);
+
+  // Objeto estável: um defaultColDef novo a cada render fazia o grid reaplicar as
+  // colunas e voltar ordem/largura ao padrão (ex.: ao clicar no "P" da promoção).
+  const defaultColDefItens = useMemo(
+    () => ({ sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true, sortingOrder: ['asc', 'desc'] as any }),
+    [],
+  );
 
   // ---------- Carregar dados de finalização ----------
   useEffect(() => {
@@ -2169,8 +2226,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                 theme={themeQuartz.withParams({ borderColor: '#d1d5db', wrapperBorder: true })}
                 rowData={itensGrid}
                 columnDefs={itensColumnDefs}
-                defaultColDef={{ sortable: true, resizable: true, wrapHeaderText: true, autoHeaderHeight: true, sortingOrder: ['asc', 'desc'] }}
+                defaultColDef={defaultColDefItens}
+                maintainColumnOrder
                 onGridReady={onGridReady}
+                onNewColumnsLoaded={onNewColumnsLoaded}
                 onColumnResized={onColumnResized}
                 onColumnMoved={onColumnMoved}
                 onCellValueChanged={onItemCellChanged}
