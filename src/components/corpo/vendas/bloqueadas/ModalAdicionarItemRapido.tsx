@@ -52,6 +52,27 @@ interface ModalAdicionarItemRapidoProps {
 
 const BATCH_SIZE = 50;
 
+/** Colunas numéricas da lista (o resto ordena como texto). */
+const COLUNAS_NUMERICAS = new Set(['estoque_disponivel', 'prvenda']);
+
+/**
+ * Ordena a lista já carregada pela coluna clicada. Sem coluna (''), mantém a
+ * ordem do servidor: relevância, estoque e curva.
+ */
+function ordenarLista(lista: any[], by: string, dir: 'asc' | 'desc'): any[] {
+  if (!by) return lista;
+  const sinal = dir === 'asc' ? 1 : -1;
+  const numerica = COLUNAS_NUMERICAS.has(by);
+  return [...lista].sort((a, b) => {
+    const va = a?.[by];
+    const vb = b?.[by];
+    const r = numerica
+      ? (Number(va) || 0) - (Number(vb) || 0)
+      : String(va ?? '').localeCompare(String(vb ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' });
+    return r * sinal;
+  });
+}
+
 const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   isOpen,
   onClose,
@@ -97,8 +118,13 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   const [precoDigits, setPrecoDigits] = useState('');
   const precoPristineRef = useRef(true);
   const [searchField, setSearchField] = useState<'ref' | 'aplicacao'>('aplicacao');
-  const [sortBy, setSortBy] = useState('descr');
+  const searchFieldRef = useRef(searchField);
+  searchFieldRef.current = searchField;
+  // '' = relevância (ordem do servidor); clicar na coluna: ▲, ▼, volta à relevância
+  const [sortBy, setSortBy] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const ordemRef = useRef<{ by: string; dir: 'asc' | 'desc' }>({ by: '', dir: 'asc' });
+  ordemRef.current = { by: sortBy, dir: sortDir };
   const [modalEquiv, setModalEquiv] = useState(false);
   const [produtoEquiv, setProdutoEquiv] = useState<any>(null);
   const [modalHist, setModalHist] = useState(false);
@@ -136,8 +162,12 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       api.get(`/api/userPreferences?user=${user.usuario}&screen=${SCREEN_KEY}`)
         .then((res) => {
           const prefs = res.data?.preferences;
-          if (prefs?.sortBy) setSortBy(prefs.sortBy);
-          if (prefs?.sortDir) setSortDir(prefs.sortDir);
+          // `ordem` substitui o antigo sortBy (que vinha 'descr' para todos e
+          // escondia a relevância); o antigo é ignorado de propósito.
+          if (prefs?.ordem && typeof prefs.ordem.by === 'string') {
+            setSortBy(prefs.ordem.by);
+            setSortDir(prefs.ordem.dir === 'desc' ? 'desc' : 'asc');
+          }
           if (prefs?.searchField === 'ref' || prefs?.searchField === 'aplicacao') setSearchField(prefs.searchField);
         })
         .catch(() => {});
@@ -148,8 +178,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   // Salvar preferências no banco
   const salvarPreferencias = useCallback((sBy: string, sDir: string, sField?: string) => {
     if (!user?.usuario) return;
-    const prefs: any = { sortBy: sBy, sortDir: sDir };
-    if (sField) prefs.searchField = sField;
+    // O PUT grava o objeto inteiro: manda sempre ordem e campo de busca juntos.
+    const prefs: any = { ordem: { by: sBy, dir: sDir }, searchField: sField ?? searchFieldRef.current };
     api.put('/api/userPreferences', {
       user: user.usuario,
       screen: SCREEN_KEY,
@@ -188,7 +218,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   // Scroll para linha selecionada e manter foco no modal
   useEffect(() => {
     if (linhaSelecionada >= 0 && scrollRef.current) {
-      const row = scrollRef.current.querySelector(`tr:nth-child(${linhaSelecionada + 1})`) as HTMLElement;
+      const row = scrollRef.current.querySelector(`tr[data-linha="${linhaSelecionada}"]`) as HTMLElement;
       if (row) row.scrollIntoView({ block: 'nearest' });
       // Sempre focar no modal para capturar setas
       setTimeout(() => modalRef.current?.focus(), 10);
@@ -265,6 +295,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
         const resp = await api.post('/api/vendas/postgresql/produto', {
           descricao: search.trim(),
           PRVENDA: tipoPreco || '0',
+          campo: searchField, // ref | aplicacao: palavras em qualquer ordem e '| marca'
           arm_id: armId || 1001,
         });
         const rows = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
@@ -298,7 +329,8 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
             })
             .catch(() => {});
         }
-        setListaProd((prev) => append ? [...prev, ...produtos] : produtos);
+        const { by, dir } = ordemRef.current;
+        setListaProd((prev) => ordenarLista(append ? [...prev, ...produtos] : produtos, by, dir));
         setTotalProd(data.meta?.total || 0);
         setPageLoaded(page);
         if (!append) {
@@ -346,7 +378,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
       if (!container) return;
       const tbody = container.querySelector('tbody');
       if (!tbody) return;
-      const row = tbody.children[linhaSelecionada] as HTMLElement;
+      const row = tbody.querySelector(`tr[data-linha="${linhaSelecionada}"]`) as HTMLElement | null;
       if (!row) return;
       const thead = container.querySelector('thead');
       const headerH = thead ? thead.getBoundingClientRect().height : 0;
@@ -526,8 +558,17 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      const emInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const alvo = e.target as HTMLElement;
+      const tag = alvo?.tagName;
+      const tipoInput = tag === 'INPUT' ? ((alvo as HTMLInputElement).type || 'text') : '';
+      // "Digitando" = campo de texto DENTRO deste modal. Foco fora dele (ex.: a
+      // planilha da venda por trás puxou o foco ao adicionar um item) ou em
+      // rádio/checkbox (Referência/Aplicação, Nº Requisição) não conta: senão a
+      // seta ↓ voltava sempre para a 1ª linha e a ↑ não fazia nada.
+      const dentroDoModal = !!modalRef.current?.contains(alvo);
+      const emInput =
+        dentroDoModal &&
+        (tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && tipoInput !== 'radio' && tipoInput !== 'checkbox'));
       // Se o filtro avançado está aberto, só responder Escape e F8
       if (mostrarFiltroAvancadoRef.current) {
         if (e.key === 'Escape') {
@@ -582,6 +623,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
             return;
           }
           e.preventDefault(); e.stopImmediatePropagation();
+          if (!dentroDoModal || tag === 'INPUT') modalRef.current?.focus();
           const cur = linhaSelecionadaRef.current;
           if (e.key === 'ArrowDown') {
             const next = Math.min(cur + 1, prods.length - 1);
@@ -645,70 +687,34 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
     }
   }, [currentSearch, fetchProdutos]);
 
-  // Ordenação
+  // Ordenação: reordena o que já foi carregado, sem nova busca.
+  // Mesma coluna: ▲ → ▼ → volta à relevância (ordem do servidor).
   const handleSort = useCallback((col: string) => {
-    const newDir = sortBy === col ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc';
-    setSortBy(col);
-    setSortDir(newDir);
-    setLinhaSelecionada(-1);
-    setPedindoQtd(-1);
-    salvarPreferencias(col, newDir);
-    // Re-buscar com nova ordenação
-    const temFiltros = filtrosAvancadosRef.current.length > 0;
-    if (temFiltros || currentSearch.trim().length >= 2) {
-      buscandoRef.current = false;
-      setListaProd([]);
-      setPageLoaded(0);
-      setTimeout(() => {
-        if (temFiltros) {
-          buscaProdutosComFiltro({
-            page: 1, perPage: BATCH_SIZE,
-            productSearch: currentSearch.trim(),
-            filtros: filtrosAvancadosRef.current,
-          }).then((data) => {
-            if (data?.data?.length > 0) {
-              setListaProd(data.data);
-              setTotalProd(data.meta?.total || 0);
-              setPageLoaded(1);
-              setLinhaSelecionada(0);
-            } else {
-              setListaProd([]);
-              setTotalProd(0);
-            }
-          }).catch(() => setListaProd([]));
-        } else {
-          api.post('/api/vendas/postgresql/produto', {
-            descricao: currentSearch.trim(),
-            PRVENDA: tipoPreco || '0',
-            arm_id: armId || 1001,
-          }).then((resp) => {
-              const rows = Array.isArray(resp.data) ? resp.data : resp.data?.data || [];
-              const mapped = rows.map((p: any) => ({
-                ...p,
-                codprod: String(p.CODPROD || p.codprod || '').trim(),
-                ref: p.REF || p.ref || '', descr: p.DESCR || p.descr || p.aplic_extendida || '',
-                aplic_extendida: p.DESCR || p.aplic_extendida || p.descr || '',
-                codmarca: p.MARCA || p.marca || p.codmarca || '',
-                estoque_disponivel: Number(p.QTDDISPONIVEL || p.qtddisponivel || 0),
-                prvenda: Number(p.PRECOVENDA || p.prvenda || p.precovenda || 0),
-                prcompra: Number(p.PRCOMPRA || p.prcompra || 0), prcustoatual: Number(p.prcustoatual || 0),
-                dolar: p.DOLAR || p.dolar || 'N', codgpe: p.CODGPE || p.codgpe || '',
-              }));
-              if (mapped.length > 0) {
-                setListaProd(mapped);
-                setTotalProd(mapped.length);
-                setPageLoaded(1);
-                setLinhaSelecionada(0);
-              } else {
-                setListaProd([]);
-                setTotalProd(0);
-              }
-            })
-            .catch(() => setListaProd([]));
-        }
-      }, 0);
+    let by = col;
+    let dir: 'asc' | 'desc' = 'asc';
+    if (sortBy === col) {
+      if (sortDir === 'asc') dir = 'desc';
+      else by = '';
     }
-  }, [sortBy, sortDir, currentSearch, salvarPreferencias, searchField]);
+    setSortBy(by);
+    setSortDir(dir);
+    setPedindoQtd(-1);
+    salvarPreferencias(by, dir);
+    if (!by) {
+      // Relevância: a ordem do servidor só volta buscando de novo
+      if (filtrosAvancadosRef.current.length > 0 || currentSearch.trim().length >= 2) {
+        buscandoRef.current = false;
+        ordemRef.current = { by: '', dir: 'asc' };
+        fetchProdutos(currentSearch, 1, false);
+      }
+      return;
+    }
+    const selecionado = listaProdRef.current[linhaSelecionadaRef.current]?.codprod;
+    const ordenada = ordenarLista(listaProdRef.current, by, dir);
+    setListaProd(ordenada);
+    const idx = selecionado ? ordenada.findIndex((p) => p.codprod === selecionado) : -1;
+    setLinhaSelecionada(idx >= 0 ? idx : ordenada.length ? 0 : -1);
+  }, [sortBy, sortDir, currentSearch, salvarPreferencias, fetchProdutos]);
 
   if (!isOpen) return null;
 
@@ -767,7 +773,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') executarBusca(searchInput); }}
-                placeholder={searchField === 'ref' ? 'Buscar por referência...' : 'Buscar por aplicação...'}
+                placeholder={searchField === 'ref' ? 'Buscar por referência... (| marca)' : 'Referência ou aplicação... ex.: alavanca fiat | sabo'}
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-gray-900 dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
             </div>
@@ -855,6 +861,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                     key={col.key}
                     className={`${col.w} px-3 py-2 text-left text-[11px] font-bold text-gray-900 dark:text-white uppercase border-b border-gray-200 dark:border-zinc-700 ${col.sortable ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 select-none' : ''}`}
                     onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                    title={col.sortable ? 'Clique: crescente, decrescente, volta à relevância' : undefined}
                   >
                     {col.label}{sortIcon(col.key)}
                   </th>
@@ -862,6 +869,15 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
               </tr>
             </thead>
             <tbody>
+              {!loading && listaProd.length > 0 && (listaProd[0]?.BUSCA_APROXIMADA || listaProd.length >= 300) && (
+                <tr>
+                  <td colSpan={columns.length} className="px-3 py-1.5 text-xs bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                    {listaProd[0]?.BUSCA_APROXIMADA
+                      ? 'Nenhum resultado exato — mostrando produtos parecidos (confira a digitação).'
+                      : 'Mostrando os 300 mais relevantes. Refine a busca (mais palavras ou "| marca").'}
+                  </td>
+                </tr>
+              )}
               {loading ? (
                 <tr>
                   <td colSpan={columns.length} className="py-8">
@@ -886,6 +902,7 @@ const ModalAdicionarItemRapido: React.FC<ModalAdicionarItemRapidoProps> = ({
                 return (
                   <tr
                     key={`${produto.codprod}-${idx}`}
+                    data-linha={idx}
                     className={`border-b border-gray-100 dark:border-zinc-800 transition-colors cursor-pointer
                       ${jaExistente ? 'opacity-40' : ''}
                       ${semEstoque && !jaExistente ? 'opacity-50' : ''}

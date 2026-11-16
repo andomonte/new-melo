@@ -3,12 +3,15 @@ import { parseCookies } from 'nookies';
 import { PoolClient } from 'pg';
 import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { serializeBigInt } from '@/utils/serializeBigInt';
+import { buscarProdutosVenda } from '@/lib/vendas/buscaProduto';
 
 interface requestBodyDTO {
   descricao?: string;
   PRVENDA?: string | number;
   armId?: string | number;
   arm_id?: string | number;
+  /** Nova Venda V2: 'ref' | 'aplicacao' liga a busca por palavras e "| marca". */
+  campo?: string;
 }
 
 const baseQuery = `
@@ -100,6 +103,7 @@ const baseQuery = `
         )
       ORDER BY qtddisponivel DESC;
     `;
+
 const queryPromocao = `
         SELECT
             dpi.id_promocao_item,
@@ -137,7 +141,7 @@ export default async function Sec(
     return res.status(400).json({ error: 'Filial não informada no cookie' });
   }
 
-  const { descricao, PRVENDA, armId, arm_id } = (req.body ??
+  const { descricao, PRVENDA, armId, arm_id, campo } = (req.body ??
     {}) as requestBodyDTO;
 
   // Busca por prefixo (mantido como sua versão nova)
@@ -163,10 +167,13 @@ export default async function Sec(
     const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
 
-    const params: any[] = [like, tipoCliente, armNum];
-
-    const response = await client.query(baseQuery, params);
-    const rows = response.rows;
+    // Nova Venda V2 manda `campo` → busca nova (palavras, referência sem pontuação,
+    // "| marca", tolerância a erro, ordem por relevância/estoque/curva). Sem `campo`
+    // (telas antigas), a consulta original, sem mudança.
+    const rows =
+      campo === 'ref' || campo === 'aplicacao'
+        ? await buscarProdutosVenda(client, { termo, campo, tipoPreco: tipoCliente, armId: armNum })
+        : (await client.query(baseQuery, [like, tipoCliente, armNum])).rows;
 
     // Diagnóstico opcional
     await diagnostico(rows, client);
