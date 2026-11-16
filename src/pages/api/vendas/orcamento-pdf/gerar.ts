@@ -5,6 +5,7 @@ import autoTable from 'jspdf-autotable';
 import { parseCookies } from 'nookies';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
 // Estende jsPDF para incluir lastAutoTable
@@ -65,11 +66,13 @@ interface DadosOrcamento {
 }
 
 // Pasta para armazenar PDFs temporários
-// No Vercel, apenas /tmp é gravável. Em desenvolvimento, usa pasta local.
+// Pasta temporária do sistema (os.tmpdir(): /tmp no Linux/Docker). A pasta do app
+// (process.cwd()) não é gravável no container: lá roda como usuário nextjs e
+// /app é do root, então gravar em /app/tmp falhava com "Erro ao gerar PDF".
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 const PDF_TEMP_DIR = isVercel
   ? '/tmp'
-  : path.join(process.cwd(), 'tmp', 'orcamentos');
+  : path.join(os.tmpdir(), 'orcamentos');
 
 // Garantir que a pasta existe (apenas em desenvolvimento)
 function ensureTempDir() {

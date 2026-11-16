@@ -3,6 +3,7 @@ import { getPgPool } from '@/lib/pg';
 import { formatTexto, formatDateDDMMYYYY, notChar } from '@/utils/formatTexto';
 import fs from 'fs';
 import path from 'path';
+import { dirArquivos } from '@/lib/arquivosServidor';
 
 const pool = getPgPool();
 
@@ -334,7 +335,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const bancoRemessa = await determinarBancoRemessa(result.rows);
 
     // Caminho onde o arquivo será salvo fisicamente
-    const caminhoArquivo = path.join(process.cwd(), 'remessas', nomeArquivo);
+    const caminhoArquivo = path.join(dirArquivos('remessas'), nomeArquivo);
 
     // Salvar arquivo fisicamente
     try {

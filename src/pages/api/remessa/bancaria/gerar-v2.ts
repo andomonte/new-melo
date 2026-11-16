@@ -9,6 +9,7 @@ import {
 } from '@/utils/cnab/digitoVerificador';
 import fs from 'fs';
 import path from 'path';
+import { dirArquivos, SUB_REMESSA_BANCARIA } from '@/lib/arquivosServidor';
 
 const pool = getPgPool();
 
@@ -388,10 +389,8 @@ function gerarTrailerCNAB400(sequencial: number): string {
  * Salva arquivo no disco
  */
 function salvarArquivo(nomeArquivo: string, conteudo: string): string {
-  const dirRemessa = path.join(process.cwd(), 'public', 'remessas', 'bancaria');
-  if (!fs.existsSync(dirRemessa)) {
-    fs.mkdirSync(dirRemessa, { recursive: true });
-  }
+  // Pasta gravável (no container /app não é): ver src/lib/arquivosServidor.ts
+  const dirRemessa = dirArquivos(...SUB_REMESSA_BANCARIA);
   
   const caminhoArquivo = path.join(dirRemessa, nomeArquivo);
   fs.writeFileSync(caminhoArquivo, conteudo, 'utf-8');

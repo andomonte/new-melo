@@ -23,6 +23,7 @@ import { ieEmitentePorSerie } from '@/lib/faturamento/fiscalPorArmazem';
 import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal';
 import { obterCRTEmpresa } from '@/utils/consultarCRTReceita';
 import { pagamentoNotaDaFatura, regraPagamentoNota } from '@/lib/fiscal/pagamentoNota';
+import { dirArquivos } from '@/lib/arquivosServidor';
  
 // Função para registrar erros/mensagens da emissão
 async function registrarMensagemFatura(
@@ -441,7 +442,7 @@ export default async function handler(
     try {
       const fs = require('fs');
       const path = require('path');
-      const scriptsDir = path.resolve(process.cwd(), 'scripts');
+      const scriptsDir = dirArquivos('debug-xml'); // /app não é gravável no container
       
       // Criar diretório se não existir
       if (!fs.existsSync(scriptsDir)) {
@@ -483,7 +484,7 @@ export default async function handler(
     try {
       const fs = require('fs');
       const path = require('path');
-      const scriptsDir = path.resolve(process.cwd(), 'scripts');
+      const scriptsDir = dirArquivos('debug-xml'); // /app não é gravável no container
       
       if (!fs.existsSync(scriptsDir)) {
         fs.mkdirSync(scriptsDir, { recursive: true });
@@ -500,7 +501,7 @@ export default async function handler(
       const { spawn } = require('child_process');
       const validationProcess = spawn(
         'node',
-        ['scripts/validate_totals_corrigido.js', 'scripts/signed.xml'],
+        ['scripts/validate_totals_corrigido.js', path.join(scriptsDir, 'signed.xml')],
         {
           cwd: process.cwd(),
           stdio: 'pipe',
@@ -566,7 +567,7 @@ export default async function handler(
     try {
       const fs = require('fs');
       const path = require('path');
-      const scriptsDir = path.resolve(process.cwd(), 'scripts');
+      const scriptsDir = dirArquivos('debug-xml'); // /app não é gravável no container
       
       if (!fs.existsSync(scriptsDir)) {
         fs.mkdirSync(scriptsDir, { recursive: true });

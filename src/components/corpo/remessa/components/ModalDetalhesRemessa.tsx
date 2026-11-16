@@ -102,7 +102,7 @@ export function ModalDetalhesRemessa({
               {/* Botão Download */}
               <div className="flex gap-3 mb-6">
                 <a
-                  href={`/remessas/bancaria/${arquivo.nome_arquivo}`}
+                  href={`/api/remessa/bancaria/arquivo/${encodeURIComponent(arquivo.nome_arquivo)}`}
                   download
                   className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
                 >

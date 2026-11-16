@@ -3,6 +3,7 @@ import { getPgPool } from '@/lib/pg';
 import { formatTexto, notChar } from '@/utils/formatTexto';
 import fs from 'fs';
 import path from 'path';
+import { dirArquivos, SUB_REMESSA_BANCARIA } from '@/lib/arquivosServidor';
 
 const pool = getPgPool();
 
@@ -629,10 +630,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const nomeArquivo = `RM${banco}${dataArquivo}${padLeft(sequencialArquivo, 4)}.rem`;
 
     // Salvar arquivo
-    const dirRemessa = path.join(process.cwd(), 'public', 'remessas', 'bancaria');
-    if (!fs.existsSync(dirRemessa)) {
-      fs.mkdirSync(dirRemessa, { recursive: true });
-    }
+    // Pasta gravável (no container /app não é): ver src/lib/arquivosServidor.ts
+    const dirRemessa = dirArquivos(...SUB_REMESSA_BANCARIA);
 
     const caminhoArquivo = path.join(dirRemessa, nomeArquivo);
     const conteudoArquivo = linhas.join('\r\n') + '\r\n';
@@ -724,7 +723,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       mensagem: `Arquivo de remessa ${nomeBanco} gerado com sucesso`,
       arquivo: {
         nome: nomeArquivo,
-        caminho: `/remessas/bancaria/${nomeArquivo}`,
+        caminho: `/api/remessa/bancaria/arquivo/${nomeArquivo}`,
         sequencial: sequencialArquivo,
         banco: nomeBanco,
         cod_banco: banco,

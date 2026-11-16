@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
 import fs from 'fs';
 import path from 'path';
+import { DIR_ARQUIVOS, DIR_REMESSA_BANCARIA_LEGADO, SUB_REMESSA_BANCARIA, nomeArquivoSeguro } from '@/lib/arquivosServidor';
 
 const pool = getPgPool();
 
@@ -152,17 +153,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 6. Deletar arquivo físico (opcional)
     if (deletar_arquivo && remessaInfo.nome_arquivo) {
       try {
-        const caminhoArquivo = path.join(
-          process.cwd(),
-          'public',
-          'remessas',
-          'bancaria',
-          remessaInfo.nome_arquivo
-        );
-
-        if (fs.existsSync(caminhoArquivo)) {
-          fs.unlinkSync(caminhoArquivo);
-          console.log(`  ✓ Arquivo físico deletado: ${remessaInfo.nome_arquivo}`);
+        // Pasta atual (gravável) e a antiga em public/, para remessas mais velhas
+        const nome = nomeArquivoSeguro(remessaInfo.nome_arquivo);
+        const caminhos = nome
+          ? [path.join(DIR_ARQUIVOS, ...SUB_REMESSA_BANCARIA, nome), path.join(DIR_REMESSA_BANCARIA_LEGADO, nome)]
+          : [];
+        for (const caminhoArquivo of caminhos) {
+          if (fs.existsSync(caminhoArquivo)) {
+            fs.unlinkSync(caminhoArquivo);
+            console.log(`  ✓ Arquivo físico deletado: ${caminhoArquivo}`);
+          }
         }
       } catch (error) {
         console.warn('  ⚠️ Não foi possível deletar arquivo físico:', error);

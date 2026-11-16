@@ -292,7 +292,7 @@ export function TabelaHistorico({
                           </button>
                           {h.nome_arquivo && (
                             <a
-                              href={`/remessas/bancaria/${h.nome_arquivo}`}
+                              href={`/api/remessa/bancaria/arquivo/${encodeURIComponent(h.nome_arquivo)}`}
                               download
                               className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 hover:underline inline-flex items-center gap-1"
                             >

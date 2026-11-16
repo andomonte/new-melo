@@ -19,6 +19,7 @@ import { getAmbienteSefaz, getUrlSefazAtual } from '@/utils/gerarXmlCupomFiscal'
 import https from 'https';
 import { DOMParser } from 'xmldom';
 import { pagamentoNotaDaFatura } from '@/lib/fiscal/pagamentoNota';
+import { dirArquivos } from '@/lib/arquivosServidor';
 
 /**
  * API para emissão de Cupom Fiscal Eletrônico (NFC-e) - Modelo 65
@@ -583,7 +584,7 @@ export default async function handler(
     try {
       const fs = require('fs');
       const path = require('path');
-      const tempDir = path.resolve(process.cwd(), 'temp');
+      const tempDir = dirArquivos('debug-xml'); // /app não é gravável no container
       fs.mkdirSync(tempDir, { recursive: true });
       fs.writeFileSync(path.resolve(tempDir, 'envelope-soap-nfce.xml'), envelope, 'utf8');
       fs.writeFileSync(path.resolve(tempDir, 'xml-envio-nfce.xml'), xmlEnvioDebug, 'utf8');

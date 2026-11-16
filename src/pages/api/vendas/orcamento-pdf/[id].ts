@@ -1,13 +1,16 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 // Pasta para armazenar PDFs temporários
-// No Vercel, apenas /tmp é gravável. Em desenvolvimento, usa pasta local.
+// Pasta temporária do sistema (os.tmpdir(): /tmp no Linux/Docker). A pasta do app
+// (process.cwd()) não é gravável no container: lá roda como usuário nextjs e
+// /app é do root, então gravar em /app/tmp falhava com "Erro ao gerar PDF".
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 const PDF_TEMP_DIR = isVercel
   ? '/tmp'
-  : path.join(process.cwd(), 'tmp', 'orcamentos');
+  : path.join(os.tmpdir(), 'orcamentos');
 
 /**
  * API para servir PDF de orçamento pelo ID
