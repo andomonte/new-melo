@@ -56,7 +56,9 @@ export default async function handler(
     const totalCif = parseFloat(String(cab.total_cif || 0));
     const frete = parseFloat(String(cab.frete || 0));
     const thc = parseFloat(String(cab.thc || 0));
-    const pisCofins = parseFloat(String(cab.pis_cofins || 0));
+    // PIS + COFINS separados quando existem (a tela edita esses); senão o combinado.
+    const pisMaisCofins = (parseFloat(String(cab.pis || 0)) || 0) + (parseFloat(String(cab.cofins || 0)) || 0);
+    const pisCofins = pisMaisCofins > 0 ? pisMaisCofins : parseFloat(String(cab.pis_cofins || 0));
     const ii = parseFloat(String(cab.ii || 0));
     const ipi = parseFloat(String(cab.ipi || 0));
     const icmsSt = parseFloat(String(cab.icms_st || 0));

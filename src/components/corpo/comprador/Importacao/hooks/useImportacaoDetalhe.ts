@@ -150,7 +150,12 @@ export function useImportacaoDetalhe(importacaoId?: number) {
           );
           const dolarMedio = totalUSD > 0 ? totalBRL / totalUSD : 0;
 
-          const totalImpostos = (cab.pis || 0) + (cab.cofins || 0) + (cab.pis_cofins || 0) + (cab.ii || 0) + (cab.ipi || 0) + (cab.icms_st || 0);
+          // pis_cofins já é PIS + COFINS (gravado junto com os dois separados): somar
+          // os três contava PIS/COFINS em dobro. Usa os separados quando existem;
+          // importações antigas só têm o pis_cofins.
+          const pisMaisCofins = (cab.pis || 0) + (cab.cofins || 0);
+          const pisCofinsCusto = pisMaisCofins > 0 ? pisMaisCofins : (cab.pis_cofins || 0);
+          const totalImpostos = pisCofinsCusto + (cab.ii || 0) + (cab.ipi || 0) + (cab.icms_st || 0);
           const totalDespesas = (cab.anuencia || 0) + (cab.siscomex || 0) + (cab.despachante || 0) +
             (cab.freteorigem_total || 0) + (cab.infraero_porto || 0) +
             (cab.carreteiro_eadi || 0) + (cab.carreteiro_melo || 0) + (cab.eadi || 0) +

@@ -261,7 +261,11 @@ async function handlePut(pool: any, id: number, req: NextApiRequest, res: NextAp
       body.total_cif || 0,
       body.pis || 0,
       body.cofins || 0,
-      body.pis_cofins || 0,
+      // pis_cofins = PIS + COFINS quando a tela manda os dois (é o que o cálculo
+      // de custo usa); sem eles, mantém o combinado que veio (importações antigas).
+      (Number(body.pis) || 0) + (Number(body.cofins) || 0) > 0
+        ? (Number(body.pis) || 0) + (Number(body.cofins) || 0)
+        : body.pis_cofins || 0,
       body.ii || 0,
       body.ipi || 0,
       body.icms_st || 0,
