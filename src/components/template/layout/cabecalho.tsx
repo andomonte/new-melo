@@ -97,6 +97,20 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
     } catch { /* ignora */ }
   }, []);
 
+  // Aviso de ambiente de teste: no endereço de homologação (sistemahomolog...),
+  // no localhost (usa o mesmo banco de teste) ou com NEXT_PUBLIC_AMBIENTE=homologacao.
+  // Em produção não aparece.
+  const [emHomologacao, setEmHomologacao] = useState(false);
+  useEffect(() => {
+    const host = window.location.hostname.toLowerCase();
+    setEmHomologacao(
+      host.includes('homolog') ||
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        process.env.NEXT_PUBLIC_AMBIENTE === 'homologacao',
+    );
+  }, []);
+
   useEffect(() => {
     fetchBloqueadas();
     fetchPromoAlerta();
@@ -165,6 +179,14 @@ const LayoutPagina: React.FC<LayoutPaginaProps> = ({
                 </div>
               ) : null}
             </div>
+            {emHomologacao ? (
+              <div
+                className="ml-2 px-3 py-1 rounded-md bg-amber-400 text-amber-950 text-xs sm:text-sm font-bold uppercase tracking-wide whitespace-nowrap shadow-sm"
+                title="Ambiente de testes: os dados aqui não valem para a operação real"
+              >
+                Sistema em Homologação (TESTE)
+              </div>
+            ) : null}
           </div>
           <div className="w-[25%] flex items-center justify-end gap-3">
             {/* Notificação de promoções expirando / estoque acabando */}
