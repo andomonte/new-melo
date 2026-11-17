@@ -14,6 +14,7 @@ import { useNavegacaoTecladoTabela, CLASSE_LINHA_ATIVA } from '@/hooks/useNavega
 import { EntradasHeader } from './EntradasHeader';
 import { EntradaOperacoesMenu } from './EntradaOperacoesMenu';
 import { EntradasModals } from './EntradasModals';
+import GerarEntradaNFeModal from '@/components/corpo/comprador/EntradaXml/components/GerarEntradaNFeModal';
 
 // Hooks
 import { useEntradas } from '../hooks/useEntradas';
@@ -89,6 +90,8 @@ export const EntradasMain: React.FC = () => {
 
   const handleCreateSuccess = async () => { setIsNewOpen(false); await refetch(); };
   const handleGerarSuccess = async () => { setIsGerarOpen(false); await refetch(); };
+  // "Gerar Entrada" do cabeçalho: o mesmo modal da tela Entrada por XML/NFe
+  const [isGerarNFeOpen, setIsGerarNFeOpen] = useState(false);
   const handleEditSuccess = async () => { setEditItem(null); await refetch(); };
 
   // ⌨️ Navegação por teclado (estilo Delphi): ↑/↓ move a linha; Enter e V abrem
@@ -96,7 +99,7 @@ export const EntradasMain: React.FC = () => {
   // atalho, mas são registradas dentro do próprio EntradaOperacoesMenu (onde os
   // handlers vivem), ativas só na linha selecionada (prop `selecionada`).
   const algumModalAberto =
-    isNewOpen || isGerarOpen || !!editItem || !!viewItem || !!itensItem || menusComModal.size > 0;
+    isNewOpen || isGerarOpen || isGerarNFeOpen || !!editItem || !!viewItem || !!itensItem || menusComModal.size > 0;
 
   const { linhaSelecionada, setLinhaSelecionada } = useNavegacaoTecladoTabela<EntradaDTO>({
     data,
@@ -115,6 +118,7 @@ export const EntradasMain: React.FC = () => {
       if (itensItem) setItensItem(null);
       else if (viewItem) setViewItem(null);
       else if (editItem) setEditItem(null);
+      else if (isGerarNFeOpen) setIsGerarNFeOpen(false);
       else if (isGerarOpen) setIsGerarOpen(false);
       else if (isNewOpen) setIsNewOpen(false);
       else return;
@@ -123,7 +127,7 @@ export const EntradasMain: React.FC = () => {
     };
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
-  }, [itensItem, viewItem, editItem, isGerarOpen, isNewOpen]);
+  }, [itensItem, viewItem, editItem, isGerarNFeOpen, isGerarOpen, isNewOpen]);
 
   // Rótulos e célula por coluna
   const columnLabels = React.useMemo(
@@ -197,7 +201,7 @@ export const EntradasMain: React.FC = () => {
       <EntradasHeader
         onRefresh={refetch}
         onNovaEntrada={() => setIsNewOpen(true)}
-        onGerarEntrada={() => setIsGerarOpen(true)}
+        onGerarEntrada={() => setIsGerarNFeOpen(true)}
         canManageEntradas={canManageEntradas}
       />
 
@@ -276,6 +280,15 @@ export const EntradasMain: React.FC = () => {
         onViewClose={() => setViewItem(null)}
         itensItem={itensItem}
         onItensClose={() => setItensItem(null)}
+      />
+
+      <GerarEntradaNFeModal
+        isOpen={isGerarNFeOpen}
+        onClose={() => setIsGerarNFeOpen(false)}
+        onEntradaGerada={() => {
+          setIsGerarNFeOpen(false);
+          refetch();
+        }}
       />
     </div>
   );

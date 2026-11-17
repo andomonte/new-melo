@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Plus, RefreshCcw } from 'lucide-react';
+import { Package, RefreshCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface EntradasHeaderProps {
@@ -37,14 +37,15 @@ export const EntradasHeader: React.FC<EntradasHeaderProps> = ({
           </Button>
 
           {canManageEntradas && (
+            // Mesmo "Gerar Entrada" da tela Entrada por XML/NFe: gera a entrada
+            // a partir de uma NF-e já recebida/associada, sem sair desta tela.
             <Button
-              onClick={onNovaEntrada}
-              variant="outline"
+              onClick={onGerarEntrada}
               size="sm"
-              className="flex items-center gap-1"
+              className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white"
             >
-              <Plus size={18} />
-              Nova Entrada
+              <Package size={18} />
+              Gerar Entrada
             </Button>
           )}
         </div>
