@@ -214,6 +214,10 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [produtoEquivalente, setProdutoEquivalente] = useState<any>(null);
   const [modalHistProduto, setModalHistProduto] = useState(false);
   const [produtoHist, setProdutoHist] = useState<any>(null);
+  // Item do menu do botão direito: guardado ao ABRIR o menu. O clique numa opção
+  // do menu conta como "clique fora da planilha" e limpa ultimaCelulaRef antes do
+  // onClick — por isso Zoom/Equivalentes/Histórico pelo menu não faziam nada.
+  const [itemMenu, setItemMenu] = useState<any>(null);
 
   // ---------- Estados da finalização ----------
   const [documento, setDocumento] = useState<{ COD_OPERACAO: string; DESCR: string }>(() => draft.current?.documento || { COD_OPERACAO: '1', DESCR: 'VENDA' });
@@ -1742,6 +1746,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   }, [clienteSelecionado, totalItens, itensGrid, temBPV, temMPV]);
 
   // Mensagem de impedimento + disabled do botão — fonte única de verdade
+  const MSG_BLOQUEIO_PRECO = 'PREÇO ABAIXO DA TABELA — SERÁ ENVIADA PARA ANÁLISE';
   const impedimentoVenda = useMemo(() => {
     if (!clienteSelecionado) return 'INFORME O CLIENTE';
     if (clienteBloqueado) return 'CLIENTE BLOQUEADO — CONSULTE O SETOR DE COBRANÇA';
@@ -1750,11 +1755,21 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     if (isClienteBalcao && totalVenda > 10000) return 'CLIENTE BALCÃO. LIMITE DE 10.000,00 EXCEDIDO.';
     if (isClienteBalcao && !isAvista && !isCartaoCredito) return 'CLIENTE BALCÃO. PAGAMENTO SOMENTE À VISTA OU C. CRÉDITO.';
     if (isCartaoCredito && parcelasCartao <= 0) return 'INFORME O PARCELAMENTO DO CARTÃO';
-    if (statusVenda === 'BLOQUEIO_PRECO') return 'PREÇO ABAIXO DA TABELA — SERÁ ENVIADA PARA ANÁLISE';
+    // Forma de pagamento é obrigatória (antes a venda saía sem ela). Única exceção:
+    // "FECHAMENTO NA SEMANA", que limpa a forma de propósito.
+    if (!fPagamento && prazo !== 'FECHAMENTO NA SEMANA') return 'INFORME A FORMA DE PAGAMENTO';
+    // Boleto é venda a prazo: não vale para cliente só à vista / sem crédito, e precisa
+    // de prazo. (O boleto podia ficar de um rascunho anterior e a venda saía com BOLETO
+    // sem prazo para cliente "Somente à vista".)
+    if (isBoleto && prazoBloqueado) return `BOLETO NÃO PERMITIDO: ${prazoBloqueadoMsg || 'CLIENTE SOMENTE À VISTA'} — ESCOLHA OUTRA FORMA DE PAGAMENTO`;
+    if (isBoleto && !prazo) return 'INFORME O PRAZO DO BOLETO';
+    if (statusVenda === 'BLOQUEIO_PRECO') return MSG_BLOQUEIO_PRECO;
     return null;
-  }, [clienteSelecionado, clienteBloqueado, totalItens, totalVenda, isClienteBalcao, isAvista, isCartaoCredito, parcelasCartao, statusVenda]);
+  }, [clienteSelecionado, clienteBloqueado, totalItens, totalVenda, isClienteBalcao, isAvista, isCartaoCredito, parcelasCartao, statusVenda, fPagamento, prazo, isBoleto, prazoBloqueado, prazoBloqueadoMsg]);
 
-  const vendaBloqueada = impedimentoVenda !== null && statusVenda !== 'BLOQUEIO_PRECO';
+  // Só o bloqueio de preço deixa seguir (vira "Solicitar Desbloqueio"); qualquer outro
+  // impedimento — inclusive forma de pagamento — trava os dois botões.
+  const vendaBloqueada = impedimentoVenda !== null && impedimentoVenda !== MSG_BLOQUEIO_PRECO;
 
   // ---------- Atalhos de teclado ----------
   useEffect(() => {
@@ -1908,7 +1923,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   };
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={(aberto) => { if (aberto) setItemMenu(ultimaCelulaRef.current); }}>
       <ContextMenuTrigger asChild>
         <div className="nova-venda-v2 h-full flex flex-col flex-grow border border-gray-300 bg-white dark:bg-slate-900">
           {/* Mensagem de status */}
@@ -2274,6 +2289,15 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
                     e.event.preventDefault();
                     e.event.stopImmediatePropagation();
                     handleRemoverItem(e.data.codprod);
+                  }
+                }}
+                onCellContextMenu={(e: any) => {
+                  // Botão direito numa linha: ela vira o item do menu (antes só a célula
+                  // focada com o botão esquerdo contava → "Nenhum item selecionado").
+                  if (e.data) {
+                    ultimaCelulaRef.current = e.data;
+                    setItemMenu(e.data);
+                    if (e.rowIndex != null && e.column) e.api.setFocusedCell(e.rowIndex, e.column.getColId());
                   }
                 }}
                 onCellFocused={(e: any) => {
@@ -2779,7 +2803,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
       {/* Context Menu */}
       <ContextMenuContent className="w-56">
         <ContextMenuLabel className="text-xs text-gray-800">
-          {ultimaCelulaRef.current ? `${ultimaCelulaRef.current.ref || ultimaCelulaRef.current.codprod}` : 'Nenhum item selecionado'}
+          {itemMenu ? `${itemMenu.ref || itemMenu.codprod}` : 'Nenhum item selecionado'}
         </ContextMenuLabel>
         <ContextMenuSeparator />
         <ContextMenuItem onClick={() => setAddItemOpen(true)}>
@@ -2787,14 +2811,14 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           <span className="ml-auto text-[10px] text-gray-700">Ctrl++</span>
         </ContextMenuItem>
         <ContextMenuItem onClick={() => {
-          const item = ultimaCelulaRef.current;
+          const item = itemMenu;
           if (item) setZoomProduto({ codprod: item.codprod, ref: item.ref, descr: item.descr });
         }}>
           <ShoppingCart size={14} className="mr-2" /> Zoom Produto
           <span className="ml-auto text-[10px] text-gray-700">Ctrl+Z</span>
         </ContextMenuItem>
         <ContextMenuItem onClick={() => {
-          const item = ultimaCelulaRef.current;
+          const item = itemMenu;
           if (item) {
             fetch(`/api/produtos/get/${item.codprod}`).then(r => r.json()).then(data => {
               const gpe = (data.codgpe || '').trim();
@@ -2807,8 +2831,8 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
           <span className="ml-auto text-[10px] text-gray-700">F9</span>
         </ContextMenuItem>
         <ContextMenuItem onClick={() => {
-          const item = ultimaCelulaRef.current;
-          if (item) { setProdutoHist(item); setModalHistProduto(true); }
+          const item = itemMenu;
+          if (item) { setProdutoHist({ codprod: item.codprod, ref: item.ref, descr: item.descr }); setModalHistProduto(true); }
         }}>
           Histórico Produto
           <span className="ml-auto text-[10px] text-gray-700">F10</span>

@@ -260,6 +260,11 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
     if (fpUpper.includes('CARTAO') && fpUpper.includes('CREDITO')) {
       const parcelas = Number(h.parcelasCartao) || 1;
       fp = `CARTAO DE CREDITO ${String(parcelas).padStart(2, '0')}x`;
+    } else if (fpUpper.includes('BOLETO')) {
+      // Boleto é venda A PRAZO: nunca "A VISTA" (o faturamento lê substr(obsfat,1,8)
+      // = 'A VISTA ' para tratar como à vista). Ex.: "BOLETO 35 49 63".
+      const prazo = nul(h.prazo);
+      fp = prazo ? `BOLETO ${prazo}` : 'BOLETO';
     } else {
       // Dinheiro, PIX, Débito, etc → prefixar com A VISTA (motivo)
       const motivo = h.avistaMotivo || 'VE';
@@ -270,7 +275,13 @@ function normalizeHeaderPg(h: NonNullable<Body['header']>) {
     fp = motivo === 'Z' ? `A VISTA (Z) - DINHEIRO` : `A VISTA (${motivo})`;
   }
   const obsOriginal = nul(h.obsfat);
-  const obsfatFinal = fp
+  // A Nova Venda V2 já manda o obsfat montado ("A VISTA (V)", "BOLETO 35 49 63",
+  // "CARTAO DE CREDITO 02x"); prefixar de novo duplicava ("A VISTA (V) A VISTA (V)").
+  // Só prefixa quando o texto ainda não começa com uma forma de pagamento (V1/mobile
+  // mandam a observação livre).
+  const obsNorm = (obsOriginal || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const jaTemForma = /^(A VISTA|CARTAO DE CREDITO|BOLETO|FECHAMENTO NA SEMANA)/.test(obsNorm);
+  const obsfatFinal = fp && !jaTemForma
     ? (obsOriginal ? `${fp} ${obsOriginal}` : fp)
     : obsOriginal;
 

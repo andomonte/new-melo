@@ -1099,6 +1099,16 @@ const VendasPage = () => {
   }
 
   function handleNovaVendaClick() {
+    // "Nova Venda" começa sempre limpa: descarta o rascunho da sessão (cliente, itens,
+    // forma de pagamento da venda anterior — era assim que um BOLETO "aparecia sozinho")
+    // e remonta o formulário. O F5 com a venda aberta continua restaurando o rascunho
+    // (centralV2_modalAberto), e Editar/Copiar montam o rascunho antes de abrir.
+    try {
+      Object.keys(sessionStorage).forEach((k) => {
+        if (k.startsWith('novaVendaV2_draft')) sessionStorage.removeItem(k);
+      });
+    } catch {}
+    setNovaVendaKey((k) => k + 1);
     setModalNovaVenda(true);
     sessionStorage.setItem('centralV2_modalAberto', 'novaVenda');
   }
