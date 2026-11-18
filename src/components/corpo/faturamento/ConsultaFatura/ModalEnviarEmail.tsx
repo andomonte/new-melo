@@ -12,11 +12,15 @@ interface Props {
   nomeCliente?: string;
   numeroNota?: string;
   /** 'danfe' anexa a DANFE; 'cobranca' o boleto; 'comprovante' o PDF do comprovante. */
-  tipo?: 'danfe' | 'cobranca' | 'comprovante';
+  tipo?: 'danfe' | 'cobranca' | 'comprovante' | 'orcamento';
   /** Código do grupo de pagamento — quando presente, anexa o "Resumo GP" à cobrança. */
   codgp?: string | number | null;
   /** aut_id do comprovante (quando tipo='comprovante'). */
   autId?: string;
+  /** id do PDF do orçamento já gerado (quando tipo='orcamento'). */
+  pdfId?: string;
+  /** nome do arquivo anexado (sem .pdf) — orçamento. */
+  nomeArquivo?: string;
 }
 
 /**
@@ -34,8 +38,12 @@ export default function ModalEnviarEmail({
   tipo = 'danfe',
   codgp,
   autId,
+  pdfId,
+  nomeArquivo,
 }: Props) {
-  const tituloDoc = tipo === 'cobranca' ? 'Cobrança' : tipo === 'comprovante' ? 'Comprovante' : 'DANFE';
+  const tituloDoc =
+    tipo === 'cobranca' ? 'Cobrança' : tipo === 'comprovante' ? 'Comprovante' : tipo === 'orcamento' ? 'Orçamento' : 'DANFE';
+  const artigo = tipo === 'orcamento' ? 'o' : 'a';
   const ehGrupo = codgp != null && String(codgp).trim() !== '';
   const [destinatarios, setDestinatarios] = useState<string[]>([]);
   const [novoEmail, setNovoEmail] = useState('');
@@ -50,19 +58,23 @@ export default function ModalEnviarEmail({
     setNovoEmail('');
     setAssunto(`${tituloDoc}${numeroNota ? ` nº ${numeroNota}` : ''} — MELO Peças`);
     setMensagem(
-      `Olá${nomeCliente ? `, ${nomeCliente}` : ''},\n\nSegue em anexo a ${tituloDoc}${
+      `Olá${nomeCliente ? `, ${nomeCliente}` : ''},\n\nSegue em anexo ${artigo} ${tituloDoc}${
         numeroNota ? ` nº ${numeroNota}` : ''
       }.\n\nAtenciosamente,\nMELO Peças`,
     );
     setDestinatarios([]);
     setCarregando(true);
+    if (!codcli && !codfat) {
+      setCarregando(false);
+      return;
+    }
     const q = codcli ? `codcli=${encodeURIComponent(codcli)}` : `codfat=${encodeURIComponent(codfat || '')}`;
     fetch(`/api/faturamento/emails-cliente?${q}`)
       .then((r) => r.json())
       .then((d) => setDestinatarios(Array.isArray(d?.emails) ? d.emails : []))
       .catch(() => setDestinatarios([]))
       .finally(() => setCarregando(false));
-  }, [open, codfat, codcli, nomeCliente, numeroNota, tituloDoc]);
+  }, [open, codfat, codcli, nomeCliente, numeroNota, tituloDoc, artigo]);
 
   if (!open) return null;
 
@@ -93,6 +105,19 @@ export default function ModalEnviarEmail({
         const d = await resp.json();
         if (!resp.ok) throw new Error(d.detalhes || d.erro || 'Falha ao enviar.');
         toast.success(d.mensagem || 'Comprovante enviado.');
+        onClose();
+        return;
+      }
+
+      if (tipo === 'orcamento') {
+        const resp = await fetch('/api/vendas/orcamento-pdf/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdf_id: pdfId, destinatarios, assunto, mensagem, nome_arquivo: nomeArquivo, codvenda: numeroNota }),
+        });
+        const d = await resp.json();
+        if (!resp.ok) throw new Error(d.detalhes || d.erro || 'Falha ao enviar.');
+        toast.success(d.mensagem || 'Orçamento enviado.');
         onClose();
         return;
       }
@@ -151,7 +176,7 @@ export default function ModalEnviarEmail({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end sm:items-center sm:justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-[55] flex items-end justify-end sm:items-center sm:justify-center bg-slate-900/50 backdrop-blur-sm p-0 sm:p-4">
       <div className="bg-white dark:bg-slate-900 w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 flex flex-col max-h-[92vh]">
         {/* cabeçalho estilo Gmail */}
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 sm:rounded-t-2xl">
@@ -226,7 +251,12 @@ export default function ModalEnviarEmail({
 
           {/* Anexos */}
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {tipo === 'comprovante' ? (
+            {tipo === 'orcamento' ? (
+              <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
+                <Paperclip size={14} className="text-gray-500" />
+                {nomeArquivo || `Orcamento-${numeroNota || ''}`}.pdf
+              </span>
+            ) : tipo === 'comprovante' ? (
               <span className="inline-flex items-center gap-2 text-xs bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-1.5 border border-gray-200 dark:border-slate-700">
                 <Paperclip size={14} className="text-gray-500" />
                 Comprovante-{autId}.pdf

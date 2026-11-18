@@ -508,6 +508,7 @@ export default async function handler(
         total: dadosOrcamento.total,
         total_com_impostos: totalComImpostos,
         data: dadosOrcamento.data,
+        codcli: codcli ? String(codcli) : undefined,
       },
       expires_in: '24 horas',
     });
