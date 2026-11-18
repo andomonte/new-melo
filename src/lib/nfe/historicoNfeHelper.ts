@@ -18,6 +18,7 @@
  */
 
 import { PoolClient, Pool } from 'pg';
+import { getUserFromRequest } from '@/lib/authHelper';
 
 // Mapeamento de status para descrição legível
 export const STATUS_NFE_LABELS: Record<string, string> = {
@@ -89,6 +90,28 @@ export interface HistoricoNfeItem {
   status_label_anterior: string;
   status_label_novo: string;
   tipo_acao_label: string;
+}
+
+/**
+ * Quem fez a ação, para o histórico. A tela manda `userId` = codusr, que é o
+ * código de VENDEDOR e vem vazio para quem não é vendedor (ex.: administração);
+ * com isso o histórico era pulado em silêncio. Sem o que veio da tela, usa o
+ * login do cookie; em último caso 'SISTEMA'. Sempre devolve os dois preenchidos.
+ */
+export function usuarioDoHistorico(
+  req: any,
+  userId?: string | null,
+  userName?: string | null,
+): { userId: string; userName: string } {
+  let login = '';
+  try {
+    login = getUserFromRequest(req)?.login_user_login || '';
+  } catch {
+    /* sem cookie de login */
+  }
+  const nome = String(userName || '').trim() || login || 'SISTEMA';
+  const id = String(userId || '').trim() || login || nome;
+  return { userId: id, userName: nome };
 }
 
 /**

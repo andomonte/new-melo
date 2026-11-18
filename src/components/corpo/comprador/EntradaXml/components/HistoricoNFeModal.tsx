@@ -188,8 +188,51 @@ export const HistoricoNFeModal: React.FC<HistoricoNFeModalProps> = ({
         {parsed.itemNfe && <p>Item: {parsed.itemNfe}</p>}
         {parsed.produtoAssociado && <p>Produto: {parsed.produtoAssociado}</p>}
         {parsed.ordemCompra && <p>OC: {parsed.ordemCompra}</p>}
-        {parsed.parcelas && <p>Parcelas: {parsed.parcelas}</p>}
-        {parsed.banco && <p>Banco: {parsed.banco}</p>}
+        {Array.isArray(parsed.ordens) && parsed.ordens.length > 0 && (
+          <p>Ordem(ns) de compra: {parsed.ordens.join(', ')}</p>
+        )}
+        {/* Antecipado: o que foi feito com ele na configuração do pagamento */}
+        {parsed.antecipado && parsed.antecipado.acao !== 'SEM_ANTECIPADO' && (
+          <div className="mt-1">
+            <p className="font-medium">
+              Antecipado:{' '}
+              {{
+                CANCELADO: <span className="text-red-600 dark:text-red-400">não pago → cancelado</span>,
+                QUITOU_NF: <span className="text-green-600 dark:text-green-400">pago → quitou a NF</span>,
+                MANTIDO_COMO_ENTRADA: <span>mantido como entrada</span>,
+              }[parsed.antecipado.acao as string] || parsed.antecipado.acao}
+              {parsed.antecipado.creditoGerado > 0 && (
+                <> (crédito de {formatCurrency(parsed.antecipado.creditoGerado)} para o fornecedor)</>
+              )}
+            </p>
+            {Array.isArray(parsed.antecipado.titulos) && parsed.antecipado.titulos.map((t: any) => (
+              <p key={t.cod_pgto} className="ml-3 text-xs">
+                Título {t.cod_pgto} · OC {t.orc_id} · {formatCurrency(t.valor)}
+                {t.pago > 0 ? ` · pago ${formatCurrency(t.pago)}` : ' · não pago'}
+              </p>
+            ))}
+          </div>
+        )}
+        {/* Parcelas novas da cobrança */}
+        {Array.isArray(parsed.parcelasDetalhe) && parsed.parcelasDetalhe.length > 0 ? (
+          <div className="mt-1">
+            <p className="font-medium">
+              Nova cobrança: {parsed.parcelasDetalhe.length} parcela(s)
+              {parsed.tipoDocumento ? ` · ${parsed.tipoDocumento}` : ''}
+              {parsed.banco ? ` · banco ${parsed.banco}` : ''}
+            </p>
+            {parsed.parcelasDetalhe.map((p: any) => (
+              <p key={p.cod_pgto || p.numero} className="ml-3 text-xs">
+                Parcela {p.numero} · {p.nro_dup} · venc. {String(p.vencimento || '').split('-').reverse().join('/')} · {formatCurrency(p.valor)}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <>
+            {parsed.parcelas && <p>Parcelas: {parsed.parcelas}</p>}
+            {parsed.banco && <p>Banco: {parsed.banco}</p>}
+          </>
+        )}
         {parsed.numeroCte && <p>CT-e: {parsed.numeroCte}</p>}
         {parsed.transportadora && <p>Transportadora: {parsed.transportadora}</p>}
         {parsed.valorFrete && <p>Valor Frete: {formatCurrency(parsed.valorFrete)}</p>}

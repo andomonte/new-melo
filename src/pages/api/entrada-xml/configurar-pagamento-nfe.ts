@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
-import { registrarHistoricoNfe } from '@/lib/nfe/historicoNfeHelper';
+import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
 
 const parcelaSchema = z.object({
   numero_parcela: z.number(),
@@ -222,12 +222,16 @@ export default async function handler(
     const TOL_EXC = 0.10;
     const antBase = valorAntecipado > 0 ? valorAntecipado : antTotal;
     const excedente = Math.round((antBase - valorTotalNFe) * 100) / 100;
-    const ehExcedente = excedente > TOL_EXC;
+    // Antecipado COBRE a NF quando é MAIOR OU IGUAL a ela (tolerância de R$ 0,10) — mesma
+    // regra da tela (ConfiguracaoPagamentoNFeModal). Antes aqui era só "maior": com antecipado
+    // IGUAL à NF e não pago, a tela mandava as parcelas da NF inteira e o servidor ainda somava
+    // o antecipado (NF 19771: 8.314,20 + 8.314,20 ≠ 8.314,20) e recusava.
+    const cobreNF = valorTotalNFe > 0 && antBase >= valorTotalNFe - TOL_EXC;
     const algumPago = antPago > 0.005;
-    // A > NF: PAGO → quita + crédito (0 parcelas). NÃO PAGO → cancela antecipados e a cobrança
-    // da NF inteira vem das parcelas (XML ou manual). Spec §5.2.
-    const quitaPorAntecipado = ehExcedente && algumPago;
-    const cancelaAntecipado = ehExcedente && !algumPago;
+    // A ≥ NF: PAGO → quita (+ crédito do que passar da NF; 0 parcelas). NÃO PAGO → cancela os
+    // antecipados e a cobrança da NF inteira vem das parcelas (XML ou manual). Spec §5.2.
+    const quitaPorAntecipado = cobreNF && algumPago;
+    const cancelaAntecipado = cobreNF && !algumPago;
 
     // Validação de DATA: nenhuma parcela pode vencer antes de hoje (obriga o usuário a corrigir).
     if (!quitaPorAntecipado && parcelas.length > 0) {
@@ -242,7 +246,7 @@ export default async function handler(
     }
 
     if (quitaPorAntecipado) {
-      console.log(`\n💰 EXCEDENTE PAGO: antecipado R$ ${antBase.toFixed(2)} > NF R$ ${valorTotalNFe.toFixed(2)}. NFe quitada; excedente pago vira crédito.\n`);
+      console.log(`\n💰 ANTECIPADO PAGO COBRE A NF: antecipado R$ ${antBase.toFixed(2)} >= NF R$ ${valorTotalNFe.toFixed(2)}. NFe quitada; excedente pago vira crédito.\n`);
     } else {
       // Antecipado efetivo = 0 quando os antecipados serão cancelados (não pago); senão o detectado.
       const antecipadoEfetivo = cancelaAntecipado ? 0 : valorAntecipado;
@@ -256,7 +260,7 @@ export default async function handler(
         await client.query('ROLLBACK');
         return res.status(400).json({
           error: cancelaAntecipado
-            ? 'Os antecipados não pagos são maiores que a NFe e serão cancelados — informe as parcelas da cobrança (do XML ou manual).'
+            ? 'Os antecipados não pagos cobrem a NFe e serão cancelados — informe as parcelas da cobrança (do XML ou manual).'
             : 'Pelo menos uma parcela é necessária.'
         });
       }
@@ -370,6 +374,8 @@ export default async function handler(
     // Parcela 0 (ANTECIPADO) JÁ EXISTE - foi criada no pagamento antecipado da ordem
     let parcelasCriadas = 0;
     let valorTotalCriado = 0;
+    // Para o histórico: cada parcela criada
+    const parcelasDetalhe: { numero: number; cod_pgto: string; nro_dup: string; vencimento: string; valor: number }[] = [];
 
     // Quitado por antecipado PAGO → 0 parcelas. Nos demais casos (inclusive cancelaAntecipado),
     // a cobrança vem das parcelas enviadas (XML ou manual).
@@ -459,6 +465,13 @@ export default async function handler(
 
       await Promise.all(insertPromises);
 
+      parcelasDetalhe.push({
+        numero: parcela.numero_parcela,
+        cod_pgto: codPgto,
+        nro_dup: nroDup,
+        vencimento: String(parcela.data_vencimento).slice(0, 10),
+        valor: parcela.valor_parcela,
+      });
       parcelasCriadas++;
       valorTotalCriado += parcela.valor_parcela;
       proximoCodPgto++;
@@ -494,7 +507,7 @@ export default async function handler(
         await client.query(`UPDATE ordem_pagamento_conta SET status = 'CANCELADO' WHERE cod_pgto = $1 AND numero_parcela = 0`, [t.cod_pgto]);
         await client.query(`UPDATE ordem_pagamento_parcelas SET status = 'CANCELADO' WHERE orc_id = $1 AND numero_parcela = 0`, [t.orc_id]);
       }
-      console.log(`🚫 ${antTitulos.length} antecipado(s) NAO pago(s) cancelado(s) (A > NF). Cobranca gerada pelas parcelas.`);
+      console.log(`🚫 ${antTitulos.length} antecipado(s) NAO pago(s) cancelado(s) (A >= NF). Cobranca gerada pelas parcelas.`);
     }
 
     // 9. Marcar NFe como com pagamento configurado
@@ -530,25 +543,54 @@ export default async function handler(
       console.log(`NFe de importacao - ordens NAO marcadas como pagamento configurado`);
     }
 
-    // 11. Registrar historico de configuracao de pagamento
-    if (userId && userName) {
+    // 11. Registrar historico de configuracao de pagamento — SEMPRE, com o que foi
+    // feito com o antecipado (mantido / cancelado / quitou a NF) e cada parcela criada.
+    {
+      const quem = usuarioDoHistorico(req, userId, userName);
+      const acaoAntecipado = antTitulos.length === 0
+        ? 'SEM_ANTECIPADO'
+        : quitaPorAntecipado
+        ? 'QUITOU_NF'
+        : cancelaAntecipado
+        ? 'CANCELADO'
+        : 'MANTIDO_COMO_ENTRADA';
+      const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const partes: string[] = [];
+      if (acaoAntecipado === 'CANCELADO') partes.push(`antecipado não pago de R$ ${fmt(antBase)} cancelado`);
+      else if (acaoAntecipado === 'QUITOU_NF') partes.push(`NF quitada pelo antecipado pago de R$ ${fmt(antBase)}${creditoGeradoValor > 0 ? ` (crédito de R$ ${fmt(creditoGeradoValor)})` : ''}`);
+      else if (acaoAntecipado === 'MANTIDO_COMO_ENTRADA') partes.push(`antecipado de R$ ${fmt(antBase)} mantido como entrada`);
+      partes.push(`${parcelasCriadas} parcela(s) de cobrança${parcelasCriadas ? ` (R$ ${fmt(valorTotalCriado)})` : ''}`);
       await registrarHistoricoNfe(client, {
         codNfeEnt: parseInt(nfeId),
         tipoAcao: 'CONFIG_PAGAMENTO',
         previousStatus: nfe.exec || 'C',
         newStatus: nfe.exec || 'C',
-        userId,
-        userName,
+        userId: quem.userId,
+        userName: quem.userName,
         comments: {
           tipo: 'CONFIG_PAGAMENTO',
-          descricao: `Pagamento configurado: ${parcelasCriadas} parcela(s)`,
+          descricao: `Pagamento configurado: ${partes.join('; ')}`,
           banco,
           tipoDocumento,
+          valorNF: valorTotalNFe,
           parcelas: parcelasCriadas,
-          valorTotal: valorTotalCriado
+          valorTotal: valorTotalCriado,
+          parcelasDetalhe,
+          antecipado: {
+            acao: acaoAntecipado,
+            valor: antBase,
+            pago: antPago,
+            creditoGerado: creditoGeradoValor,
+            titulos: antTitulos.map((t) => ({
+              cod_pgto: t.cod_pgto,
+              orc_id: t.orc_id,
+              valor: t.valor_pgto,
+              pago: t.valor_pago,
+            })),
+          },
         }
       });
-      console.log(`✅ Historico registrado para usuario ${userName}`);
+      console.log(`✅ Historico registrado para usuario ${quem.userName}`);
     }
 
     // Commit da transacao

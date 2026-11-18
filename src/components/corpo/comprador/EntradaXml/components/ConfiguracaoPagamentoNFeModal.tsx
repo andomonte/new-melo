@@ -818,7 +818,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                 </div>
               )}
 
-              {/* Antecipado(s) não pago(s) > NF → serão cancelados; cobrança = NF inteira */}
+              {/* Antecipado(s) não pago(s) ≥ NF → serão cancelados; cobrança = NF inteira */}
               {cancelaAntecipado && (
                 <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <div className="flex items-start gap-3">
@@ -828,7 +828,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                         Antecipado(s) não pago(s) serão cancelados
                       </h4>
                       <p className="text-amber-700 dark:text-amber-300 mt-1">
-                        O total antecipado (R$ {valorEntrada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) é maior que a
+                        O total antecipado (R$ {valorEntrada.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) cobre a
                         NFe (R$ {valorNFe.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) e <b>não foi pago</b>. Os
                         antecipados serão <b>cancelados</b> e a cobrança será gerada pela <b>NFe inteira</b> — pelas parcelas do
                         XML ou lançadas manualmente abaixo.

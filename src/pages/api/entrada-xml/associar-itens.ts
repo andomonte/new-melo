@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
-import { registrarHistoricoNfe } from '@/lib/nfe/historicoNfeHelper';
+import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
 import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota } from '@/lib/compras/refFabrica';
 
 interface ItemAssociation {
@@ -381,23 +381,31 @@ export default async function handler(
 
     console.log(`✅ NFe ${nfeId} marcada como ASSOCIADA (exec='C')`);
 
-    // Registrar historico de conclusao de associacao
-    if (userId && userName) {
+    // Registrar historico de conclusao de associacao — SEMPRE (antes só com
+    // userId da tela, que vem vazio para quem não é vendedor), com as ordens.
+    {
       await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
+      const quem = usuarioDoHistorico(req, userId, userName);
+      const ordensRes = await client.query(
+        `SELECT DISTINCT req_id::text AS orc FROM nfe_item_pedido_associacao WHERE nfe_id = $1 ORDER BY 1`,
+        [nfeId],
+      );
+      const ordens = ordensRes.rows.map((r: any) => r.orc);
       await registrarHistoricoNfe(client, {
         codNfeEnt: parseInt(nfeId),
         tipoAcao: 'ASSOCIACAO_CONCLUIDA',
         previousStatus: 'A',
         newStatus: 'C',
-        userId,
-        userName,
+        userId: quem.userId,
+        userName: quem.userName,
         comments: {
           tipo: 'ASSOCIACAO_CONCLUIDA',
-          descricao: `Associacao concluida: ${associatedItems.length} item(ns)`,
-          totalItens: associatedItems.length
+          descricao: `Associacao concluida: ${associatedItems.length} item(ns)${ordens.length ? ` — ordem(ns) ${ordens.join(', ')}` : ''}`,
+          totalItens: associatedItems.length,
+          ordens,
         }
       });
-      console.log(`✅ Historico registrado para usuario ${userName}`);
+      console.log(`✅ Historico registrado para usuario ${quem.userName}`);
     }
 
     console.log(`Associação de itens concluída para NFe ${nfeId} -> ID ${nfeIdFinal} (Modo: ${isTestMode ? 'TESTE' : 'REAL'}): ${associatedItems.length} itens associados`);

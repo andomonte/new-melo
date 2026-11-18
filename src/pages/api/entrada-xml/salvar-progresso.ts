@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
-import { registrarHistoricoNfe } from '@/lib/nfe/historicoNfeHelper';
+import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
 import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota } from '@/lib/compras/refFabrica';
 
 interface ItemAssociation {
@@ -238,15 +238,16 @@ export default async function handler(
 
     // Registrar histórico de associação
     const itensAssociados = items.filter(i => i.status === 'associated' || i.status === 'partial').length;
-    if (userId && userName && itensAssociados > 0) {
+    if (itensAssociados > 0) {
+      const quem = usuarioDoHistorico(req, userId, userName);
       await client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}`);
       await registrarHistoricoNfe(client, {
         codNfeEnt: parseInt(nfeId),
         tipoAcao: 'ASSOCIACAO_ITEM',
         previousStatus: 'R',
         newStatus: 'A',
-        userId,
-        userName,
+        userId: quem.userId,
+        userName: quem.userName,
         comments: {
           tipo: 'ASSOCIACAO_ITEM',
           descricao: `${itensAssociados} item(ns) associado(s)`,
