@@ -13,7 +13,8 @@ export function Toaster() {
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
+      {/* Erros/atenção (variant destructive) abrem no alerta central (AlertaCentralGlobal) */}
+      {toasts.filter((t) => (t as any).variant !== "destructive").map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props} className="custom-toast">
             <div className="grid gap-1">

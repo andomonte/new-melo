@@ -8,6 +8,7 @@ import { AuthProvider } from '@/contexts/authContexts';
 import { ToastProvider } from '@/components/ui/toast';
 import { Toaster as UIToaster } from '@/components/ui/toaster';
 import { Toaster } from 'sonner';
+import { AlertaCentralGlobal } from '@/components/common/AlertaCentralGlobal';
 
 export type NextPageWithLayout<P = unknown, IP = P> = NextPage<P, IP> & {
   getLayout?: (page: ReactElement) => ReactNode;
@@ -39,6 +40,8 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
           <Component {...pageProps} />
           <UIToaster />
           <Toaster richColors position="top-center" expand={true} />
+          {/* Erros/atenção de toast e sonner abrem no meio da tela, com OK */}
+          <AlertaCentralGlobal />
         </ToastProvider>
       </AuthProvider>
     </ThemeProvider>,
