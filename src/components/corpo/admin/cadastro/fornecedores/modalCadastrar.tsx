@@ -107,7 +107,7 @@ export default function CustomModal({
   const camposObrigatoriosPorAba: Record<string, string[]> = {
     dadosCadastrais: ['nome', 'nome_fant', 'cpf_cgc', 'codcf', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf', 'codpais', 'tipoemp', 'tipofornecedor', 'tipo'],
     dadosFinanceiros: ['regime_tributacao'],
-    regrasFaturamento: [],
+    regraFaturamento: [],
   };
 
   const handleActiveTab = (tab: string) => {
@@ -427,7 +427,7 @@ export default function CustomModal({
 
         if (piscofinsVazios) {
           toast({ description: 'Todos os campos PIS/COFINS são obrigatórios quando a regra diferenciada está ativa.', variant: 'destructive' });
-          setActiveTab('regrasFaturamento');
+          setActiveTab('regraFaturamento');
           return;
         }
       }
@@ -498,7 +498,7 @@ export default function CustomModal({
         });
 
         // Ordenar erros pela sequência das abas
-        const tabOrder = ['dadosCadastrais', 'dadosFinanceiros', 'regrasFaturamento'];
+        const tabOrder = ['dadosCadastrais', 'dadosFinanceiros', 'regraFaturamento'];
         const sortedErrors = [...error.errors].sort((a, b) => {
           const tabA = tabOrder.indexOf(campoParaAba[String(a.path[0])] || '');
           const tabB = tabOrder.indexOf(campoParaAba[String(b.path[0])] || '');

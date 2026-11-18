@@ -4,6 +4,7 @@ import { getPgPoolPorNomeFilial } from '@/lib/pg';
 import { PoolClient } from 'pg';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
+import { COLUNAS_DBCREDOR, COLUNAS_REGRA_FATURAMENTO } from '@/lib/fornecedores/colunasFornecedor';
 
 export default async function handle(
   req: NextApiRequest,
@@ -34,58 +35,9 @@ export default async function handle(
     client = await pool.connect();
     await client.query('BEGIN');
 
-    const colunasDbCredor = [
-      'nome',
-      'nome_fant',
-      'cpf_cgc',
-      'tipo',
-      'data_cad',
-      'endereco',
-      'bairro',
-      'cidade',
-      'uf',
-      'isuframa',
-      'iest',
-      'imun',
-      'cc',
-      'n_agencia',
-      'banco',
-      'cod_ident',
-      'contatos',
-      'tipoemp',
-      'cep',
-      'codcf',
-      'fabricante',
-      'regime_tributacao',
-      'codbairro',
-      'codmunicipio',
-      'numero',
-      'referencia',
-      'codpais',
-      'complemento',
-      'tipofornecedor',
-      'codunico',
-      'codccontabil',
-    ];
-
-    const colunasRegraFaturamento = [
-      'desc_icms_sufra',
-      'desc_icms_sufra_piscofins',
-      'piscofins_365',
-      'piscofins_925',
-      'piscofins_1150',
-      'piscofins_1310',
-      'desc_icms_sufra_st',
-      'desc_piscofins_st',
-      'acres_piscofins_st',
-      'desc_icms_sufra_importado',
-      'cobrar_ipi_importado',
-      'frete',
-      'basereduzida_st',
-      'basereduzida_icms',
-      'desc_icms_sufra_base',
-      'desc_icms_sufra_importado_base',
-    ];
+    // Mesmas listas do cadastro (src/lib/fornecedores/colunasFornecedor.ts)
+    const colunasDbCredor: readonly string[] = COLUNAS_DBCREDOR;
+    const colunasRegraFaturamento: readonly string[] = COLUNAS_REGRA_FATURAMENTO;
 
     const dadosFornecedor: { [key: string]: any } = {};
     const dadosRegra: { [key: string]: any } = {};

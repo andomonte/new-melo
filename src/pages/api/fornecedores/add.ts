@@ -5,6 +5,7 @@ import { PoolClient } from 'pg';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
+import { separarDadosFornecedor, regraComPadrao } from '@/lib/fornecedores/colunasFornecedor';
 
 export default async function handle(
   req: NextApiRequest,
@@ -26,6 +27,8 @@ export default async function handle(
   try {
     const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
+    // Fornecedor e regra de faturamento entram juntos ou nenhum dos dois.
+    await client.query('BEGIN');
 
     // ✅ PASSO 1: Buscar o próximo código disponível (ignora 99999 se já existir)
     const nextCodeQuery = await client.query(`
@@ -71,35 +74,66 @@ export default async function handle(
       fornecedorData.codbairro = fornecedorData.codbairro.substring(0, 5);
     }
 
-    // Constrói a query de inserção de forma segura
-    const columns = Object.keys(fornecedorData)
+    // Separa o que é do fornecedor (dbcredor) do que é regra de faturamento
+    // (cad_credor_regra_faturamento), como faz a edição. Antes ia tudo para dbcredor
+    // e quem marcava algo na aba Regras Faturamento recebia "Erro interno" (42703).
+    const { fornecedor: dadosCredor, regra: dadosRegra, ignorados } =
+      separarDadosFornecedor(fornecedorData as any);
+    if (ignorados.length) console.warn('Campos ignorados no cadastro de fornecedor:', ignorados);
+    const linhaCredor: Record<string, any> = { cod_credor: newCodCredor, ...dadosCredor };
+
+    const columns = Object.keys(linhaCredor)
       .map((col) => `"${col}"`)
       .join(', ');
-    const placeholders = Object.keys(fornecedorData)
+    const placeholders = Object.keys(linhaCredor)
       .map((_, i) => `$${i + 1}`)
       .join(', ');
-    const values = Object.values(fornecedorData);
+    const values = Object.values(linhaCredor);
 
     const insertQuery = `
-      INSERT INTO dbcredor (${columns}) 
-      VALUES (${placeholders}) 
+      INSERT INTO dbcredor (${columns})
+      VALUES (${placeholders})
       RETURNING *;
     `;
 
     const result = await client.query(insertQuery, values);
 
-    // Integridade de pessoa: replica nome/inscrições/tipo em cliente/transportadora
-    await syncPessoaIntegridade(filial, 'FORNECEDOR', {
-      doc: (fornecedorData as any).cpf_cgc,
-      nome: (fornecedorData as any).nome,
-      iest: (fornecedorData as any).iest,
-      isuframa: (fornecedorData as any).isuframa,
-      imun: (fornecedorData as any).imun,
-      tipo: (fornecedorData as any).tipo,
-    });
+    // Regra de faturamento: só quando o usuário mexeu na aba (mesmo formato da edição).
+    if (Object.keys(dadosRegra).length > 0) {
+      const linhaRegra = regraComPadrao(newCodCredor, dadosRegra);
+      const cols = Object.keys(linhaRegra);
+      await client.query(
+        `INSERT INTO cad_credor_regra_faturamento (${cols.map((c) => `"${c}"`).join(', ')})
+         VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')})
+         ON CONFLICT (crf_id) DO UPDATE SET ${cols
+           .filter((c) => c !== 'crf_id')
+           .map((c) => `"${c}" = EXCLUDED."${c}"`)
+           .join(', ')}`,
+        Object.values(linhaRegra),
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // Integridade de pessoa: replica nome/inscrições/tipo em cliente/transportadora.
+    // O fornecedor já está gravado: falha aqui não pode virar "erro ao cadastrar"
+    // (o usuário tentaria de novo e daria "CNPJ já cadastrado").
+    try {
+      await syncPessoaIntegridade(filial, 'FORNECEDOR', {
+        doc: (fornecedorData as any).cpf_cgc,
+        nome: (fornecedorData as any).nome,
+        iest: (fornecedorData as any).iest,
+        isuframa: (fornecedorData as any).isuframa,
+        imun: (fornecedorData as any).imun,
+        tipo: (fornecedorData as any).tipo,
+      });
+    } catch (e) {
+      console.error('Fornecedor gravado, mas falhou a sincronização com cliente/transportadora:', e);
+    }
 
     res.status(201).json(serializeBigInt(result.rows[0]));
   } catch (error: any) {
+    await client?.query('ROLLBACK').catch(() => {});
     console.error('Erro ao cadastrar fornecedor:', error);
 
     // Verificar se é erro de string muito longa (22001)
