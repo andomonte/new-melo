@@ -1,0 +1,222 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { getPgPool, getPgPoolFilial, filialDaRequisicao } from '@/lib/pg';
+import { getUserFromRequest } from '@/lib/authHelper';
+
+/**
+ * GET /api/offline/pacote — pacote de dados para o vendedor externo trabalhar sem internet.
+ * Arquitetura: docs/VENDAS-EXTERNAS-OFFLINE.md
+ *
+ * Vem em partes (respostas grandes não passam inteiras pelo nginx de homologação):
+ *   ?parte=meta                       vendedor, tipos de preço da carteira, contagens
+ *   ?parte=produtos&apos=<codprod>&limite=5000&min=1&arm=1001
+ *                                     produtos com disponível >= min (paginação por codprod)
+ *   ?parte=clientes&apos=<codcli>&limite=5000
+ *                                     carteira do vendedor (dbclien.codvend)
+ *   ?parte=aux                        formas de pagamento, prazos, transportes, promoções
+ *
+ * Mesmas fontes da Nova Venda V2 (src/lib/vendas/buscaProduto.ts, buscarCliente.ts).
+ * Só leitura.
+ */
+
+const LIMITE_MAX = 5000;
+
+async function vendedorDaRequisicao(req: NextApiRequest) {
+  const user = getUserFromRequest(req);
+  const login = user?.login_user_login;
+  const filial = filialDaRequisicao(req);
+  if (!login || login === 'SYSTEM') return null;
+  const central = getPgPool();
+  const r = await central.query(
+    `SELECT codvend FROM tb_user_perfil WHERE user_login_id = $1 AND nome_filial = $2 LIMIT 1`,
+    [login, filial],
+  );
+  const codvend = String(r.rows[0]?.codvend || '').trim();
+  return { login, filial, codvend };
+}
+
+function inteiro(v: any, padrao: number, max?: number) {
+  const n = Math.floor(Number(v));
+  if (!Number.isFinite(n) || n < 0) return padrao;
+  return max ? Math.min(n, max) : n;
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ erro: 'Método não permitido.' });
+
+  const vend = await vendedorDaRequisicao(req).catch(() => null);
+  if (!vend) return res.status(401).json({ erro: 'Faça login para baixar o pacote.' });
+  if (!vend.codvend) {
+    return res.status(422).json({ erro: 'Seu usuário não tem código de vendedor nesta filial.' });
+  }
+
+  const parte = String(req.query.parte || 'meta');
+  const limite = inteiro(req.query.limite, LIMITE_MAX, LIMITE_MAX) || LIMITE_MAX;
+  const apos = String(req.query.apos || '');
+  const min = Math.max(1, inteiro(req.query.min, 1));
+  const arm = inteiro(req.query.arm, 1001);
+
+  const pool = await getPgPoolFilial(req);
+  const client = await pool.connect();
+  try {
+    // tipos de preço (dbclien.prvenda) usados pela carteira do vendedor
+    const tiposR = await client.query(
+      `SELECT DISTINCT COALESCE(NULLIF(btrim(prvenda::text), ''), '0') AS tipo
+         FROM dbclien WHERE codvend = $1 ORDER BY 1`,
+      [vend.codvend],
+    );
+    const tipos: string[] = tiposR.rows.map((r) => String(r.tipo));
+    if (tipos.length === 0) tipos.push('0');
+
+    if (parte === 'meta') {
+      const [prod, cli] = await Promise.all([
+        client.query(
+          `SELECT COUNT(*)::int AS n FROM (
+             SELECT arp_codprod FROM cad_armazem_produto
+              WHERE arp_arm_id = $1 AND COALESCE(arp_bloqueado,'N') <> 'S'
+              GROUP BY arp_codprod
+             HAVING SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0)) >= $2) x`,
+          [arm, min],
+        ),
+        client.query(`SELECT COUNT(*)::int AS n FROM dbclien WHERE codvend = $1`, [vend.codvend]),
+      ]);
+      return res.status(200).json({
+        gerado_em: new Date().toISOString(),
+        vendedor: vend.codvend,
+        login: vend.login,
+        filial: vend.filial,
+        armazem: arm,
+        estoque_minimo: min,
+        tipos_preco: tipos,
+        total_produtos: prod.rows[0].n,
+        total_clientes: cli.rows[0].n,
+        limite_por_parte: LIMITE_MAX,
+      });
+    }
+
+    if (parte === 'produtos') {
+      // disp = qtest − reservada no armazém (igual à busca da Nova Venda); preço por tipo
+      const r = await client.query(
+        `WITH d AS (
+           SELECT arp_codprod AS codprod,
+                  SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0)) AS disp
+             FROM cad_armazem_produto
+            WHERE arp_arm_id = $1 AND COALESCE(arp_bloqueado,'N') <> 'S'
+              AND arp_codprod > $3
+            GROUP BY arp_codprod
+           HAVING SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0)) >= $2
+            ORDER BY arp_codprod
+            LIMIT $4)
+         SELECT p.codprod, p.ref, p.aplic_extendida AS descr, m.descr AS marca, p.codgpe,
+                d.disp, p.dolar, p.curva,
+                (SELECT json_object_agg(fp."TIPOPRECO"::text, fp."PRECOVENDA")
+                   FROM dbformacaoprvenda fp
+                  WHERE fp."CODPROD" = p.codprod AND fp."PRECOVENDA" > 0
+                    AND fp."TIPOPRECO"::text = ANY($5::text[])) AS precos
+           FROM d
+           JOIN dbprod p ON p.codprod = d.codprod
+           JOIN dbmarcas m ON m.codmarca = p.codmarca
+          WHERE COALESCE(p.inf,'') <> 'D' AND COALESCE(p.excluido,0) <> 1
+          ORDER BY d.codprod`,
+        [arm, min, apos, limite, tipos],
+      );
+      // o "apos" da próxima parte é o último codprod lido em cad_armazem_produto
+      // (mesmo que o produto tenha sido filtrado por excluído/sem marca)
+      const ultimo = await client.query(
+        `SELECT MAX(codprod) AS ult FROM (
+           SELECT arp_codprod AS codprod FROM cad_armazem_produto
+            WHERE arp_arm_id = $1 AND COALESCE(arp_bloqueado,'N') <> 'S' AND arp_codprod > $3
+            GROUP BY arp_codprod
+           HAVING SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0)) >= $2
+            ORDER BY arp_codprod LIMIT $4) x`,
+        [arm, min, apos, limite],
+      );
+      const prox = ultimo.rows[0]?.ult || null;
+      // formato compacto: [codprod, ref, descr, marca, codgpe, disp, dolar, curva, precos]
+      const itens = r.rows.map((p) => [
+        p.codprod,
+        p.ref,
+        p.descr,
+        p.marca,
+        p.codgpe,
+        Number(p.disp),
+        p.dolar,
+        p.curva,
+        p.precos || {},
+      ]);
+      return res.status(200).json({
+        colunas: ['codprod', 'ref', 'descr', 'marca', 'codgpe', 'disp', 'dolar', 'curva', 'precos'],
+        itens,
+        proximo: prox,
+        fim: !prox,
+      });
+    }
+
+    if (parte === 'clientes') {
+      const r = await client.query(
+        `WITH c AS (
+           SELECT * FROM dbclien WHERE codvend = $1 AND codcli > $2 ORDER BY codcli LIMIT $3)
+         SELECT c.codcli, c.nome, c.nomefant, c.cpfcgc, c.tipo, c.ender, c.numero, c.bairro,
+                c.cidade, c.uf, c.cep, c.complemento, c.contato, c.email, c.iest,
+                COALESCE(NULLIF(btrim(c.prvenda::text), ''), '0') AS prvenda,
+                c.claspgto, c.status, c.atraso, c.limite, c.debito, c.bloquear_preco, c.tipocliente,
+                COALESCE(ct.credito_tmp, 0) AS credito_tmp,
+                COALESCE(t.qtd_vencidos, 0) AS qtd_vencidos,
+                COALESCE(t.valor_vencido, 0) AS valor_vencido,
+                COALESCE(t.maior_atraso, 0) AS maior_atraso
+           FROM c
+           LEFT JOIN LATERAL (
+             SELECT SUM(GREATEST(COALESCE(limite,0) - COALESCE(limite_usado,0), 0)) AS credito_tmp
+               FROM dbclien_creditotmp
+              WHERE codcli = c.codcli AND COALESCE(status,'') <> 'F' AND datavencimento >= NOW()
+           ) ct ON true
+           LEFT JOIN LATERAL (
+             SELECT COUNT(*)::int AS qtd_vencidos, SUM(COALESCE(valor_pgto,0)) AS valor_vencido,
+                    MAX(EXTRACT(DAY FROM NOW() - dt_venc))::int AS maior_atraso
+               FROM dbreceb
+              WHERE codcli = c.codcli AND dt_venc < NOW()
+                AND COALESCE(rec,'N') <> 'S' AND COALESCE(cancel,'N') <> 'S'
+           ) t ON true
+          ORDER BY c.codcli`,
+        [vend.codvend, apos, limite],
+      );
+      const itens = r.rows.map((x) => ({
+        ...x,
+        limite: Number(x.limite || 0),
+        debito: Number(x.debito || 0),
+        credito_tmp: Number(x.credito_tmp || 0),
+        valor_vencido: Number(x.valor_vencido || 0),
+      }));
+      const prox = itens.length === limite ? itens[itens.length - 1].codcli : null;
+      return res.status(200).json({ itens, proximo: prox, fim: !prox });
+    }
+
+    if (parte === 'aux') {
+      const [formas, prazos, transp, promo] = await Promise.all([
+        client.query(`SELECT id, descricao FROM dbtipo_documento WHERE descricao <> '' ORDER BY descricao`),
+        client.query(`SELECT * FROM tb_tabela_prazos WHERE ativo ORDER BY categoria, valor_min`),
+        client.query(`SELECT codtptransp, descr FROM dbtptransp ORDER BY descr`),
+        client.query(
+          `SELECT dpi.id_promocao_item, dpi.codprod, dpi.codgpp, dpi.valor_desconto_item, dpi.tipo_desconto_item,
+                  dpi.qtde_minima_item, dpi.qtde_maxima_item, dpi.qtd_total_item, dpi.qtdvendido,
+                  dp.id_promocao, dp.nome_promocao, dp.tipo_promocao, dp.valor_desconto, dp.tipo_desconto,
+                  dp.data_inicio, dp.data_fim, COALESCE(dp.permite_balcao,false) AS permite_balcao
+             FROM dbpromocao_item dpi JOIN dbpromocao dp ON dpi.id_promocao = dp.id_promocao
+            WHERE dp.ativa = TRUE AND NOW() BETWEEN dp.data_inicio AND dp.data_fim`,
+        ),
+      ]);
+      return res.status(200).json({
+        formas_pagamento: formas.rows,
+        tabela_prazos: prazos.rows,
+        transportes: transp.rows,
+        promocoes: promo.rows,
+      });
+    }
+
+    return res.status(400).json({ erro: 'Parte inválida. Use meta, produtos, clientes ou aux.' });
+  } catch (e: any) {
+    console.error('Erro no pacote offline:', e);
+    return res.status(500).json({ erro: 'Erro ao montar o pacote offline', detalhes: e.message });
+  } finally {
+    client.release();
+  }
+}
