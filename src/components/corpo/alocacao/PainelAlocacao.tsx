@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { LogOut, RefreshCw, Warehouse, Package } from 'lucide-react';
+import { LogOut, RefreshCw, Warehouse, Package, Search, X } from 'lucide-react';
 import { DefaultButton } from '@/components/common/Buttons';
 import CardEntradaAlocacao from './CardEntradaAlocacao';
 import ModalAlocarItens from './ModalAlocarItens';
@@ -33,6 +33,14 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
   const [isLoadingFinalizados, setIsLoadingFinalizados] = useState(true);
   const [entradaAtiva, setEntradaAtiva] = useState<EntradaParaAlocar | null>(null);
   const [showModal, setShowModal] = useState(false);
+  // busca por NF, chave, fornecedor, CNPJ ou entrada (no servidor)
+  const [busca, setBusca] = useState('');
+  const [buscaDeb, setBuscaDeb] = useState('');
+  const [erroIniciar, setErroIniciar] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDeb(busca.trim()), 400);
+    return () => clearTimeout(t);
+  }, [busca]);
 
   // Formatar moeda
   const formatCurrency = useCallback((value: number) => {
@@ -46,7 +54,7 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
   const loadEntradas = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getEntradasParaAlocar(alocador.nome);
+      const data = await getEntradasParaAlocar(alocador.nome, buscaDeb);
       setEntradas(data);
 
       // Verificar se tem alocacao ativa
@@ -59,7 +67,7 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
     } finally {
       setIsLoading(false);
     }
-  }, [alocador.nome]);
+  }, [alocador.nome, buscaDeb]);
 
   // Carregar finalizados
   const loadFinalizados = useCallback(async () => {
@@ -94,6 +102,7 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
   // Iniciar alocacao
   const handleIniciar = useCallback(
     async (entrada: EntradaParaAlocar, armId: number) => {
+      setErroIniciar('');
       try {
         await iniciarAlocacao({
           entradaId: entrada.entrada_id,
@@ -103,9 +112,10 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
         });
         setEntradaAtiva(entrada);
         await loadEntradas();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro ao iniciar alocacao:', error);
-        alert('Erro ao iniciar alocacao. Tente novamente.');
+        // mostra o motivo real (ex.: preço não confirmado)
+        setErroIniciar(error?.response?.data?.error || 'Erro ao iniciar a alocação. Tente novamente.');
       }
     },
     [alocador, loadEntradas],
@@ -169,6 +179,9 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-600" />
                 Entradas para Alocar
+                <span className="text-xs font-normal text-gray-500">
+                  ({entradas.length}{entradas.length === 100 ? '+' : ''})
+                </span>
               </h2>
               <button
                 onClick={handleRefresh}
@@ -179,6 +192,35 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
                 Atualizar
               </button>
             </div>
+
+            {/* busca */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por nº da nota, chave, fornecedor, CNPJ ou entrada"
+                className="w-full pl-9 pr-9 py-2 rounded-md border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-sm outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              {busca && (
+                <button
+                  onClick={() => setBusca('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  aria-label="Limpar busca"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {erroIniciar && (
+              <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300 flex gap-2">
+                <span className="flex-1">{erroIniciar}</span>
+                <button onClick={() => setErroIniciar('')} aria-label="Fechar aviso">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {isLoading ? (
               <div className="space-y-4">
@@ -197,7 +239,7 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
               <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm p-8 text-center">
                 <Package className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                 <p className="text-gray-500 dark:text-gray-400">
-                  Nenhuma entrada disponivel para alocacao
+                  {buscaDeb ? 'Nenhuma entrada encontrada para esta busca' : 'Nenhuma entrada disponivel para alocacao'}
                 </p>
                 <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
                   As entradas aparecerao aqui apos serem recebidas
@@ -216,7 +258,11 @@ const PainelAlocacao: React.FC<PainelAlocacaoProps> = ({ alocador, onLogout }) =
                     onIniciar={armId => handleIniciar(entrada, armId)}
                     onAlocar={handleAlocar}
                     formatCurrency={formatCurrency}
-                    disabled={entradaAtiva !== null && entradaAtiva.entrada_id !== entrada.entrada_id}
+                    disabled={
+                      (entradaAtiva !== null && entradaAtiva.entrada_id !== entrada.entrada_id) ||
+                      // alocação libera para venda: sem preço confirmado não inicia
+                      (entrada.preco_confirmado === false && entrada.status !== 'EM_ALOCACAO')
+                    }
                     armazens={armazens}
                   />
                 ))}

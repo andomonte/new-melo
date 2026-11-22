@@ -8,7 +8,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolEstacaoEntrada } from '@/lib/recebimentoEntrada/filial';
 import { PoolClient } from 'pg';
 
 interface EntradaAtiva {
@@ -75,9 +75,9 @@ export default async function handler(
   }
 
   const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'MANAUS';
+  // filial do link da tela (header x-filial-estacao); ver lib/recebimentoEntrada/filial.ts
+  const { filial, pool, schema } = poolEstacaoEntrada(req);
 
-  const pool = getPgPool(filial);
   let client: PoolClient | null = null;
 
   try {

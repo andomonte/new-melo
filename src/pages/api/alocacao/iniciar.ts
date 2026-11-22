@@ -11,8 +11,9 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolEstacaoEntrada } from '@/lib/recebimentoEntrada/filial';
 import { PoolClient } from 'pg';
+import { precoConfirmadoDaEntrada, MSG_PRECO_PENDENTE_ALOCACAO } from '@/lib/recebimentoEntrada/status';
 
 interface IniciarRequest {
   entradaId: string; // codent
@@ -68,9 +69,9 @@ export default async function handler(
   }
 
   const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'MANAUS';
+  // filial do link da tela (header x-filial-estacao); ver lib/recebimentoEntrada/filial.ts
+  const { filial, pool, schema } = poolEstacaoEntrada(req);
 
-  const pool = getPgPool(filial);
   let client: PoolClient | null = null;
 
   try {
@@ -103,6 +104,11 @@ export default async function handler(
       return res.status(400).json({
         error: 'Esta entrada nao esta disponivel para alocacao.',
       });
+    }
+
+    // Alocação libera para venda: exige o preço confirmado (lib/recebimentoEntrada/status.ts)
+    if (!(await precoConfirmadoDaEntrada(client, entradaId))) {
+      return res.status(400).json({ error: MSG_PRECO_PENDENTE_ALOCACAO(entradaId) });
     }
 
     // Iniciar alocacao

@@ -630,14 +630,16 @@ export const menus = [
             href: '/entrada/recebimento',
             icon: PackageCheck,
             corpo: RecebimentoEntradaPage,
-            openInNewTab: true,
+            // abre /entrada/recebimento/<codigo da filial logada> em nova aba
+            linkFilial: '/entrada/recebimento',
           },
           {
             name: 'Alocação',
             href: '/alocacao',
             icon: MapPin,
             corpo: AlocacaoPage,
-            openInNewTab: true,
+            // abre /alocacao/<codigo da filial logada> em nova aba
+            linkFilial: '/alocacao',
           },
         ],
       },

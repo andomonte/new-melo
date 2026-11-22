@@ -60,7 +60,7 @@ export default async function handler(
 
     // Entrada + estado do workflow
     const entResult = await client.query(
-      `SELECT e.codent, e.status, rec.status AS rec_status
+      `SELECT e.codent, e.status, rec.status AS rec_status, rec.data_confirmacao_preco
          FROM dbent e
          LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
         WHERE e.codent = $1`,
@@ -70,8 +70,17 @@ export default async function handler(
       throw new Error('Entrada não encontrada');
     }
     const ent = entResult.rows[0];
-    if (ent.rec_status && ent.rec_status !== 'PENDENTE') {
-      throw new Error(`Não é possível confirmar preço. Status atual: ${ent.rec_status}. Esperado: PENDENTE`);
+    // Desde 22/11/2026 o preço é independente do fluxo físico: a entrada pode já estar
+    // em recebimento/alocação. Só não confirma duas vezes (reprecificaria de novo) nem
+    // entrada cancelada. Entrada antiga sem data, mas com fluxo além de PENDENTE, também
+    // já teve o preço confirmado no modelo anterior.
+    if (ent.rec_status === 'CANCELADA' || ent.status === 'C') {
+      throw new Error('Entrada cancelada: não é possível confirmar o preço.');
+    }
+    const confirmadoModeloAntigo =
+      !ent.data_confirmacao_preco && ent.status === 'F' && ent.rec_status && ent.rec_status !== 'PENDENTE';
+    if (ent.data_confirmacao_preco || confirmadoModeloAntigo) {
+      throw new Error('O preço desta entrada já foi confirmado.');
     }
 
     // Aplica preços/unidades editados na tela aos itens da entrada (dbitent por produto)
@@ -118,7 +127,10 @@ export default async function handler(
       `INSERT INTO dbent_recebimento (codent, status, data_confirmacao_preco, observacao_preco, updated_at)
        VALUES ($1, 'PRECO_CONFIRMADO', now(), $2, now())
        ON CONFLICT (codent) DO UPDATE SET
-         status = 'PRECO_CONFIRMADO', data_confirmacao_preco = now(),
+         -- só avança a situação se ainda está no início; em recebimento/alocação mantém
+         status = CASE WHEN dbent_recebimento.status IS NULL OR dbent_recebimento.status = 'PENDENTE'
+                       THEN 'PRECO_CONFIRMADO' ELSE dbent_recebimento.status END,
+         data_confirmacao_preco = now(),
          observacao_preco = EXCLUDED.observacao_preco, updated_at = now()`,
       [id, observacao || null]
     );

@@ -13,7 +13,10 @@ import {
   finalizarRecebimento,
   type ArmazemAlterado,
   getRecebimentosFinalizados,
+  iniciarRecebimentoPorEntrada,
+  type EntradaDisponivel,
 } from '@/data/recebimento-entrada/recebimentoEntradaService';
+import ListaEntradasDisponiveis from './ListaEntradasDisponiveis';
 import { DefaultButton } from '@/components/common/Buttons';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -118,6 +121,30 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
     setIsModalItensOpen(true);
   }, []);
 
+  // Lista "Entradas para receber": inicia pela entrada e já abre a conferência
+  const [versaoLista, setVersaoLista] = useState(0);
+  const handleReceberDaLista = useCallback(
+    async (e: EntradaDisponivel) => {
+      try {
+        const iniciada = await iniciarRecebimentoPorEntrada({
+          codent: e.codent,
+          matriculaRecebedor: recebedor.matricula,
+          nomeRecebedor: recebedor.nome,
+        });
+        await loadEntradas();
+        setVersaoLista((v) => v + 1);
+        if (iniciada) handleAbrirConferencia(iniciada);
+      } catch (error: any) {
+        toast({
+          title: 'Erro ao iniciar recebimento',
+          description: error?.response?.data?.error || 'Tente novamente.',
+          variant: 'destructive',
+        });
+      }
+    },
+    [recebedor.matricula, recebedor.nome, loadEntradas, handleAbrirConferencia, toast],
+  );
+
   // Finalizar recebimento
   const handleFinalizarRecebimento = useCallback(async (
     entrada: EntradaParaReceber,
@@ -144,6 +171,7 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
       // Recarregar dados
       await loadEntradas();
       await loadRecebimentosFinalizados();
+      setVersaoLista((v) => v + 1);
     } catch (error: any) {
       console.error('Erro ao finalizar recebimento:', error);
       toast({
@@ -311,24 +339,28 @@ const PainelRecebimento: React.FC<PainelRecebimentoProps> = ({
 
             {/* Estado vazio - Iniciar novo recebimento */}
             {!entradaAtiva && !isLoading && (
-              <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-gray-200 dark:border-zinc-700 p-6 text-center">
-                <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Package className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+              <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-gray-200 dark:border-zinc-700 p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 text-sm text-gray-600 dark:text-gray-300">
+                  <Package className="w-5 h-5 text-emerald-600 shrink-0" />
+                  Nenhum recebimento em andamento. Escolha na lista abaixo ou use a chave da NFe.
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  Nenhum recebimento em andamento
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
-                  Clique no botao abaixo para iniciar um novo recebimento escaneando ou digitando a chave da NFe.
-                </p>
                 <DefaultButton
-                  text="Iniciar Novo Recebimento"
-                  variant="primary"
+                  text="Escanear / digitar chave"
+                  variant="secondary"
+                  size="sm"
                   onClick={handleOpenModalIniciar}
                   icon={<Plus className="w-4 h-4" />}
                 />
               </div>
             )}
+
+            {/* Entradas que podem ser recebidas (busca por NF, chave, fornecedor) */}
+            <ListaEntradasDisponiveis
+              versao={versaoLista}
+              bloqueado={!!entradaAtiva}
+              onReceber={handleReceberDaLista}
+              formatCurrency={formatCurrency}
+            />
 
             {/* Loading state */}
             {isLoading && !entradaAtiva && (

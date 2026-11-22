@@ -8,7 +8,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolEstacaoEntrada } from '@/lib/recebimentoEntrada/filial';
 import { PoolClient } from 'pg';
 
 interface RomaneioResumo {
@@ -64,9 +64,11 @@ const ENTRADAS_QUERY = `
     END as status_label,
     op.alocador_nome,
     op.inicio_alocacao,
-    COALESCE(op.tem_divergencia, false) as tem_divergencia
+    COALESCE(op.tem_divergencia, false) as tem_divergencia,
+    (rec.data_confirmacao_preco IS NOT NULL OR e.status = 'F') as preco_confirmado
   FROM dbent e
   INNER JOIN entrada_operacoes op ON op.codent = e.codent
+  LEFT JOIN dbent_recebimento rec ON rec.codent = e.codent
   LEFT JOIN dbnfe_ent n ON n.chave = e.chave
   LEFT JOIN dbnfe_ent_emit emit ON n.codnfe_ent = emit.codnfe_ent
   WHERE
@@ -74,10 +76,21 @@ const ENTRADAS_QUERY = `
       op.status = 'RECEBIDO'
       OR (op.status = 'EM_ALOCACAO' AND op.alocador_nome = $1)
     )
+    -- busca ($2 texto, $3 só números?, $4 dígitos): NF, chave, entrada, CNPJ ou fornecedor
+    AND (
+      $2 = ''
+      OR ($3::boolean AND (
+            n.nnf::text = ltrim($4, '0')
+         OR n.nnf::text LIKE $4 || '%'
+         OR e.chave LIKE '%' || $4 || '%'
+         OR e.codent LIKE '%' || $4 || '%'
+         OR regexp_replace(COALESCE(emit.cpf_cnpj, ''), '\\D', '', 'g') LIKE $4 || '%'))
+      OR (NOT $3::boolean AND (emit.xnome ILIKE '%' || $2 || '%' OR emit.xfant ILIKE '%' || $2 || '%'))
+    )
   ORDER BY
     CASE WHEN op.alocador_nome = $1 AND op.status = 'EM_ALOCACAO' THEN 0 ELSE 1 END,
     op.fim_recebimento DESC
-  LIMIT 50
+  LIMIT 100
 `;
 
 // Romaneio resumido por entrada (por codent)
@@ -103,16 +116,19 @@ export default async function handler(
   }
 
   const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'MANAUS';
+  // filial do link da tela (header x-filial-estacao); ver lib/recebimentoEntrada/filial.ts
+  const { filial, pool, schema } = poolEstacaoEntrada(req);
   const nomeAlocador = (req.query.nomeAlocador as string) || '';
 
-  const pool = getPgPool(filial);
   let client: PoolClient | null = null;
 
   try {
     client = await pool.connect();
 
-    const result = await client.query(ENTRADAS_QUERY, [nomeAlocador]);
+    const busca = String(req.query.busca || '').trim();
+    const digitos = busca.replace(/\D/g, '');
+    const soNumero = busca !== '' && digitos.length === busca.replace(/[\s.\-/]/g, '').length;
+    const result = await client.query(ENTRADAS_QUERY, [nomeAlocador, busca, soNumero, digitos]);
 
     // Buscar números de entrada para buscar romaneio
     const numerosEntrada = result.rows.map(r => r.numero_entrada);
@@ -153,6 +169,7 @@ export default async function handler(
         alocador_nome: row.alocador_nome,
         inicio_alocacao: row.inicio_alocacao,
         tem_divergencia: row.tem_divergencia,
+        preco_confirmado: row.preco_confirmado === true,
         tem_romaneio: romaneio.length > 0,
         romaneio_resumo: romaneio,
       };

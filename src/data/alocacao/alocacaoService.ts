@@ -1,4 +1,23 @@
-import api from '@/components/services/api';
+import apiBase from '@/components/services/api';
+
+// ==========================================
+// FILIAL DA TELA
+// ==========================================
+// Tela solta (link fixo por filial: /alocacao/1 = MANAUS). Toda chamada leva a filial no
+// header x-filial-estacao (lido em lib/recebimentoEntrada/filial.ts).
+let filialAtual = 'MANAUS';
+export function definirFilialAlocacao(filial: string) {
+  filialAtual = String(filial || 'MANAUS').toUpperCase();
+}
+const comFilial = (cfg: any = {}) => ({
+  ...cfg,
+  headers: { ...(cfg.headers || {}), 'x-filial-estacao': encodeURIComponent(filialAtual) },
+});
+const api = {
+  get: (url: string, cfg?: any) => apiBase.get(url, comFilial(cfg)),
+  post: (url: string, data?: any, cfg?: any) => apiBase.post(url, data, comFilial(cfg)),
+  put: (url: string, data?: any, cfg?: any) => apiBase.put(url, data, comFilial(cfg)),
+};
 
 // ==========================================
 // INTERFACES
@@ -8,6 +27,8 @@ import api from '@/components/services/api';
 export interface Alocador {
   matricula: string;
   nome: string;
+  /** código ainda igual à matrícula: a tela obriga a criar um código pessoal */
+  primeiroAcesso?: boolean;
 }
 
 // Resumo de romaneio por armazém
@@ -33,6 +54,8 @@ export interface EntradaParaAlocar {
   alocador_nome?: string;
   inicio_alocacao?: string;
   tem_divergencia: boolean;
+  /** alocação exige preço confirmado (libera para venda) */
+  preco_confirmado?: boolean;
   tem_romaneio?: boolean;
   romaneio_resumo?: RomaneioResumo[];
 }
@@ -99,22 +122,14 @@ export interface VerificarAtivasAlocacaoResponse {
 /**
  * Login do alocador
  */
-export async function loginAlocador(
-  matricula: string,
-  codigoAcesso: string,
-  filial?: string,
-): Promise<Alocador> {
-  const payload: { matricula: string; codigoAcesso: string; filial?: string } = {
-    matricula,
-    codigoAcesso,
-  };
-
-  if (filial) {
-    payload.filial = filial;
-  }
-
-  const response = await api.post('/api/alocacao/login', payload);
+export async function loginAlocador(matricula: string, codigoAcesso: string): Promise<Alocador> {
+  const response = await api.post('/api/alocacao/login', { matricula, codigoAcesso });
   return response.data.data;
+}
+
+/** Primeiro acesso: cria o código pessoal (mesmo cadastro dbfunc_estoque das estações). */
+export async function criarCodigoAlocador(matricula: string, novoCodigo: string): Promise<void> {
+  await api.post('/api/conferencia/estacao/criar-codigo', { matricula, novoCodigo, filial: filialAtual });
 }
 
 /**
@@ -122,11 +137,12 @@ export async function loginAlocador(
  */
 export async function getEntradasParaAlocar(
   nomeAlocador?: string,
+  busca?: string,
 ): Promise<EntradaParaAlocar[]> {
   const timestamp = Date.now();
-  const params = nomeAlocador
-    ? `?nomeAlocador=${encodeURIComponent(nomeAlocador)}&_t=${timestamp}`
-    : `?_t=${timestamp}`;
+  const params =
+    (nomeAlocador ? `?nomeAlocador=${encodeURIComponent(nomeAlocador)}&_t=${timestamp}` : `?_t=${timestamp}`) +
+    (busca ? `&busca=${encodeURIComponent(busca)}` : '');
 
   const response = await api.get(`/api/alocacao/entradas${params}`, {
     headers: {

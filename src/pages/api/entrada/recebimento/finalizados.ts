@@ -9,7 +9,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolRecebimento } from '@/lib/recebimentoEntrada/filial';
 import { PoolClient } from 'pg';
 
 interface RecebimentoFinalizado {
@@ -83,9 +83,9 @@ export default async function handler(
   }
 
   const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'MANAUS';
+  // filial do link da tela (header x-filial-recebimento); ver lib/recebimentoEntrada/filial.ts
+  const { filial, pool } = poolRecebimento(req);
 
-  const pool = getPgPool(filial);
   let client: PoolClient | null = null;
 
   try {

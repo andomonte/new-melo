@@ -83,7 +83,9 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
   const canFazerRomaneio = entrada.status === 'PENDENTE' || entrada.status === 'PRECO_CONFIRMADO';
 
   // Pode confirmar preco se ainda nao foi confirmado
-  const canConfirmarPreco = !entrada.precoConfirmado;
+  // (independe do recebimento desde 22/11/2026: pode confirmar com a entrada já em
+  // recebimento ou alocação)
+  const canConfirmarPreco = !entrada.precoConfirmado && entrada.status !== 'CANCELADA';
 
   // Confirmar Preço — não depende do romaneio (o romaneio é opcional; se não
   // houver, a alocação por armazém segue no padrão).
@@ -138,9 +140,10 @@ export const EntradaOperacoesMenu: React.FC<EntradaOperacoesMenuProps> = ({
     }
   };
 
-  // Confirmar estoque so DEPOIS do preco (workflow PRECO_CONFIRMADO), como no Delphi.
-  const canConfirmarEstoque =
-    entrada.precoConfirmado && entrada.status === 'PRECO_CONFIRMADO';
+  // "Confirmar Estoque" (liberar para recebimento) deixou de ser necessário em
+  // 22/11/2026: entrada gerada já aparece no Recebimento, com ou sem preço, e o
+  // romaneio padrão é criado ao iniciar o recebimento. Mantido oculto.
+  const canConfirmarEstoque = false;
 
   const handleReabrirEntrada = () => {
     setShowConfirmReabrir(true);

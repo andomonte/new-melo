@@ -5,7 +5,8 @@
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolRecebimento } from '@/lib/recebimentoEntrada/filial';
+import { STATUS_PODE_RECEBER } from '@/lib/recebimentoEntrada/status';
 import { PoolClient } from 'pg';
 
 interface IniciarPorChaveRequest {
@@ -45,27 +46,38 @@ export default async function handler(
   }
 
   const { chaveNFe, matriculaRecebedor, nomeRecebedor } = (req.body || {}) as IniciarPorChaveRequest;
+  // Alternativa à chave: o número da entrada (codent), vindo da lista "Entradas para receber".
+  const codentBody = String((req.body as any)?.codent || '').trim();
 
-  if (!chaveNFe || !matriculaRecebedor || !nomeRecebedor) {
-    return res.status(400).json({ error: 'chaveNFe, matriculaRecebedor e nomeRecebedor sao obrigatorios' });
+  if ((!chaveNFe && !codentBody) || !matriculaRecebedor || !nomeRecebedor) {
+    return res.status(400).json({ error: 'Informe a chave da NFe (ou a entrada), a matrícula e o nome do recebedor' });
   }
 
-  const isImportacao = chaveNFe.trim().toUpperCase().startsWith('IMP');
-  const chaveLimpa = isImportacao
-    ? 'IMP' + chaveNFe.trim().slice(3).replace(/\D/g, '')
-    : chaveNFe.replace(/\D/g, '');
-  const digitosCount = isImportacao ? chaveLimpa.slice(3).length : chaveLimpa.length;
-  if (digitosCount < 20) {
-    return res.status(400).json({ error: 'A chave deve ter pelo menos 20 digitos numericos' });
-  }
-
-  const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'MANAUS';
-  const pool = getPgPool(filial);
+  // filial do link da tela (header x-filial-recebimento); ver lib/recebimentoEntrada/filial.ts
+  const { pool } = poolRecebimento(req);
   let client: PoolClient | null = null;
 
   try {
     client = await pool.connect();
+
+    // Pela entrada: descobre a chave dela e segue o fluxo normal
+    let chaveLimpa = '';
+    if (codentBody) {
+      const r = await client.query(`SELECT chave FROM dbent WHERE codent = $1 LIMIT 1`, [codentBody]);
+      if (r.rows.length === 0 || !r.rows[0].chave) {
+        return res.status(404).json({ error: `Entrada ${codentBody} não encontrada (ou sem chave de NFe).` });
+      }
+      chaveLimpa = String(r.rows[0].chave).trim();
+    } else {
+      const isImportacao = String(chaveNFe).trim().toUpperCase().startsWith('IMP');
+      chaveLimpa = isImportacao
+        ? 'IMP' + String(chaveNFe).trim().slice(3).replace(/\D/g, '')
+        : String(chaveNFe).replace(/\D/g, '');
+      const digitosCount = isImportacao ? chaveLimpa.slice(3).length : chaveLimpa.length;
+      if (digitosCount < 20) {
+        return res.status(400).json({ error: 'A chave deve ter pelo menos 20 digitos numericos' });
+      }
+    }
 
     // 1. NFe pela chave
     const nfeResult = await client.query(
@@ -84,6 +96,7 @@ export default async function handler(
               COALESCE(e.totalnf, 0) as valor_total,
               e.dtent as data_entrada,
               rec.status as workflow_status,
+              e.status as ent_status,
               (SELECT COUNT(*) FROM dbitent WHERE codent = e.codent) as qtd_itens,
               COALESCE(op.id, 0) as operacao_id,
               op.status as op_status,
@@ -124,7 +137,7 @@ export default async function handler(
       return res.status(400).json({ error: `Esta entrada ja esta sendo recebida por ${entradaRow.recebedor_nome}` });
     }
     // Só entrada liberada pode iniciar: recomeçar uma já alocada somaria o estoque de novo.
-    if (entradaRow.workflow_status === 'CANCELADA') {
+    if (entradaRow.workflow_status === 'CANCELADA' || entradaRow.ent_status === 'C') {
       return res.status(400).json({ error: 'Esta entrada foi cancelada.' });
     }
     if (
@@ -133,8 +146,13 @@ export default async function handler(
     ) {
       return res.status(400).json({ error: 'Esta entrada ja foi recebida anteriormente.' });
     }
-    if (entradaRow.workflow_status !== 'AGUARDANDO_RECEBIMENTO') {
-      return res.status(400).json({ error: 'Esta entrada ainda nao foi liberada para recebimento.' });
+    // Regra (22/11/2026): entrada GERADA já pode ser recebida, com ou sem preço confirmado.
+    // O preço é confirmado à parte (dbent_recebimento.data_confirmacao_preco) e não
+    // depende mais do status do fluxo físico. Ver lib/recebimentoEntrada/status.ts.
+    if (!STATUS_PODE_RECEBER.includes(entradaRow.workflow_status)) {
+      return res.status(400).json({
+        error: `A entrada ${entradaRow.codent} não pode ser recebida (situação: ${entradaRow.workflow_status || 'sem registro de fluxo'}).`,
+      });
     }
 
     // 4. Operador já tem outro recebimento ativo?
@@ -170,6 +188,18 @@ export default async function handler(
              WHERE r.entrada_operacao_id = $1 AND r.produto_cod = ie.codprod
                AND COALESCE(r.codreq,'') = COALESCE(ie.codreq,''))`,
       [operacaoId, codent]);
+
+    // Romaneio: o recebimento passa a ser o lugar de escolher o armazém. Se a entrada
+    // ainda não tem romaneio (dbitent_armazem), cria o padrão (armazém 1001, quantidade
+    // da nota) — o mesmo que o "Confirmar Estoque" fazia.
+    await client.query(
+      `INSERT INTO dbitent_armazem (codent, codprod, codreq, arm_id, qtd)
+       SELECT ie.codent, ie.codprod, ie.codreq, 1001, ie.quant
+         FROM dbitent ie
+        WHERE ie.codent = $1
+          AND NOT EXISTS (SELECT 1 FROM dbitent_armazem a WHERE a.codent = $1)
+       ON CONFLICT DO NOTHING`,
+      [codent]);
 
     await client.query(
       `UPDATE dbent_recebimento SET status = 'EM_RECEBIMENTO', updated_at = now() WHERE codent = $1`,

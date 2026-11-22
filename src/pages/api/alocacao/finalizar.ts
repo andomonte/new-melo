@@ -6,9 +6,10 @@
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolEstacaoEntrada } from '@/lib/recebimentoEntrada/filial';
 import { PoolClient } from 'pg';
 import { creditarSemReserva, liberarReserva, posicionarReserva } from '@/lib/compras/estoqueEntrada';
+import { precoConfirmadoDaEntrada, MSG_PRECO_PENDENTE_ALOCACAO } from '@/lib/recebimentoEntrada/status';
 
 interface FinalizarRequest {
   entradaId: string; // codent
@@ -50,8 +51,8 @@ export default async function handler(
   }
 
   const cookies = parseCookies({ req });
-  const filial = cookies.filial_melo || 'MANAUS';
-  const pool = getPgPool(filial);
+  // filial do link da tela (header x-filial-estacao); ver lib/recebimentoEntrada/filial.ts
+  const { filial, pool, schema } = poolEstacaoEntrada(req);
   let client: PoolClient | null = null;
 
   try {
@@ -64,9 +65,13 @@ export default async function handler(
     if (checkResult.rows.length === 0) {
       return res.status(403).json({ error: 'Voce nao esta autorizado a finalizar esta alocacao' });
     }
+    // Finalizar libera a reserva (produto disponível para venda): exige o preço confirmado.
+    if (!(await precoConfirmadoDaEntrada(client, entradaId))) {
+      return res.status(400).json({ error: MSG_PRECO_PENDENTE_ALOCACAO(entradaId) });
+    }
 
     await client.query('BEGIN');
-    await client.query(`SET LOCAL search_path TO ${process.env.DB_SCHEMA || 'db_manaus'}, public`);
+    await client.query(`SET LOCAL search_path TO ${schema}, public`);
 
     // Quantidade de cada produto: a recebida, limitada à da nota. O excesso não entra no
     // estoque (como no Delphi, vale a nota) e a falta segue reservada até resolver a devolução.

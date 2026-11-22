@@ -1,4 +1,26 @@
-import api from '@/components/services/api';
+import apiBase from '@/components/services/api';
+
+// ==========================================
+// FILIAL DA TELA
+// ==========================================
+// A tela é solta (link fixo por filial: /entrada/recebimento/1 = MANAUS). Toda chamada
+// leva a filial no header x-filial-recebimento (lido em lib/recebimentoEntrada/filial.ts).
+let filialAtual = 'MANAUS';
+export function definirFilialRecebimento(filial: string) {
+  filialAtual = String(filial || 'MANAUS').toUpperCase();
+}
+export function filialRecebimentoAtual() {
+  return filialAtual;
+}
+const comFilial = (cfg: any = {}) => ({
+  ...cfg,
+  headers: { ...(cfg.headers || {}), 'x-filial-recebimento': encodeURIComponent(filialAtual) },
+});
+const api = {
+  get: (url: string, cfg?: any) => apiBase.get(url, comFilial(cfg)),
+  post: (url: string, data?: any, cfg?: any) => apiBase.post(url, data, comFilial(cfg)),
+  put: (url: string, data?: any, cfg?: any) => apiBase.put(url, data, comFilial(cfg)),
+};
 
 // ==========================================
 // INTERFACES
@@ -8,6 +30,8 @@ import api from '@/components/services/api';
 export interface Recebedor {
   matricula: string;
   nome: string;
+  /** código ainda igual à matrícula: a tela obriga a criar um código pessoal */
+  primeiroAcesso?: boolean;
 }
 
 // Entrada disponível para recebimento
@@ -70,22 +94,14 @@ export interface VerificarAtivasResponse {
 /**
  * Login do recebedor
  */
-export async function loginRecebedor(
-  matricula: string,
-  codigoAcesso: string,
-  filial?: string,
-): Promise<Recebedor> {
-  const payload: { matricula: string; codigoAcesso: string; filial?: string } = {
-    matricula,
-    codigoAcesso,
-  };
-
-  if (filial) {
-    payload.filial = filial;
-  }
-
-  const response = await api.post('/api/entrada/recebimento/login', payload);
+export async function loginRecebedor(matricula: string, codigoAcesso: string): Promise<Recebedor> {
+  const response = await api.post('/api/entrada/recebimento/login', { matricula, codigoAcesso });
   return response.data.data;
+}
+
+/** Primeiro acesso: cria o código pessoal (mesmo cadastro dbfunc_estoque das estações). */
+export async function criarCodigoRecebedor(matricula: string, novoCodigo: string): Promise<void> {
+  await api.post('/api/conferencia/estacao/criar-codigo', { matricula, novoCodigo, filial: filialAtual });
 }
 
 /**
@@ -207,6 +223,43 @@ export async function getRecebimentosFinalizados(
  */
 export async function iniciarRecebimentoPorChaveNFe(payload: {
   chaveNFe: string;
+  matriculaRecebedor: string;
+  nomeRecebedor: string;
+}): Promise<EntradaParaReceber> {
+  const response = await api.post('/api/entrada/recebimento/iniciar-por-chave', payload);
+  return response.data.data;
+}
+
+// ==========================================
+// ENTRADAS PARA RECEBER (lista com busca)
+// ==========================================
+
+export interface EntradaDisponivel {
+  codent: string;
+  chave: string;
+  nfe_numero: string;
+  nfe_serie: string;
+  fornecedor: string;
+  cnpj: string;
+  valor_total: number;
+  qtd_itens: number;
+  data_entrada: string;
+  data_emissao: string | null;
+  status: string;
+  preco_confirmado: boolean;
+}
+
+/** Entradas que podem ser recebidas (geradas, com ou sem preço), com busca por NF, chave, fornecedor. */
+export async function getEntradasDisponiveis(busca = ''): Promise<EntradaDisponivel[]> {
+  const response = await api.get(
+    `/api/entrada/recebimento/disponiveis?busca=${encodeURIComponent(busca)}&_t=${Date.now()}`,
+  );
+  return response.data.data || [];
+}
+
+/** Inicia o recebimento a partir da lista (pelo número da entrada). */
+export async function iniciarRecebimentoPorEntrada(payload: {
+  codent: string;
   matriculaRecebedor: string;
   nomeRecebedor: string;
 }): Promise<EntradaParaReceber> {

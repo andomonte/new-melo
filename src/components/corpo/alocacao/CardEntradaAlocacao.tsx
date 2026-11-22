@@ -161,6 +161,18 @@ const CardEntradaAlocacao: React.FC<CardEntradaAlocacaoProps> = ({
         </div>
       )}
 
+      {/* Preço pendente: a alocação libera para venda e exige o preço confirmado */}
+      {entrada.preco_confirmado === false && (
+        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+            <span className="text-sm font-medium text-red-700 dark:text-red-300">
+              Preço não confirmado — confirme o preço em Compras &gt; Entradas antes de alocar
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Alerta de divergencia */}
       {entrada.tem_divergencia && (
         <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-3">
@@ -303,7 +315,13 @@ const CardEntradaAlocacao: React.FC<CardEntradaAlocacaoProps> = ({
             className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700"
             icon={<Play className="w-4 h-4" />}
             disabled={disabled || showArmazemSelect}
-            title={disabled ? 'Finalize a alocacao atual primeiro' : 'Iniciar alocacao desta entrada'}
+            title={
+              disabled
+                ? entrada.preco_confirmado === false
+                  ? 'Confirme o preço da entrada antes de alocar'
+                  : 'Finalize a alocacao atual primeiro'
+                : 'Iniciar alocacao desta entrada'
+            }
           />
         )}
       </div>

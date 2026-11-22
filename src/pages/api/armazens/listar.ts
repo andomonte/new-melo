@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPgPoolFilial } from '@/lib/pg';
+import { getPgPoolFilial, getPgPoolPorNomeFilial } from '@/lib/pg';
 
 interface Armazem {
   arm_id: number;
@@ -25,7 +25,9 @@ export default async function handler(
   let client;
 
   try {
-    const pool = await getPgPoolFilial(req);
+    // ?filial= (telas soltas, ex.: Recebimento de Entradas por link de filial); sem ele, cookie.
+    const filialQuery = typeof req.query.filial === 'string' ? req.query.filial.trim() : '';
+    const pool = filialQuery ? await getPgPoolPorNomeFilial(filialQuery) : await getPgPoolFilial(req);
     client = await pool.connect();
 
     // Buscar armazéns ativos (incluindo todos para o usuário escolher)

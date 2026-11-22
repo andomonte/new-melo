@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getItensEntrada,
   conferirItem,
+  filialRecebimentoAtual,
 } from '@/data/recebimento-entrada/recebimentoEntradaService';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -63,7 +64,7 @@ export const useConferirItens = ({
   const loadArmazens = useCallback(async () => {
     setLoadingArmazens(true);
     try {
-      const response = await fetch('/api/armazens/listar');
+      const response = await fetch(`/api/armazens/listar?filial=${encodeURIComponent(filialRecebimentoAtual())}`);
       if (!response.ok) throw new Error('Erro ao buscar armazens');
       const data = await response.json();
       setArmazens(data.armazens || []);
