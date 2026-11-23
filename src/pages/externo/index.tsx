@@ -1,29 +1,60 @@
+// /externo sem filial: vai para a filial já usada neste aparelho ou mostra as filiais.
+// O link certo para o vendedor é /externo/<codigo_filial> (ex.: /externo/1 = MANAUS).
 import Head from 'next/head';
-import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 
-// Só no navegador (usa localStorage/navigator). Arquitetura: docs/VENDAS-EXTERNAS-OFFLINE.md
-const VendaExterna = dynamic(() => import('@/components/vendaExterna/VendaExterna'), {
-  ssr: false,
-  loading: () => (
-    <div className="min-h-[100dvh] flex items-center justify-center text-sm text-gray-500">Carregando…</div>
-  ),
-});
+type Filial = { nome_filial: string; codigo_filial: number };
 
 export default function PaginaExterno() {
+  const router = useRouter();
+  const [filiais, setFiliais] = useState<Filial[] | null>(null);
+
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('vendaExterna_sessao_v1') || 'null');
+      if (s?.codigoFilial) {
+        router.replace(`/externo/${s.codigoFilial}`);
+        return;
+      }
+    } catch {
+      /* */
+    }
+    fetch('/api/conferencia/estacao/filiais')
+      .then((r) => r.json())
+      .then((d) => setFiliais(d.filiais || []))
+      .catch(() => setFiliais([]));
+  }, [router]);
+
   return (
     <>
       <Head>
         <title>Venda Externa — Melo</title>
-        <link rel="manifest" href="/externo.webmanifest" />
         <meta name="theme-color" content="#1e3a5f" />
-        {/* iPhone/iPad: "Adicionar à Tela de Início" abre em tela cheia */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Venda Melo" />
-        <link rel="apple-touch-icon" href="/images/externo-icon-180.png" />
       </Head>
-      <VendaExterna />
+      <div className="min-h-[100dvh] flex items-center justify-center bg-[#1e3a5f] p-4">
+        <div className="w-full max-w-sm bg-white rounded-2xl p-6">
+          <div className="font-bold text-gray-900 mb-1">Venda Externa</div>
+          <div className="text-sm text-gray-500 mb-4">Escolha a filial</div>
+          {filiais === null ? (
+            <div className="text-sm text-gray-400">Carregando…</div>
+          ) : filiais.length === 0 ? (
+            <div className="text-sm text-red-600">Sem conexão para listar as filiais.</div>
+          ) : (
+            <div className="space-y-2">
+              {filiais.map((f) => (
+                <a
+                  key={f.codigo_filial}
+                  href={`/externo/${f.codigo_filial}`}
+                  className="block rounded-xl border border-gray-200 px-4 py-3 font-semibold text-[#1e3a5f]"
+                >
+                  {f.nome_filial}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }

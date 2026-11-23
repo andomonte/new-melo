@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool, getPgPoolFilial, filialDaRequisicao } from '@/lib/pg';
 import { getUserFromRequest } from '@/lib/authHelper';
+import { passeDaRequisicao } from '@/lib/vendaExterna/token';
+import { poolDaFilial } from '@/lib/estacaoDb';
 
 /**
  * GET /api/offline/pacote — pacote de dados para o vendedor externo trabalhar sem internet.
@@ -21,6 +23,10 @@ import { getUserFromRequest } from '@/lib/authHelper';
 const LIMITE_MAX = 5000;
 
 async function vendedorDaRequisicao(req: NextApiRequest) {
+  // Venda Externa: passe do aparelho (Authorization: Bearer) — não depende do cookie
+  const passe = passeDaRequisicao(req);
+  if (passe) return { login: passe.u, filial: passe.f, codvend: passe.v, doPasse: true };
+
   const user = getUserFromRequest(req);
   const login = user?.login_user_login;
   const filial = filialDaRequisicao(req);
@@ -31,7 +37,7 @@ async function vendedorDaRequisicao(req: NextApiRequest) {
     [login, filial],
   );
   const codvend = String(r.rows[0]?.codvend || '').trim();
-  return { login, filial, codvend };
+  return { login, filial, codvend, doPasse: false };
 }
 
 function inteiro(v: any, padrao: number, max?: number) {
@@ -55,7 +61,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const min = Math.max(1, inteiro(req.query.min, 1));
   const arm = inteiro(req.query.arm, 1001);
 
-  const pool = await getPgPoolFilial(req);
+  // com passe: schema da filial do passe; sem passe (login do sistema): cookie da filial
+  const pool = vend.doPasse ? poolDaFilial(vend.filial) : await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
     // tipos de preço (dbclien.prvenda) usados pela carteira do vendedor

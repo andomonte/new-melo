@@ -92,15 +92,71 @@ homologação.
 - **Número da venda** no servidor é `MAX+1` sem trava: envios simultâneos podem colidir.
   Tratar junto com o envio idempotente.
 
-## 5. Fases
+## 5. Implementado (23/11/2026)
+
+**Acesso**
+- Link por filial: `/externo/<codigo_filial>` (1 = MANAUS, 2 = RORAIMA, 3 = RONDONIA).
+  `/externo` vai para a filial já usada no aparelho ou lista as filiais.
+- Login próprio com o usuário e a senha do sistema: `POST /api/externo/login`.
+  - Exige **código de vendedor na filial** (`tb_user_perfil.codvend`).
+  - Não passa pelo menu nem pela escolha de filial.
+- Passe de **7 dias**, assinado pelo servidor (`lib/vendaExterna/token.ts`).
+  - É renovado a cada conexão (`/api/externo/renovar`).
+  - Usuário bloqueado ou sem código de vendedor perde o acesso na próxima conexão.
+- **PIN de 4 dígitos**, criado no primeiro acesso, desbloqueia o app ao abrir, inclusive sem internet.
+  - 5 erros obrigam a entrar de novo com usuário e senha.
+  - "Esqueci o PIN" faz o mesmo.
+
+**Abrir sem internet**
+- Service worker `public/sw-externo.js` (escopo `/externo`), registrado só em produção.
+- Guarda a tela (HTML, JS, CSS e ícones). APIs e dados nunca entram no cache.
+- Manifesto por filial (`/api/externo/manifest?c=1`): o ícone instalado abre direto no link da filial.
+
+**Dados no aparelho**
+- IndexedDB `melo-externo` (`lib/vendaExterna/idb.ts`).
+- O pacote é baixado em partes (`lib/vendaExterna/sincronizar.ts`) ao abrir com internet, se não existir ou tiver mais de 6 h, ou pelo botão "atualizar".
+- Fonte híbrida (`lib/vendaExterna/fonte.ts`): online quando há conexão; sem conexão, ou se a rede cair no meio, usa o pacote (`fonteLocal.ts`).
+  - O crédito local segue a mesma regra do `validarCredito`.
+
+**Pedidos**
+- Todo pedido é guardado no aparelho com uuid e número provisório `EXT-<vendedor>-<seq>` (`lib/vendaExterna/fila.ts`).
+- Envio, um por vez, para `POST /api/externo/enviar-pedido`. Acontece ao abrir, quando a conexão volta e a cada 2 min.
+- O servidor:
+  - não duplica pedidos (tabela `venda_externa_pedido`, migration 085);
+  - confere de novo o crédito e o preço da tabela atual (abaixo dela, a venda vai bloqueada para análise);
+  - grava pela mesma rotina da Nova Venda (`finalizarVenda`, chamada por dentro), com estoque, impostos e número.
+- Na aba **Pedidos**, cada pedido aparece como:
+
+  | Situação | O vendedor pode |
+  |---|---|
+  | Aguardando envio | ajustar, enviar ou excluir |
+  | Enviado (nº da venda) | só consultar |
+  | Com pendência (motivo) | ajustar e reenviar com o mesmo uuid, ou excluir |
+  | Erro | aguardar: o app tenta de novo sozinho |
+
+**Configuração no servidor**
+- Defina `VENDA_EXTERNA_SECRET` com 16 caracteres ou mais no ambiente.
+- Sem ela, o segredo do passe é derivado da `DATABASE_URL`. Funciona, mas trocar a URL do banco derruba todos os passes.
+
+**Roteiro de teste (homologação)**
+1. No celular, abra `https://<servidor>/externo/1` com internet, entre e crie o PIN.
+   Espere aparecer "Dados do aparelho: dd/mm hh:mm".
+2. Instale na tela inicial: no Android, ⋮ → Instalar app; no iPhone, Compartilhar → Adicionar à Tela de Início.
+3. Faça um pedido online e confira o número da venda e a venda na Central.
+4. Ligue o modo avião, feche o app e abra pelo ícone. Deve pedir o PIN e abrir com o aviso "sem internet".
+   Faça um pedido: deve ficar "Aguardando envio".
+5. Desligue o modo avião. O pedido deve sair sozinho em até 2 min, ou pelo botão Enviar na aba Pedidos.
+6. Pendência: faça sem internet um pedido no boleto para um cliente com títulos em atraso. Ao conectar, ele volta "Com pendência". Ajuste para PIX e reenvie.
+
+## 6. Fases
 
 | Fase | Entrega | Situação |
 |---|---|---|
-| 0 | Esta arquitetura + endpoint do pacote | em andamento |
-| 1 | `/externo` responsivo online (cliente → itens → pagamento → enviar) + instalável (PWA) | |
-| 2 | Download do pacote, IndexedDB, consulta de estoque/cliente sem internet | |
-| 3 | Venda sem internet, fila e envio idempotente | |
-| 4 | Teste de campo com 1–2 vendedores (Android e iPhone) | |
+| 0 | Esta arquitetura + endpoint do pacote | feito |
+| 1 | `/externo` responsivo online (cliente → itens → pagamento → enviar) + instalável (PWA) | feito |
+| 2 | Download do pacote, IndexedDB, consulta de estoque/cliente sem internet | feito (23/11) |
+| 3 | Venda sem internet, fila e envio idempotente | feito (23/11) |
+| 4 | Teste de campo com 1–2 vendedores (Android e iPhone) | a fazer |
 
 As telas de escritório (Central de Vendas V2 / Nova Venda V2) continuam como estão;
 `/externo` reaproveita as mesmas regras e APIs.

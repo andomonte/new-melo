@@ -107,7 +107,8 @@ export const fonteOnline: FonteVenda = {
         formaPagamento: forma,
       });
       return r.data || null;
-    } catch {
+    } catch (e: any) {
+      if (!e?.response) throw e; // sem conexão: a fonte híbrida usa o pacote local
       return null;
     }
   },
@@ -138,7 +139,8 @@ export const fonteOnline: FonteVenda = {
       const imp: any = r?.impostosRs || {};
       const impostos = +(n(imp.valorIPI) + n(imp.valorICMS_Subst)).toFixed(2);
       return { impostos, campos: (r as any)?.raw?.campos || {} };
-    } catch {
+    } catch (e: any) {
+      if (!e?.response) throw e; // sem conexão: a fonte híbrida usa o pacote local
       return null;
     }
   },
