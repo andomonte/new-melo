@@ -39,6 +39,22 @@ import { carregarFeriados, getProximoDiaUtil } from '@/components/corpo/vendas/n
 const fmtLocalData = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+// ---- Taxa de conversão (conta internacional): até 6 casas decimais ----
+// (coluna dbpgto/dbfpgto.taxa_conversao é numeric(16,6) desde a migration 082)
+/** Limpa o que foi digitado: só dígitos e UMA vírgula (ponto vira vírgula), até 6 casas. */
+const textoTaxa6 = (bruto: string) => {
+  let t = String(bruto || '').replace(/\./g, ',').replace(/[^\d,]/g, '');
+  const i = t.indexOf(',');
+  if (i >= 0) t = t.slice(0, i + 1) + t.slice(i + 1).replace(/,/g, '').slice(0, 6);
+  return t;
+};
+const numeroTaxa6 = (texto: string) => {
+  const v = Number(String(texto || '').replace(',', '.'));
+  return Number.isFinite(v) ? +v.toFixed(6) : 0;
+};
+/** 5.4321 → "5,432100" (sempre 6 casas) */
+const formatarTaxa6 = (v: number) => (Number(v) || 0).toFixed(6).replace('.', ',');
+
 export function ContasAPagar() {
   const { user } = useContext(AuthContext);
 
@@ -1577,7 +1593,7 @@ export function ContasAPagar() {
         // Taxa Conversão
         (
           <span className="text-xs font-mono">
-            {conta.taxa_conversao ? conta.taxa_conversao.toFixed(4) : '-'}
+            {conta.taxa_conversao ? formatarTaxa6(Number(conta.taxa_conversao)) : '-'}
           </span>
         ),
         // Valor Moeda
@@ -4790,26 +4806,32 @@ export function ContasAPagar() {
                     </span>
                     <Input
                       type="text"
+                      inputMode="decimal"
                       value={taxaConversaoInput}
                       onChange={(e) => {
-                        const mascarado = mascaraInputBRL(e.target.value);
-                        setTaxaConversaoInput(mascarado);
-
-                        const taxa = desmascarar(mascarado);
+                        // Taxa com até 6 casas decimais: digita livre (vírgula ou ponto);
+                        // ao sair do campo completa com zeros até 6 casas (ex.: 5,43 → 5,430000).
+                        const texto = textoTaxa6(e.target.value);
+                        setTaxaConversaoInput(texto);
+                        const taxa = numeroTaxa6(texto);
                         setNovaContaDados({
                           ...novaContaDados,
                           taxa_conversao: taxa,
                           valor_pgto: novaContaDados.valor_moeda * taxa
                         });
                       }}
-                      placeholder="0,00"
+                      onBlur={() => {
+                        const taxa = numeroTaxa6(taxaConversaoInput);
+                        setTaxaConversaoInput(taxa > 0 ? formatarTaxa6(taxa) : '');
+                      }}
+                      placeholder="0,000000"
                       className="pl-10"
                     />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {novaContaDados.taxa_conversao > 0 
-                      ? `1 ${novaContaDados.moeda || 'Moeda'} = R$ ${novaContaDados.taxa_conversao.toFixed(4).replace('.', ',')}`
-                      : 'Digite apenas números (ex: 626 = R$ 6,26)'}
+                    {novaContaDados.taxa_conversao > 0
+                      ? `1 ${novaContaDados.moeda || 'Moeda'} = R$ ${formatarTaxa6(novaContaDados.taxa_conversao)}`
+                      : 'Até 6 casas decimais (ex: 5,4321 vira 5,432100)'}
                   </p>
                 </div>
               </div>
@@ -4872,7 +4894,7 @@ export function ContasAPagar() {
                 <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md text-sm">
                   <strong className="text-blue-900 dark:text-blue-100">💱 Resumo da Conversão:</strong>
                   <p className="mt-1 text-blue-800 dark:text-blue-200">
-                    {obterIconeMoeda(novaContaDados.moeda)} {novaContaDados.valor_moeda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} × {novaContaDados.taxa_conversao.toFixed(4).replace('.', ',')} = R$ {novaContaDados.valor_pgto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {obterIconeMoeda(novaContaDados.moeda)} {novaContaDados.valor_moeda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} × {formatarTaxa6(novaContaDados.taxa_conversao)} = R$ {novaContaDados.valor_pgto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
               )}
