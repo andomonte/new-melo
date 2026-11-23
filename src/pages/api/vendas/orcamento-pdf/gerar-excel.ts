@@ -66,13 +66,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let ref = item.ref || '';
       let descr = item.descr || item.descricao || item.nome || '';
       let ncm = '';
+      let marca = item.marca || item.MARCA || '';
 
       if (codprod) {
-        const rp = await client.query('SELECT ref, descr, clasfiscal as ncm FROM dbprod WHERE codprod = $1', [codprod]);
+        const rp = await client.query(
+          `SELECT p.ref, p.descr, p.clasfiscal as ncm, m.descr as marca
+             FROM dbprod p LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
+            WHERE p.codprod = $1`,
+          [codprod],
+        );
         if (rp.rows.length > 0) {
           ref = ref || rp.rows[0].ref || '';
           if (!descr) descr = rp.rows[0].descr || '';
           ncm = rp.rows[0].ncm || '';
+          marca = marca || rp.rows[0].marca || '';
         }
       }
 
@@ -81,14 +88,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const desconto = Number(item.desconto || 0);
       const totalItem = qtd * prunit * (1 - desconto / 100);
 
-      const icmsValor = Number(item.impostos?.valorICMS || item.campos?.totalicms || 0);
-      const ipiValor = Number(item.impostos?.valorIPI || item.campos?.totalipi || 0);
-      const pisValor = Number(item.impostos?.valorPIS || item.campos?.valorpis || 0);
-      const cofinsValor = Number(item.impostos?.valorCOFINS || item.campos?.valorcofins || 0);
-      const stValor = Number(item.impostos?.valorICMS_Subst || item.campos?.totalsubst_trib || 0);
+      // Impostos já calculados na tela: item.impostos (V1), item.campos, ou os campos
+      // fiscais soltos no item (Nova Venda V2: totalicms, totalipi, totalsubst_trib...).
+      const icmsValor = Number(item.impostos?.valorICMS || item.campos?.totalicms || item.totalicms || 0);
+      const ipiValor = Number(item.impostos?.valorIPI || item.campos?.totalipi || item.totalipi || 0);
+      const pisValor = Number(item.impostos?.valorPIS || item.campos?.valorpis || item.valorpis || 0);
+      const cofinsValor = Number(item.impostos?.valorCOFINS || item.campos?.valorcofins || item.valorcofins || 0);
+      const stValor = Number(item.impostos?.valorICMS_Subst || item.campos?.totalsubst_trib || item.totalsubst_trib || 0);
       const totalComImp = totalItem + ipiValor + stValor;
 
-      itensProcessados.push({ ref, descr, ncm: ncm || item.campos?.ncm || item.ncm || '', qtd, prunit, desconto, totalItem, icmsValor, ipiValor, stValor, pisValor, cofinsValor, totalComImp });
+      itensProcessados.push({ ref, descr, marca: String(marca || '').trim(), ncm: ncm || item.campos?.ncm || item.ncm || '', qtd, prunit, desconto, totalItem, icmsValor, ipiValor, stValor, pisValor, cofinsValor, totalComImp });
     }
 
     // Gerar Excel
@@ -97,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Cabeçalho
     const dataOrc = new Date(draft.created_at).toLocaleDateString('pt-BR');
-    ws.mergeCells('A1:M1');
+    ws.mergeCells('A1:N1');
     const titleCell = ws.getCell('A1');
     titleCell.value = 'ORÇAMENTO';
     titleCell.font = { bold: true, size: 16, color: { argb: '003366' } };
@@ -113,7 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Tabela de itens - Header
     const headerRow = 7;
-    const headers = ['REF', 'DESCRIÇÃO', 'NCM', 'QTD', 'UNIT.', 'DESC%', 'SUBTOTAL', 'ICMS', 'IPI', 'ST', 'PIS', 'COFINS', 'TOTAL'];
+    const headers = ['REF', 'DESCRIÇÃO', 'MARCA', 'NCM', 'QTD', 'UNIT.', 'DESC%', 'SUBTOTAL', 'ICMS', 'IPI', 'ST', 'PIS', 'COFINS', 'TOTAL'];
     headers.forEach((h, i) => {
       const cell = ws.getCell(headerRow, i + 1);
       cell.value = h;
@@ -129,24 +138,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const row = headerRow + 1 + idx;
       ws.getCell(row, 1).value = item.ref;
       ws.getCell(row, 2).value = item.descr;
-      ws.getCell(row, 3).value = item.ncm || '-';
-      ws.getCell(row, 4).value = item.qtd;
-      ws.getCell(row, 5).value = item.prunit;
-      ws.getCell(row, 6).value = item.desconto > 0 ? item.desconto : null;
-      ws.getCell(row, 7).value = item.totalItem;
-      ws.getCell(row, 8).value = item.icmsValor || null;
-      ws.getCell(row, 9).value = item.ipiValor || null;
-      ws.getCell(row, 10).value = item.stValor || null;
-      ws.getCell(row, 11).value = item.pisValor || null;
-      ws.getCell(row, 12).value = item.cofinsValor || null;
-      ws.getCell(row, 13).value = item.totalComImp;
+      ws.getCell(row, 3).value = item.marca || '-';
+      ws.getCell(row, 4).value = item.ncm || '-';
+      ws.getCell(row, 5).value = item.qtd;
+      ws.getCell(row, 6).value = item.prunit;
+      ws.getCell(row, 7).value = item.desconto > 0 ? item.desconto : null;
+      ws.getCell(row, 8).value = item.totalItem;
+      ws.getCell(row, 9).value = item.icmsValor || null;
+      ws.getCell(row, 10).value = item.ipiValor || null;
+      ws.getCell(row, 11).value = item.stValor || null;
+      ws.getCell(row, 12).value = item.pisValor || null;
+      ws.getCell(row, 13).value = item.cofinsValor || null;
+      ws.getCell(row, 14).value = item.totalComImp;
 
       // Formato moeda
-      [5,7,8,9,10,11,12,13].forEach(c => { ws.getCell(row, c).numFmt = '#,##0.00'; });
-      [6].forEach(c => { if (ws.getCell(row, c).value) ws.getCell(row, c).numFmt = '0.0"%"'; });
+      [6,8,9,10,11,12,13,14].forEach(c => { ws.getCell(row, c).numFmt = '#,##0.00'; });
+      [7].forEach(c => { if (ws.getCell(row, c).value) ws.getCell(row, c).numFmt = '0.0"%"'; });
 
       // Bordas
-      for (let c = 1; c <= 13; c++) {
+      for (let c = 1; c <= 14; c++) {
         ws.getCell(row, c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
       }
 
@@ -161,16 +171,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Linha de totais
     const totRow = headerRow + 1 + itensProcessados.length;
-    ws.getCell(totRow, 6).value = 'TOTAIS:';
-    ws.getCell(totRow, 6).font = { bold: true, size: 10 };
-    ws.getCell(totRow, 7).value = totalGeral;
-    ws.getCell(totRow, 8).value = totalIcms || null;
-    ws.getCell(totRow, 9).value = totalIpi || null;
-    ws.getCell(totRow, 10).value = totalSt || null;
-    ws.getCell(totRow, 11).value = totalPis || null;
-    ws.getCell(totRow, 12).value = totalCofins || null;
-    ws.getCell(totRow, 13).value = totalComImpGeral;
-    [7,8,9,10,11,12,13].forEach(c => {
+    ws.getCell(totRow, 7).value = 'TOTAIS:';
+    ws.getCell(totRow, 7).font = { bold: true, size: 10 };
+    ws.getCell(totRow, 8).value = totalGeral;
+    ws.getCell(totRow, 9).value = totalIcms || null;
+    ws.getCell(totRow, 10).value = totalIpi || null;
+    ws.getCell(totRow, 11).value = totalSt || null;
+    ws.getCell(totRow, 12).value = totalPis || null;
+    ws.getCell(totRow, 13).value = totalCofins || null;
+    ws.getCell(totRow, 14).value = totalComImpGeral;
+    [8,9,10,11,12,13,14].forEach(c => {
       const cell = ws.getCell(totRow, c);
       cell.numFmt = '#,##0.00';
       cell.font = { bold: true, size: 10 };
@@ -181,17 +191,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Larguras das colunas
     ws.getColumn(1).width = 14;  // REF
     ws.getColumn(2).width = 40;  // DESCRIÇÃO
-    ws.getColumn(3).width = 12;  // NCM
-    ws.getColumn(4).width = 8;   // QTD
-    ws.getColumn(5).width = 12;  // UNIT
-    ws.getColumn(6).width = 10;  // DESC%
-    ws.getColumn(7).width = 14;  // SUBTOTAL
-    ws.getColumn(8).width = 12;  // ICMS
-    ws.getColumn(9).width = 10;  // IPI
-    ws.getColumn(10).width = 10; // ST
-    ws.getColumn(11).width = 10; // PIS
-    ws.getColumn(12).width = 12; // COFINS
-    ws.getColumn(13).width = 14; // TOTAL
+    ws.getColumn(3).width = 18;  // MARCA
+    ws.getColumn(4).width = 12;  // NCM
+    ws.getColumn(5).width = 8;   // QTD
+    ws.getColumn(6).width = 12;  // UNIT
+    ws.getColumn(7).width = 10;  // DESC%
+    ws.getColumn(8).width = 14;  // SUBTOTAL
+    ws.getColumn(9).width = 12;  // ICMS
+    ws.getColumn(10).width = 10; // IPI
+    ws.getColumn(11).width = 10; // ST
+    ws.getColumn(12).width = 10; // PIS
+    ws.getColumn(13).width = 12; // COFINS
+    ws.getColumn(14).width = 14; // TOTAL
 
     // Nome do arquivo
     const now = new Date();

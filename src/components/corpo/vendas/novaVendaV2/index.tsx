@@ -478,7 +478,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   useEffect(() => {
     // Parâmetros
     api.get('/api/parametros/get?chave=prazo_validade_orcamento').then(r => {
-      if (r.data?.valor) setPrazoValidadeMax(Number(r.data.valor) || 10);
+      if (r.data?.valor) setPrazoValidadeMax(Number(r.data.valor) || 7);
     }).catch(() => {});
     // Transportadoras (com dedupe)
     api.post('/api/dbOracle/buscarTransporte').then(r => {
@@ -582,7 +582,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
     if (!user?.funcoes) return false;
     return user.funcoes.some((f: any) => (typeof f === 'string' ? f : f?.sigla) === 'PVO');
   }, [user]);
-  const [prazoValidadeMax, setPrazoValidadeMax] = useState(10);
+  const [prazoValidadeMax, setPrazoValidadeMax] = useState(7); // tb_parametros.prazo_validade_orcamento (7 desde a migration 083)
 
   const temEV = useMemo(() => {
     if (!user?.funcoes) return false;
@@ -1004,7 +1004,7 @@ const NovaVendaV2 = ({ onSaved }: { onSaved?: () => void }) => {
   const [salvarStep, setSalvarStep] = useState<'validade' | 'montando' | 'enviando' | 'ok' | 'erro'>('validade');
   const [salvarMsg, setSalvarMsg] = useState('');
   const [salvarResp, setSalvarResp] = useState<any>(null);
-  const [diasValidade, setDiasValidade] = useState('10');
+  const [diasValidade, setDiasValidade] = useState('7');
 
   const handleSalvarOrcamento = useCallback(async () => {
     if (temPVO) {

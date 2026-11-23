@@ -42,6 +42,7 @@ interface ItemOrcamento {
   cofins_aliquota: number;
   cofins_valor: number;
   ncm: string;
+  marca: string;
 }
 
 interface DadosOrcamento {
@@ -60,6 +61,7 @@ interface DadosOrcamento {
   itens: ItemOrcamento[];
   total_icms: number;
   total_ipi: number;
+  total_st: number;
   total_pis: number;
   total_cofins: number;
   total_impostos: number;
@@ -207,6 +209,7 @@ export default async function handler(
     const itensProcessados: ItemOrcamento[] = [];
     let totalIcms = 0;
     let totalIpi = 0;
+    let totalSt = 0;
     let totalPis = 0;
     let totalCofins = 0;
 
@@ -215,12 +218,14 @@ export default async function handler(
       let ref = item.ref || '';
       let descr = item.descr || item.descricao || item.nome || '';
       let ncm = '';
+      let marca = item.marca || item.MARCA || '';
 
-      // Buscar ref, descr e ncm do produto se não vieram no draft
+      // Buscar ref, descr, ncm e marca do produto se não vieram no draft
       if (codprod) {
         const queryProd = `
-          SELECT p.ref, p.descr, p.clasfiscal as ncm
-          FROM dbprod p WHERE p.codprod = $1
+          SELECT p.ref, p.descr, p.clasfiscal as ncm, m.descr as marca
+          FROM dbprod p LEFT JOIN dbmarcas m ON m.codmarca = p.codmarca
+          WHERE p.codprod = $1
         `;
         const resultProd = await client.query(queryProd, [codprod]);
         if (resultProd.rows.length > 0) {
@@ -228,6 +233,7 @@ export default async function handler(
           ref = ref || prod.ref || '';
           if (!descr) descr = prod.descr || '';
           ncm = prod.ncm || '';
+          marca = marca || prod.marca || '';
         }
       }
 
@@ -237,19 +243,22 @@ export default async function handler(
       const totalItem = qtd * prunit * (1 - desconto / 100);
 
       // Usar impostos JÁ CALCULADOS do draft (campos ou impostos)
-      const aliqIcms = Number(item.aliquotas?.icms || item.campos?.icms || 0);
-      const aliqIpi = Number(item.aliquotas?.ipi || item.campos?.ipi || 0);
-      const aliqPis = Number(item.aliquotas?.pis || item.campos?.pis || 0);
-      const aliqCofins = Number(item.aliquotas?.cofins || item.campos?.cofins || 0);
+      const aliqIcms = Number(item.aliquotas?.icms || item.campos?.icms || item.icms || 0);
+      const aliqIpi = Number(item.aliquotas?.ipi || item.campos?.ipi || item.ipi || 0);
+      const aliqPis = Number(item.aliquotas?.pis || item.campos?.pis || item.pis || 0);
+      const aliqCofins = Number(item.aliquotas?.cofins || item.campos?.cofins || item.cofins || 0);
 
-      const icmsValor = Number(item.impostos?.valorICMS || item.campos?.totalicms || 0);
-      const ipiValor = Number(item.impostos?.valorIPI || item.campos?.totalipi || 0);
-      const pisValor = Number(item.impostos?.valorPIS || item.campos?.valorpis || 0);
-      const cofinsValor = Number(item.impostos?.valorCOFINS || item.campos?.valorcofins || 0);
-      const stValor = Number(item.impostos?.valorICMS_Subst || item.campos?.totalsubst_trib || 0);
+      // Impostos já calculados na tela: item.impostos (V1), item.campos, ou os campos
+      // fiscais soltos no item (Nova Venda V2: totalicms, totalipi, totalsubst_trib...).
+      const icmsValor = Number(item.impostos?.valorICMS || item.campos?.totalicms || item.totalicms || 0);
+      const ipiValor = Number(item.impostos?.valorIPI || item.campos?.totalipi || item.totalipi || 0);
+      const pisValor = Number(item.impostos?.valorPIS || item.campos?.valorpis || item.valorpis || 0);
+      const cofinsValor = Number(item.impostos?.valorCOFINS || item.campos?.valorcofins || item.valorcofins || 0);
+      const stValor = Number(item.impostos?.valorICMS_Subst || item.campos?.totalsubst_trib || item.totalsubst_trib || 0);
 
       totalIcms += icmsValor;
       totalIpi += ipiValor;
+      totalSt += stValor;
       totalPis += pisValor;
       totalCofins += cofinsValor;
 
@@ -270,6 +279,7 @@ export default async function handler(
         cofins_aliquota: aliqCofins,
         cofins_valor: cofinsValor,
         ncm: ncm || item.campos?.ncm || item.ncm || '',
+        marca: String(marca || '').trim(),
         st_valor: stValor,
       } as any);
     }
@@ -292,6 +302,7 @@ export default async function handler(
       itens: itensProcessados,
       total_icms: totalIcms,
       total_ipi: totalIpi,
+      total_st: totalSt,
       total_pis: totalPis,
       total_cofins: totalCofins,
       total_impostos: totalImpostos,
@@ -363,17 +374,19 @@ export default async function handler(
     // Tabela de itens — com impostos por item
     const startY = currentY + 6;
 
-    const totalComImpostos = dadosOrcamento.total + dadosOrcamento.total_ipi;
+    // Total a pagar = produtos + tributos "por fora" (IPI + ICMS-ST), igual à Nova Venda e à NF
+    const totalComImpostos = dadosOrcamento.total + dadosOrcamento.total_ipi + dadosOrcamento.total_st;
 
     autoTable(doc, {
       startY,
-      head: [['REF', 'DESCRIÇÃO', 'NCM', 'QTD', 'UNIT.', 'DESC%', 'SUBTOTAL', 'ICMS', 'IPI', 'ST', 'PIS', 'COFINS', 'TOTAL']],
+      head: [['REF', 'DESCRIÇÃO', 'MARCA', 'NCM', 'QTD', 'UNIT.', 'DESC%', 'SUBTOTAL', 'ICMS', 'IPI', 'ST', 'PIS', 'COFINS', 'TOTAL']],
       body: dadosOrcamento.itens.map((item) => {
         const stValor = Number((item as any).st_valor || 0);
         const totalItem = item.total + item.ipi_valor + stValor;
         return [
           item.ref,
           item.descr.substring(0, 45),
+          (item.marca || '-').substring(0, 18),
           item.ncm || '-',
           item.qtd.toString(),
           item.prunit.toFixed(2),
@@ -389,11 +402,11 @@ export default async function handler(
       }),
       // Linha de totais no rodapé da tabela
       foot: [[
-        '', '', '', '', '', 'TOTAIS:',
+        '', '', '', '', '', '', 'TOTAIS:',
         dadosOrcamento.total.toFixed(2),
         dadosOrcamento.total_icms > 0 ? dadosOrcamento.total_icms.toFixed(2) : '-',
         dadosOrcamento.total_ipi > 0 ? dadosOrcamento.total_ipi.toFixed(2) : '-',
-        '-',
+        dadosOrcamento.total_st > 0 ? dadosOrcamento.total_st.toFixed(2) : '-',
         dadosOrcamento.total_pis > 0 ? dadosOrcamento.total_pis.toFixed(2) : '-',
         dadosOrcamento.total_cofins > 0 ? dadosOrcamento.total_cofins.toFixed(2) : '-',
         totalComImpostos.toFixed(2),
@@ -415,19 +428,20 @@ export default async function handler(
         fontSize: 7,
       },
       columnStyles: {
-        0: { cellWidth: 22 },                          // REF
+        0: { cellWidth: 20 },                          // REF
         1: { cellWidth: 'auto' },                      // DESCRIÇÃO (flex)
-        2: { cellWidth: 18 },                          // NCM
-        3: { cellWidth: 12, halign: 'center' },        // QTD
-        4: { cellWidth: 20, halign: 'right' },         // UNIT.
-        5: { cellWidth: 14, halign: 'center' },        // DESC%
-        6: { cellWidth: 22, halign: 'right' },         // SUBTOTAL
-        7: { cellWidth: 18, halign: 'right' },         // ICMS
-        8: { cellWidth: 16, halign: 'right' },         // IPI
-        9: { cellWidth: 16, halign: 'right' },         // ST
-        10: { cellWidth: 16, halign: 'right' },        // PIS
-        11: { cellWidth: 18, halign: 'right' },        // COFINS
-        12: { cellWidth: 24, halign: 'right' },        // TOTAL
+        2: { cellWidth: 22 },                          // MARCA
+        3: { cellWidth: 17 },                          // NCM
+        4: { cellWidth: 11, halign: 'center' },        // QTD
+        5: { cellWidth: 18, halign: 'right' },         // UNIT.
+        6: { cellWidth: 13, halign: 'center' },        // DESC%
+        7: { cellWidth: 20, halign: 'right' },         // SUBTOTAL
+        8: { cellWidth: 16, halign: 'right' },         // ICMS
+        9: { cellWidth: 15, halign: 'right' },         // IPI
+        10: { cellWidth: 15, halign: 'right' },        // ST
+        11: { cellWidth: 15, halign: 'right' },        // PIS
+        12: { cellWidth: 16, halign: 'right' },        // COFINS
+        13: { cellWidth: 22, halign: 'right' },        // TOTAL
       },
       theme: 'grid',
     });
@@ -444,7 +458,7 @@ export default async function handler(
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(80);
-    doc.text(`Subtotal: R$ ${dadosOrcamento.total.toFixed(2)}  |  IPI: R$ ${dadosOrcamento.total_ipi.toFixed(2)}`, pageWidth - 14, totalY + 5, { align: 'right' });
+    doc.text(`Subtotal: R$ ${dadosOrcamento.total.toFixed(2)}  |  IPI: R$ ${dadosOrcamento.total_ipi.toFixed(2)}  |  ST: R$ ${dadosOrcamento.total_st.toFixed(2)}`, pageWidth - 14, totalY + 5, { align: 'right' });
 
     // Condições e observações — lado esquerdo
     if (dadosOrcamento.prazo) {
@@ -470,7 +484,12 @@ export default async function handler(
     const pageHeight = doc.internal.pageSize.getHeight();
     doc.setFontSize(7);
     doc.setTextColor(120);
-    doc.text('Valores de impostos sujeitos a confirmação na emissão da NF. Orçamento válido por 7 dias. Preços sujeitos a alteração sem aviso prévio.', pageWidth / 2, pageHeight - 10, { align: 'center' });
+    // Validade real do orçamento (escolhida ao salvar; máximo em tb_parametros.prazo_validade_orcamento)
+    const venceEm = new Date(String(payload.expires_at || ''));
+    const textoValidade = !isNaN(venceEm.getTime())
+      ? `Orçamento válido até ${venceEm.toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' })}.`
+      : 'Orçamento válido por 7 dias.';
+    doc.text(`Valores de impostos sujeitos a confirmação na emissão da NF. ${textoValidade} Preços sujeitos a alteração sem aviso prévio.`, pageWidth / 2, pageHeight - 10, { align: 'center' });
     doc.setFontSize(7);
     doc.setTextColor(150);
     doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth - 14, pageHeight - 5, { align: 'right' });

@@ -101,6 +101,7 @@ import ConsultaFaturasPage from '../corpo/faturamento/ConsultaFatura/ConsultaFat
 
 // Vendas / Operacional - Lazy loading para componentes pesados
 const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
+const ConfigOrcamento = lazy(() => import('@/components/corpo/admin/configuracoes/orcamento'));
 const NovasVendas = lazy(() => import('@/components/corpo/vendas/novaVenda'));
 const NovaVendaV2 = lazy(() => import('@/components/corpo/vendas/novaVendaV2'));
 const CentralVendas = lazy(() => import('@/components/corpo/vendas/centralVendas'));
@@ -720,6 +721,13 @@ export const menus = [
             icon: ShoppingBasketIcon,
             href: '/admin/configuracoes/vendas',
             corpo: Vendas,
+          },
+          {
+            // prazo de validade do orçamento (tb_parametros) — migration 084
+            name: 'Orçamento',
+            icon: FileTextIcon,
+            href: '/admin/configuracoes/orcamento',
+            corpo: ConfigOrcamento,
           },
         ],
       },

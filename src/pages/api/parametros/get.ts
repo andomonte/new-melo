@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
-import { getPgPool } from '@/lib/pgClient';
+import { poolDaFilial } from '@/lib/estacaoDb';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const cookies = parseCookies({ req });
@@ -10,7 +10,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { chave } = req.query;
   let client;
   try {
-    const pool = getPgPool(filial);
+    // schema da filial fixado (mesma conexão da tela Configurações → Orçamento)
+    const pool = poolDaFilial(filial);
     client = await pool.connect();
 
     if (chave) {
