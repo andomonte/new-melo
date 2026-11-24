@@ -46,6 +46,8 @@ export interface ItemVenda {
   /** preço da tabela no momento em que entrou (p/ detectar preço abaixo) */
   prvenda_original: number;
   disp: number;
+  /** grupo de equivalência (dbprod.codgpe) — para oferecer equivalentes com estoque */
+  codgpe?: string;
   /** ST + IPI do item (calculado no servidor); undefined = ainda não calculado */
   impostos?: number;
   campos_fiscais?: Record<string, any>;
@@ -200,6 +202,11 @@ export function montarPayloadVenda(opts: {
   transporte?: { codtptransp: string; descr: string } | null;
 }) {
   const { cliente, itens, pag, analise, usuario, armId, obs, transporte } = opts;
+  // Mesma regra da Nova Venda V2: VENDEDOR = vendedor do cliente (dbclien.codvend);
+  // OPERADOR = quem está fazendo a venda (código de vendedor do usuário), sempre, com
+  // tele = 'S'. O finalizarVenda grava os dois em dbvvend (operador 'N' / 'S') e nos itens.
+  const operador = String(usuario.codusr || '').trim() || null;
+  const vendedor = String(cliente.codvend || '').trim() || operador;
   const hoje = new Date();
   const prazos = pag.prazoDias.map((d) => {
     const dt = new Date(hoje);
@@ -213,7 +220,7 @@ export function montarPayloadVenda(opts: {
       codusr: Number(usuario.codusr) || 0,
       pedido: '',
       tipo: 'P',
-      tele: 'N',
+      tele: operador ? 'S' : 'N',
       transp: transporte?.descr || '',
       codtptransp: transporte?.codtptransp ? Number(transporte.codtptransp) : null,
       vlrfrete: 0,
@@ -224,8 +231,8 @@ export function montarPayloadVenda(opts: {
       estoque_virtual: 'N',
       uName: usuario.usuario || '',
       nomecf: cliente.nomefant || cliente.nome || null,
-      vendedor: cliente.codvend || String(usuario.codusr || '') || null,
-      operador: null,
+      vendedor,
+      operador,
       formaPagamento: pag.forma?.descricao || null,
       parcelasCartao: analise.cartaoCredito ? Math.max(1, pag.parcelasCartao) : null,
       avista: analise.avista,
@@ -239,8 +246,8 @@ export function montarPayloadVenda(opts: {
       ref: it.ref || '',
       descr: it.descr || '',
       desconto: 0,
-      codvend: cliente.codvend || null,
-      codoperador: null,
+      codvend: vendedor,
+      codoperador: operador,
       nritem: String(idx + 1),
       nrequis: '',
       demanda: 'S',

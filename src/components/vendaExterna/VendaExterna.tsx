@@ -13,6 +13,11 @@ import {
   CreditCard,
   ClipboardCheck,
   ListChecks,
+  FileText,
+  Share2,
+  Replace,
+  ChevronDown,
+  ChevronUp,
   Search,
   Plus,
   Minus,
@@ -45,9 +50,10 @@ import {
 } from '@/lib/vendaExterna/regras';
 import type { ProdutoBusca } from '@/lib/vendaExterna/fonteOnline';
 import { fonte } from '@/lib/vendaExterna/fonte';
-import { sessaoVencida, type SessaoExterna } from '@/lib/vendaExterna/sessao';
+import { authHeader, sessaoVencida, type SessaoExterna } from '@/lib/vendaExterna/sessao';
 import {
   EVENTO_FILA,
+  ehOrcamento,
   enviarPedido,
   excluirPedido,
   guardarPedido,
@@ -293,8 +299,37 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
               prunit: p.preco,
               prvenda_original: p.preco,
               disp: p.disp,
+              codgpe: p.codgpe || '',
             };
       setItens(i >= 0 ? itens.map((x, k) => (k === i ? novo : x)) : [novo, ...itens]);
+      calcImpostos([novo], cliente);
+    },
+    [itens, cliente, calcImpostos],
+  );
+
+  /** Troca um item do carrinho por um equivalente, mantendo a quantidade. */
+  const trocarItem = useCallback(
+    (codprodAntigo: string, p: ProdutoBusca) => {
+      const antigo = itens.find((x) => x.codprod === codprodAntigo);
+      if (!antigo || !(p.preco > 0)) return;
+      const jaTem = itens.find((x) => x.codprod === p.codprod);
+      const novo: ItemVenda = jaTem
+        ? { ...jaTem, qtd: jaTem.qtd + antigo.qtd, disp: p.disp, impostos: undefined }
+        : {
+            codprod: p.codprod,
+            ref: p.ref,
+            descr: p.descr,
+            marca: p.marca,
+            qtd: antigo.qtd,
+            prunit: p.preco,
+            prvenda_original: p.preco,
+            disp: p.disp,
+            codgpe: p.codgpe || antigo.codgpe || '',
+          };
+      const lista = jaTem
+        ? itens.filter((x) => x.codprod !== codprodAntigo).map((x) => (x.codprod === p.codprod ? novo : x))
+        : itens.map((x) => (x.codprod === codprodAntigo ? novo : x));
+      setItens(lista);
       calcImpostos([novo], cliente);
     },
     [itens, cliente, calcImpostos],
@@ -318,7 +353,27 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
     fase: 'enviando' | 'ok' | 'guardado' | 'pendencia' | 'erro';
     msg: string;
     nro?: string;
+    /** orçamento gravado no servidor: nº (draft_id) para o PDF */
+    orcamento?: string;
+    ehOrcamento?: boolean;
   } | null>(null);
+
+  const montarPayload = () => {
+    const transporte =
+      String(cliente!.claspgto).toUpperCase() === 'V' && cliente!.status !== '4'
+        ? { codtptransp: '001', descr: 'CLIENTE RETIRA' }
+        : null;
+    return montarPayloadVenda({
+      cliente: cliente!,
+      itens,
+      pag,
+      analise,
+      usuario: { usuario: sessao.login, codusr: sessao.codvend },
+      armId,
+      obs,
+      transporte,
+    });
+  };
 
   const enviar = async () => {
     if (!cliente || !analise.podeEnviar || envio?.fase === 'enviando') return;
@@ -328,24 +383,14 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
     }
     setEnvio({ fase: 'enviando', msg: 'Guardando o pedido…' });
     try {
-      const transporte =
-        String(cliente.claspgto).toUpperCase() === 'V' && cliente.status !== '4'
-          ? { codtptransp: '001', descr: 'CLIENTE RETIRA' }
-          : null;
-      const payload = montarPayloadVenda({
-        cliente,
-        itens,
-        pag,
-        analise,
-        usuario: { usuario: sessao.login, codusr: sessao.codvend },
-        armId,
-        obs,
-        transporte,
-      });
-      const anterior = editandoUuid ? pedidos.find((p) => p.uuid === editandoUuid) : undefined;
+      const payload = montarPayload();
+      // ajustando um ORÇAMENTO e enviando como venda: vira um pedido novo (o orçamento fica)
+      const ajustado = editandoUuid ? pedidos.find((p) => p.uuid === editandoUuid) : undefined;
+      const anterior = ajustado && !ehOrcamento(ajustado) ? ajustado : undefined;
       const agora = new Date().toISOString();
       const pedido: PedidoLocal = {
         uuid: anterior?.uuid || novoUuid(),
+        tipo: 'VENDA',
         numero_local: anterior?.numero_local || proximoNumeroLocal(sessao.codvend),
         login: sessao.login,
         codcli: cliente.codcli,
@@ -385,6 +430,78 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
     } catch (e: any) {
       setEnvio({ fase: 'erro', msg: msgErro(e) });
     }
+  };
+
+  /** Orçamento: não precisa de forma de pagamento, não reserva estoque nem passa pelo crédito. */
+  const podeOrcar =
+    !!cliente && itens.length > 0 && itens.every((i) => i.qtd > 0 && i.prunit > 0) && !vencida && envio?.fase !== 'enviando';
+
+  const salvarOrcamento = async () => {
+    if (!cliente || !podeOrcar) return;
+    setEnvio({ fase: 'enviando', msg: 'Guardando o orçamento…', ehOrcamento: true });
+    try {
+      const payload = montarPayload();
+      // ajustando um orçamento guardado: substitui ele (mesmo uuid / mesmo nº)
+      const ajustado = editandoUuid ? pedidos.find((p) => p.uuid === editandoUuid) : undefined;
+      const anterior = ajustado && ehOrcamento(ajustado) ? ajustado : undefined;
+      const agora = new Date().toISOString();
+      const orc: PedidoLocal = {
+        uuid: anterior?.uuid || novoUuid(),
+        tipo: 'ORCAMENTO',
+        numero_local: anterior?.numero_local || proximoNumeroLocal(sessao.codvend, 'ORC'),
+        login: sessao.login,
+        codcli: cliente.codcli,
+        cliente_nome: cliente.nomefant || cliente.nome,
+        total: subtotal + impostos,
+        itens_count: itens.length,
+        criado_em: anterior?.criado_em || agora,
+        atualizado_em: agora,
+        payload,
+        liberaPreco: false,
+        rascunho: { cliente, itens, pag, obs },
+        status: 'AGUARDANDO',
+      };
+      await guardarPedido(orc);
+
+      if (!navigator.onLine) {
+        setEnvio({
+          fase: 'guardado',
+          ehOrcamento: true,
+          nro: orc.numero_local,
+          msg: 'Sem internet: o orçamento ficou guardado no aparelho e será enviado sozinho quando a conexão voltar. O PDF fica disponível depois do envio, na aba Pedidos.',
+        });
+        return;
+      }
+      setEnvio({ fase: 'enviando', msg: 'Enviando o orçamento…', ehOrcamento: true });
+      const r = await enviarPedido(sessao, orc.uuid);
+      if (r?.status === 'ENVIADO') {
+        setEnvio({ fase: 'ok', ehOrcamento: true, nro: r.nrovenda, orcamento: r.nrovenda, msg: r.mensagem || 'Orçamento salvo.' });
+      } else if (r?.status === 'PENDENCIA') {
+        setEnvio({ fase: 'pendencia', ehOrcamento: true, nro: orc.numero_local, msg: r.mensagem || 'Orçamento com pendência.' });
+      } else {
+        setEnvio({
+          fase: 'guardado',
+          ehOrcamento: true,
+          nro: orc.numero_local,
+          msg: r?.mensagem || 'O orçamento ficou guardado e será enviado sozinho assim que possível.',
+        });
+      }
+    } catch (e: any) {
+      setEnvio({ fase: 'erro', ehOrcamento: true, msg: msgErro(e) });
+    }
+  };
+
+  /** Orçamento enviado → venda: carrega os itens numa venda NOVA (o orçamento continua). */
+  const orcamentoParaVenda = (p: PedidoLocal) => {
+    const r = p.rascunho || {};
+    setCliente(r.cliente || null);
+    setItens((r.itens || []).map((i: ItemVenda) => ({ ...i, impostos: undefined })));
+    setPag(r.pag || PAG_VAZIO);
+    setObs(r.obs || '');
+    setEditandoUuid(null);
+    setEnvio(null);
+    setEtapa('itens');
+    if (r.cliente && r.itens?.length) calcImpostos(r.itens, r.cliente);
   };
 
   const novaVenda = () => {
@@ -504,7 +621,10 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
         )}
         {editandoUuid && etapa !== 'pedidos' && (
           <div className="mb-3 rounded-xl bg-blue-50 border border-blue-200 p-2 text-xs text-blue-800 flex items-center gap-2">
-            <Pencil size={14} /> Ajustando um pedido guardado. Ao enviar, ele substitui o anterior.
+            <Pencil size={14} />
+            {ehOrcamento(pedidos.find((p) => p.uuid === editandoUuid))
+              ? 'Ajustando um orçamento. "Salvar como orçamento" substitui o anterior; "Enviar venda" cria uma venda nova.'
+              : 'Ajustando um pedido guardado. Ao enviar, ele substitui o anterior.'}
             <button onClick={novaVenda} className="ml-auto underline">
               cancelar
             </button>
@@ -519,6 +639,7 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
             onAdicionar={adicionar}
             onAlterar={alterarItem}
             onRemover={remover}
+            onTrocar={trocarItem}
           />
         )}
         {etapa === 'pagamento' && cliente && (
@@ -540,6 +661,17 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
                 são conferidos de novo no envio.
               </div>
             )}
+            <button
+              onClick={salvarOrcamento}
+              disabled={!podeOrcar}
+              className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[#1e3a5f] text-[#1e3a5f] dark:text-blue-200 font-semibold py-3 disabled:opacity-40"
+            >
+              <FileText size={18} /> Salvar como orçamento
+            </button>
+            <div className="mt-1 text-[11px] text-gray-500 text-center">
+              Orçamento não reserva estoque nem precisa da forma de pagamento. Vale pelo prazo da filial (7 dias) e gera
+              PDF para mandar ao cliente.
+            </div>
           </>
         )}
         {etapa === 'pedidos' && (
@@ -547,12 +679,19 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
             pedidos={pedidos}
             online={online}
             vencida={vencida}
+            sessao={sessao}
             onAbrir={abrirPedido}
+            onVirarVenda={orcamentoParaVenda}
             onEnviar={async (p) => {
               await enviarPedido(sessao, p.uuid);
             }}
             onExcluir={async (p) => {
-              if (window.confirm(`Excluir o pedido ${p.numero_local} (${p.cliente_nome})? Ele não foi enviado.`)) {
+              const oque = ehOrcamento(p) ? 'o orçamento' : 'o pedido';
+              const aviso =
+                p.status === 'ENVIADO'
+                  ? 'Ele sai só deste aparelho (no sistema continua salvo).'
+                  : 'Ele não foi enviado.';
+              if (window.confirm(`Excluir ${oque} ${p.numero_local} (${p.cliente_nome})? ${aviso}`)) {
                 await excluirPedido(p.uuid);
               }
             }}
@@ -599,16 +738,33 @@ export default function VendaExterna({ sessao, meta, sincronizando, onSincroniza
             {envio.fase === 'ok' && <CheckCircle2 className="w-12 h-12 mx-auto text-green-600" />}
             {envio.fase === 'guardado' && <Clock className="w-12 h-12 mx-auto text-blue-600" />}
             {(envio.fase === 'erro' || envio.fase === 'pendencia') && <AlertTriangle className="w-12 h-12 mx-auto text-red-600" />}
-            {envio.nro && <div className="text-2xl font-bold mt-3">Nº {envio.nro}</div>}
+            {envio.nro && (
+              <div className="text-2xl font-bold mt-3">
+                {envio.ehOrcamento && envio.fase === 'ok' ? 'Orçamento ' : ''}Nº {envio.nro}
+              </div>
+            )}
             <p className="mt-2 text-sm whitespace-pre-line">{envio.msg}</p>
+            {envio.fase === 'ok' && envio.orcamento && (
+              <div className="mt-4">
+                <BotaoPdfOrcamento sessao={sessao} draftId={envio.orcamento} grande />
+              </div>
+            )}
             {(envio.fase === 'ok' || envio.fase === 'guardado') && (
               <button onClick={novaVenda} className="mt-5 w-full rounded-xl bg-[#1e3a5f] text-white font-semibold py-3">
                 Nova venda
               </button>
             )}
             {envio.fase === 'pendencia' && (
-              <button onClick={() => setEnvio(null)} className="mt-5 w-full rounded-xl bg-[#1e3a5f] text-white font-semibold py-3">
-                Ajustar o pedido
+              <button
+                onClick={() => {
+                  // o pedido guardado traz o disponível atualizado pelo servidor (faltas)
+                  const p = pedidos.find((x) => x.numero_local === envio.nro);
+                  if (p) abrirPedido(p);
+                  else setEnvio(null);
+                }}
+                className="mt-5 w-full rounded-xl bg-[#1e3a5f] text-white font-semibold py-3"
+              >
+                {envio.ehOrcamento ? 'Ajustar o orçamento' : 'Ajustar o pedido'}
               </button>
             )}
             {envio.fase === 'erro' && (
@@ -636,34 +792,58 @@ function AbaPedidos({
   pedidos,
   online,
   vencida,
+  sessao,
   onAbrir,
+  onVirarVenda,
   onEnviar,
   onExcluir,
 }: {
   pedidos: PedidoLocal[];
   online: boolean;
   vencida: boolean;
+  sessao: SessaoExterna;
   onAbrir: (p: PedidoLocal) => void;
+  onVirarVenda: (p: PedidoLocal) => void;
   onEnviar: (p: PedidoLocal) => Promise<void>;
   onExcluir: (p: PedidoLocal) => Promise<void>;
 }) {
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<'todos' | 'vendas' | 'orcamentos'>('todos');
   if (pedidos.length === 0) {
-    return <div className="text-center text-sm text-gray-500 py-10">Nenhum pedido feito neste aparelho.</div>;
+    return <div className="text-center text-sm text-gray-500 py-10">Nenhum pedido ou orçamento feito neste aparelho.</div>;
   }
+  const lista = pedidos.filter((p) => filtro === 'todos' || (filtro === 'orcamentos') === ehOrcamento(p));
+  const botaoFiltro = (id: typeof filtro, txt: string) => (
+    <button
+      onClick={() => setFiltro(id)}
+      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${filtro === id ? 'bg-[#1e3a5f] text-white' : 'bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700'}`}
+    >
+      {txt}
+    </button>
+  );
   return (
     <div className="space-y-2">
-      {pedidos.map((p) => {
+      <div className="flex gap-2">
+        {botaoFiltro('todos', 'Todos')}
+        {botaoFiltro('vendas', 'Vendas')}
+        {botaoFiltro('orcamentos', 'Orçamentos')}
+      </div>
+      {lista.length === 0 && <div className="text-center text-sm text-gray-500 py-6">Nada aqui.</div>}
+      {lista.map((p) => {
         const sit = ROTULO_SITUACAO[p.status] || ROTULO_SITUACAO.AGUARDANDO;
         const podeMexer = p.status === 'AGUARDANDO' || p.status === 'PENDENCIA' || p.status === 'ERRO';
+        const orc = ehOrcamento(p);
+        const titulo =
+          p.status === 'ENVIADO' && p.nrovenda ? `${orc ? 'Orçamento' : 'Venda'} Nº ${p.nrovenda}` : p.numero_local;
         return (
           <Cartao key={p.uuid}>
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-sm">
-                    {p.status === 'ENVIADO' && p.nrovenda ? `Venda Nº ${p.nrovenda}` : p.numero_local}
-                  </span>
+                  <span className="font-semibold text-sm">{titulo}</span>
+                  {orc && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">Orçamento</span>
+                  )}
                   <span className={`text-[11px] px-2 py-0.5 rounded-full ${sit.cls}`}>{sit.txt}</span>
                 </div>
                 <div className="text-sm truncate">
@@ -672,10 +852,30 @@ function AbaPedidos({
                 <div className="text-xs text-gray-500">
                   {dataHora(p.criado_em)} · {p.itens_count} {p.itens_count === 1 ? 'item' : 'itens'} · {brl(p.total)}
                 </div>
-                {p.mensagem && p.status !== 'ENVIADO' && <div className="text-xs text-red-700 mt-1">{p.mensagem}</div>}
+                {p.mensagem && p.status !== 'ENVIADO' && (
+                  <div className="text-xs text-red-700 mt-1 whitespace-pre-line">{p.mensagem}</div>
+                )}
                 {p.mensagem && p.status === 'ENVIADO' && <div className="text-xs text-green-700 mt-1">{p.mensagem}</div>}
               </div>
             </div>
+            {orc && p.status === 'ENVIADO' && (
+              <div className="flex flex-wrap gap-2 mt-2 justify-end">
+                {online && p.nrovenda && <BotaoPdfOrcamento sessao={sessao} draftId={p.nrovenda} />}
+                <button
+                  onClick={() => onVirarVenda(p)}
+                  className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-[#1e3a5f] text-white"
+                >
+                  <Send size={13} /> Virar venda
+                </button>
+                <button
+                  onClick={() => onExcluir(p)}
+                  className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg text-red-600 border border-red-200"
+                  aria-label="Tirar do aparelho"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            )}
             {podeMexer && (
               <div className="flex gap-2 mt-2 justify-end">
                 <button
@@ -719,6 +919,121 @@ function AbaPedidos({
 function Cartao({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-3 ${className}`}>{children}</div>
+  );
+}
+
+/**
+ * PDF do orçamento (o mesmo da Nova Venda). Em 2 toques: "PDF" gera; depois
+ * "Compartilhar" (WhatsApp, e-mail…) ou "Abrir". O iPhone só deixa compartilhar logo após
+ * um toque — por isso não compartilha direto depois de esperar o servidor.
+ */
+function BotaoPdfOrcamento({ sessao, draftId, grande }: { sessao: SessaoExterna; draftId: string; grande?: boolean }) {
+  const [fase, setFase] = useState<'nada' | 'gerando' | 'pronto' | 'erro'>('nada');
+  const [arq, setArq] = useState<{ url: string; file: File | null } | null>(null);
+  const [erro, setErro] = useState('');
+  const cls = grande
+    ? 'w-full inline-flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm'
+    : 'inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg';
+
+  const gerar = async () => {
+    setFase('gerando');
+    setErro('');
+    try {
+      const r = await fetch('/api/externo/orcamento-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader(sessao) },
+        body: JSON.stringify({ draft_id: draftId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.pdf_url) throw new Error(d.error || `Falha ao gerar o PDF (${r.status})`);
+      let file: File | null = null;
+      try {
+        const b = await (await fetch(d.pdf_url)).blob();
+        file = new File([b], `${d.nome_arquivo || `orcamento_${draftId}`}.pdf`, { type: 'application/pdf' });
+      } catch {
+        /* sem arquivo: só "Abrir" */
+      }
+      setArq({ url: d.pdf_url, file });
+      setFase('pronto');
+    } catch (e: any) {
+      setErro(e?.message || 'Falha ao gerar o PDF');
+      setFase('erro');
+    }
+  };
+
+  const podeCompartilhar =
+    !!arq?.file && typeof navigator !== 'undefined' && !!navigator.canShare && navigator.canShare({ files: [arq.file] });
+
+  if (fase === 'pronto' && arq) {
+    return (
+      <div className={grande ? 'grid grid-cols-2 gap-2' : 'inline-flex gap-2'}>
+        {podeCompartilhar && (
+          <button
+            onClick={() =>
+              navigator.share({ files: [arq.file as File], title: `Orçamento ${draftId}` }).catch(() => undefined)
+            }
+            className={`${cls} bg-green-600 text-white`}
+          >
+            <Share2 size={grande ? 18 : 13} /> Compartilhar
+          </button>
+        )}
+        <a
+          href={arq.url}
+          target="_blank"
+          rel="noreferrer"
+          className={`${cls} border border-gray-300 ${podeCompartilhar ? '' : 'col-span-2'}`}
+        >
+          <FileText size={grande ? 18 : 13} /> Abrir PDF
+        </a>
+      </div>
+    );
+  }
+  return (
+    <div className={grande ? '' : 'inline-flex flex-col items-end'}>
+      <button onClick={gerar} disabled={fase === 'gerando'} className={`${cls} border border-[#1e3a5f] text-[#1e3a5f] dark:text-blue-200 disabled:opacity-50`}>
+        {fase === 'gerando' ? <Loader2 size={grande ? 18 : 13} className="animate-spin" /> : <FileText size={grande ? 18 : 13} />}
+        {fase === 'gerando' ? 'Gerando PDF…' : 'PDF do orçamento'}
+      </button>
+      {fase === 'erro' && <div className="text-[11px] text-red-600 mt-1">{erro}</div>}
+    </div>
+  );
+}
+
+/** Lista de equivalentes com estoque: "adicionar" (busca) ou "trocar" (item do carrinho). */
+function ListaEquivalentes({
+  lista,
+  acao,
+  onEscolher,
+}: {
+  lista: ProdutoBusca[];
+  acao: 'adicionar' | 'trocar';
+  onEscolher: (p: ProdutoBusca) => void;
+}) {
+  return (
+    <div className="mt-2 space-y-1.5 border-l-2 border-green-500 pl-2">
+      {lista.map((e) => (
+        <div key={e.codprod} className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold truncate">
+              {e.ref} <span className="font-normal text-gray-500">· {e.marca}</span>
+            </div>
+            <div className="text-[11px] text-gray-500 truncate">{e.descr}</div>
+            <div className="text-[11px]">
+              <span className="text-green-700">disp. {e.disp}</span>
+              <span className="ml-2 font-semibold">{e.preco > 0 ? brl(e.preco) : 'sem preço nesta tabela'}</span>
+            </div>
+          </div>
+          <button
+            onClick={() => onEscolher(e)}
+            disabled={!(e.preco > 0)}
+            className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-green-600 text-white text-xs font-semibold px-3 py-2 disabled:opacity-30"
+          >
+            {acao === 'trocar' ? <Replace size={14} /> : <Plus size={14} />}
+            {acao === 'trocar' ? 'Trocar' : 'Incluir'}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -872,6 +1187,7 @@ function EtapaItens({
   onAdicionar,
   onAlterar,
   onRemover,
+  onTrocar,
 }: {
   cliente: ClienteVenda;
   itens: ItemVenda[];
@@ -879,12 +1195,44 @@ function EtapaItens({
   onAdicionar: (p: ProdutoBusca) => void;
   onAlterar: (codprod: string, m: Partial<ItemVenda>) => void;
   onRemover: (codprod: string) => void;
+  onTrocar: (codprodAntigo: string, p: ProdutoBusca) => void;
 }) {
   const [termo, setTermo] = useState('');
   const termoDeb = useDebounce(termo, 450);
   const [lista, setLista] = useState<ProdutoBusca[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState('');
+  // equivalentes com estoque dos produtos SEM estoque da busca (por grupo codgpe)
+  const [equivs, setEquivs] = useState<Record<string, ProdutoBusca[]>>({});
+  const [aberto, setAberto] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEquivs({});
+    setAberto(null);
+    const grupos = Array.from(
+      new Set(lista.filter((p) => p.disp <= 0 && p.codgpe).map((p) => String(p.codgpe).trim())),
+    ).slice(0, 20);
+    if (grupos.length === 0) return;
+    let vivo = true;
+    fonte
+      .equivalentes(grupos, cliente.prvenda, armId)
+      .then((eqs) => {
+        if (!vivo) return;
+        const m: Record<string, ProdutoBusca[]> = {};
+        for (const e of eqs) (m[String(e.codgpe).trim()] ??= []).push(e);
+        setEquivs(m);
+        // um único produto sem estoque na busca (ex.: referência exata): já abre a lista
+        const zerados = lista.filter((p) => p.disp <= 0 && m[String(p.codgpe).trim()]?.some((e) => e.codprod !== p.codprod));
+        if (zerados.length === 1 && lista.length <= 3) setAberto(zerados[0].codprod);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [lista, cliente.prvenda, armId]);
+
+  const equivalentesDe = (p: { codprod: string; codgpe?: string }) =>
+    (equivs[String(p.codgpe || '').trim()] || []).filter((e) => e.codprod !== p.codprod);
 
   useEffect(() => {
     const t = termoDeb.trim();
@@ -920,6 +1268,7 @@ function EtapaItens({
         <div className="space-y-2">
           {lista.map((p) => {
             const noCarrinho = qtdNoCarrinho(p.codprod);
+            const eqs = p.disp <= 0 ? equivalentesDe(p) : [];
             return (
               <Cartao key={p.codprod}>
                 <div className="flex items-start gap-2">
@@ -929,9 +1278,23 @@ function EtapaItens({
                     </div>
                     <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{p.descr}</div>
                     <div className="text-xs mt-1">
-                      <span className={p.disp > 0 ? 'text-green-700' : 'text-red-600'}>disp. {p.disp}</span>
-                      <span className="ml-3 font-semibold">{brl(p.preco)}</span>
+                      <span className={p.disp > 0 ? 'text-green-700' : 'text-red-600'}>
+                        {p.disp > 0 ? `disp. ${p.disp}` : 'sem estoque'}
+                      </span>
+                      <span className="ml-3 font-semibold">{p.preco > 0 ? brl(p.preco) : ''}</span>
                     </div>
+                    {eqs.length > 0 && (
+                      <button
+                        onClick={() => setAberto(aberto === p.codprod ? null : p.codprod)}
+                        className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-green-50 dark:bg-green-950/40 border border-green-300 text-green-800 dark:text-green-300 text-xs font-semibold px-2 py-1"
+                      >
+                        {eqs.length} {eqs.length === 1 ? 'equivalente disponível' : 'equivalentes disponíveis'}
+                        {aberto === p.codprod ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                    )}
+                    {aberto === p.codprod && eqs.length > 0 && (
+                      <ListaEquivalentes lista={eqs} acao="adicionar" onEscolher={(e) => onAdicionar(e)} />
+                    )}
                   </div>
                   <button
                     onClick={() => onAdicionar(p)}
@@ -962,7 +1325,15 @@ function EtapaItens({
           <div className="text-xs font-semibold text-gray-500 uppercase pt-2">Itens da venda</div>
           <div className="space-y-2">
             {itens.map((it) => (
-              <ItemCarrinho key={it.codprod} it={it} onAlterar={onAlterar} onRemover={onRemover} />
+              <ItemCarrinho
+                key={it.codprod}
+                it={it}
+                prvenda={cliente.prvenda}
+                armId={armId}
+                onAlterar={onAlterar}
+                onRemover={onRemover}
+                onTrocar={onTrocar}
+              />
             ))}
           </div>
         </>
@@ -973,17 +1344,42 @@ function EtapaItens({
 
 function ItemCarrinho({
   it,
+  prvenda,
+  armId,
   onAlterar,
   onRemover,
+  onTrocar,
 }: {
   it: ItemVenda;
+  prvenda: string;
+  armId: number;
   onAlterar: (codprod: string, m: Partial<ItemVenda>) => void;
   onRemover: (codprod: string) => void;
+  onTrocar: (codprodAntigo: string, p: ProdutoBusca) => void;
 }) {
   const [precoTxt, setPrecoTxt] = useState(it.prunit.toFixed(2).replace('.', ','));
   useEffect(() => setPrecoTxt(it.prunit.toFixed(2).replace('.', ',')), [it.prunit]);
   const abaixo = it.prvenda_original > 0 && it.prunit < it.prvenda_original - 0.01;
   const semEstoque = it.qtd > it.disp;
+
+  // quantidade maior que o disponível: oferece equivalentes que cobrem a quantidade
+  const [eqs, setEqs] = useState<ProdutoBusca[] | null>(null);
+  const [verEqs, setVerEqs] = useState(false);
+  useEffect(() => {
+    setEqs(null);
+    setVerEqs(false);
+    if (!semEstoque || !it.codgpe) return;
+    let vivo = true;
+    fonte
+      .equivalentes([it.codgpe], prvenda, armId)
+      .then((l) => vivo && setEqs(l.filter((e) => e.codprod !== it.codprod)))
+      .catch(() => vivo && setEqs([]));
+    return () => {
+      vivo = false;
+    };
+  }, [semEstoque, it.codgpe, it.codprod, prvenda, armId]);
+  const eqsQueCobrem = (eqs || []).filter((e) => e.disp >= it.qtd);
+  const eqsMostrar = eqsQueCobrem.length > 0 ? eqsQueCobrem : eqs || [];
 
   return (
     <Cartao>
@@ -1049,8 +1445,21 @@ function ItemCarrinho({
       {(abaixo || semEstoque) && (
         <div className="mt-1 text-[11px] text-amber-700 flex flex-wrap gap-x-3">
           {abaixo && <span>abaixo da tabela ({brl(it.prvenda_original)})</span>}
-          {semEstoque && <span>disponível só {it.disp}</span>}
+          {semEstoque && <span>disponível só {Math.max(0, it.disp)}</span>}
         </div>
+      )}
+      {semEstoque && eqsMostrar.length > 0 && (
+        <>
+          <button
+            onClick={() => setVerEqs(!verEqs)}
+            className="mt-1.5 inline-flex items-center gap-1 rounded-lg bg-green-50 dark:bg-green-950/40 border border-green-300 text-green-800 dark:text-green-300 text-xs font-semibold px-2 py-1"
+          >
+            Ver equivalentes ({eqsMostrar.length}
+            {eqsQueCobrem.length > 0 ? ` com ${it.qtd}+ em estoque` : ''})
+            {verEqs ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {verEqs && <ListaEquivalentes lista={eqsMostrar} acao="trocar" onEscolher={(e) => onTrocar(it.codprod, e)} />}
+        </>
       )}
     </Cartao>
   );

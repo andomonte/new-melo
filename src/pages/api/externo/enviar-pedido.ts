@@ -14,7 +14,10 @@
  * Arquitetura: docs/VENDAS-EXTERNAS-OFFLINE.md
  */
 import type { NextApiRequest, NextApiResponse } from 'next';
+import type { Pool } from 'pg';
 import { poolDaFilial } from '@/lib/estacaoDb';
+import { buscarEquivalentes } from '@/lib/vendaExterna/equivalentes';
+import { aplicarVendedorOperador } from '@/lib/vendaExterna/vendedorOperador';
 import { passeDaRequisicao } from '@/lib/vendaExterna/token';
 import { chamarRota } from '@/lib/vendaExterna/chamarRota';
 import finalizarVenda from '@/pages/api/vendas/postgresql/finalizarVenda';
@@ -29,6 +32,42 @@ function emSerie<T>(fn: () => Promise<T>): Promise<T> {
   const p = fila.then(fn, fn);
   fila = p.catch(() => undefined);
   return p;
+}
+
+/**
+ * Itens do pedido sem estoque suficiente AGORA e, para cada um, quantos equivalentes têm
+ * estoque. faltas = { codprod: disponível } (o aparelho atualiza o carrinho com isso e
+ * mostra o botão "Ver equivalentes").
+ */
+async function analisarFaltas(pool: Pool, payload: any) {
+  const itens: any[] = payload.itens || [];
+  const arm = Number(itens[0]?.arm_id) || 1001;
+  const cods = itens.map((i) => String(i.codprod));
+  const r = await pool.query(
+    `SELECT p.codprod, btrim(COALESCE(p.codgpe,'')) AS codgpe,
+            COALESCE((SELECT SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0))
+                        FROM cad_armazem_produto
+                       WHERE arp_arm_id = $2 AND arp_codprod = p.codprod AND COALESCE(arp_bloqueado,'N') <> 'S'), 0) AS disp
+       FROM dbprod p WHERE p.codprod = ANY($1::text[])`,
+    [cods, arm],
+  );
+  const info = new Map(r.rows.map((x: any) => [String(x.codprod).trim(), { codgpe: x.codgpe as string, disp: Number(x.disp) || 0 }]));
+  const faltando = itens.filter((i) => (info.get(String(i.codprod))?.disp ?? 0) < Number(i.qtd || 0));
+  const faltas: Record<string, number> = {};
+  for (const i of faltando) faltas[String(i.codprod)] = Math.max(0, info.get(String(i.codprod))?.disp ?? 0);
+
+  const cli = await pool.query(`SELECT COALESCE(NULLIF(btrim(prvenda::text),''),'0') AS tipo FROM dbclien WHERE codcli=$1`, [
+    String(payload.header?.codcli || ''),
+  ]);
+  const grupos = faltando.map((i) => info.get(String(i.codprod))?.codgpe || '').filter(Boolean);
+  const eqs = await buscarEquivalentes(pool, grupos, { arm, prvenda: cli.rows[0]?.tipo ?? '0' });
+  const linhas = faltando.map((i) => {
+    const inf = info.get(String(i.codprod));
+    const n = eqs.filter((e) => e.codgpe === inf?.codgpe && e.codprod !== String(i.codprod)).length;
+    const base = `${i.ref || i.codprod}: pediu ${i.qtd}, disponível ${Math.max(0, inf?.disp ?? 0)}`;
+    return n > 0 ? `${base} — tem ${n} equivalente(s) com estoque` : base;
+  });
+  return { faltas, linhas };
 }
 
 const ehErroDeNegocio = (msg: string) =>
@@ -49,14 +88,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const filial = passe.f;
   const pool = poolDaFilial(filial);
 
-  // quem envia é o dono do passe (não confia no codusr que veio do aparelho)
-  payload.header.codusr = Number(passe.v) || passe.v;
-  payload.header.uName = passe.u;
-  if (!payload.header.vendedor) payload.header.vendedor = passe.v;
-
   const total = payload.itens.reduce((a: number, i: any) => a + (Number(i.qtd) || 0) * (Number(i.prunit) || 0), 0);
 
   try {
+    // vendedor = do cliente; operador = dono do passe (regra da Nova Venda)
+    await aplicarVendedorOperador(pool, payload, passe);
+
     // 1) registra/trava o pedido pelo uuid
     const ins = await pool.query(
       `INSERT INTO venda_externa_pedido
@@ -71,6 +108,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const ex = (await pool.query(`SELECT * FROM venda_externa_pedido WHERE uuid = $1`, [uuid])).rows[0];
       if (ex.login.toUpperCase() !== passe.u.toUpperCase()) {
         return res.status(403).json({ error: 'Este pedido pertence a outro usuário.' });
+      }
+      if (ex.payload?._tipo === 'ORCAMENTO') {
+        return res.status(409).json({ error: 'Identificação já usada por um orçamento.' });
       }
       if (ex.status === 'ENVIADO') {
         return res.status(200).json({ ok: true, repetido: true, codvenda: ex.codvenda, nrovenda: ex.nrovenda, mensagem: ex.mensagem });
@@ -143,8 +183,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const erro = String(r.data?.error || 'Falha ao gravar a venda.');
     if (ehErroDeNegocio(erro) || r.status === 400) {
-      await marcar('PENDENCIA', erro);
-      return res.status(200).json({ ok: false, pendencia: true, mensagem: erro });
+      // falta de estoque: diz quais itens faltam e se há equivalente com estoque
+      let faltas: Record<string, number> | undefined;
+      let msg = erro;
+      if (/ESTOQUE/i.test(erro)) {
+        try {
+          const f = await analisarFaltas(pool, payload);
+          if (f.linhas.length) {
+            faltas = f.faltas;
+            msg = `${erro}\n${f.linhas.join('\n')}`;
+          }
+        } catch (e) {
+          console.error('externo/enviar-pedido: análise de faltas', e);
+        }
+      }
+      await marcar('PENDENCIA', msg);
+      return res.status(200).json({ ok: false, pendencia: true, mensagem: msg, faltas });
     }
     await marcar('ERRO', erro);
     return res.status(502).json({ ok: false, tentarDeNovo: true, error: erro });

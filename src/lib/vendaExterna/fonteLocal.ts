@@ -64,6 +64,7 @@ export const fonteLocal: FonteVenda = {
     const lista = await clientes();
     const dig = t.replace(/\D/g, '');
     const soNumero = /^\d+$/.test(t.replace(/[\s.\-/]/g, ''));
+    const palavras = t.split(/\s+/).filter(Boolean);
     const achados = lista.filter((c) => {
       if (soNumero) {
         return (
@@ -72,9 +73,17 @@ export const fonteLocal: FonteVenda = {
           String(c.cpfcgc || '').replace(/\D/g, '').startsWith(dig)
         );
       }
-      const alvo = normalizar(`${c.nome} ${c.nomefant} ${c.cidade}`);
-      return t.split(/\s+/).every((p) => alvo.includes(p));
+      const alvo = c.busca ?? normalizar(`${c.nome} ${c.nomefant} ${c.cidade}`);
+      return palavras.every((p) => alvo.includes(p));
     });
+    // carteira do vendedor primeiro; depois quem começa com o termo; depois por nome
+    const ini = (c: any) => (normalizar(c.nomefant || '').startsWith(t) || normalizar(c.nome || '').startsWith(t) ? 0 : 1);
+    achados.sort(
+      (a, b) =>
+        (a.carteira ? 0 : 1) - (b.carteira ? 0 : 1) ||
+        ini(a) - ini(b) ||
+        String(a.nome || '').localeCompare(String(b.nome || '')),
+    );
     return achados.slice(0, 30).map(clienteDoPacote);
   },
 
@@ -134,7 +143,7 @@ export const fonteLocal: FonteVenda = {
 
   async validarCredito(codcli, valor, forma) {
     const c = await detalheClienteLocal(codcli);
-    if (!c) return { passou: 'NOK', mensagem: 'CLIENTE NÃO ESTÁ NA SUA CARTEIRA (pacote do aparelho)' };
+    if (!c) return { passou: 'NOK', mensagem: 'CLIENTE NÃO ESTÁ NOS DADOS DO APARELHO — ATUALIZE COM INTERNET' };
     const clas = String(c.claspgto || '').trim().toUpperCase();
     const fp = normalizar(forma || '');
     const isenta = (fp.includes('CARTAO') && fp.includes('CREDITO')) || fp.includes('A VISTA') || fp === 'PIX' || fp.includes('DINHEIRO') || fp.includes('DEBITO');
@@ -171,5 +180,24 @@ export const fonteLocal: FonteVenda = {
 
   async impostosItem() {
     return null; // sem internet: impostos são calculados no envio
+  },
+
+  async equivalentes(grupos, prvenda) {
+    const gs = new Set(grupos.map((g) => String(g || '').trim()).filter(Boolean));
+    if (gs.size === 0) return [];
+    const tipo = String(prvenda || '0');
+    return (await produtos())
+      .filter((p) => p.disp >= 1 && gs.has(String(p.codgpe || '').trim()))
+      .sort((a, b) => b.disp - a.disp || a.ref.localeCompare(b.ref))
+      .slice(0, 200)
+      .map((p) => ({
+        codprod: p.codprod,
+        ref: p.ref,
+        descr: p.descr,
+        marca: p.marca,
+        disp: p.disp,
+        preco: Number(p.precos?.[tipo] || 0),
+        codgpe: String(p.codgpe || '').trim(),
+      })) as ProdutoBusca[];
   },
 };

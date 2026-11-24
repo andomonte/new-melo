@@ -45,11 +45,13 @@ Medido em db_manaus (19/11/2026):
 Conteúdo:
 
 - **produtos** — `codprod, ref, descr (aplic_extendida), marca, codgpe, disp, dolar, curva`
-  + `precos{tipo: valor}` só dos `TIPOPRECO` presentes na carteira do vendedor.
+  + `precos{tipo: valor}` dos `TIPOPRECO` usados pelos clientes da filial.
   Fonte = a mesma da busca da Nova Venda (`src/lib/vendas/buscaProduto.ts`):
   `dbprod` + `dbmarcas` + `cad_armazem_produto` (disp = qtest − reservada, não bloqueado)
   + `dbformacaoprvenda` (minúscula, chave CODPROD+TIPOPRECO).
-- **clientes** (carteira = `dbclien.codvend` do vendedor) — dados de consulta
+- **clientes** — **todos** os da filial (desde 23/11; a busca online também acha qualquer
+  cliente). Os da carteira (`dbclien.codvend` do vendedor) vêm marcados e aparecem primeiro.
+  ~36 mil clientes, partes de 2.000 (~100 KB com gzip cada). Dados de consulta
   (nome, fantasia, documento, endereço, telefone, email), `prvenda`, `uf`, `claspgto`,
   `status`, `limite`, `debito`, crédito temporário, títulos vencidos (qtd e maior atraso).
 - **tabelas auxiliares** — formas de pagamento (`dbtipo_documento`), tabela de prazos
@@ -133,6 +135,31 @@ homologação.
   | Enviado (nº da venda) | só consultar |
   | Com pendência (motivo) | ajustar e reenviar com o mesmo uuid, ou excluir |
   | Erro | aguardar: o app tenta de novo sozinho |
+
+**Equivalentes (24/11/2026)**
+- Equivalente = mesmo grupo `dbprod.codgpe` (mesmo critério do F9 da Nova Venda), com o
+  disponível do armazém do vendedor. Servidor: `lib/vendaExterna/equivalentes.ts` e
+  `POST /api/externo/equivalentes`; sem internet: produtos do pacote (`fonteLocal.equivalentes`).
+- Busca: produto sem estoque mostra "N equivalentes disponíveis"; um toque inclui o equivalente.
+- Carrinho: item com quantidade maior que o disponível mostra "Ver equivalentes"; "Trocar" substitui mantendo a quantidade.
+- Pacote: parte `semestoque` leva só ref/descrição/marca/grupo dos produtos zerados que têm
+  equivalente com estoque (~25 mil em MANAUS). Assim, sem internet, a busca acha a referência e oferece a troca.
+- Envio: pendência de estoque lista os itens que faltam e se há equivalente. O aparelho atualiza o disponível do carrinho ao ajustar.
+
+**Orçamento (24/11/2026)**
+- Botão "Salvar como orçamento" no Resumo. Não exige forma de pagamento, não reserva estoque e não passa pelo crédito.
+- Vai pela mesma fila, com número provisório `ORC-<vendedor>-<seq>`. Envio: `POST /api/externo/enviar-orcamento`,
+  que grava pela rota do "Salvar Orçamento" da Nova Venda (`salvar-draft`, chamada por dentro).
+  - Validade: `tb_parametros.prazo_validade_orcamento` da filial.
+  - Não duplica: o uuid fica em `venda_externa_pedido`, com `payload._tipo = 'ORCAMENTO'`.
+- PDF: `POST /api/externo/orcamento-pdf` gera o mesmo PDF da Nova Venda, só de orçamento do próprio vendedor. Na tela: "PDF do orçamento" e depois "Compartilhar" (WhatsApp/e-mail) ou "Abrir".
+- Aba Pedidos: filtro Vendas/Orçamentos. Orçamento enviado tem "PDF" e "Virar venda", que carrega os itens numa venda nova; o orçamento continua.
+
+**Vendedor e operador (24/11/2026)** — mesma regra da Nova Venda V2
+- Vendedor = vendedor do cliente (`dbclien.codvend`). Se o cliente não tem vendedor, fica quem vendeu.
+- Operador = quem fez a venda (código de vendedor do passe), sempre, com `tele = 'S'`.
+- O `finalizarVenda` grava os dois em `dbvvend` (operador 'N' / 'S') e em cada item (`codvend` / `codoperador`).
+- O servidor aplica a regra no envio (`lib/vendaExterna/vendedorOperador.ts`). Não confia no aparelho, e vale também para pedidos feitos sem internet com dados antigos.
 
 **Configuração no servidor**
 - Defina `VENDA_EXTERNA_SECRET` com 16 caracteres ou mais no ambiente.

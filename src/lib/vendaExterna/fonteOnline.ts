@@ -5,6 +5,7 @@
 import api from '@/components/services/api';
 import { calcularIBSCBS } from '@/lib/calc_engine_ibs_cbs';
 import type { ClienteVenda, FormaPagamento, PrazoOpcao } from './regras';
+import { authHeader, lerSessao } from './sessao';
 
 export interface ProdutoBusca {
   codprod: string;
@@ -26,6 +27,8 @@ export interface FonteVenda {
   precos(codprods: string[], prvenda: string): Promise<Record<string, number>>;
   /** ST+IPI do item e campos fiscais (null = sem cálculo) */
   impostosItem(codprod: string, codcli: string, qtd: number, prunit: number): Promise<{ impostos: number; campos: any } | null>;
+  /** produtos COM estoque dos grupos de equivalência (dbprod.codgpe), maior estoque primeiro */
+  equivalentes(grupos: string[], prvenda: string, armId: number): Promise<ProdutoBusca[]>;
 }
 
 const n = (v: any) => Number(v || 0);
@@ -143,5 +146,19 @@ export const fonteOnline: FonteVenda = {
       if (!e?.response) throw e; // sem conexão: a fonte híbrida usa o pacote local
       return null;
     }
+  },
+
+  async equivalentes(grupos, prvenda, armId) {
+    const gs = Array.from(new Set(grupos.filter(Boolean)));
+    if (gs.length === 0) return [];
+    // fetch sem resposta (sem conexão) lança TypeError → a fonte híbrida usa o pacote
+    const r = await fetch('/api/externo/equivalentes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader(lerSessao()) },
+      body: JSON.stringify({ grupos: gs, prvenda: prvenda || '0', arm: armId || 1001 }),
+    });
+    if (!r.ok) throw Object.assign(new Error(`Falha ao buscar equivalentes (${r.status})`), { response: { status: r.status } });
+    const d = await r.json();
+    return (d.equivalentes || []) as ProdutoBusca[];
   },
 };

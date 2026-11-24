@@ -1,7 +1,8 @@
 /**
  * Baixa o pacote para trabalhar sem internet (/api/offline/pacote, em partes) e grava no
  * aparelho (IndexedDB). Pacote completo a cada sincronização (produto/preço/estoque não
- * têm "alterado em"); ~1 MB com gzip.
+ * têm "alterado em"). Leva: produtos com estoque (com preços), produtos sem estoque que
+ * têm equivalente com estoque (só para a busca), todos os clientes da filial, auxiliares.
  */
 import { gravarMeta, lerMeta, substituirTudo } from './idb';
 import { authHeader, type SessaoExterna } from './sessao';
@@ -15,6 +16,7 @@ export interface MetaPacote {
   tipos_preco: string[];
   total_produtos: number;
   total_clientes: number;
+  total_sem_estoque?: number;
 }
 
 export interface ProdutoLocal {
@@ -85,13 +87,55 @@ export async function baixarPacote(
     apos = d.proximo;
   }
 
-  // clientes da carteira
+  // produtos SEM estoque que têm equivalente com estoque: entram sem preço e com disp 0,
+  // para a busca sem internet achar a referência pedida e oferecer os equivalentes
+  apos = '';
+  let semEstoque = 0;
+  try {
+    for (let volta = 0; volta < 100; volta++) {
+      const d = await pegar(`${base}&parte=semestoque&limite=5000&apos=${encodeURIComponent(apos)}`, s);
+      for (const [codprod, ref, descr, marca, codgpe] of d.itens as any[]) {
+        produtos.push({
+          codprod,
+          ref: ref || '',
+          refnorm: soAlfanum(ref),
+          descr: descr || '',
+          marca: marca || '',
+          codgpe,
+          disp: 0,
+          dolar: '',
+          curva: '',
+          precos: {},
+          busca: normalizar(`${ref} ${descr} ${marca}`),
+        });
+        semEstoque++;
+      }
+      progresso?.(`Sem estoque com equivalente ${semEstoque.toLocaleString('pt-BR')}`, 80);
+      if (d.fim || !d.proximo) break;
+      apos = d.proximo;
+    }
+  } catch (e) {
+    console.warn('Venda Externa: índice de produtos sem estoque não baixado', e); // segue sem ele
+  }
+
+  // todos os clientes da filial (a busca online também acha qualquer um); os da carteira
+  // do vendedor vêm marcados. Partes de 2.000 (~1 MB cada sem gzip).
   const clientes: any[] = [];
   apos = '';
-  for (let volta = 0; volta < 100; volta++) {
-    const d = await pegar(`${base}&parte=clientes&limite=5000&apos=${encodeURIComponent(apos)}`, s);
-    clientes.push(...d.itens);
-    progresso?.(`Clientes ${clientes.length.toLocaleString('pt-BR')}`, 85);
+  for (let volta = 0; volta < 200; volta++) {
+    const d = await pegar(`${base}&parte=clientes&limite=2000&apos=${encodeURIComponent(apos)}`, s);
+    const colunas: string[] | undefined = d.colunas;
+    for (const linha of d.itens as any[]) {
+      const c: any = colunas ? Object.fromEntries(colunas.map((k, i) => [k, linha[i]])) : linha;
+      c.codcli = String(c.codcli || '').trim();
+      c.busca = normalizar(`${c.nome || ''} ${c.nomefant || ''} ${c.cidade || ''}`);
+      clientes.push(c);
+    }
+    const pct = meta.total_clientes ? Math.min(90, 80 + (clientes.length / meta.total_clientes) * 10) : 85;
+    progresso?.(
+      `Clientes ${clientes.length.toLocaleString('pt-BR')} de ${(meta.total_clientes || 0).toLocaleString('pt-BR')}`,
+      pct,
+    );
     if (d.fim || !d.proximo) break;
     apos = d.proximo;
   }

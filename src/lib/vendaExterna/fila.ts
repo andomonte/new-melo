@@ -1,5 +1,5 @@
 /**
- * Fila de pedidos da Venda Externa no aparelho (IndexedDB "pedidos").
+ * Fila de pedidos (e orçamentos) da Venda Externa no aparelho (IndexedDB "pedidos").
  * Todo pedido é guardado ANTES de enviar (com uuid); depois vai para
  * /api/externo/enviar-pedido, um por vez. Sem internet, fica "Aguardando envio" e sai
  * sozinho quando a conexão volta. O servidor não duplica (uuid).
@@ -15,6 +15,8 @@ export type SituacaoPedido = 'AGUARDANDO' | 'ENVIANDO' | 'ENVIADO' | 'PENDENCIA'
 
 export interface PedidoLocal {
   uuid: string;
+  /** VENDA (padrão) → /api/externo/enviar-pedido; ORCAMENTO → /api/externo/enviar-orcamento */
+  tipo?: 'VENDA' | 'ORCAMENTO';
   numero_local: string;
   login: string;
   codcli: string;
@@ -44,13 +46,15 @@ export function novoUuid(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-/** Número provisório do aparelho: EXT-<vendedor>-<sequência>. */
-export function proximoNumeroLocal(codvend: string): string {
-  const chave = `vendaExterna_seq_${codvend}`;
+/** Número provisório do aparelho: EXT-<vendedor>-<seq> (venda) ou ORC-<vendedor>-<seq> (orçamento). */
+export function proximoNumeroLocal(codvend: string, prefixo: 'EXT' | 'ORC' = 'EXT'): string {
+  const chave = prefixo === 'EXT' ? `vendaExterna_seq_${codvend}` : `vendaExterna_seq_orc_${codvend}`;
   const n = Number(localStorage.getItem(chave) || 0) + 1;
   localStorage.setItem(chave, String(n));
-  return `EXT-${codvend}-${String(n).padStart(4, '0')}`;
+  return `${prefixo}-${codvend}-${String(n).padStart(4, '0')}`;
 }
+
+export const ehOrcamento = (p?: Pick<PedidoLocal, 'tipo'> | null) => p?.tipo === 'ORCAMENTO';
 
 export async function listarPedidos(login: string): Promise<PedidoLocal[]> {
   const lista = await todos<PedidoLocal>('pedidos');
@@ -78,7 +82,7 @@ export async function enviarPedido(s: SessaoExterna, uuid: string): Promise<Pedi
   await guardarPedido({ ...p, status: 'ENVIANDO', mensagem: undefined });
   let final: PedidoLocal;
   try {
-    const r = await fetch('/api/externo/enviar-pedido', {
+    const r = await fetch(ehOrcamento(p) ? '/api/externo/enviar-orcamento' : '/api/externo/enviar-pedido', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader(s) },
       body: JSON.stringify({
@@ -96,9 +100,21 @@ export async function enviarPedido(s: SessaoExterna, uuid: string): Promise<Pedi
       /* */
     }
     if (r.ok && d.ok) {
-      final = { ...p, status: 'ENVIADO', codvenda: d.codvenda, nrovenda: d.nrovenda, mensagem: d.mensagem };
+      final = ehOrcamento(p)
+        ? { ...p, status: 'ENVIADO', codvenda: d.draft_id, nrovenda: d.draft_id, mensagem: d.mensagem }
+        : { ...p, status: 'ENVIADO', codvenda: d.codvenda, nrovenda: d.nrovenda, mensagem: d.mensagem };
     } else if (d.pendencia) {
       final = { ...p, status: 'PENDENCIA', mensagem: d.mensagem };
+      // falta de estoque: o servidor devolve o disponível de agora → o carrinho mostra
+      // "disponível só X" e o botão de equivalentes ao ajustar
+      if (d.faltas && p.rascunho?.itens) {
+        final.rascunho = {
+          ...p.rascunho,
+          itens: p.rascunho.itens.map((i: any) =>
+            d.faltas[i.codprod] !== undefined ? { ...i, disp: Number(d.faltas[i.codprod]) || 0 } : i,
+          ),
+        };
+      }
     } else if (r.status === 401) {
       final = { ...p, status: 'AGUARDANDO', mensagem: 'Sessão vencida: entre de novo para enviar.' };
     } else if (r.status === 409) {

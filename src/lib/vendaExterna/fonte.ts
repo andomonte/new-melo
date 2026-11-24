@@ -27,4 +27,5 @@ export const fonte: FonteVenda = {
   validarCredito: hibrida('validarCredito'),
   precos: hibrida('precos'),
   impostosItem: hibrida('impostosItem'),
+  equivalentes: hibrida('equivalentes'),
 };

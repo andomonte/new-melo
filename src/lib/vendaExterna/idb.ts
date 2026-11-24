@@ -1,7 +1,8 @@
 /**
  * Banco local do aparelho (IndexedDB "melo-externo") da Venda Externa.
- *   produtos  (codprod)  — pacote: produtos com estoque e preços das tabelas da carteira
- *   clientes  (codcli)   — pacote: carteira do vendedor
+ *   produtos  (codprod)  — pacote: produtos com estoque (com preços) + sem estoque que têm
+ *                          equivalente com estoque (disp 0, sem preço, só para a busca)
+ *   clientes  (codcli)   — pacote: todos os clientes da filial ("carteira" = do vendedor)
  *   meta      (chave)    — data do pacote, tabelas auxiliares (formas, prazos, ...)
  *   pedidos   (uuid)     — fila de pedidos feitos no aparelho
  * Sem dependências: API nativa do navegador.

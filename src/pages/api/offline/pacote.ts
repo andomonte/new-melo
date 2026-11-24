@@ -12,8 +12,12 @@ import { poolDaFilial } from '@/lib/estacaoDb';
  *   ?parte=meta                       vendedor, tipos de preço da carteira, contagens
  *   ?parte=produtos&apos=<codprod>&limite=5000&min=1&arm=1001
  *                                     produtos com disponível >= min (paginação por codprod)
- *   ?parte=clientes&apos=<codcli>&limite=5000
- *                                     carteira do vendedor (dbclien.codvend)
+ *   ?parte=clientes&apos=<codcli>&limite=2000
+ *                                     todos os clientes da filial (colunas + linhas);
+ *                                     "carteira" = do vendedor (dbclien.codvend)
+ *   ?parte=semestoque&apos=<codprod>&limite=5000&min=1&arm=1001
+ *                                     produtos SEM estoque cujo grupo de equivalência tem
+ *                                     produto com estoque (só ref/descr/marca/grupo)
  *   ?parte=aux                        formas de pagamento, prazos, transportes, promoções
  *
  * Mesmas fontes da Nova Venda V2 (src/lib/vendas/buscaProduto.ts, buscarCliente.ts).
@@ -21,6 +25,34 @@ import { poolDaFilial } from '@/lib/estacaoDb';
  */
 
 const LIMITE_MAX = 5000;
+
+/**
+ * Produtos sem estoque (disp < min) cujo grupo de equivalência tem produto com estoque.
+ * Termina num CTE "base" (colunas de dbprod). Parâmetros: $1 armazém, $2 estoque mínimo.
+ */
+const SQL_SEM_ESTOQUE_BASE = `
+  WITH d AS (
+    SELECT arp_codprod AS codprod, SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0)) AS disp
+      FROM cad_armazem_produto
+     WHERE arp_arm_id = $1 AND COALESCE(arp_bloqueado,'N') <> 'S'
+     GROUP BY arp_codprod),
+  gd AS (
+    SELECT DISTINCT p.codgpe FROM dbprod p JOIN d ON d.codprod = p.codprod
+     WHERE d.disp >= $2 AND NULLIF(btrim(p.codgpe),'') IS NOT NULL
+       AND COALESCE(p.inf,'') <> 'D' AND COALESCE(p.excluido,0) <> 1),
+  base AS (
+    SELECT p.* FROM dbprod p
+      JOIN gd ON gd.codgpe = p.codgpe
+      LEFT JOIN d ON d.codprod = p.codprod
+     WHERE COALESCE(d.disp,0) < $2
+       AND COALESCE(p.inf,'') <> 'D' AND COALESCE(p.excluido,0) <> 1)`;
+
+const COLUNAS_CLIENTE = [
+  'codcli', 'nome', 'nomefant', 'cpfcgc', 'tipo', 'ender', 'numero', 'bairro', 'cidade', 'uf', 'cep',
+  'complemento', 'contato', 'email', 'iest', 'prvenda', 'claspgto', 'status', 'atraso', 'limite',
+  'debito', 'bloquear_preco', 'tipocliente', 'credito_tmp', 'qtd_vencidos', 'valor_vencido',
+  'maior_atraso', 'codvend', 'carteira',
+];
 
 async function vendedorDaRequisicao(req: NextApiRequest) {
   // Venda Externa: passe do aparelho (Authorization: Bearer) — não depende do cookie
@@ -65,17 +97,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const pool = vend.doPasse ? poolDaFilial(vend.filial) : await getPgPoolFilial(req);
   const client = await pool.connect();
   try {
-    // tipos de preço (dbclien.prvenda) usados pela carteira do vendedor
+    // tipos de preço (dbclien.prvenda) usados pelos clientes da filial — o pacote leva
+    // todos os clientes, então o produto precisa do preço de cada tabela em uso
     const tiposR = await client.query(
       `SELECT DISTINCT COALESCE(NULLIF(btrim(prvenda::text), ''), '0') AS tipo
-         FROM dbclien WHERE codvend = $1 ORDER BY 1`,
-      [vend.codvend],
+         FROM dbclien ORDER BY 1`,
     );
     const tipos: string[] = tiposR.rows.map((r) => String(r.tipo));
     if (tipos.length === 0) tipos.push('0');
 
     if (parte === 'meta') {
-      const [prod, cli] = await Promise.all([
+      const [prod, cli, sem] = await Promise.all([
         client.query(
           `SELECT COUNT(*)::int AS n FROM (
              SELECT arp_codprod FROM cad_armazem_produto
@@ -84,7 +116,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              HAVING SUM(COALESCE(arp_qtest,0) - COALESCE(arp_qtest_reservada,0)) >= $2) x`,
           [arm, min],
         ),
-        client.query(`SELECT COUNT(*)::int AS n FROM dbclien WHERE codvend = $1`, [vend.codvend]),
+        client.query(`SELECT COUNT(*)::int AS n FROM dbclien`),
+        client.query(`${SQL_SEM_ESTOQUE_BASE} SELECT COUNT(*)::int AS n FROM base`, [arm, min]),
       ]);
       return res.status(200).json({
         gerado_em: new Date().toISOString(),
@@ -96,6 +129,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         tipos_preco: tipos,
         total_produtos: prod.rows[0].n,
         total_clientes: cli.rows[0].n,
+        total_sem_estoque: sem.rows[0].n,
         limite_por_parte: LIMITE_MAX,
       });
     }
@@ -158,10 +192,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    if (parte === 'semestoque') {
+      // Índice leve dos produtos SEM estoque cujo grupo de equivalência (dbprod.codgpe) tem
+      // algum produto COM estoque: sem internet o vendedor acha a referência pedida e o app
+      // oferece os equivalentes que estão no pacote. Sem preço (não dá para vender o zerado).
+      const r = await client.query(
+        `${SQL_SEM_ESTOQUE_BASE}
+         SELECT p.codprod, p.ref, COALESCE(NULLIF(btrim(p.aplic_extendida),''), p.descr) AS descr,
+                m.descr AS marca, p.codgpe
+           FROM base p JOIN dbmarcas m ON m.codmarca = p.codmarca
+          WHERE p.codprod > $3
+          ORDER BY p.codprod
+          LIMIT $4`,
+        [arm, min, apos, limite],
+      );
+      const itens = r.rows.map((p) => [p.codprod, p.ref, p.descr, p.marca, p.codgpe]);
+      const prox = r.rows.length === limite ? r.rows[r.rows.length - 1].codprod : null;
+      return res.status(200).json({ colunas: ['codprod', 'ref', 'descr', 'marca', 'codgpe'], itens, proximo: prox, fim: !prox });
+    }
+
     if (parte === 'clientes') {
+      // TODOS os clientes da filial (a busca online também acha qualquer cliente);
+      // "carteira" marca os do vendedor, que aparecem primeiro na busca do aparelho.
       const r = await client.query(
         `WITH c AS (
-           SELECT * FROM dbclien WHERE codvend = $1 AND codcli > $2 ORDER BY codcli LIMIT $3)
+           SELECT * FROM dbclien WHERE codcli > $2 ORDER BY codcli LIMIT $3)
          SELECT c.codcli, c.nome, c.nomefant, c.cpfcgc, c.tipo, c.ender, c.numero, c.bairro,
                 c.cidade, c.uf, c.cep, c.complemento, c.contato, c.email, c.iest,
                 COALESCE(NULLIF(btrim(c.prvenda::text), ''), '0') AS prvenda,
@@ -169,32 +224,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 COALESCE(ct.credito_tmp, 0) AS credito_tmp,
                 COALESCE(t.qtd_vencidos, 0) AS qtd_vencidos,
                 COALESCE(t.valor_vencido, 0) AS valor_vencido,
-                COALESCE(t.maior_atraso, 0) AS maior_atraso
+                COALESCE(t.maior_atraso, 0) AS maior_atraso,
+                c.codvend,
+                (btrim(COALESCE(c.codvend,'')) = btrim($1)) AS carteira
            FROM c
-           LEFT JOIN LATERAL (
-             SELECT SUM(GREATEST(COALESCE(limite,0) - COALESCE(limite_usado,0), 0)) AS credito_tmp
+           -- dbreceb tem ~2 mi de linhas e não tem índice por codcli: agrupa UMA vez para a
+           -- página inteira (LATERAL por cliente varria a tabela 2.000 vezes)
+           LEFT JOIN (
+             SELECT codcli, SUM(GREATEST(COALESCE(limite,0) - COALESCE(limite_usado,0), 0)) AS credito_tmp
                FROM dbclien_creditotmp
-              WHERE codcli = c.codcli AND COALESCE(status,'') <> 'F' AND datavencimento >= NOW()
-           ) ct ON true
-           LEFT JOIN LATERAL (
-             SELECT COUNT(*)::int AS qtd_vencidos, SUM(COALESCE(valor_pgto,0)) AS valor_vencido,
+              WHERE codcli IN (SELECT codcli FROM c)
+                AND COALESCE(status,'') <> 'F' AND datavencimento >= NOW()
+              GROUP BY codcli
+           ) ct ON ct.codcli = c.codcli
+           LEFT JOIN (
+             SELECT codcli, COUNT(*)::int AS qtd_vencidos, SUM(COALESCE(valor_pgto,0)) AS valor_vencido,
                     MAX(EXTRACT(DAY FROM NOW() - dt_venc))::int AS maior_atraso
                FROM dbreceb
-              WHERE codcli = c.codcli AND dt_venc < NOW()
+              WHERE codcli IN (SELECT codcli FROM c) AND dt_venc < NOW()
                 AND COALESCE(rec,'N') <> 'S' AND COALESCE(cancel,'N') <> 'S'
-           ) t ON true
+              GROUP BY codcli
+           ) t ON t.codcli = c.codcli
           ORDER BY c.codcli`,
         [vend.codvend, apos, limite],
       );
-      const itens = r.rows.map((x) => ({
-        ...x,
-        limite: Number(x.limite || 0),
-        debito: Number(x.debito || 0),
-        credito_tmp: Number(x.credito_tmp || 0),
-        valor_vencido: Number(x.valor_vencido || 0),
-      }));
-      const prox = itens.length === limite ? itens[itens.length - 1].codcli : null;
-      return res.status(200).json({ itens, proximo: prox, fim: !prox });
+      // formato compacto (colunas + linhas): ~metade do tamanho de uma lista de objetos
+      const numericas = new Set(['limite', 'debito', 'credito_tmp', 'valor_vencido']);
+      const itens = r.rows.map((x) =>
+        COLUNAS_CLIENTE.map((k) => {
+          const v = x[k];
+          if (numericas.has(k)) return Number(v || 0);
+          if (typeof v === 'string') return v.trim() || null;
+          return v ?? null;
+        }),
+      );
+      const prox = r.rows.length === limite ? r.rows[r.rows.length - 1].codcli : null;
+      return res.status(200).json({ colunas: COLUNAS_CLIENTE, itens, proximo: prox, fim: !prox });
     }
 
     if (parte === 'aux') {
@@ -219,7 +284,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    return res.status(400).json({ erro: 'Parte inválida. Use meta, produtos, clientes ou aux.' });
+    return res.status(400).json({ erro: 'Parte inválida. Use meta, produtos, semestoque, clientes ou aux.' });
   } catch (e: any) {
     console.error('Erro no pacote offline:', e);
     return res.status(500).json({ erro: 'Erro ao montar o pacote offline', detalhes: e.message });
