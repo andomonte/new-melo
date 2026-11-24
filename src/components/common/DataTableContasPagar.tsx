@@ -63,6 +63,9 @@ interface DataTableContasPagarProps {
   loading?: boolean;
   noDataMessage?: string;
   onFiltroChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
+  /** Soma de todos os registros do filtro, vinda do servidor (telas paginadas no servidor, ex.:
+   *  Contas a Receber) — linha "Total do filtro" abaixo do subtotal da página. */
+  totaisFiltro?: ({ qtd: number } & Record<string, number>) | null;
   colunasFiltro?: string[];
   /** Rótulos amigáveis por chave de coluna p/ o filtro avançado (ex.: { cod_receb: 'Número Título' })
    *  — deixa o "Selecionar campo" igual aos cabeçalhos do datatable. */
@@ -119,6 +122,7 @@ export default function DataTableContasPagar({
   initialFilters,
   statusFilterOptions,
   filtroLocal = false,
+  totaisFiltro,
   onFiltrosLocaisChange,
   onLimparFiltros,
   acoesOpcoes,
@@ -878,6 +882,7 @@ export default function DataTableContasPagar({
                   <LinhaSubtotal
                     linhas={linhasVisiveis}
                     colunas={ordemColunas.filter((h) => colunasVisiveis.includes(h) && headers.includes(h))}
+                    totalFiltro={filtroLocal ? null : totaisFiltro}
                   />
                   </>
                   );

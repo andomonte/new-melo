@@ -87,6 +87,8 @@ export interface Paginacao {
 export interface RespostaContasReceber {
   contas_receber: ContaReceber[];
   paginacao: Paginacao;
+  /** Soma de todos os títulos do filtro (não só a página): { qtd, 'Valor Original', 'Valor Recebido' } */
+  totais_filtro?: { qtd: number } & Record<string, number>;
   resumo?: {
     total_a_receber: number;
     total_recebido: number;
@@ -165,6 +167,7 @@ export interface NovaContaReceberData {
 export function useContasReceber() {
   const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
   const [paginacao, setPaginacao] = useState<Paginacao | null>(null);
+  const [totaisFiltro, setTotaisFiltro] = useState<({ qtd: number } & Record<string, number>) | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -195,6 +198,7 @@ export function useContasReceber() {
 
       setContasReceber(data.contas_receber);
       setPaginacao(data.paginacao);
+      setTotaisFiltro(data.totais_filtro ?? null);
 
     } catch (error: any) {
       console.error('❌ Erro ao consultar contas a receber:', error);
@@ -409,6 +413,7 @@ export function useContasReceber() {
   return {
     contasReceber,
     paginacao,
+    totaisFiltro,
     carregando,
     erro,
     consultarContasReceber,

@@ -74,6 +74,7 @@ export default function ContasAReceber() {
   const {
     contasReceber,
     paginacao,
+    totaisFiltro,
     carregando,
     erro,
     consultarContasReceber,
@@ -781,7 +782,6 @@ export default function ContasAReceber() {
       (_linha as any)._valores = {
         'Valor Original': Number(conta.valor_original) || 0,
         'Valor Recebido': Number(conta.valor_recebido) || 0,
-        'Juros': Number((conta as any).valor_juros) || 0,
       };
       return _linha;
     });
@@ -1984,6 +1984,7 @@ export default function ContasAReceber() {
             loading={carregando}
             noDataMessage="Nenhum título a receber encontrado."
             onFiltroChange={handleFiltroAvancado}
+            totaisFiltro={totaisFiltro}
             onExportarExcel={handleExportarDireto}
             acoesOpcoes={[
               { label: 'Selecionar tudo', onClick: selecionarTodosRecebiveis },

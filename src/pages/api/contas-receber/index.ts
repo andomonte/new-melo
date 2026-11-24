@@ -343,6 +343,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       WITH contas_com_status AS (
         SELECT
           r.cod_receb,
+          r.valor_pgto AS valor_original,
+          COALESCE(r.valor_rec, 0) AS valor_recebido,
           CASE
             WHEN r.cancel = 'S' THEN 'cancelado'
             -- Quitado: rec='S' OU o PRINCIPAL recebido (valor_rec - juros) já cobre o título.
@@ -368,7 +370,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ) jr ON TRUE
         WHERE 1=1 ${whereClause}
       )
-      SELECT COUNT(*) as total
+      SELECT COUNT(*) as total,
+             COALESCE(SUM(valor_original), 0) AS soma_original,
+             COALESCE(SUM(valor_recebido), 0) AS soma_recebido
       FROM contas_com_status
       WHERE 1=1
       ${statusFilter ? `AND status = '${statusFilter}'` : ''}
@@ -450,6 +454,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       contas_receber: contasFormatadas,
+      // soma de TODOS os títulos do filtro (não só a página) — linha de total da tabela
+      totais_filtro: {
+        qtd: total,
+        'Valor Original': parseFloat(countResult.rows[0].soma_original || 0),
+        'Valor Recebido': parseFloat(countResult.rows[0].soma_recebido || 0),
+      },
       paginacao: {
         pagina: parseInt(page as string),
         limite: parseInt(limit as string),

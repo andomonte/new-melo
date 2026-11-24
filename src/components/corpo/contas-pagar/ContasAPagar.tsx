@@ -322,6 +322,14 @@ export function ContasAPagar() {
   const [filtroDataInicio, setFiltroDataInicio] = useState('');
   const [filtroDataFim, setFiltroDataFim] = useState('');
   const [termoBusca, setTermoBusca] = useState('');
+  // Filtro digitado nas colunas OU busca geral ativos → a tabela recebe TODOS os títulos do
+  // período (não só a página), para o filtro e o subtotal valerem sobre tudo. Sem filtro,
+  // volta à paginação normal.
+  const filtroColunaAtivo =
+    filtrosColunaRelatorio.some((f) => String(f?.valor ?? '').trim() !== '') || termoBusca.trim() !== '';
+  const LIMITE_TODOS = 100000;
+  const paginaConsulta = filtroColunaAtivo ? 1 : paginaAtual;
+  const limiteConsulta = filtroColunaAtivo ? LIMITE_TODOS : limite;
 
   // Estados para filtro de range de data
   const [rangeDataAtivo, setRangeDataAtivoLocal] = useState<'semana' | 'mes' | 'personalizado' | 'todos'>('semana');
@@ -720,7 +728,18 @@ export function ContasAPagar() {
 
   // Converter paginação para formato Meta (usa paginação local quando busca múltiplos status)
   const paginacaoAtual = paginacaoLocal || paginacao;
-  const meta: Meta = {
+  // Com filtro de coluna: todos os títulos numa página só (o DataTable filtra e soma sobre eles)
+  const contasNaTabela: ContaPagar[] = filtroColunaAtivo
+    ? (todasContasConsolidadas.length > 0 && !filtros.status ? todasContasConsolidadas : contasPagar)
+    : contasPagar;
+  const meta: Meta = filtroColunaAtivo ? {
+    total: contasNaTabela.length,
+    lastPage: 1,
+    currentPage: 1,
+    perPage: limite,
+    to: contasNaTabela.length,
+    from: contasNaTabela.length ? 1 : 0,
+  } : {
     total: paginacaoAtual?.total || 0,
     lastPage: paginacaoAtual?.totalPaginas || 1,
     currentPage: paginaAtual,
@@ -765,9 +784,20 @@ export function ContasAPagar() {
   // Efeito para buscar dados quando filtros mudam (só após preferências carregadas)
   useEffect(() => {
     if (!prefsProntas) return;
-    consultarContasPagar(paginaAtual, limite, filtros);
+    consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
     buscarResumo(filtros);
   }, [filtros, prefsProntas]);
+
+  // Ligou/desligou o filtro de coluna com uma situação escolhida (consulta paginada na API):
+  // busca de novo — tudo, ou de volta só a página.
+  const filtroColunaAtivoAnterior = useRef(filtroColunaAtivo);
+  useEffect(() => {
+    if (filtroColunaAtivoAnterior.current === filtroColunaAtivo) return;
+    filtroColunaAtivoAnterior.current = filtroColunaAtivo;
+    if (!prefsProntas) return;
+    setPaginaAtual(1);
+    if (filtros.status) consultarContasPagar(1, filtroColunaAtivo ? LIMITE_TODOS : limite, filtros);
+  }, [filtroColunaAtivo]);
 
   // Efeito para aplicar paginação local quando página ou limite mudam (sem refazer busca)
   useEffect(() => {
@@ -782,7 +812,7 @@ export function ContasAPagar() {
       setContasPagar(todasContasConsolidadas.slice(inicio, fim));
     } else if (filtros.status) {
       // Status específico, buscar via API
-      consultarContasPagar(paginaAtual, limite, filtros);
+      consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
     }
   }, [paginaAtual, limite]);
 
@@ -1124,7 +1154,7 @@ export function ContasAPagar() {
     toast.dismiss('pagamento-lote');
 
     // Atualizar lista de contas
-    consultarContasPagar(paginaAtual, limite, filtros);
+    consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
 
     // Fechar modal de pagamento e abrir modal de resultado
     setModalPagamentoLoteAberto(false);
@@ -1363,7 +1393,7 @@ export function ContasAPagar() {
 
   // Preparar dados no formato que o DataTable espera
   const prepararDadosTabela = () => {
-    return contasPagar.map(conta => {
+    return contasNaTabela.map(conta => {
       // "Vencido" só quando a DATA de vencimento é ANTERIOR a hoje. Compara pela DATA
       // (string yyyy-mm-dd), MESMA base do formatarData (que faz split('T')[0]). Usar
       // new Date() convertia p/ fuso local e, com dt_venc em UTC (…T00:00Z), marcava
@@ -2199,7 +2229,7 @@ export function ContasAPagar() {
       await abrirModalHistorico(modais.contaSelecionada);
       
       // Recarregar lista de contas
-      await consultarContasPagar(paginaAtual, limite, filtros);
+      await consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
       
       modais.setModalCancelarPagamentoAberto(false);
       setPagamentoParaCancelar(null);
@@ -2312,7 +2342,7 @@ export function ContasAPagar() {
       setContaSelecionadaPgto('');
       setObsPagamento('');
       
-      consultarContasPagar(paginaAtual, limite, filtros);
+      consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
     } catch (error: any) {
       toast.error(error.message || 'Erro ao marcar conta como paga', {
         position: 'top-right',
@@ -2362,7 +2392,7 @@ export function ContasAPagar() {
       });
 
       modais.setModalEditarAberto(false);
-      consultarContasPagar(paginaAtual, limite, filtros);
+      consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
     } catch (error: any) {
       toast.error(error.message || 'Erro ao editar conta', {
         position: 'top-right',
@@ -2381,7 +2411,7 @@ export function ContasAPagar() {
       });
 
       modais.setModalCancelarAberto(false);
-      consultarContasPagar(paginaAtual, limite, filtros);
+      consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
     } catch (error: any) {
       toast.error(error.message || 'Erro ao cancelar conta', {
         position: 'top-right',
@@ -2535,7 +2565,7 @@ export function ContasAPagar() {
           toast.success('Conta criada com sucesso!', { position: 'top-right' });
         }
 
-        consultarContasPagar(paginaAtual, limite, filtros);
+        consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
       }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao criar conta', {
@@ -4768,7 +4798,7 @@ export function ContasAPagar() {
         onCriado={async (codPgtos) => {
           // Atualiza a lista e já abre o Pagamento em Lote com os pedágios criados
           // pré-selecionados — o usuário decide quais dar baixa (pode não pagar algum hoje).
-          await consultarContasPagar(paginaAtual, limite, filtros);
+          await consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
           setTitulosSelecionados(new Set(codPgtos));
           setModalPagamentoLoteAberto(true);
         }}
@@ -5533,7 +5563,7 @@ export function ContasAPagar() {
         isOpen={modalConciliacaoAberto}
         onClose={() => setModalConciliacaoAberto(false)}
         usuario={user?.usuario}
-        onBaixaConcluida={() => consultarContasPagar(paginaAtual, limite, filtros)}
+        onBaixaConcluida={() => consultarContasPagar(paginaConsulta, limiteConsulta, filtros)}
       />
 
       {/* Consulta Avançada do Financeiro — Pagamentos (pivô por conta financeira × mês) */}
