@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { COF_FRETE_NACIONAL, proximoCodPgto } from '@/lib/compras/tituloCompras';
 import { Pool } from 'pg';
 
 // Pool global compartilhado
@@ -111,17 +112,13 @@ export default async function handler(
       // 3. Gerar título diretamente na tabela dbpgto
       console.log('💰 [Gerar Conta CT-e] Gerando título diretamente...');
 
-      // Gerar código do pagamento
-      const maxCodResult = await client.query(
-        'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM dbpgto'
-      );
-      const nextCodPgto = maxCodResult.rows[0].next_cod.toString().padStart(9, '0');
-
-      // Gerar pag_cof_id
-      const maxPagCofResult = await client.query(
-        'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM dbpgto'
-      );
-      const nextPagCofId = maxPagCofResult.rows[0].next_pag_cof_id;
+      // Título + vínculos com as CT-e numa transação só (antes não havia: um erro no meio
+      // deixava título sem CT-e; o finally desfaz se não chegar ao COMMIT).
+      await client.query('BEGIN');
+      // Código do título com trava (não repete entre usuários simultâneos) e conta financeira
+      // 7 FRETE NACIONAL. Antes: MAX(pag_cof_id)+1 → conta errada/inexistente (roteiro 24/11/2026).
+      const nextCodPgto = await proximoCodPgto(client);
+      const nextPagCofId = COF_FRETE_NACIONAL;
 
       // Inserir título na dbpgto
       const tituloObservacao = obs || `Pagamento de ${notas.length} CT-e(s): ${cteResult.rows.map(n => n.nrocon).join(', ')}`;
@@ -170,6 +167,7 @@ export default async function handler(
           [nextCodPgto, cte.codtransp, cte.nrocon]
         );
       }
+      await client.query('COMMIT');
 
       console.log('💰 [Gerar Conta CT-e] Título gerado com sucesso:', nextCodPgto);
 
@@ -189,6 +187,8 @@ export default async function handler(
       });
 
     } finally {
+      // se parou no meio (erro), desfaz; depois do COMMIT o ROLLBACK não faz nada
+      await client.query('ROLLBACK').catch(() => undefined);
       client.release();
     }
 

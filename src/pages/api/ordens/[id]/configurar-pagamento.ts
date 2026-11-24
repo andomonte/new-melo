@@ -3,6 +3,14 @@ import { getPgPool } from '@/lib/pgClient';
 import { parseCookies } from 'nookies';
 import { z } from 'zod';
 import { registrarHistoricoOrdem } from '@/lib/compras/ordemHistoricoHelper';
+import {
+  COF_ADIANTAMENTO,
+  codigoBanco,
+  contaFinanceiraFornecedor,
+  duplicataOrdem,
+  proximoCodPgto,
+  ufDaFilial,
+} from '@/lib/compras/tituloCompras';
 
 const parcelaSchema = z.object({
   numero_parcela: z.number(),
@@ -185,26 +193,21 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
     }
 
     // 5. Criar registros em Contas a Pagar (dbpgto)
-    // Buscar próximo código de pagamento (apenas códigos numéricos) e próximo pag_cof_id
-    const lastPgtoResult = await client.query(
-      `SELECT
-        COALESCE(MAX(CAST(cod_pgto AS INTEGER)), 0) + 1 as proximo_cod,
-        COALESCE(MAX(pag_cof_id), 0) + 1 as proximo_pag_cof_id
-      FROM dbpgto
-      WHERE cod_pgto ~ '^[0-9]+$'`
-    );
-
-    let proximoCodPgto = lastPgtoResult.rows[0]?.proximo_cod || 1;
-    let proximoPagCofId = lastPgtoResult.rows[0]?.proximo_pag_cof_id || 1;
-
-    // Calcular total de parcelas incluindo entrada
-    const totalParcelas = todasParcelas.length;
-
-    // Preparar ordem_compra como JSON (para futuro suporte a múltiplas ordens)
+    // Roteiro 24/11/2026 (docs/saldo-fornecedor/roteiro-adiantamento-nfe-credito.md):
+    //  - conta financeira: antecipado (parcela 0) = 4 ADIANTAMENTO A FORNECEDOR; demais pela
+    //    regra do fornecedor (D1). Antes: MAX(pag_cof_id)+1 → conta errada/inexistente.
+    //  - cod_pgto com trava; duplicata OC{nº da ordem}/{parcela}/{total}.
+    //  - banco pelo código (dbbanco); conta bancária/centro de custo em branco (o Financeiro
+    //    escolhe ao pagar) — antes iam fixos '0001' (DESC.COMISSAO / EXTRA).
     const ordemCompraJson = JSON.stringify([orcId]);
+    const parcelasOrdenadas = [...todasParcelas].sort((a, b) => a.numero_parcela - b.numero_parcela);
+    const totalTitulos = parcelasOrdenadas.length;
+    const bancoCodigo = await codigoBanco(client, banco);
+    const cofFornecedor = await contaFinanceiraFornecedor(client, ordemCompra.for_cod, { ufFilial: ufDaFilial(filial) });
 
-    for (const parcela of todasParcelas) {
-      const codPgto = proximoCodPgto.toString().padStart(9, '0'); // Padrão: 9 dígitos com zeros à esquerda (ex: 000027634)
+    for (const [idx, parcela] of parcelasOrdenadas.entries()) {
+      const codPgto = await proximoCodPgto(client);
+      const pagCofId = parcela.numero_parcela === 0 ? COF_ADIANTAMENTO : cofFornecedor;
 
       // Determinar label da parcela
       let labelParcela = '';
@@ -222,16 +225,9 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
         labelParcela = `Parcela ${parcela.numero_parcela}/${parcelasNormais} - ${tipoDocumento}`;
       }
 
-      // Gerar nro_dup no formato OC{cod_pgto}/{parcela}
-      // cod_pgto SEM zeros à esquerda, parcela COM zeros (2 dígitos)
-      // Para pagamento antecipado único (parcela 0 sem outras parcelas), usar 01 em vez de 00
-      const codPgtoSemZeros = parseInt(codPgto, 10).toString();
-      let numeroParcelaExibicao = parcela.numero_parcela;
-      if (parcela.numero_parcela === 0 && parcelasNormais === 0) {
-        // Pagamento antecipado único - mostrar como parcela 1
-        numeroParcelaExibicao = 1;
-      }
-      const nroDup = `OC${codPgtoSemZeros}/${String(numeroParcelaExibicao).padStart(2, '0')}`;
+      // Duplicata: OC{nº da ordem}/{posição}/{total} — antecipado único = OC{orc}/1/1;
+      // entrada + 2 parcelas = /1/3 (entrada), /2/3, /3/3.
+      const nroDup = duplicataOrdem(orcId, idx + 1, totalTitulos);
 
       // Inserir em dbpgto (conta a pagar)
       await client.query(
@@ -241,10 +237,10 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
           codcomprador, valor_juros, pag_cof_id, banco, ordem_compra, nro_dup)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
         [
-          codPgto,                                                     // cod_pgto (9 zeros à esquerda)
+          codPgto,                                                     // cod_pgto (9 dígitos, com trava)
           ordemCompra.for_cod,                                        // cod_credor
-          '0001',                                                     // cod_conta (padrão)
-          '0001',                                                     // cod_ccusto (padrão)
+          null,                                                       // cod_conta (Financeiro escolhe ao pagar)
+          null,                                                       // cod_ccusto
           parcela.data_vencimento,                                    // dt_venc
           new Date(),                                                 // dt_emissao
           parcela.valor_parcela,                                      // valor_pgto
@@ -257,10 +253,10 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
           'N',                                                        // cancel (não cancelado)
           ordemCompra.req_codcomprador || '000',                      // codcomprador (da requisição)
           0,                                                          // valor_juros
-          proximoPagCofId,                                            // pag_cof_id
-          banco,                                                      // banco
+          pagCofId,                                                   // pag_cof_id (conta financeira)
+          bancoCodigo,                                                // banco (código dbbanco)
           ordemCompraJson,                                            // ordem_compra (JSON com lista de ordens)
-          nroDup                                                      // nro_dup (formato: OC{orc_id}/{parcela})
+          nroDup                                                      // nro_dup OC{orc_id}/{parcela}/{total}
         ]
       );
 
@@ -278,8 +274,6 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
           'PENDENTE'
         ]
       );
-
-      proximoCodPgto++;
     }
 
     // Registrar histórico da configuração de pagamento

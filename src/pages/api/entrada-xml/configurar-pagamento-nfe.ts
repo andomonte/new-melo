@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
 import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
+import { codigoBanco, contaFinanceiraFornecedor, duplicataNota, proximoCodPgto, ufDaFilial } from '@/lib/compras/tituloCompras';
 
 const parcelaSchema = z.object({
   numero_parcela: z.number(),
@@ -356,19 +357,16 @@ export default async function handler(
     // Preparar JSON das ordens para o campo ordem_compra
     const ordemCompraJson = JSON.stringify(todasOrdensAssociadas);
 
-    // 7. Buscar próximo código de pagamento
-    const lastPgtoResult = await client.query(`
-      SELECT COALESCE(MAX(CAST(cod_pgto AS INTEGER)), 0) + 1 as proximo_cod,
-             COALESCE(MAX(pag_cof_id), 0) + 1 as proximo_pag_cof_id
-      FROM dbpgto
-      WHERE cod_pgto ~ '^[0-9]+$'
-    `);
-
-    let proximoCodPgto = lastPgtoResult.rows[0]?.proximo_cod || 1;
-    let proximoPagCofId = lastPgtoResult.rows[0]?.proximo_pag_cof_id || 1;
-
-    console.log(`🔢 Próximo código de pagamento: ${proximoCodPgto}`);
-    console.log(`🔢 Próximo pag_cof_id: ${proximoPagCofId}\n`);
+    // 7. Conta financeira, banco e código dos títulos (roteiro 24/11/2026, regra D1):
+    //    conta pelo fornecedor (1 importação/exterior · 3 fora do estado · 2 local) — antes
+    //    era MAX(pag_cof_id)+1 (conta errada/inexistente); cod_pgto com trava; banco pelo código.
+    const natopRes = await client.query(`SELECT natop, nnf FROM dbnfe_ent WHERE codnfe_ent = $1`, [nfeId]);
+    const numeroNF = String(natopRes.rows[0]?.nnf || '').trim() || String(nfeId).replace(/^0+/, '');
+    const ehImportacao = natopRes.rows[0]?.natop === 'ENTRADA_IMPORTACAO';
+    const ufFilial = ufDaFilial(String(process.env.DB_SCHEMA || 'db_manaus').replace(/^db_/, ''));
+    const pagCofIdNfe = await contaFinanceiraFornecedor(client, fornecedorCod, { ufFilial, importacao: ehImportacao });
+    const bancoCodigo = await codigoBanco(client, banco);
+    console.log(`🔢 Conta financeira das parcelas: ${pagCofIdNfe} · banco ${bancoCodigo}\n`);
 
     // 8. Criar registros em dbpgto APENAS para parcelas > 0
     // Parcela 0 (ANTECIPADO) JÁ EXISTE - foi criada no pagamento antecipado da ordem
@@ -384,21 +382,16 @@ export default async function handler(
 
     console.log(`📝 Criando ${parcelasNormais.length} parcela(s) em dbpgto (parcela 0 já existe)\n`);
 
-    // IMPORTANTE: Usar o MESMO prefixo base para todas as parcelas
-    // Isso permite que a listagem de contas a pagar identifique corretamente "X de Y"
-    const codPgtoBase = proximoCodPgto.toString();
-
     for (const parcela of parcelasNormais) {
-      // cod_pgto com 9 dígitos (zeros à esquerda) - igual ao pagamento antecipado
-      const codPgto = proximoCodPgto.toString().padStart(9, '0');
+      // cod_pgto com 9 dígitos, com trava (não repete entre usuários simultâneos)
+      const codPgto = await proximoCodPgto(client);
 
       // Label da parcela
       const labelParcela = `Parcela ${parcela.numero_parcela}/${totalParcelasNormais} - ${parcela.tipo_documento}`;
 
-      // Gerar nro_dup no formato OC{base}/{parcela}
-      // Usar o MESMO prefixo (codPgtoBase) para todas as parcelas do mesmo pagamento
-      // parcela COM zeros (2 dígitos)
-      const nroDup = `OC${codPgtoBase}/${String(parcela.numero_parcela).padStart(2, '0')}`;
+      // Duplicata (decisão D2, 24/11/2026): {duplicata do XML}/{parcela}/{total}.
+      // Se o XML traz só a sequência ("001") ou nada, usa o nº da NF: NF 78239 → 78239/1/2, 78239/2/2.
+      const nroDup = duplicataNota(parcela.numero_duplicata, numeroNF, parcela.numero_parcela, totalParcelasNormais);
 
       console.log(`💳 Criando parcela ${parcela.numero_parcela}:`);
       console.log(`   cod_pgto: ${codPgto}`);
@@ -435,8 +428,8 @@ export default async function handler(
         'F',                                                        // tipo (F = Fornecedor)
         nfeId,                                                      // nro_nf
         nroDup,                                                     // nro_dup (formato: OC{orc_id}/{parcela})
-        proximoPagCofId,                                            // pag_cof_id
-        banco,                                                      // banco
+        pagCofIdNfe,                                                // pag_cof_id (conta financeira, regra D1)
+        bancoCodigo,                                                // banco (código dbbanco)
         ordemCompraJson,                                            // ordem_compra (JSON com lista de ordens)
         xmlNf || null                                               // xml_nf
       ]);
@@ -474,7 +467,6 @@ export default async function handler(
       });
       parcelasCriadas++;
       valorTotalCriado += parcela.valor_parcela;
-      proximoCodPgto++;
     }
 
     // 8.1 EXCEDENTE tratado (spec §5.2):

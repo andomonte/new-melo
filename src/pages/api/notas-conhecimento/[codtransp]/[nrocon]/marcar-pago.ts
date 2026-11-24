@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { COF_FRETE_NACIONAL, proximoCodPgto } from '@/lib/compras/tituloCompras';
 import { getPgPool } from '@/lib/pg';
 
 export default async function handler(
@@ -53,15 +54,10 @@ export default async function handler(
     }
 
     // 2. Criar registro na tabela dbpgto
-    const maxCodResult = await client.query(
-      'SELECT COALESCE(MAX(cod_pgto::integer), 0) + 1 as next_cod FROM dbpgto'
-    );
-    const nextCodPgto = maxCodResult.rows[0].next_cod.toString().padStart(9, '0');
-
-    const maxPagCofResult = await client.query(
-      'SELECT COALESCE(MAX(pag_cof_id), 0) + 1 as next_pag_cof_id FROM dbpgto'
-    );
-    const nextPagCofId = maxPagCofResult.rows[0].next_pag_cof_id;
+    // Código do título com trava e conta financeira 7 FRETE NACIONAL
+    // (antes: MAX(pag_cof_id)+1 → conta errada/inexistente; roteiro 24/11/2026)
+    const nextCodPgto = await proximoCodPgto(client);
+    const nextPagCofId = COF_FRETE_NACIONAL;
 
     // Inserir pagamento em dbpgto
     await client.query(

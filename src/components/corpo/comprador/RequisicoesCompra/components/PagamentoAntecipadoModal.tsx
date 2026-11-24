@@ -48,6 +48,29 @@ export const PagamentoAntecipadoModal: React.FC<
     }
   }, [isOpen, cobrancaJaGerada, ordem.orc_valor_total]);
 
+  // Já configurado: mostra o que foi SALVO (antes abria com 0,00 e sem vencimento).
+  useEffect(() => {
+    if (!isOpen || !cobrancaJaGerada) return;
+    let vivo = true;
+    api
+      .get(`/api/ordens/${ordem.orc_id}/parcelas-pagamento`)
+      .then((r) => {
+        if (!vivo) return;
+        const cfg = r.data?.configuracao;
+        const p0 = (cfg?.parcelas || []).find((p: any) => Number(p.numero_parcela) === 0) || cfg?.parcelas?.[0];
+        if (cfg?.tipoDocumento) setTipoDocumento(cfg.tipoDocumento);
+        const valor = Number(p0?.valor_parcela ?? cfg?.valorEntrada ?? 0);
+        setValorEntrada(valor > 0 ? mascaraInputBRL(String(Math.round(valor * 100))) : '');
+        // "AAAA-MM-DD" → data local (new Date("AAAA-MM-DD") volta um dia no fuso de Manaus)
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(p0?.data_vencimento || ''));
+        setDataVencimento(m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [isOpen, cobrancaJaGerada, ordem.orc_id]);
+
   // Data mínima: amanhã (pelo menos 1 dia após hoje)
   const getDataMinima = () => {
     const amanha = new Date();

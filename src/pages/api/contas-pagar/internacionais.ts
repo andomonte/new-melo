@@ -351,7 +351,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const contasFormatadas = await Promise.all(result.rows.map(async row => {
             // Extrair número da parcela do campo nro_dup (formato: "base/01", "base/02")
             let parcela_atual = null;
-            if (row.nro_dup && row.nro_dup.includes('/')) {
+            // Formato novo do Compras: ".../{parcela}/{total}" — lê direto
+            const pt = row.nro_dup ? /\/(\d+)\/(\d+)$/.exec(row.nro_dup) : null;
+            if (pt) {
+                parcela_atual = `${parseInt(pt[1], 10)} de ${parseInt(pt[2], 10)}`;
+            } else if (row.nro_dup && row.nro_dup.includes('/')) {
                 const partes = row.nro_dup.split('/');
                 const base = partes[0]; // base do nro_dup
                 const numParcela = parseInt(partes[1]); // "01" -> 1

@@ -105,6 +105,10 @@ function buildQuery(
         p.cod_pgto,
         p.nro_dup,
         CASE
+          -- formato novo do Compras ".../{parcela}/{total}": lê direto
+          WHEN p.nro_dup ~ '/[0-9]+/[0-9]+$' THEN
+            (substring(p.nro_dup from '/([0-9]+)/[0-9]+$')::int)::text || ' de ' ||
+            (substring(p.nro_dup from '/([0-9]+)$')::int)::text
           WHEN p.nro_dup LIKE '%/%' AND split_part(p.nro_dup, '/', 2) ~ '^[0-9]+$' THEN
             (split_part(p.nro_dup, '/', 2)::int)::text || ' de ' ||
             (SELECT COUNT(*) FROM dbpgto pp WHERE pp.nro_dup LIKE split_part(p.nro_dup, '/', 1) || '/%')::text
