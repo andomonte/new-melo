@@ -96,8 +96,8 @@ export default function CreditoFornecedor() {
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
-  const [aba, setAba] = useState<'creditos' | 'historico' | 'filiais'>('creditos');
-  const [usarAberto, setUsarAberto] = useState(false);
+  const [aba, setAba] = useState<'titulos' | 'creditos' | 'historico' | 'filiais'>('titulos');
+  const [versaoTitulos, setVersaoTitulos] = useState(0); // recarrega a aba de títulos após baixa/estorno
   const [estorno, setEstorno] = useState<Uso | null>(null);
 
   const carregarLista = useCallback(async (q = busca, t = todos) => {
@@ -151,6 +151,7 @@ export default function CreditoFornecedor() {
   const nomeSel = grupoSel?.nome || detalhe?.credores?.[0]?.nome || selecionado || '';
 
   const recarregarTudo = async () => {
+    setVersaoTitulos((v) => v + 1);
     await carregarLista();
     if (selecionado) await carregarDetalhe(selecionado);
   };
@@ -226,7 +227,7 @@ export default function CreditoFornecedor() {
               {grupos.map((g) => (
                 <tr
                   key={g.grupo_key}
-                  onClick={() => { setSelecionado(g.grupo_key); setAba('creditos'); }}
+                  onClick={() => { setSelecionado(g.grupo_key); setAba('titulos'); }}
                   className={`cursor-pointer border-t border-gray-100 dark:border-zinc-700 hover:bg-blue-50 dark:hover:bg-zinc-700/60 ${selecionado === g.grupo_key ? 'bg-blue-100 dark:bg-blue-900/40' : ''}`}
                 >
                   <td className={`${td} max-w-[260px] truncate`} title={g.nome || ''}>
@@ -260,13 +261,13 @@ export default function CreditoFornecedor() {
                   <div className="text-xs text-gray-500">Saldo de crédito</div>
                   <div className="text-xl font-bold text-green-700 dark:text-green-400">{moeda(detalhe?.saldo)}</div>
                 </div>
-                <button className={botaoPrimario} disabled={!detalhe || (detalhe.saldo || 0) <= 0.005} onClick={() => setUsarAberto(true)}>
-                  Usar crédito
-                </button>
               </div>
 
               <div className="flex gap-1 border-b border-gray-200 px-3 dark:border-zinc-700">
-                {([['creditos', 'Créditos'], ['historico', 'Histórico'], ['filiais', 'Filiais']] as const).map(([k, rot]) => (
+                {([
+                  ['titulos', `Títulos em aberto${grupoSel ? ` (${grupoSel.qtd_titulos_abertos})` : ''}`],
+                  ['creditos', 'Créditos'], ['historico', 'Histórico'], ['filiais', 'Filiais'],
+                ] as const).map(([k, rot]) => (
                   <button
                     key={k}
                     onClick={() => setAba(k)}
@@ -280,6 +281,15 @@ export default function CreditoFornecedor() {
               <div className="min-h-0 flex-1 overflow-auto">
                 {carregandoDetalhe && (
                   <div className="flex items-center gap-2 p-4 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando…</div>
+                )}
+                {detalhe && !carregandoDetalhe && aba === 'titulos' && (
+                  <PainelUsarCredito
+                    key={`${detalhe.grupo}-${versaoTitulos}`}
+                    grupo={detalhe.grupo}
+                    saldo={detalhe.saldo}
+                    usuario={usuario}
+                    onConcluido={recarregarTudo}
+                  />
                 )}
                 {detalhe && !carregandoDetalhe && aba === 'creditos' && (
                   <table className="w-full">
@@ -366,16 +376,6 @@ export default function CreditoFornecedor() {
         </div>
       </div>
 
-      {usarAberto && detalhe && (
-        <ModalUsarCredito
-          grupo={detalhe.grupo}
-          nome={nomeSel}
-          saldo={detalhe.saldo}
-          usuario={usuario}
-          onFechar={() => setUsarAberto(false)}
-          onConcluido={async () => { setUsarAberto(false); await recarregarTudo(); }}
-        />
-      )}
       {estorno && (
         <ModalEstorno
           uso={estorno}
@@ -388,8 +388,9 @@ export default function CreditoFornecedor() {
   );
 }
 
-function ModalUsarCredito({ grupo, nome, saldo, usuario, onFechar, onConcluido }: {
-  grupo: string; nome: string; saldo: number; usuario: string; onFechar: () => void; onConcluido: () => void;
+/** Aba "Títulos em aberto": títulos do fornecedor e das filiais; marca, informa quanto e baixa com o crédito. */
+function PainelUsarCredito({ grupo, saldo, usuario, onConcluido }: {
+  grupo: string; saldo: number; usuario: string; onConcluido: () => void;
 }) {
   const [titulos, setTitulos] = useState<Titulo[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -449,17 +450,15 @@ function ModalUsarCredito({ grupo, nome, saldo, usuario, onFechar, onConcluido }
     }
   };
 
+  const semCredito = saldo <= 0.005;
   return (
-    <Dialog open onOpenChange={(v) => !v && !gravando && onFechar()}>
-      <DialogContent className="max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>Usar crédito — {nome}</DialogTitle>
-          <DialogDescription>
-            Títulos em aberto do fornecedor e das filiais. Marque quais baixar e quanto de cada um (parcial permitido).
-            A baixa sai como ABATIMENTO DE SALDO e não mexe em caixa nem banco.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[50vh] overflow-auto rounded border border-gray-200 dark:border-zinc-700">
+    <div className="flex flex-col gap-3 p-3">
+      <p className="text-xs text-gray-500">
+        Títulos em aberto do fornecedor e das filiais. Marque quais baixar com o crédito e quanto de cada um (parcial permitido).
+        A baixa sai como ABATIMENTO DE SALDO e não mexe em caixa nem banco.
+        {semCredito && <b className="ml-1 text-amber-600">Este fornecedor está sem saldo de crédito.</b>}
+      </p>
+        <div className="rounded border border-gray-200 dark:border-zinc-700">
           {carregando ? (
             <div className="flex items-center gap-2 p-4 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Carregando…</div>
           ) : titulos.length === 0 ? (
@@ -480,7 +479,7 @@ function ModalUsarCredito({ grupo, nome, saldo, usuario, onFechar, onConcluido }
                   return (
                     <tr key={t.cod_pgto} className={`border-t border-gray-100 dark:border-zinc-700 ${t.em_remessa ? 'opacity-50' : ''}`}>
                       <td className={td}>
-                        <input type="checkbox" disabled={t.em_remessa || gravando} checked={marcado} onChange={() => alternar(t)} />
+                        <input type="checkbox" disabled={t.em_remessa || gravando || (semCredito && !marcado)} checked={marcado} onChange={() => alternar(t)} />
                       </td>
                       <td className={`${td} max-w-[200px] truncate`} title={t.nome}>{t.nome}</td>
                       <td className={td}>{t.nro_nf || '-'}</td>
@@ -509,20 +508,21 @@ function ModalUsarCredito({ grupo, nome, saldo, usuario, onFechar, onConcluido }
           )}
         </div>
         <Textarea placeholder="Observação (opcional)" value={obs} onChange={(e) => setObs(e.target.value)} maxLength={250} disabled={gravando} />
-        <DialogFooter className="flex flex-wrap items-center gap-4 sm:justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="text-sm">
             Crédito {moeda(saldo)} · selecionado <b>{moeda(total)}</b> ·{' '}
             <span className={restante < -0.005 ? 'font-semibold text-red-600' : ''}>sobra {moeda(restante)}</span>
           </div>
           <div className="flex gap-2">
-            <button className={botaoSec} onClick={onFechar} disabled={gravando}>Cancelar</button>
+            <button className={botaoSec} onClick={() => { setMarcados({}); setObs(''); }} disabled={gravando || !Object.keys(marcados).length}>
+              Limpar seleção
+            </button>
             <button className={botaoPrimario} onClick={confirmar} disabled={gravando || temErro}>
               {gravando && <Loader2 className="h-4 w-4 animate-spin" />} Confirmar baixa
             </button>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </div>
   );
 }
 
