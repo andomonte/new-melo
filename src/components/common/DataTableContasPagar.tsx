@@ -886,6 +886,7 @@ export default function DataTableContasPagar({
           <SelectInput
             name="itemsPagina"
             label=""
+            required
             value={meta?.perPage?.toString() ?? ''}
             options={perPageOptions}
             onValueChange={handlePerPageChangeInternal}
