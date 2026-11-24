@@ -22,13 +22,15 @@ import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 import Carregamento from '@/utils/carregamento';
 
-// Cor da fonte da linha por status de ENTRADA (Contas a Pagar). Vazio = sem cor (neutro).
+// Cor da fonte da linha pela situação de RECEBIMENTO FÍSICO da(s) nota(s) do título
+// (Contas a Pagar; regra em src/lib/contasPagar/situacaoRecebimento.ts). Vazio = sem cor.
 const corEntradaStatus = (status: any): string => {
   switch (status) {
-    case 'gerada': return 'text-green-700 dark:text-green-400';       // Entrada gerada
-    case 'nao_gerada': return 'text-yellow-600 dark:text-yellow-400'; // Entrada não gerada
-    case 'cancelada': return 'text-red-600 dark:text-red-400';        // NFe cancelada
-    case 'avulso': return 'text-black dark:text-white font-medium';   // Avulso com NF, sem entrada
+    case 'recebida': return 'text-green-700 dark:text-green-400';        // mercadoria recebida
+    case 'em_recebimento': return 'text-blue-600 dark:text-blue-400';    // em conferência / parte das notas
+    case 'nao_recebida': return 'text-yellow-600 dark:text-yellow-400';  // ainda não chegou
+    case 'cancelada': return 'text-red-600 dark:text-red-400';           // entrada da NF cancelada
+    case 'avulso': return 'text-black dark:text-white font-medium';      // avulso com NF fora do sistema
     default: return '';
   }
 };
@@ -838,8 +840,8 @@ export default function DataTableContasPagar({
                   }
                   return sortedRows;
                 })().map((row, rowIndex) => {
-                  // Cor da fonte da linha conforme o status da ENTRADA (Contas a Pagar):
-                  // verde=entrada gerada, amarelo=não gerada, vermelho=NFe cancelada, preto=avulso c/ NF.
+                  // Cor da fonte da linha conforme o RECEBIMENTO da nota (Contas a Pagar):
+                  // verde=recebida, azul=em recebimento, amarelo=não recebida, vermelho=cancelada, preto=avulso c/ NF.
                   const corLinha = corEntradaStatus((row as any).entradaStatus);
                   return (
                   <tr

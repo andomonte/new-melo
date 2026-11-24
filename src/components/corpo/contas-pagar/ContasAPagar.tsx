@@ -1504,13 +1504,12 @@ export function ContasAPagar() {
           const nf = String(conta.nro_nf || '').trim();
           if (!nf) return <span className="text-xs">-</span>;
           const varias = nf.includes('/');
-          const doCompras = !!conta.ordem_compra && !['[]', ''].includes(String(conta.ordem_compra));
-          if (!varias && !doCompras) return <span className="text-xs">{nf}</span>;
+          // toda NF abre o modal: notas, valores e o RECEBIMENTO de cada uma (azul = falta alguma)
           return (
             <button
               type="button"
               className="text-xs text-blue-600 hover:underline dark:text-blue-400"
-              title={varias ? `Notas: ${nf.split('/').join(', ')}` : 'Ver notas do título'}
+              title={varias ? `Notas: ${nf.split('/').join(', ')} — ver o recebimento de cada uma` : 'Ver a nota e o recebimento'}
               onClick={(e) => { e.stopPropagation(); setNotasDoTitulo(String(conta.id)); }}
             >
               {varias ? `${nf.split('/')[0]}…` : nf}
@@ -3136,7 +3135,7 @@ export function ContasAPagar() {
               <option value="xml">Gerado por XML/NFe</option>
               <option value="compras">Todos do Compras</option>
             </select>
-            <label className="text-xs text-gray-600 dark:text-gray-300 ml-1">Entrada:</label>
+            <label className="text-xs text-gray-600 dark:text-gray-300 ml-1" title="Chegada física da mercadoria (tela de Recebimento)">Recebimento:</label>
             <select
               value={filtros.entrada_status || ''}
               onChange={(e) => {
@@ -3147,16 +3146,18 @@ export function ContasAPagar() {
               className="border rounded px-2 py-1 text-xs bg-white dark:bg-zinc-800 dark:border-zinc-600"
             >
               <option value="">Todas</option>
-              <option value="gerada">Entrada Gerada</option>
-              <option value="nao_gerada">Entrada não Gerada</option>
+              <option value="recebida">Recebida</option>
+              <option value="em_recebimento">Em recebimento</option>
+              <option value="nao_recebida">Não recebida</option>
               <option value="cancelada">NFe Cancelada</option>
               <option value="avulso">Avulso (com NF)</option>
             </select>
           </div>
           {/* Legenda de cores (fonte da linha) */}
           <div className="flex flex-wrap items-center gap-3 text-[11px]">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Entrada Gerada</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Entrada não Gerada</span>
+            <span className="flex items-center gap-1" title="Conferência finalizada na tela de Recebimento (entradas antigas do Delphi contam como recebidas)"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Recebida</span>
+            <span className="flex items-center gap-1" title="Conferência em andamento, ou só parte das notas do título recebida — clique no Nº NF para ver cada nota"><span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" /> Em recebimento</span>
+            <span className="flex items-center gap-1" title="A mercadoria ainda não chegou"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Não recebida</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block" /> NFe Cancelada</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-black dark:bg-white inline-block" /> Avulso (c/ NF)</span>
           </div>

@@ -17,7 +17,25 @@ interface Nota {
   valor_atendido: number;
   criado_em: string | null;
   usuario: string | null;
+  // recebimento físico da nota (tela de Recebimento) — situacaoRecebimento.ts
+  recebimento?: 'recebida' | 'em_recebimento' | 'nao_recebida' | 'cancelada' | null;
+  etapa?: string | null;
+  recebedor_nome?: string | null;
+  fim_recebimento?: string | null;
+  codent?: string | null;
 }
+
+const RECEB: Record<string, { rotulo: string; cor: string }> = {
+  recebida: { rotulo: 'Recebida', cor: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
+  em_recebimento: { rotulo: 'Em recebimento', cor: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+  nao_recebida: { rotulo: 'Não recebida', cor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
+  cancelada: { rotulo: 'Cancelada', cor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+};
+const ETAPA: Record<string, string> = {
+  PENDENTE: 'entrada pendente', PRECO_CONFIRMADO: 'preço confirmado', AGUARDANDO_RECEBIMENTO: 'aguardando recebimento',
+  EM_RECEBIMENTO: 'em conferência', RECEBIDO: 'conferida', EM_ALOCACAO: 'em alocação', ALOCADO: 'alocada',
+  DISPONIVEL_VENDA: 'disponível p/ venda', CANCELADA: 'entrada cancelada',
+};
 
 interface Resposta {
   titulo: { cod_pgto: string; nro_dup: string | null; valor_pgto: number; valor_pago: number; nome_credor: string | null } | null;
@@ -60,12 +78,17 @@ export default function ModalNotasDoTitulo({ codPgto, onFechar }: { codPgto: str
 
   return (
     <Dialog open={!!codPgto} onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Notas do título {dados?.titulo?.nro_dup || codPgto}</DialogTitle>
           <DialogDescription>
             {dados?.titulo?.nome_credor || ''}
             {dados?.titulo ? ` · valor do título ${formatarMoeda(dados.titulo.valor_pgto)}` : ''}
+            {dados && dados.notas.length > 0 && (
+              <span className="ml-1">
+                · {dados.notas.filter((n) => n.recebimento === 'recebida').length} de {dados.notas.length} nota(s) recebida(s)
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -88,7 +111,8 @@ export default function ModalNotasDoTitulo({ codPgto, onFechar }: { codPgto: str
                     <th className="py-2 pr-3">Série</th>
                     <th className="py-2 pr-3">Associada em</th>
                     <th className="py-2 pr-3 text-right">Valor da NF</th>
-                    <th className="py-2 text-right">Atendido</th>
+                    <th className="py-2 pr-3 text-right">Atendido</th>
+                    <th className="py-2">Recebimento</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -98,19 +122,37 @@ export default function ModalNotasDoTitulo({ codPgto, onFechar }: { codPgto: str
                       <td className="py-2 pr-3">{n.serie || '-'}</td>
                       <td className="py-2 pr-3">{dataBR(n.criado_em)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{formatarMoeda(n.valor_nf)}</td>
-                      <td className="py-2 text-right tabular-nums font-medium">{formatarMoeda(n.valor_atendido)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{formatarMoeda(n.valor_atendido)}</td>
+                      <td className="py-2">
+                        {n.recebimento && RECEB[n.recebimento] ? (
+                          <>
+                            <span className={`rounded px-1.5 py-0.5 text-xs ${RECEB[n.recebimento].cor}`}>{RECEB[n.recebimento].rotulo}</span>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">
+                              {!n.codent
+                                ? 'sem entrada no sistema'
+                                : n.etapa
+                                  ? `entrada ${n.codent} · ${ETAPA[n.etapa] || n.etapa}`
+                                  : `entrada ${n.codent} · antiga (Delphi)`}
+                              {n.recebedor_nome ? ` · ${n.recebedor_nome}` : ''}
+                              {n.fim_recebimento ? ` em ${dataBR(n.fim_recebimento)}` : ''}
+                            </div>
+                          </>
+                        ) : '-'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="text-sm">
                     <td colSpan={4} className="pt-3 pr-3 text-right text-muted-foreground">Total atendido</td>
-                    <td className="pt-3 text-right tabular-nums font-semibold">{formatarMoeda(dados.total_atendido)}</td>
+                    <td className="pt-3 pr-3 text-right tabular-nums font-semibold">{formatarMoeda(dados.total_atendido)}</td>
+                    <td />
                   </tr>
                   {ehAdiantamento && (
                     <tr className="text-sm">
                       <td colSpan={4} className="pt-1 pr-3 text-right text-muted-foreground">Saldo do adiantamento</td>
-                      <td className="pt-1 text-right tabular-nums font-semibold">{formatarMoeda(dados.saldo)}</td>
+                      <td className="pt-1 pr-3 text-right tabular-nums font-semibold">{formatarMoeda(dados.saldo)}</td>
+                      <td />
                     </tr>
                   )}
                 </tfoot>

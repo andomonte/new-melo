@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { SITUACOES_RECEBIMENTO, sqlSituacaoTitulo } from '@/lib/contasPagar/situacaoRecebimento';
 import { getPgPool } from '@/lib/pg';
 
 const pool = getPgPool();
@@ -226,36 +227,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       whereClause += ` AND p.cancel != 'S'`;
     }
 
-    // Status da ENTRADA (fonte da verdade: dbnfe_ent.exec + codent / dbent), derivado
-    // sem usar o campo morto possui_entrada. Significado do exec (ver buscaNFes.ts):
-    //   N/R=Recebida, A=Em Andamento, C=Associada, S+codent=Entrada Gerada.
-    //   (NÃO existe estado "Cancelada" no exec da NFe de entrada.)
-    // Estados retornados:
-    //   gerada     → NFe da ordem com exec='S' E codent preenchido (dbent gerado) OU avulso c/ NF que casa dbent (verde)
-    //   nao_gerada → origem Compras sem entrada gerada ainda: Recebida/Em Andamento/Associada, ou antecipado sem NFe (amarelo)
-    //   avulso     → título avulso com NF sem entrada encontrada (preto)
-    //   null       → sem NF e sem Compras (neutro)
-    const entradaStatusExpr = `
-      CASE
-        WHEN p.ordem_compra IS NOT NULL AND p.ordem_compra NOT IN ('[]', '') THEN
-          CASE
-            WHEN (SELECT bool_or(ne.exec = 'S' AND ne.codent IS NOT NULL) FROM ordem_pagamento_conta opc
-                    JOIN nfe_item_pedido_associacao nipa ON nipa.req_id = opc.orc_id
-                    JOIN dbnfe_ent ne ON ne.codnfe_ent = nipa.nfe_id
-                   WHERE opc.cod_pgto = p.cod_pgto) THEN 'gerada'
-            ELSE 'nao_gerada'
-          END
-        WHEN p.nro_nf IS NOT NULL AND p.nro_nf <> '' THEN
-          CASE WHEN EXISTS (
-            SELECT 1 FROM dbent d
-             WHERE d.cod_credor = p.cod_credor
-               AND ltrim(substring(d.chave FROM 26 FOR 9), '0') = ltrim(p.nro_nf, '0')
-          ) THEN 'gerada' ELSE 'avulso' END
-        ELSE NULL
-      END`;
+    // Situação de RECEBIMENTO FÍSICO da(s) nota(s) do título (24/11/2026): conferência
+    // finalizada na tela de Recebimento — não a entrada gerada. Regra e estados em
+    // src/lib/contasPagar/situacaoRecebimento.ts (recebida, em_recebimento, nao_recebida,
+    // cancelada, avulso, null). O campo continua se chamando entrada_status na resposta.
+    const entradaStatusExpr = sqlSituacaoTitulo('p');
 
     // Filtro opcional por entrada_status (whitelist p/ evitar injeção)
-    const esf = ['gerada', 'nao_gerada', 'cancelada', 'avulso'].includes(entradaStatusFiltro as string)
+    const esf = (SITUACOES_RECEBIMENTO as string[]).includes(entradaStatusFiltro as string)
       ? (entradaStatusFiltro as string) : null;
 
     // Query principal com cálculo de status baseado no histórico

@@ -54,8 +54,9 @@ export interface ContaPagar {
   nro_contrato?: string; // Número do contrato internacional
   xml_nf?: string; // XML da nota fiscal
   titulo_importado?: boolean; // Indica se o título foi gerado automaticamente a partir de CT-e
-  // Status da ENTRADA (derivado no /api/contas-pagar): 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso' | null
-  entrada_status?: 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso' | null;
+  // Situação de RECEBIMENTO FÍSICO da(s) nota(s) (derivado no /api/contas-pagar; ver
+  // src/lib/contasPagar/situacaoRecebimento.ts)
+  entrada_status?: 'recebida' | 'em_recebimento' | 'nao_recebida' | 'cancelada' | 'avulso' | null;
 }
 
 export interface FiltrosContasPagar {
@@ -80,7 +81,7 @@ export interface FiltrosContasPagar {
   nro_contrato?: string;
   search?: string; // Busca geral
   origem_compras?: 'antecipado' | 'xml' | 'compras'; // Títulos gerados pelo Compras
-  entrada_status?: 'gerada' | 'nao_gerada' | 'cancelada' | 'avulso'; // Status da entrada
+  entrada_status?: 'recebida' | 'em_recebimento' | 'nao_recebida' | 'cancelada' | 'avulso'; // Situação de recebimento
 }
 
 export interface Paginacao {
