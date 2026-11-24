@@ -1678,6 +1678,13 @@ export function ContasAPagar() {
       ];
       // Anexa o status da entrada à linha (sobrevive a filtro/ordenação local do DataTable)
       (_linha as any).entradaStatus = conta.entrada_status ?? null;
+      // Valores crus das colunas somáveis (linha de subtotal do DataTable). Valor Moeda fica
+      // de fora: soma moedas diferentes.
+      (_linha as any)._valores = {
+        'Valor Total': Number(conta.valor_pgto) || 0,
+        'Valor Pago': Number(conta.total_pago_historico) || 0,
+        'Juros': Number(conta.valor_juros) || 0,
+      };
       return _linha;
     });
   };

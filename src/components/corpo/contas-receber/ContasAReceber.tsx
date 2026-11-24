@@ -666,7 +666,7 @@ export default function ContasAReceber() {
       const vencido = !!vencStr && vencStr < fmtLocalData(new Date()) && contaComNomeBanco.status !== 'recebido' && contaComNomeBanco.status !== 'cancelado';
 
       // Retornar array na ordem dos headers (☑️, Ações, Status, ...)
-      return [
+      const _linha: any[] = [
         // Seleção (checkbox) — só para títulos recebíveis
         <input
           key={`sel-${conta.cod_receb}`}
@@ -777,6 +777,13 @@ export default function ContasAReceber() {
         // Observações
         <div key={`obs-${conta.cod_receb}`} className="text-xs text-gray-700 dark:text-gray-300 truncate max-w-[180px]">{conta.obs || '-'}</div>,
       ];
+      // Valores crus das colunas somáveis (linha de subtotal do DataTable)
+      (_linha as any)._valores = {
+        'Valor Original': Number(conta.valor_original) || 0,
+        'Valor Recebido': Number(conta.valor_recebido) || 0,
+        'Juros': Number((conta as any).valor_juros) || 0,
+      };
+      return _linha;
     });
   };
 

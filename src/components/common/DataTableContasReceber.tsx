@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import SelectInput from './SelectPadrao';
 import SearchInput from './SearchInput';
+import { LinhaSubtotal } from './LinhaSubtotal';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
 
@@ -463,6 +464,13 @@ export default function DataTableContasReceber({
                     })}
                   </tr>
                 ))
+              )}
+              {/* Subtotal das colunas de valor das linhas da tela */}
+              {!loading && rows?.length > 0 && (
+                <LinhaSubtotal
+                  linhas={rows}
+                  colunas={ordemColunas.filter((h: string) => colunasVisiveis.includes(h) && headers.includes(h))}
+                />
               )}
             </tbody>
           </table>

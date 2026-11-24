@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import SelectInput from './SelectPadrao';
 import { Select as RadixSelect, SelectTrigger as RadixSelectTrigger, SelectValue as RadixSelectValue, SelectContent as RadixSelectContent, SelectItem as RadixSelectItem } from '@/components/ui/select';
+import { LinhaSubtotal } from './LinhaSubtotal';
 import SearchInput from './SearchInput';
 import FiltroDinamicoDeClientes from '@/components/common/FiltroDinamico';
 import { obterNomeAmigavel } from '@/utils/mapeamentoColunas';
@@ -839,8 +840,10 @@ export default function DataTableContasPagar({
                       });
                     }
                   }
-                  return sortedRows;
-                })().map((row, rowIndex) => {
+                  const linhasVisiveis = sortedRows;
+                  return (
+                  <>
+                  {linhasVisiveis.map((row, rowIndex) => {
                   // Cor da fonte da linha conforme o RECEBIMENTO da nota (Contas a Pagar):
                   // verde=recebida, azul=em recebimento, amarelo=não recebida, vermelho=cancelada, roxo=avulso c/ NF, padrão=sem NF.
                   const corLinha = corEntradaStatus((row as any).entradaStatus);
@@ -870,7 +873,15 @@ export default function DataTableContasPagar({
                     })}
                   </tr>
                   );
-                })
+                  })}
+                  {/* Subtotal das colunas de valor das linhas visíveis (filtradas) */}
+                  <LinhaSubtotal
+                    linhas={linhasVisiveis}
+                    colunas={ordemColunas.filter((h) => colunasVisiveis.includes(h) && headers.includes(h))}
+                  />
+                  </>
+                  );
+                })()
               )}
             </tbody>
           </table>
