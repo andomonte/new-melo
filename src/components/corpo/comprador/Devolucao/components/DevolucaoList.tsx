@@ -285,6 +285,7 @@ export const DevolucaoList: React.FC<DevolucaoListProps> = ({
                     <div className="flex items-center gap-1">
                       <span className="text-sm">Qtd. Itens:</span>
                       <SelectInput
+                        required
                         name="itemsPagina"
                         label=""
                         value={perPage.toString()}

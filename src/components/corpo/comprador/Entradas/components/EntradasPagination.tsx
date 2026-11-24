@@ -45,6 +45,7 @@ export const EntradasPagination: React.FC<EntradasPaginationProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Qtd. Itens:</span>
             <SelectInput
+              required
               name="itemsPagina"
               label=""
               value={perPage?.toString() ?? '25'}
