@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { sincronizarCreditoAposBaixa } from '@/lib/compras/creditoFornecedor';
 import { PoolClient } from 'pg';
 import { getPgPool } from '@/lib/pgClient';
 import { parseCookies } from 'nookies';
@@ -120,6 +121,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       obsUpdate,
       id
     ]);
+
+    // Crédito de fornecedor: título pago sem NF (conta 4 / avulso conta 2) — roteiro fase 3
+    await sincronizarCreditoAposBaixa(client, String(id), dadosPagamento.usuario, { emTransacao: true });
 
     await client.query('COMMIT');
 

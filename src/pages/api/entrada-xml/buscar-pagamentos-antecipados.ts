@@ -11,6 +11,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
+import { adiantamentosDisponiveis } from '@/lib/compras/creditoFornecedor';
 import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 
 const bodySchema = z.object({
@@ -136,8 +137,9 @@ export default async function handler(
     const codCredor = credorResult.rows[0].cod_credor;
     console.log(`👤 Código do credor: ${codCredor}`);
 
-    // 3. Buscar pagamentos antecipados (parcela 0) do mesmo fornecedor
-    // que ainda não foram pagos e não estão cancelados
+    // 3. Buscar pagamentos antecipados (parcela 0) do mesmo fornecedor, não cancelados.
+    // Fase 3 do roteiro: o PAGO também entra (vale pelo crédito disponível); o valor mostrado
+    // é o que o adiantamento ainda abate desta NF (sem o que outras notas já usaram).
     const pagamentosResult = await client.query(`
       SELECT DISTINCT
         opc.orc_id as ordem_id,
@@ -146,7 +148,7 @@ export default async function handler(
         p.dt_venc as vencimento,
         p.dt_emissao as data_emissao,
         CASE
-          WHEN p.paga = 'S' THEN 'PAGO'
+          WHEN p.paga = 'S' OR COALESCE(p.valor_pago,0) > 0 THEN 'PAGO'
           WHEN p.cancel = 'S' THEN 'CANCELADO'
           ELSE 'PENDENTE'
         END as status,
@@ -159,17 +161,21 @@ export default async function handler(
       INNER JOIN cmp_requisicao r ON o.orc_req_id = r.req_id AND o.orc_req_versao = r.req_versao
       LEFT JOIN dbcredor c ON p.cod_credor = c.cod_credor
       WHERE opc.numero_parcela = 0
-        AND p.paga = 'N'
-        AND p.cancel = 'N'
+        AND COALESCE(p.cancel,'N') <> 'S'
         AND p.cod_credor = $1
         AND o.orc_status NOT IN ('CANCELADA', 'REPROVADA')
       ORDER BY p.dt_emissao DESC, opc.orc_id DESC
     `, [codCredor]);
 
-    const pagamentos: PagamentoAntecipado[] = pagamentosResult.rows.map(row => ({
+    const disponiveis = new Map(
+      (await adiantamentosDisponiveis(client, Array.from(new Set(pagamentosResult.rows.map((r: any) => Number(r.ordem_id)))), nfeId))
+        .map((a) => [a.cod_pgto, a]));
+    const pagamentos: PagamentoAntecipado[] = pagamentosResult.rows
+      .filter((row: any) => (disponiveis.get(row.cod_pgto)?.disponivel || 0) > 0.005)
+      .map((row: any) => ({
       ordem_id: Number(row.ordem_id),
       req_id_composto: row.req_id_composto || '',
-      valor: parseFloat(row.valor || 0),
+      valor: disponiveis.get(row.cod_pgto)?.disponivel ?? parseFloat(row.valor || 0),
       vencimento: row.vencimento ? new Date(row.vencimento).toISOString() : '',
       data_emissao: row.data_emissao ? new Date(row.data_emissao).toISOString() : '',
       status: row.status || 'PENDENTE',

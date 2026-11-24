@@ -1,6 +1,6 @@
 # Roteiro para aprovação: adiantamento a fornecedor, NF no título e Crédito de Fornecedor
 
-**Data:** 24/11/2026. **Situação:** todas as decisões aprovadas em 24/11. Fases 1 e 2 feitas, com as migrations 086 a 089 aplicadas no banco de teste. Fases 3 e 4 a fazer.
+**Data:** 24/11/2026. **Situação:** todas as decisões aprovadas em 24/11. Fases 1, 2 e 3 feitas, com as migrations 086 a 090 aplicadas no banco de teste. Fase 4 a fazer.
 
 **Decisões tomadas (24/11/2026):**
 - **D1:** aprovada como proposta. Implementada em `src/lib/compras/tituloCompras.ts`; títulos existentes corrigidos pela migration 086.
@@ -187,7 +187,36 @@ As mudanças no banco entram como migrations novas e precisam rodar em produçã
 - **Contas a Pagar:**
   - coluna NF com `78239…` e o modal das notas (`/api/contas-pagar/{id}/notas`);
   - a duplicata no padrão novo não é mais remontada na tela.
-- **Pendente:** com a mesma ordem em duas notas, o valor antecipado que a tela de configuração considera continua sendo o adiantamento inteiro. O vínculo limita o atendido ao que sobra, mas a validação das parcelas ainda usa o valor cheio. Entra junto com a fase 3 (consumo do crédito).
+- Com a mesma ordem em duas notas, a conferência das parcelas usava o adiantamento inteiro. **Resolvido na fase 3.**
+
+### Fase 3: o que foi feito (24/11/2026)
+- **Rotina única** `src/lib/compras/creditoFornecedor.ts` (`sincronizarCreditoTitulo`).
+  - Recalcula o crédito do título pelo estado atual. Pode rodar várias vezes sem duplicar.
+  - O valor pago vem do histórico `dbfpgto` (sem a forma 45); sem histórico, de `valor_pago`.
+  - **Gera crédito:** título de fornecedor pago, sem NF, com conta 4, ou com conta 2 se for avulso (fora do Compras).
+  - **Não gera:** pago depois de a NF estar no título.
+- **Onde é chamada:**
+  - pagar (dentro da transação, com savepoint);
+  - marcar como pago;
+  - baixa pelo retorno do banco;
+  - configurar o pagamento da NF (para os adiantamentos pagos).
+  - Na baixa, uma falha do crédito vai para o log e não desfaz o pagamento.
+- **Estorno do pagamento** (`cancelar-pagamento`):
+  - agora roda em transação e atualiza `valor_pago`;
+  - crédito não usado é cancelado;
+  - crédito já usado bloqueia o estorno (409 com a mensagem).
+  - Editar título pago já era bloqueado.
+- **Consumo pela NF** (`configurar-pagamento-nfe`): o adiantamento vale pelo que ainda abate desta NF. Pago: crédito disponível. Não pago: o que não foi usado em outra NF.
+  - **NF menor ou igual ao crédito:** a nota quita e consome o crédito. O que sobra continua crédito (não nasce mais o crédito "sobra" à parte).
+  - **NF maior:** consome o crédito todo e as parcelas ficam só com o restante. Antes, esse caso era recusado na conferência das parcelas.
+  - **Reconfiguração:** devolve o consumo anterior antes de recalcular.
+  - **Cancelamento do antecipado não pago:** só cancela título que não atende outra NF.
+- **Mesma conta nas telas:** a sugestão de parcelas (`parcelas-sugeridas-v2`) e a seleção manual (`buscar-pagamentos-antecipados`, que agora lista também os pagos com saldo) usam a mesma conta do servidor. A tela reconhece adiantamento pago também no fluxo automático.
+- **Migration 090:**
+  - `credor_credito_uso` com `nfe_id` e campos de estorno do uso;
+  - um crédito por título;
+  - **D6:** 5 créditos em Manaus (4 adiantamentos, R$ 4.359,01, e o avulso de R$ 166,68).
+- **Testado no banco** (transação desfeita): adiantamento pago com NF menor, reconfiguração, estorno bloqueado, pagamento e estorno de adiantamento sem NF, pagamento de título que já tem NF, e erro isolado no savepoint.
 
 ## 6. Fora deste roteiro
 - **Crédito entre filiais da MELO** (Manaus usar crédito de Roraima): são bancos diferentes; já estava adiado na spec.

@@ -1,5 +1,6 @@
 import { getPgPool } from '@/lib/pg';
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { CreditoUsadoError, sincronizarCreditoTitulo } from '@/lib/compras/creditoFornecedor';
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,12 +17,15 @@ export default async function handler(
   }
 
   const pool = getPgPool();
+  // Transação: o estorno e o ajuste do crédito de fornecedor andam juntos (roteiro fase 3)
+  const db = await pool.connect();
 
   try {
+    await db.query('BEGIN');
     console.log(`🔍 [API Cancelar Pagamento] cod_pgto: ${cod_pgto}, fpg_cof_id: ${fpg_cof_id}`);
 
     // 1. Verificar se o pagamento existe e não está cancelado
-    const checkPagamento = await pool.query(`
+    const checkPagamento = await db.query(`
       SELECT 
         cod_pgto,
         fpg_cof_id,
@@ -33,17 +37,19 @@ export default async function handler(
     `, [cod_pgto, fpg_cof_id]);
 
     if (checkPagamento.rows.length === 0) {
+      await db.query('ROLLBACK');
       return res.status(404).json({ erro: 'Pagamento não encontrado' });
     }
 
     const pagamento = checkPagamento.rows[0];
 
     if (pagamento.cancel === 'S') {
+      await db.query('ROLLBACK');
       return res.status(400).json({ erro: 'Este pagamento já está cancelado' });
     }
 
     // 2. Cancelar o pagamento (marcar cancel = 'S')
-    await pool.query(`
+    await db.query(`
       UPDATE dbfpgto
       SET cancel = 'S'
       WHERE cod_pgto = $1 AND fpg_cof_id = $2
@@ -52,7 +58,7 @@ export default async function handler(
     console.log(`✅ [API] Pagamento ${fpg_cof_id} do título ${cod_pgto} cancelado com sucesso`);
 
     // 3. Recalcular o total pago do título (soma apenas pagamentos não cancelados)
-    const totalPagoResult = await pool.query(`
+    const totalPagoResult = await db.query(`
       SELECT COALESCE(SUM(valor_pgto), 0) as total_pago
       FROM dbfpgto
       WHERE cod_pgto = $1 
@@ -62,13 +68,14 @@ export default async function handler(
     const totalPago = parseFloat(totalPagoResult.rows[0].total_pago || 0);
 
     // 4. Buscar valor original do título
-    const tituloResult = await pool.query(`
+    const tituloResult = await db.query(`
       SELECT valor_pgto
       FROM dbpgto
       WHERE cod_pgto = $1
     `, [cod_pgto]);
 
     if (tituloResult.rows.length === 0) {
+      await db.query('ROLLBACK');
       return res.status(404).json({ erro: 'Título não encontrado' });
     }
 
@@ -82,11 +89,16 @@ export default async function handler(
       novoPaga = 'P'; // Pago parcialmente
     }
 
-    await pool.query(`
+    await db.query(`
       UPDATE dbpgto
-      SET paga = $1
+      SET paga = $1, valor_pago = $3
       WHERE cod_pgto = $2
-    `, [novoPaga, cod_pgto]);
+    `, [novoPaga, cod_pgto, totalPago]);
+
+    // Crédito de fornecedor gerado por este título: baixa junto. Se já foi usado, bloqueia.
+    await sincronizarCreditoTitulo(db, String(cod_pgto), req.body?.username || null);
+
+    await db.query('COMMIT');
 
     console.log(`✅ [API] Status do título atualizado: paga=${novoPaga}, total_pago=${totalPago}`);
 
@@ -104,10 +116,16 @@ export default async function handler(
     });
 
   } catch (error: any) {
+    await db.query('ROLLBACK').catch(() => undefined);
+    if (error instanceof CreditoUsadoError) {
+      return res.status(409).json({ erro: error.message });
+    }
     console.error('❌ [API] Erro ao cancelar pagamento:', error);
     return res.status(500).json({
       erro: 'Erro ao cancelar pagamento',
       detalhes: error.message
     });
+  } finally {
+    db.release();
   }
 }

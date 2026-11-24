@@ -116,7 +116,10 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
   const [recalcularTrigger, setRecalcularTrigger] = React.useState(0);
 
   // Regras do antecipado x NFe (spec §5.2):
-  const algumAntecipadoPago = (valorAntecipadoPago || 0) > 0.005;
+  // Pago: o informado pela seleção manual OU, no fluxo automático, algum adiantamento das
+  // ordens da NF com pagamento/crédito (detalhes da parcela 0 — parcelas-sugeridas-v2).
+  const [antecipadoPagoAuto, setAntecipadoPagoAuto] = useState(false);
+  const algumAntecipadoPago = (valorAntecipadoPago || 0) > 0.005 || antecipadoPagoAuto;
   const antecipadoCobreNF = (nf: number, ent: number) => nf > 0 && ent >= nf - 0.10;
   // A ≥ NF e PAGO → NFe quitada pelo antecipado (0 parcelas; excedente vira crédito no backend).
   const ehQuitadoPorAntecipadoPago = (nf: number, ent: number) => antecipadoCobreNF(nf, ent) && algumAntecipadoPago;
@@ -199,6 +202,9 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
         const entradaEfetiva = veioSelecaoManual
           ? valorAntecipado
           : (parcelaAntecipado ? parcelaAntecipado.valor_parcela : 0);
+        const pagoAuto =
+          !veioSelecaoManual && !!parcelaAntecipado?.detalhes?.some((d: DetalhePagamentoAntecipado) => d.paga);
+        setAntecipadoPagoAuto(pagoAuto);
         if (entradaEfetiva > 0) {
           setHabilitarEntrada(true);
           setValorEntrada(entradaEfetiva);
@@ -219,7 +225,9 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
         // Só zera as parcelas quando o antecipado PAGO já quita a NFe. Se for o caso de
         // CANCELAR (não pago > NF), mantém as parcelas do XML (cobrança da NF inteira).
         const nfLocal = data.debug?.valorTotalNFe || 0;
-        const quitadoLocal = ehQuitadoPorAntecipadoPago(nfLocal, entradaEfetiva);
+        // (estado ainda não atualizado neste render: usa o "pago" calculado aqui)
+        const quitadoLocal = antecipadoCobreNF(nfLocal, entradaEfetiva)
+          && ((valorAntecipadoPago || 0) > 0.005 || pagoAuto);
 
         // Carregar parcelas do XML como sugestão (nenhuma quando quitado por antecipado)
         const parcelasXML = quitadoLocal ? [] : data.data

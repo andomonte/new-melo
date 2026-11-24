@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { sincronizarCreditoAposBaixa } from '@/lib/compras/creditoFornecedor';
 import { getPgPool } from '@/lib/pg';
 import { marcarTituloPagoOracle, calcularJurosTitulo } from '@/lib/oracleService';
 import { parseCookies } from 'nookies';
@@ -235,8 +236,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error(`Falha ao registrar pagamento no histórico: ${fpgtoError.message}`);
     }
 
+    // Crédito de fornecedor: título pago sem NF (conta 4 / avulso conta 2) — roteiro fase 3
+    const credito = await sincronizarCreditoAposBaixa(pool, String(id), userName);
+
     res.status(200).json({
       sucesso: true,
+      credito: credito && credito.acao !== 'NENHUMA' ? credito : undefined,
       mensagem: estaCompletamentePago 
         ? 'Conta marcada como paga com sucesso.' 
         : 'Pagamento parcial registrado com sucesso.',

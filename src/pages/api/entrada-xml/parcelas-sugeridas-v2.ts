@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
+import { adiantamentosDisponiveis } from '@/lib/compras/creditoFornecedor';
 
 interface DetalhePagamentoAntecipado {
   ordemId: string;
@@ -74,37 +75,23 @@ export default async function handler(
     let totalEntrada = 0;
     const detalhesPagamentosAntecipados: DetalhePagamentoAntecipado[] = [];
 
-    for (const ordem of ordensAssociadas.rows) {
-      const pgtoAntecipado = await client.query(`
-        SELECT
-          opc.valor_parcela,
-          opc.data_vencimento,
-          p.paga,
-          p.dt_pgto
-        FROM ordem_pagamento_conta opc
-        INNER JOIN dbpgto p ON opc.cod_pgto = p.cod_pgto
-        WHERE opc.orc_id = $1 AND opc.numero_parcela = 0
-      `, [ordem.req_id]);
-
-      if (pgtoAntecipado.rows.length > 0) {
-        const valorAntecipado = parseFloat(pgtoAntecipado.rows[0].valor_parcela || 0);
-        totalEntrada += valorAntecipado;
-
-        console.log(`💰 Ordem ${ordem.req_id}: Antecipado R$ ${valorAntecipado.toFixed(2)}`);
-
-        detalhesPagamentosAntecipados.push({
-          ordemId: ordem.req_id,
-          valor: valorAntecipado,
-          dataVencimento: pgtoAntecipado.rows[0].data_vencimento,
-          paga: pgtoAntecipado.rows[0].paga === 'S',
-          dataPagamento: pgtoAntecipado.rows[0].dt_pgto || null
-        });
-      } else {
-        console.log(`ℹ️  Ordem ${ordem.req_id}: Sem pagamento antecipado`);
-      }
+    // Quanto cada adiantamento ainda abate desta NF (fase 3 do roteiro): o pago vale pelo
+    // crédito disponível, o não pago pelo que não foi usado em outra NF; cancelados ficam fora.
+    // Mesma conta do configurar-pagamento-nfe (src/lib/compras/creditoFornecedor.ts).
+    const adiantamentos = await adiantamentosDisponiveis(
+      client, ordensAssociadas.rows.map((r: any) => Number(r.req_id)), String(nfeId));
+    for (const a of adiantamentos) {
+      if (a.disponivel <= 0.005) continue;
+      totalEntrada += a.disponivel;
+      detalhesPagamentosAntecipados.push({
+        ordemId: a.orc_id,
+        valor: a.disponivel,
+        dataVencimento: a.data_vencimento,
+        paga: !!a.creditoId || a.valor_pago > 0.005,
+        dataPagamento: a.dt_pgto || null,
+      } as any);
     }
 
-    console.log(`\n💵 TOTAL ENTRADA (soma dos antecipados): R$ ${totalEntrada.toFixed(2)}\n`);
 
     // 3. Buscar valor total da NFe e status do pagamento
     const nfeResult = await client.query(`

@@ -3,7 +3,10 @@ import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
 import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
 import {
-  associarNotaAoAdiantamento, atendidoEmOutrasNotas, atualizarNfDoTitulo, codigoBanco, contaFinanceiraFornecedor,
+  adiantamentosDisponiveis, consumirCreditoNaNota, desfazerConsumoDaNota, sincronizarCreditoAposBaixa,
+} from '@/lib/compras/creditoFornecedor';
+import {
+  associarNotaAoAdiantamento, atualizarNfDoTitulo, codigoBanco, contaFinanceiraFornecedor,
   dadosNota, duplicataNota, proximoCodPgto, ufDaFilial, vincularNotaTitulo,
 } from '@/lib/compras/tituloCompras';
 
@@ -159,45 +162,10 @@ export default async function handler(
       }
     }
 
-    // 4. Buscar pagamento antecipado (parcela 0) se existir
-    let valorAntecipado = 0;
-
-    // Se foi passado valor antecipado manual, usar diretamente
-    if (valorAntecipadoManual && valorAntecipadoManual > 0) {
-      valorAntecipado = valorAntecipadoManual;
-      console.log(`💰 Valor antecipado (manual): R$ ${valorAntecipado.toFixed(2)}`);
-    } else if (ordensAssociadas && ordensAssociadas.length > 0) {
-      // Buscar antecipado das ordens manuais
-      const pgtoAntecipadoResult = await client.query(`
-        SELECT COALESCE(SUM(p.valor_pgto), 0) as valor_antecipado
-        FROM dbpgto p
-        INNER JOIN ordem_pagamento_conta opc ON p.cod_pgto = opc.cod_pgto
-        WHERE opc.orc_id = ANY($1::bigint[])
-          AND opc.numero_parcela = 0
-          AND p.paga = 'N'
-      `, [ordensAssociadas]);
-      valorAntecipado = parseFloat(pgtoAntecipadoResult.rows[0]?.valor_antecipado || 0);
-    } else {
-      // IMPORTANTE: Usar DISTINCT nas ordens para evitar multiplicação
-      // (nfe_item_pedido_associacao tem múltiplas linhas por ordem - uma para cada item)
-      const pgtoAntecipadoResult = await client.query(`
-        SELECT COALESCE(SUM(p.valor_pgto), 0) as valor_antecipado
-        FROM dbpgto p
-        INNER JOIN ordem_pagamento_conta opc ON p.cod_pgto = opc.cod_pgto
-        WHERE opc.orc_id IN (
-          SELECT DISTINCT nipa.req_id::bigint
-          FROM nfe_item_pedido_associacao nipa
-          WHERE nipa.nfe_id = $1
-        )
-          AND opc.numero_parcela = 0
-          AND p.paga = 'N'
-      `, [nfeId]);
-      valorAntecipado = parseFloat(pgtoAntecipadoResult.rows[0]?.valor_antecipado || 0);
-    }
-
-    // ===== Detecção de EXCEDENTE (antecipado TOTAL >= NF) =====
-    // O valorAntecipado acima conta só parcela 0 com paga='N'. Para o excedente precisamos
-    // do TOTAL (valor_pgto) e do PAGO (valor_pago) dos antecipados das ordens desta NFe.
+    // 4. Adiantamentos (parcela 0) das ordens e quanto cada um ainda pode abater DESTA NF
+    //    (fase 3 do roteiro, 24/11/2026): o PAGO vale pelo crédito disponível (credor_credito);
+    //    o NÃO PAGO, pelo que ainda não foi usado em outra NF. Antes só contava o não pago
+    //    (paga='N'): adiantamento pago menor que a NF fazia a conferência das parcelas falhar.
     let orcIdsAnt: number[] = [];
     if (ordensAssociadas && ordensAssociadas.length > 0) {
       orcIdsAnt = ordensAssociadas;
@@ -205,24 +173,35 @@ export default async function handler(
       const rOrc = await client.query(
         `SELECT DISTINCT req_id::bigint AS orc FROM nfe_item_pedido_associacao WHERE nfe_id = $1`, [nfeId]
       );
-      orcIdsAnt = rOrc.rows.map((r) => Number(r.orc));
+      orcIdsAnt = rOrc.rows.map((r: any) => Number(r.orc));
     }
-    let antTotal = 0, antPago = 0;
-    const antTitulos: { cod_pgto: string; orc_id: number; valor_pgto: number; valor_pago: number; nro_dup: string | null; atendido: number }[] = [];
+    // reconfiguração: o que esta NF tinha consumido volta para os créditos
+    await desfazerConsumoDaNota(client, nfeId);
+    // adiantamento pago que ainda não tem o crédito (pago antes da rotina): cria agora
     if (orcIdsAnt.length > 0) {
-      const ai = await client.query(`
-        SELECT p.cod_pgto, opc.orc_id, p.nro_dup,
-               COALESCE(p.valor_pgto,0) AS valor_pgto, COALESCE(p.valor_pago,0) AS valor_pago
-        FROM dbpgto p
-        INNER JOIN ordem_pagamento_conta opc ON p.cod_pgto = opc.cod_pgto
-        WHERE opc.orc_id = ANY($1::bigint[]) AND opc.numero_parcela = 0 AND COALESCE(p.cancel,'N') <> 'S'
-        ORDER BY p.cod_pgto`, [orcIdsAnt]);
-      for (const r of ai.rows) {
-        const vp = parseFloat(r.valor_pgto), vpg = parseFloat(r.valor_pago);
-        antTotal += vp; antPago += vpg;
-        antTitulos.push({ cod_pgto: r.cod_pgto, orc_id: Number(r.orc_id), valor_pgto: vp, valor_pago: vpg, nro_dup: r.nro_dup ?? null, atendido: 0 });
-      }
+      const pagosAnt = await client.query(`
+        SELECT DISTINCT p.cod_pgto FROM dbpgto p
+          JOIN ordem_pagamento_conta opc ON opc.cod_pgto = p.cod_pgto AND opc.numero_parcela = 0
+         WHERE opc.orc_id = ANY($1::bigint[]) AND COALESCE(p.cancel,'N') <> 'S' AND COALESCE(p.valor_pago,0) > 0`,
+        [orcIdsAnt]);
+      for (const r of pagosAnt.rows) await sincronizarCreditoAposBaixa(client, r.cod_pgto, userName, { emTransacao: true });
     }
+    const adiantamentos = await adiantamentosDisponiveis(client, orcIdsAnt, nfeId);
+    // só os que ainda têm o que abater
+    const antTitulos = adiantamentos
+      .filter((a) => a.disponivel > 0.005)
+      .map((a) => ({ ...a, atendido: 0, creditoUsado: 0 }));
+    const antDisponivel = Math.round(antTitulos.reduce((s2, a) => s2 + a.disponivel, 0) * 100) / 100;
+    const antPago = antTitulos.reduce((s2, a) => s2 + a.valor_pago, 0);
+
+    let valorAntecipado = antDisponivel;
+    if (valorAntecipadoManual && valorAntecipadoManual > 0) {
+      // seleção manual: não passa do que os adiantamentos ainda têm para abater
+      valorAntecipado = Math.min(valorAntecipadoManual, antDisponivel || valorAntecipadoManual);
+      console.log(`💰 Valor antecipado (manual): R$ ${valorAntecipadoManual.toFixed(2)} → considerado R$ ${valorAntecipado.toFixed(2)}`);
+    }
+    console.log(`💰 Adiantamentos: ${antTitulos.length} com saldo, disponível R$ ${antDisponivel.toFixed(2)}`);
+    const antTotal = antDisponivel;
     const TOL_EXC = 0.10;
     const antBase = valorAntecipado > 0 ? valorAntecipado : antTotal;
     const excedente = Math.round((antBase - valorTotalNFe) * 100) / 100;
@@ -231,7 +210,8 @@ export default async function handler(
     // IGUAL à NF e não pago, a tela mandava as parcelas da NF inteira e o servidor ainda somava
     // o antecipado (NF 19771: 8.314,20 + 8.314,20 ≠ 8.314,20) e recusava.
     const cobreNF = valorTotalNFe > 0 && antBase >= valorTotalNFe - TOL_EXC;
-    const algumPago = antPago > 0.005;
+    // "pago" = algum adiantamento com crédito (pago sem NF) entre os que abatem esta NF
+    const algumPago = antTitulos.some((a) => a.creditoId) || antPago > 0.005;
     // A ≥ NF: PAGO → quita (+ crédito do que passar da NF; 0 parcelas). NÃO PAGO → cancela os
     // antecipados e a cobrança da NF inteira vem das parcelas (XML ou manual). Spec §5.2.
     const quitaPorAntecipado = cobreNF && algumPago;
@@ -479,11 +459,16 @@ export default async function handler(
       valorTotalCriado += parcela.valor_parcela;
     }
 
-    // 8.1 EXCEDENTE tratado (spec §5.2):
-    //  - PAGO     → NFe quitada + crédito do excedente pago (títulos permanecem);
-    //  - NÃO PAGO → cancela TODOS os antecipados das OCs (a cobrança da NF veio das parcelas acima).
+    // 8.1 Antecipado ≥ NF (spec §5.2, ajustado na fase 3 do roteiro):
+    //  - PAGO     → NFe quitada; a NF CONSOME o crédito do adiantamento (8.2) e o que passar da
+    //               NF continua como crédito do fornecedor (antes: crédito "SOBRA" à parte);
+    //  - NÃO PAGO → cancela os antecipados (a cobrança da NF veio das parcelas acima) — só os
+    //               que não atendem outra NF (os demais seguem como estão).
     let creditoGeradoValor = 0;
-    if (quitaPorAntecipado) {
+    const algumComCredito = antTitulos.some((a) => a.creditoId);
+    if (quitaPorAntecipado && !algumComCredito) {
+      // pago sem o crédito da rotina (ex.: pago depois de outra NF já estar no título):
+      // mantém a regra antiga — crédito do excedente pago
       const excedentePago = Math.min(excedente, Math.round(Math.max(0, antPago - valorTotalNFe) * 100) / 100);
       const grpRes = await client.query(
         `SELECT fn_grupo_credor(cpf_cgc) AS gk FROM dbcredor WHERE cod_credor = $1`, [fornecedorCod]
@@ -495,36 +480,42 @@ export default async function handler(
             (grupo_key, cod_credor, origem, cod_pgto, nfe_id, valor_original, valor_disponivel, status, obs, username)
           VALUES ($1,$2,'SOBRA_PAGAMENTO',$3,$4,$5,$5,'ABERTO',$6,$7)`,
           [grupoKey, fornecedorCod, antTitulos[0]?.cod_pgto || null, nfeId, excedentePago,
-           `Excedente de antecipado pago na NFe ${nfeId} (antecipado R$ ${antBase.toFixed(2)} - NF R$ ${valorTotalNFe.toFixed(2)})`,
+           `Excedente de antecipado pago na NFe ${notaNF.nnf} (antecipado R$ ${antBase.toFixed(2)} - NF R$ ${valorTotalNFe.toFixed(2)})`,
            userName || null]);
         creditoGeradoValor = excedentePago;
       }
-      console.log(`💰 Quitado por antecipado pago. Crédito gerado: R$ ${creditoGeradoValor.toFixed(2)}`);
     } else if (cancelaAntecipado) {
-      // Cancela TODOS os antecipados (parcela 0) das OCs associadas — cancel='S', nada excluído.
+      let cancelados = 0;
       for (const t of antTitulos) {
+        if (t.creditoId || t.disponivel < t.valor_pgto - 0.005) continue; // atende outra NF
         await client.query(
-          `UPDATE dbpgto SET cancel = 'S', obs = COALESCE(obs,'') || $2 WHERE cod_pgto = $1`,
-          [t.cod_pgto, ` [CANCELADO: antecipado nao pago substituido pela cobranca do XML da NFe ${nfeId}]`]);
+          `UPDATE dbpgto SET cancel = 'S', obs = left(COALESCE(obs,'') || $2, 500) WHERE cod_pgto = $1`,
+          [t.cod_pgto, ` [CANCELADO: antecipado nao pago substituido pela cobranca do XML da NFe ${notaNF.nnf}]`]);
         await client.query(`UPDATE ordem_pagamento_conta SET status = 'CANCELADO' WHERE cod_pgto = $1 AND numero_parcela = 0`, [t.cod_pgto]);
         await client.query(`UPDATE ordem_pagamento_parcelas SET status = 'CANCELADO' WHERE orc_id = $1 AND numero_parcela = 0`, [t.orc_id]);
+        cancelados++;
       }
-      console.log(`🚫 ${antTitulos.length} antecipado(s) NAO pago(s) cancelado(s) (A >= NF). Cobranca gerada pelas parcelas.`);
+      console.log(`🚫 ${cancelados} antecipado(s) NAO pago(s) cancelado(s) (A >= NF). Cobranca gerada pelas parcelas.`);
     }
 
-    // 8.2 Adiantamento ↔ nota (roteiro etapas 3/4, decisão D5): o adiantamento continua título
+    // 8.2 Adiantamento ↔ nota (roteiro etapas 3/4/5, decisão D5): o adiantamento continua título
     // próprio; ganha o nº da NF no campo NF (várias por "/"), tem_nota='S', a observação
     // "NF … associada em …: R$ … atendido" e o vínculo em dbpgto_nota (histórico/modal).
     // Atendido = o que foi abatido da NF (quitou: o valor da NF; entrada: o antecipado
-    // considerado), distribuído pelos títulos sem passar do que sobra de cada um.
+    // considerado), distribuído pelos títulos (primeiro os com crédito) sem passar do
+    // disponível de cada um. Do título PAGO, a parte atendida CONSOME o crédito.
     if (!cancelaAntecipado && antTitulos.length > 0) {
       let aDistribuir = Math.round((quitaPorAntecipado ? valorTotalNFe : valorAntecipado) * 100) / 100;
       const usados = new Set<string>();
       for (const t of antTitulos) {
         if (aDistribuir <= 0.005) break;
-        const sobra = Math.max(0, t.valor_pgto - (await atendidoEmOutrasNotas(client, t.cod_pgto, nfeId)));
-        const parte = Math.round(Math.min(sobra, aDistribuir) * 100) / 100;
+        const parte = Math.round(Math.min(t.disponivel, aDistribuir) * 100) / 100;
         if (parte <= 0.005) continue;
+        if (t.creditoId) {
+          const doCredito = Math.round(Math.min(t.creditoDisponivel, parte) * 100) / 100;
+          await consumirCreditoNaNota(client, t.creditoId, nfeId, notaNF.nnf, doCredito, userName);
+          t.creditoUsado = doCredito;
+        }
         await associarNotaAoAdiantamento(client, t.cod_pgto, notaNF, parte, userName);
         t.atendido = parte;
         usados.add(t.cod_pgto);
@@ -541,6 +532,13 @@ export default async function handler(
             WHERE cod_pgto = $1 AND NOT EXISTS (SELECT 1 FROM dbpgto_nota WHERE cod_pgto = $1)`, [r.cod_pgto]);
       }
       console.log(`🔗 Adiantamento(s) vinculado(s) à NF ${notaNF.nnf}: ${Array.from(usados).join(', ') || 'nenhum'}`);
+    }
+    // crédito que continua com o fornecedor depois desta NF (para a mensagem/histórico)
+    if (algumComCredito) {
+      const ids = antTitulos.filter((a) => a.creditoId).map((a) => a.creditoId);
+      const rc = await client.query(
+        `SELECT COALESCE(SUM(valor_disponivel),0) AS v FROM credor_credito WHERE id = ANY($1::bigint[])`, [ids]);
+      creditoGeradoValor = Math.round(Number(rc.rows[0]?.v || 0) * 100) / 100;
     }
 
     // 9. Marcar NFe como com pagamento configurado
@@ -590,7 +588,7 @@ export default async function handler(
       const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const partes: string[] = [];
       if (acaoAntecipado === 'CANCELADO') partes.push(`antecipado não pago de R$ ${fmt(antBase)} cancelado`);
-      else if (acaoAntecipado === 'QUITOU_NF') partes.push(`NF quitada pelo antecipado pago de R$ ${fmt(antBase)}${creditoGeradoValor > 0 ? ` (crédito de R$ ${fmt(creditoGeradoValor)})` : ''}`);
+      else if (acaoAntecipado === 'QUITOU_NF') partes.push(`NF quitada pelo antecipado pago de R$ ${fmt(antBase)}${creditoGeradoValor > 0 ? ` (fica crédito de R$ ${fmt(creditoGeradoValor)})` : ''}`);
       else if (acaoAntecipado === 'MANTIDO_COMO_ENTRADA') partes.push(`antecipado de R$ ${fmt(antBase)} mantido como entrada`);
       partes.push(`${parcelasCriadas} parcela(s) de cobrança${parcelasCriadas ? ` (R$ ${fmt(valorTotalCriado)})` : ''}`);
       await registrarHistoricoNfe(client, {
@@ -621,6 +619,7 @@ export default async function handler(
               pago: t.valor_pago,
               nro_dup: t.nro_dup,
               atendido: t.atendido,
+              creditoUsado: t.creditoUsado,
             })),
           },
         }
@@ -638,7 +637,7 @@ export default async function handler(
     console.log(`========================================\n`);
 
     const msgExc = quitaPorAntecipado
-      ? ` NFe quitada pelo antecipado.${creditoGeradoValor > 0 ? ` Crédito de R$ ${creditoGeradoValor.toFixed(2)} gerado para o fornecedor.` : ''}`
+      ? ` NFe quitada pelo antecipado.${creditoGeradoValor > 0 ? ` R$ ${creditoGeradoValor.toFixed(2)} continua como crédito do fornecedor.` : ''}`
       : cancelaAntecipado
       ? ` ${antTitulos.length} antecipado(s) não pago(s) cancelado(s); cobrança gerada pela NFe.`
       : '';

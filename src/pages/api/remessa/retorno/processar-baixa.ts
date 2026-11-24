@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pg';
+import { sincronizarCreditoAposBaixa } from '@/lib/compras/creditoFornecedor';
 
 const pool = getPgPool();
 
@@ -191,6 +192,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           novoTotalPago,
           obsAdicional
         ]);
+
+        // 2.6.1 Crédito de fornecedor: título pago sem NF (conta 4 / avulso conta 2) — roteiro fase 3
+        await sincronizarCreditoAposBaixa(pool, contaPagar.cod_pgto, 'RETORNO_CNAB');
 
         // 2.7. Registrar sucesso
         resultados.sucesso.push({
