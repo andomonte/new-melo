@@ -102,6 +102,7 @@ import ConsultaFaturasPage from '../corpo/faturamento/ConsultaFatura/ConsultaFat
 // Vendas / Operacional - Lazy loading para componentes pesados
 const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
 const ConfigOrcamento = lazy(() => import('@/components/corpo/admin/configuracoes/orcamento'));
+const CreditoFornecedor = lazy(() => import('@/components/corpo/admin/financeiro/creditoFornecedor'));
 const NovasVendas = lazy(() => import('@/components/corpo/vendas/novaVenda'));
 const NovaVendaV2 = lazy(() => import('@/components/corpo/vendas/novaVendaV2'));
 const CentralVendas = lazy(() => import('@/components/corpo/vendas/centralVendas'));
@@ -472,6 +473,13 @@ export const menus = [
             href: '/admin/financeiro/contasAPagar',
             icon: LandmarkIcon,
             corpo: ContasAPagar,
+          },
+          {
+            // roteiro docs/saldo-fornecedor/roteiro-adiantamento-nfe-credito.md (fase 4)
+            name: 'Crédito de Fornecedor',
+            href: '/admin/financeiro/creditoFornecedor',
+            icon: WalletIcon,
+            corpo: CreditoFornecedor,
           },
           {
             name: 'Contas a Receber',

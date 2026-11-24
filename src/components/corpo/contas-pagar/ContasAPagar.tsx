@@ -251,6 +251,14 @@ export function ContasAPagar() {
   const [detalhesParcela, setDetalhesParcela] = useState<any>(null);
   // Modal "notas do título" (coluna NF): cod_pgto do título aberto
   const [notasDoTitulo, setNotasDoTitulo] = useState<string | null>(null);
+  // Selo "CRÉDITO": credores (fornecedor/filiais) com crédito em aberto — roteiro fase 4
+  const [credoresComCredito, setCredoresComCredito] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    fetch('/api/financeiro/credito-fornecedor?credores=1')
+      .then((r) => (r.ok ? r.json() : { credores: [] }))
+      .then((j) => setCredoresComCredito(new Set((j.credores || []).map(String))))
+      .catch(() => undefined);
+  }, []);
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
   const [pagamentoParaCancelar, setPagamentoParaCancelar] = useState<any>(null);
 
@@ -1427,6 +1435,20 @@ export function ContasAPagar() {
               >
                 {conta.tipo === 'T' ? 'T' : 'F'}
               </span>
+              {/* Fornecedor (ou filial dele) com crédito em aberto → atalho para a tela de crédito */}
+              {conta.tipo !== 'T' && conta.cod_credor && credoresComCredito.has(String(conta.cod_credor)) && (
+                <button
+                  type="button"
+                  className="ml-1 px-1.5 rounded bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 text-[9px] font-bold hover:underline"
+                  title="Fornecedor tem crédito em aberto — abrir Crédito de Fornecedor"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.location.href = `/admin/financeiro/creditoFornecedor?cod_credor=${encodeURIComponent(String(conta.cod_credor))}`;
+                  }}
+                >
+                  CRÉDITO
+                </button>
+              )}
             </div>
           </div>
         ),
@@ -4148,7 +4170,10 @@ export function ContasAPagar() {
                         detalhes = pagamento.nro_cheque ? `Nº ${pagamento.nro_cheque}` : '';
                       }
 
-                      if (formaCadastro) {
+                      if (pagamento.tp_pgto === 'Z') {
+                        // forma inativa (não sai na lista do Pagar): baixa com crédito de fornecedor
+                        formaPgtoNome = 'Abatimento de saldo (crédito de fornecedor)';
+                      } else if (formaCadastro) {
                         formaPgtoNome = formaCadastro.descricao;
                       } else if (pagamento.tp_pgto === 'C') {
                         formaPgtoNome = 'Cheque';

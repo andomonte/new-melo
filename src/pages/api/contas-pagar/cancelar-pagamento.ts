@@ -1,6 +1,6 @@
 import { getPgPool } from '@/lib/pg';
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { CreditoUsadoError, sincronizarCreditoTitulo } from '@/lib/compras/creditoFornecedor';
+import { CreditoUsadoError, LETRA_ABATIMENTO, devolverUsosDoLancamento, sincronizarCreditoTitulo } from '@/lib/compras/creditoFornecedor';
 
 export default async function handler(
   req: NextApiRequest,
@@ -31,7 +31,8 @@ export default async function handler(
         fpg_cof_id,
         valor_pgto,
         cancel,
-        dt_pgto
+        dt_pgto,
+        cod_fpgto
       FROM dbfpgto
       WHERE cod_pgto = $1 AND fpg_cof_id = $2
     `, [cod_pgto, fpg_cof_id]);
@@ -94,6 +95,12 @@ export default async function handler(
       SET paga = $1, valor_pago = $3
       WHERE cod_pgto = $2
     `, [novoPaga, cod_pgto, totalPago]);
+
+    // Baixa feita com crédito de fornecedor (forma Z): o valor volta para o crédito.
+    if (String(pagamento.cod_fpgto || '').trim() === LETRA_ABATIMENTO) {
+      await devolverUsosDoLancamento(db, String(cod_pgto), fpg_cof_id,
+        'Estorno do pagamento no Contas a Pagar', req.body?.username || 'Sistema');
+    }
 
     // Crédito de fornecedor gerado por este título: baixa junto. Se já foi usado, bloqueia.
     await sincronizarCreditoTitulo(db, String(cod_pgto), req.body?.username || null);

@@ -1,6 +1,6 @@
 # Roteiro para aprovação: adiantamento a fornecedor, NF no título e Crédito de Fornecedor
 
-**Data:** 24/11/2026. **Situação:** todas as decisões aprovadas em 24/11. Fases 1, 2 e 3 feitas, com as migrations 086 a 090 aplicadas no banco de teste. Fase 4 a fazer.
+**Data:** 24/11/2026. **Situação:** todas as decisões aprovadas em 24/11. As 4 fases feitas, com as migrations 086 a 091 aplicadas no banco de teste.
 
 **Decisões tomadas (24/11/2026):**
 - **D1:** aprovada como proposta. Implementada em `src/lib/compras/tituloCompras.ts`; títulos existentes corrigidos pela migration 086.
@@ -218,6 +218,33 @@ As mudanças no banco entram como migrations novas e precisam rodar em produçã
   - um crédito por título;
   - **D6:** 5 créditos em Manaus (4 adiantamentos, R$ 4.359,01, e o avulso de R$ 166,68).
 - **Testado no banco** (transação desfeita): adiantamento pago com NF menor, reconfiguração, estorno bloqueado, pagamento e estorno de adiantamento sem NF, pagamento de título que já tem NF, e erro isolado no savepoint.
+
+### Fase 4: o que foi feito (24/11/2026)
+- **Tela Financeiro → Crédito de Fornecedor** (`/admin/financeiro/creditoFornecedor`, componente `src/components/corpo/admin/financeiro/creditoFornecedor`):
+  - **lista:** fornecedor agrupado com as filiais pela raiz do CNPJ, com saldo, créditos em aberto, crédito mais antigo (dias) e títulos em aberto. Busca por nome ou CNPJ e opção "mostrar zerados";
+  - **detalhe:** abas Créditos (origem, título, conta financeira, gerado, usado, saldo, situação), Histórico (geração, notas que consumiram, títulos baixados, estornos) e Filiais.
+- **Usar crédito:**
+  - lista os títulos em aberto do fornecedor e das filiais, sem os adiantamentos (conta 4);
+  - o usuário marca os títulos e o valor de cada um (parcial permitido);
+  - consome os créditos do mais antigo para o mais novo;
+  - lança no histórico do título com a forma **Z – ABATIMENTO DE SALDO** (inativa: não aparece no "Pagar") e a conta **0128 CRÉDITO\ACERTO**, e atualiza o pago;
+  - título em remessa SISPAG não pode ser abatido;
+  - a baixa com crédito não gera crédito novo.
+- **Estornar uso:**
+  - motivo obrigatório;
+  - cancela o lançamento, devolve o crédito e refaz o pago do título;
+  - estornar esse lançamento pelo histórico do Contas a Pagar também devolve o crédito.
+  - O consumo por NF não se estorna na tela: reconfigure o pagamento da NF.
+- **Contas a Pagar:**
+  - selo **CRÉDITO** no credor que tem crédito no grupo, com atalho para a tela (`?cod_credor=`);
+  - o histórico mostra a forma Z como "Abatimento de saldo".
+- **Rotas:** `/api/financeiro/credito-fornecedor` (lista, credores, grupo), `/detalhe` (detalhe e títulos), `/usar`, `/estornar`. Rotina em `creditoFornecedor.ts`.
+- **Migration 091:**
+  - forma Z;
+  - `credor_credito_uso.fpg_cof_id`;
+  - tela em `tb_telas` com a mesma permissão de Contas a Pagar (Manaus: ADMINISTRAÇÃO, CONTASAPAGAR, FATURAMENTO, financeiro; Roraima e Rondônia: ADMINISTRAÇÃO, FATURAMENTO).
+  - Re-logar para ver o menu.
+- **Permissão:** checada só no menu, como nas outras telas do financeiro. As rotas não validam o grupo.
 
 ## 6. Fora deste roteiro
 - **Crédito entre filiais da MELO** (Manaus usar crédito de Roraima): são bancos diferentes; já estava adiado na spec.
