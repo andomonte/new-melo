@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { mascaraInputBRL } from '@/utils/monetario';
 
 const API = '/api/financeiro/credito-fornecedor';
 
@@ -494,7 +495,9 @@ function PainelUsarCredito({ grupo, saldo, usuario, onConcluido }: {
                               className={`h-8 w-28 text-right ${erro ? 'border-red-500' : ''}`}
                               value={marcados[t.cod_pgto]}
                               disabled={gravando}
-                              onChange={(e) => setMarcados((m) => ({ ...m, [t.cod_pgto]: e.target.value.replace(/[^0-9.,]/g, '') }))}
+                              inputMode="numeric"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => setMarcados((m) => ({ ...m, [t.cod_pgto]: mascaraInputBRL(e.target.value) }))}
                             />
                             {erro && <div className="text-[11px] text-red-600">{erro}</div>}
                           </div>
