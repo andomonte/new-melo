@@ -10,7 +10,10 @@ import { getPgPool } from '@/lib/pg';
  *   conta_financeira   → agrupa por conta financeira (pag_cof_id)
  *   pagas_sem_nf       → paga='S' e tem_nota='N' no período de pagamento, agrupa por conta financeira
  *   comprador          → agrupa por comprador
- *   filtro_tela        → dados filtrados da tela (período por vencimento + status), agrupa por data
+ *   filtro_tela        → GERAL: todos os filtros do botão Filtros do Delphi (fornecedor, transportadora,
+ *                        conta financeira, centro/grupo, comprador, NF, duplicata, observação, valor
+ *                        do pagamento, valor pago, conhecimentos abertos, status e período por
+ *                        vencimento/pagamento/emissão), combináveis; agrupa pela data escolhida
  *   centro_custo       → agrupa por centro de custo (cad_centro_custo)
  *   grupo_centro       → agrupa por grupo de centros de custo (cad_grupo_centro_custo)
  *
@@ -25,7 +28,7 @@ const TITULOS: Record<string, string> = {
   conta_financeira: 'RELATÓRIO DE TÍTULOS A PAGAR: POR CONTA FINANCEIRA',
   pagas_sem_nf: 'RELATÓRIO DE TÍTULOS A PAGAR: PAGAS SEM NF',
   comprador: 'RELATÓRIO DE TÍTULOS A PAGAR: POR COMPRADOR',
-  filtro_tela: 'RELATÓRIO DE TÍTULOS A PAGAR: FILTRO DA TELA',
+  filtro_tela: 'RELATÓRIO DE TÍTULOS A PAGAR: GERAL',
   centro_custo: 'RELATÓRIO DE TÍTULOS A PAGAR: POR CENTRO DE CUSTO',
   grupo_centro: 'RELATÓRIO DE TÍTULOS A PAGAR: POR GRUPO DE CENTROS DE CUSTO',
 };
@@ -83,6 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     tipo_data = 'venc', // venc | pgto (só afeta "periodo")
     param, // filtro do grupo (conta financeira, comprador, centro, grupo)
     status, // filtro_tela: pendente | pago | ...
+    data_base = 'venc', // filtro_tela (Geral): venc | pgto | emissao
   } = req.query as Record<string, string>;
 
   if (!TITULOS[tipo]) return res.status(400).json({ erro: `Tipo de relatório inválido: ${tipo}` });
@@ -102,10 +106,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     cond.push(`p.dt_pgto >= ${add(data_inicio)} AND p.dt_pgto <= ${add(data_fim)}`);
     if (param) cond.push(`p.pag_cof_id = ${add(param)}`);
   } else if (tipo === 'filtro_tela') {
-    // Dados filtrados da tela: período por vencimento + status opcional.
-    if (data_inicio && data_fim) cond.push(`p.dt_venc >= ${add(data_inicio)} AND p.dt_venc <= ${add(data_fim)}`);
+    // GERAL (antes "Dados filtrados da tela"): todos os filtros do botão Filtros do Delphi
+    // (Pagamento de Títulos), opcionais e combináveis numa tela só.
+    const q = req.query as Record<string, string>;
+    const colBase = data_base === 'pgto' ? 'p.dt_pgto' : data_base === 'emissao' ? 'p.dt_emissao' : 'p.dt_venc';
+    if (data_inicio && data_fim) cond.push(`${colBase}::date >= ${add(data_inicio)} AND ${colBase}::date <= ${add(data_fim)}`);
     if (status === 'pago') cond.push(`p.paga = 'S'`);
-    else if (status === 'pendente') cond.push(`p.paga = 'N'`);
+    else if (status === 'pendente') cond.push(`COALESCE(p.paga,'N') <> 'S'`);
+    const txt = (v?: string) => (v && v !== '__TODOS__' ? String(v).trim() : '');
+    if (txt(q.credor)) cond.push(`p.cod_credor = ${add(txt(q.credor))}`);
+    if (txt(q.transp)) cond.push(`p.cod_transp = ${add(txt(q.transp))}`);
+    if (txt(q.conta_financeira)) cond.push(`p.pag_cof_id = ${add(txt(q.conta_financeira))}`);
+    if (txt(q.centro_custo)) cond.push(`cc.cec_id = ${add(txt(q.centro_custo))}`);
+    if (txt(q.grupo_centro)) cond.push(`gcc.gcc_id = ${add(txt(q.grupo_centro))}`);
+    if (txt(q.comprador)) cond.push(`p.codcomprador = ${add(txt(q.comprador))}`);
+    if (txt(q.nro_nf)) cond.push(`p.nro_nf ILIKE ${add(`%${txt(q.nro_nf)}%`)}`);
+    if (txt(q.nro_dup)) cond.push(`p.nro_dup ILIKE ${add(`%${txt(q.nro_dup)}%`)}`);
+    if (txt(q.obs)) cond.push(`p.obs ILIKE ${add(`%${txt(q.obs)}%`)}`);
+    const valor = (v?: string) => {
+      const t = txt(v).replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(t);
+      return isNaN(num) ? null : num;
+    };
+    const vPgto = valor(q.valor_pgto);
+    if (vPgto != null) cond.push(`abs(COALESCE(p.valor_pgto,0) - ${add(vPgto)}) < 0.005`);
+    const vPago = valor(q.valor_pago);
+    if (vPago != null) cond.push(`abs(COALESCE(p.valor_pago,0) - ${add(vPago)}) < 0.005`);
+    // Conhecimentos abertos: títulos de transportadora (CT-e) ainda não pagos
+    if (q.conhecimentos_abertos === '1') cond.push(`p.tipo = 'T'`, `COALESCE(p.paga,'N') <> 'S'`);
   } else {
     // conta_financeira / comprador / centro_custo / grupo_centro: período opcional (por vencimento)
     if (data_inicio && data_fim) cond.push(`p.dt_venc >= ${add(data_inicio)} AND p.dt_venc <= ${add(data_fim)}`);
@@ -122,7 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // --- ordenação (chave de grupo + cod_pgto) ---
   const ordem =
     tipo === 'periodo' ? (tipo_data === 'pgto' ? 'p.dt_pgto' : 'p.dt_venc') :
-    tipo === 'filtro_tela' ? 'p.dt_venc' :
+    tipo === 'filtro_tela' ? (data_base === 'pgto' ? 'p.dt_pgto' : data_base === 'emissao' ? 'p.dt_emissao' : 'p.dt_venc') :
     tipo === 'conta_financeira' || tipo === 'pagas_sem_nf' ? 'p.pag_cof_id' :
     tipo === 'comprador' ? 'p.codcomprador' :
     tipo === 'centro_custo' ? 'cc.cec_id' :
@@ -147,6 +175,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ? { chave: String(r.dt_pgto || 'sem'), rotulo: `DATA PAGAMENTO: ${fmtData(r.dt_pgto)}` }
             : { chave: String(r.dt_venc || 'sem'), rotulo: `DATA VENCIMENTO: ${fmtData(r.dt_venc)}` };
         case 'filtro_tela':
+          if (data_base === 'pgto') return { chave: String(r.dt_pgto || 'sem'), rotulo: `DATA PAGAMENTO: ${fmtData(r.dt_pgto)}` };
+          if (data_base === 'emissao') return { chave: String(r.dt_emissao || 'sem'), rotulo: `DATA EMISSÃO: ${fmtData(r.dt_emissao)}` };
           return { chave: String(r.dt_venc || 'sem'), rotulo: `DATA VENCIMENTO: ${fmtData(r.dt_venc)}` };
         case 'conta_financeira':
         case 'pagas_sem_nf':

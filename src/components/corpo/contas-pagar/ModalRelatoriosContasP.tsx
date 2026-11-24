@@ -1,4 +1,5 @@
 'use client';
+import { mascaraInputBRL } from '@/utils/monetario';
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -27,12 +28,13 @@ interface Totais { pgto: number; pago: number; aberto: number; juros: number; qt
 interface Grupo { chave: string; rotulo: string; linhas: Linha[]; subtotais: Totais }
 interface Resultado { tipo: string; titulo: string; grupos: Grupo[]; totalGeral: Totais }
 
+// 'filtro_tela' = GERAL: reúne todos os filtros do botão Filtros do Delphi (Pagamento de Títulos)
 const TIPOS = [
+  { value: 'filtro_tela', label: 'Geral' },
   { value: 'periodo', label: 'Por Período' },
   { value: 'conta_financeira', label: 'Por Conta Financeira' },
   { value: 'pagas_sem_nf', label: 'Pagas sem NF' },
   { value: 'comprador', label: 'Por Comprador' },
-  { value: 'filtro_tela', label: 'Dados Filtrados da Tela' },
   { value: 'centro_custo', label: 'Por Centro de Custo' },
   { value: 'grupo_centro', label: 'Por Grupo de Centros de Custo' },
 ];
@@ -85,7 +87,16 @@ const baixarBlob = (blob: Blob, nome: string) => {
 };
 
 export default function ModalRelatoriosContasP({ isOpen, onClose, userName }: Props) {
-  const [tipo, setTipo] = useState('periodo');
+  const [tipo, setTipo] = useState('filtro_tela');
+  // Filtros do relatório GERAL (todos opcionais e combináveis — botão Filtros do Delphi)
+  const FILTROS_GERAL_VAZIOS = {
+    credor: '', transp: '', conta_financeira: '', comprador: '', centro_custo: '', grupo_centro: '',
+    nro_nf: '', nro_dup: '', obs: '', valor_pgto: '', valor_pago: '', conhecimentos_abertos: false,
+  };
+  const [fg, setFg] = useState(FILTROS_GERAL_VAZIOS);
+  const [fgKey, setFgKey] = useState(0); // reinicia os campos de busca ao limpar
+  const [dataBase, setDataBase] = useState<'venc' | 'pgto' | 'emissao'>('venc');
+  const setF = (k: keyof typeof FILTROS_GERAL_VAZIOS, v: any) => setFg((prev) => ({ ...prev, [k]: v }));
   const [tipoData, setTipoData] = useState<'venc' | 'pgto'>('venc');
   const [dataInicio, setDataInicio] = useState(primeiroDiaMesISO());
   const [dataFim, setDataFim] = useState(hojeISO());
@@ -179,7 +190,16 @@ export default function ModalRelatoriosContasP({ isOpen, onClose, userName }: Pr
       if (tipo === 'periodo') { q.set('tipo_data', tipoData); q.set('data_inicio', dataInicio); q.set('data_fim', dataFim); }
       else if (usaPeriodo && dataInicio && dataFim) { q.set('data_inicio', dataInicio); q.set('data_fim', dataFim); }
       if (temParam && param.trim() && param !== '__TODOS__') q.set('param', param.trim());
-      if (tipo === 'filtro_tela' && status) q.set('status', status);
+      if (tipo === 'filtro_tela') {
+        if (status) q.set('status', status);
+        q.set('data_base', dataBase);
+        (Object.keys(fg) as (keyof typeof fg)[]).forEach((k) => {
+          const v = fg[k];
+          if (k === 'conhecimentos_abertos') { if (v) q.set(k, '1'); return; }
+          const t = String(v || '').trim();
+          if (t && t !== '__TODOS__') q.set(k, t);
+        });
+      }
       const r = await fetch(`/api/contas-pagar/consulta-avancada?${q.toString()}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.erro || 'Falha ao gerar relatório');
@@ -352,38 +372,121 @@ export default function ModalRelatoriosContasP({ isOpen, onClose, userName }: Pr
             </div>
           )}
           {tipo === 'filtro_tela' && (
-            <div>
-              <Label>Status</Label>
-              <Select value={status || 'todos'} onValueChange={(v) => setStatus(v === 'todos' ? '' : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="pendente">Pendentes</SelectItem>
-                  <SelectItem value="pago">Pagos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <>
+              <div>
+                <Label>Situação</Label>
+                <Select value={status || 'todos'} onValueChange={(v) => setStatus(v === 'todos' ? '' : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as contas</SelectItem>
+                    <SelectItem value="pendente">Contas não pagas</SelectItem>
+                    <SelectItem value="pago">Contas pagas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Data base do período</Label>
+                <Select value={dataBase} onValueChange={(v) => setDataBase(v as 'venc' | 'pgto' | 'emissao')}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="venc">Vencimento</SelectItem>
+                    <SelectItem value="pgto">Pagamento</SelectItem>
+                    <SelectItem value="emissao">Emissão</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
           )}
         </div>
 
+        {/* GERAL: os filtros do botão "Filtros" do Delphi, todos juntos (opcionais e combináveis) */}
+        {tipo === 'filtro_tela' && (
+          <div key={fgKey} className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-md border border-gray-200 dark:border-zinc-700 p-3">
+            <div>
+              <Label>Fornecedor</Label>
+              <Autocomplete resetKey={fgKey} apiUrl="/api/contas-pagar/fornecedores" mapResponse={(d) => d.fornecedores || []}
+                value={fg.credor} onChange={(v) => setF('credor', v)} placeholder="Todos" />
+            </div>
+            <div>
+              <Label>Transportadora</Label>
+              <Autocomplete resetKey={fgKey} apiUrl="/api/contas-pagar/transportadoras" mapResponse={(d) => d.transportadoras || []}
+                value={fg.transp} onChange={(v) => setF('transp', v)} placeholder="Todas" />
+            </div>
+            <div>
+              <Label>Conta Financeira</Label>
+              <Autocomplete resetKey={fgKey} apiUrl="/api/contas-pagar/opcoes-relatorio/conta_financeira" mapResponse={(d) => d.opcoes || []}
+                value={fg.conta_financeira} onChange={(v) => setF('conta_financeira', v)} placeholder="Todas" />
+            </div>
+            <div>
+              <Label>Comprador</Label>
+              <Autocomplete resetKey={fgKey} apiUrl="/api/contas-pagar/opcoes-relatorio/comprador" mapResponse={(d) => d.opcoes || []}
+                value={fg.comprador} onChange={(v) => setF('comprador', v)} placeholder="Todos" />
+            </div>
+            <div>
+              <Label>Centro de Custo</Label>
+              <Autocomplete resetKey={fgKey} apiUrl="/api/contas-pagar/opcoes-relatorio/centro_custo" mapResponse={(d) => d.opcoes || []}
+                value={fg.centro_custo} onChange={(v) => setF('centro_custo', v)} placeholder="Todos" />
+            </div>
+            <div>
+              <Label>Grupo de Centros de Custo</Label>
+              <Autocomplete resetKey={fgKey} apiUrl="/api/contas-pagar/opcoes-relatorio/grupo_centro" mapResponse={(d) => d.opcoes || []}
+                value={fg.grupo_centro} onChange={(v) => setF('grupo_centro', v)} placeholder="Todos" />
+            </div>
+            <div>
+              <Label>Nº Nota Fiscal</Label>
+              <Input value={fg.nro_nf} onChange={(e) => setF('nro_nf', e.target.value)} placeholder="Contém…" />
+            </div>
+            <div>
+              <Label>Duplicata</Label>
+              <Input value={fg.nro_dup} onChange={(e) => setF('nro_dup', e.target.value)} placeholder="Contém…" />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Observação</Label>
+              <Input value={fg.obs} onChange={(e) => setF('obs', e.target.value)} placeholder="Contém…" />
+            </div>
+            <div>
+              <Label>Valor do Pagamento</Label>
+              <Input value={fg.valor_pgto} inputMode="numeric" placeholder="0,00"
+                onChange={(e) => setF('valor_pgto', mascaraInputBRL(e.target.value))} />
+            </div>
+            <div>
+              <Label>Valor Pago</Label>
+              <Input value={fg.valor_pago} inputMode="numeric" placeholder="0,00"
+                onChange={(e) => setF('valor_pago', mascaraInputBRL(e.target.value))} />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none md:col-span-2" style={{ paddingTop: 20 }}>
+              <input type="checkbox" checked={fg.conhecimentos_abertos} onChange={(e) => setF('conhecimentos_abertos', e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#2f6fa8' }} />
+              <span className="text-sm">Somente conhecimentos de transporte em aberto</span>
+            </label>
+            <div className="md:col-span-2 flex items-end justify-end">
+              <Button variant="outline" size="sm" onClick={() => { setFg(FILTROS_GERAL_VAZIOS); setStatus(''); setFgKey((k) => k + 1); setRes(null); }}>
+                Limpar filtros
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Período + ações */}
         <div className="flex flex-wrap items-end gap-3">
-          {!EXIGE_PERIODO.has(tipo) && tipo !== 'filtro_tela' && (
+          {!EXIGE_PERIODO.has(tipo) && (
             <label className="flex items-center gap-2 cursor-pointer select-none" style={{ paddingBottom: 6 }}>
               <input type="checkbox" checked={usarPeriodo} onChange={(e) => setUsarPeriodo(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#2f6fa8' }} />
-              <span className="text-sm">Filtrar por período (vencimento)</span>
+              <span className="text-sm">
+                Filtrar por período ({tipo === 'filtro_tela' ? ({ venc: 'vencimento', pgto: 'pagamento', emissao: 'emissão' } as const)[dataBase] : 'vencimento'})
+              </span>
             </label>
           )}
-          <div style={{ opacity: EXIGE_PERIODO.has(tipo) || tipo === 'filtro_tela' || usarPeriodo ? 1 : 0.5 }} className="flex items-end gap-3">
+          <div style={{ opacity: EXIGE_PERIODO.has(tipo) || usarPeriodo ? 1 : 0.5 }} className="flex items-end gap-3">
             <div>
               <Label>Data inicial{EXIGE_PERIODO.has(tipo) ? ' *' : ''}</Label>
               <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)}
-                disabled={!EXIGE_PERIODO.has(tipo) && tipo !== 'filtro_tela' && !usarPeriodo} />
+                disabled={!EXIGE_PERIODO.has(tipo) && !usarPeriodo} />
             </div>
             <div>
               <Label>Data final{EXIGE_PERIODO.has(tipo) ? ' *' : ''}</Label>
               <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)}
-                disabled={!EXIGE_PERIODO.has(tipo) && tipo !== 'filtro_tela' && !usarPeriodo} />
+                disabled={!EXIGE_PERIODO.has(tipo) && !usarPeriodo} />
             </div>
           </div>
           <Button onClick={gerar} disabled={carregando}>
