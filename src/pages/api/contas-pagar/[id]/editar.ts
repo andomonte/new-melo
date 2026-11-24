@@ -20,7 +20,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       cod_credor,
       cod_conta,
       pag_cof_id,
-      cod_ccusto
+      cod_ccusto,
+      // mesmos campos do cadastro (criar.ts): transportadora, comprador e internacional
+      cod_transp,
+      cod_comprador,
+      eh_internacional,
+      moeda,
+      taxa_conversao,
+      valor_moeda,
+      nro_invoice,
+      nro_contrato
     } = req.body;
 
     if (!id) {
@@ -125,6 +134,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updates.push(`pag_cof_id = $${paramIndex}`);
       params.push(cofNum as any);
       paramIndex++;
+    }
+
+    // Texto: '' limpa o campo (NULL); corta no tamanho da coluna.
+    const texto = (v: any, max: number) => {
+      const t = v == null ? '' : String(v).trim();
+      return t === '' ? null : t.slice(0, max);
+    };
+    const numero = (v: any) => {
+      if (v == null || String(v).trim() === '') return null;
+      const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
+      return isNaN(n) ? null : n;
+    };
+    const setar = (col: string, valor: any) => {
+      updates.push(`${col} = $${paramIndex}`);
+      params.push(valor);
+      paramIndex++;
+    };
+    if (cod_transp !== undefined) setar('cod_transp', texto(cod_transp, 5));
+    if (cod_comprador !== undefined) setar('codcomprador', texto(cod_comprador, 3));
+    if (eh_internacional !== undefined) {
+      const inter = eh_internacional === true || eh_internacional === 'S';
+      setar('eh_internacional', inter ? 'S' : 'N');
+      if (inter) {
+        if (moeda !== undefined) setar('moeda', texto(moeda, 3));
+        if (taxa_conversao !== undefined) setar('taxa_conversao', numero(taxa_conversao));
+        if (valor_moeda !== undefined) setar('valor_moeda', numero(valor_moeda));
+        if (nro_invoice !== undefined) setar('nro_invoice', texto(nro_invoice, 30));
+        if (nro_contrato !== undefined) setar('nro_contrato', texto(nro_contrato, 30));
+      } else {
+        // deixou de ser internacional: limpa os campos de moeda estrangeira
+        setar('moeda', null); setar('taxa_conversao', null); setar('valor_moeda', null);
+        setar('nro_invoice', null); setar('nro_contrato', null);
+      }
     }
 
     if (cod_ccusto !== undefined) {

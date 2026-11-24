@@ -284,8 +284,21 @@ export function ContasAPagar() {
     cod_credor: '',
     cod_conta: '',
     pag_cof_id: '',
-    cod_ccusto: ''
+    cod_ccusto: '',
+    // mesmos campos do cadastro (Nova Conta a Pagar)
+    tipo: 'F',
+    cod_transp: '',
+    cod_comprador: '',
+    eh_internacional: false,
+    moeda: '',
+    taxa_conversao: 0,
+    valor_moeda: 0,
+    nro_invoice: '',
+    nro_contrato: '',
   });
+  // textos dos campos de moeda estrangeira na edição (taxa com 6 casas; valor com máscara)
+  const [taxaEdicaoInput, setTaxaEdicaoInput] = useState('');
+  const [valorMoedaEdicaoInput, setValorMoedaEdicaoInput] = useState('');
   const [dadosValidacaoValor, setDadosValidacaoValor] = useState<{
     valorEsperado: number;
     valorDigitado: number;
@@ -1793,8 +1806,21 @@ export function ContasAPagar() {
       cod_credor: conta.cod_credor?.toString() || '',
       cod_conta: conta.cod_conta?.toString() || '',
       pag_cof_id: conta.pag_cof_id?.toString() || '',
-      cod_ccusto: conta.cod_ccusto?.toString() || ''
+      cod_ccusto: conta.cod_ccusto?.toString() || '',
+      tipo: conta.tipo === 'T' ? 'T' : 'F',
+      cod_transp: (conta as any).cod_transp?.toString() || '',
+      cod_comprador: conta.codcomprador != null ? String(conta.codcomprador) : '',
+      eh_internacional: String(conta.eh_internacional || '') === 'S',
+      moeda: conta.moeda || '',
+      taxa_conversao: Number(conta.taxa_conversao) || 0,
+      valor_moeda: Number(conta.valor_moeda) || 0,
+      nro_invoice: conta.nro_invoice || '',
+      nro_contrato: conta.nro_contrato || '',
     });
+    setTaxaEdicaoInput(Number(conta.taxa_conversao) > 0 ? formatarTaxa6(Number(conta.taxa_conversao)) : '');
+    setValorMoedaEdicaoInput(
+      Number(conta.valor_moeda) > 0 ? mascaraInputBRL(String(Math.round(Number(conta.valor_moeda) * 100))) : '',
+    );
     modais.setModalEditarAberto(true);
   };
 
@@ -2292,18 +2318,37 @@ export function ContasAPagar() {
     if (!modais.contaSelecionada) return;
 
     try {
+      const inter = dadosEdicao.eh_internacional;
+      if (inter) {
+        if (!dadosEdicao.moeda) throw new Error('Selecione a moeda.');
+        if (!(dadosEdicao.taxa_conversao > 0)) throw new Error('Informe a taxa de conversão.');
+        if (!(dadosEdicao.valor_moeda > 0)) throw new Error('Informe o valor na moeda estrangeira.');
+      }
+      // internacional: o valor em reais é calculado (valor na moeda × taxa), como no cadastro
+      const valorReais = inter
+        ? Math.round(dadosEdicao.valor_moeda * dadosEdicao.taxa_conversao * 100) / 100
+        : desmascarar(dadosEdicao.valor_pgto);
       await editarConta(modais.contaSelecionada.id, {
         dt_venc: dadosEdicao.dt_venc || undefined,
         dt_emissao: dadosEdicao.dt_emissao || undefined,
-        valor_pgto: desmascarar(dadosEdicao.valor_pgto) || undefined,
-        obs: dadosEdicao.obs || undefined,
-        nro_nf: dadosEdicao.nro_nf || undefined,
-        nro_dup: dadosEdicao.nro_dup || undefined,
+        valor_pgto: valorReais || undefined,
+        // texto vai como está ('' = limpar o campo)
+        obs: dadosEdicao.obs,
+        nro_nf: dadosEdicao.nro_nf,
+        nro_dup: dadosEdicao.nro_dup,
         // STRING (mantém zeros à esquerda; parseInt quebrava o vínculo do credor/conta).
-        cod_credor: dadosEdicao.cod_credor || undefined,
-        cod_conta: dadosEdicao.cod_conta || undefined,
+        cod_credor: dadosEdicao.tipo === 'F' ? dadosEdicao.cod_credor || undefined : undefined,
+        cod_transp: dadosEdicao.tipo === 'T' ? dadosEdicao.cod_transp || undefined : undefined,
+        cod_conta: dadosEdicao.cod_conta,
         pag_cof_id: dadosEdicao.pag_cof_id || undefined,
-        cod_ccusto: dadosEdicao.cod_ccusto || undefined
+        cod_ccusto: dadosEdicao.cod_ccusto || undefined,
+        cod_comprador: dadosEdicao.cod_comprador,
+        eh_internacional: inter,
+        moeda: dadosEdicao.moeda,
+        taxa_conversao: dadosEdicao.taxa_conversao,
+        valor_moeda: dadosEdicao.valor_moeda,
+        nro_invoice: dadosEdicao.nro_invoice,
+        nro_contrato: dadosEdicao.nro_contrato,
       });
 
       toast.success('Conta atualizada com sucesso!', {
@@ -3713,136 +3758,323 @@ export function ContasAPagar() {
             Editando conta de <strong>{modais.contaSelecionada?.nome_credor}</strong>
           </p>
 
-          {/* Linha 1: Datas + Fornecedor + Valor */}
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <Label htmlFor="dt_emissao_edit">Data de Emissão</Label>
-              <Input
-                id="dt_emissao_edit"
-                type="date"
-                value={dadosEdicao.dt_emissao}
-                disabled
-                className="opacity-60 cursor-not-allowed"
-              />
-            </div>
+          {/* Mesmos campos do cadastro (Nova Conta a Pagar). Cada parcela é um título: aqui se
+              edita este título; o parcelamento não muda pela edição. */}
+          {(() => {
+            const c = modais.contaSelecionada;
+            const inter = dadosEdicao.eh_internacional;
+            const valorReaisCalc = Math.round(dadosEdicao.valor_moeda * dadosEdicao.taxa_conversao * 100) / 100;
+            return (
+              <>
+                {/* Informações básicas */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <Label>Tipo de Conta</Label>
+                    <Input value={dadosEdicao.tipo === 'T' ? 'TRANSPORTADORA' : 'FORNECEDOR'} disabled className="opacity-70" />
+                  </div>
+                  {dadosEdicao.tipo === 'T' ? (
+                    <div>
+                      <Label>Transportadora *</Label>
+                      <Autocomplete
+                        placeholder="Buscar transportadora..."
+                        apiUrl="/api/contas-pagar/transportadoras"
+                        value={dadosEdicao.cod_transp}
+                        initialLabel={c?.nome_exibicao || (dadosEdicao.cod_transp ? `Cód: ${dadosEdicao.cod_transp}` : undefined)}
+                        onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_transp: value }))}
+                        mapResponse={(data) => data.transportadoras || []}
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <Label>Fornecedor/Credor *</Label>
+                      <Autocomplete
+                        placeholder="Buscar fornecedor..."
+                        apiUrl="/api/contas-pagar/fornecedores"
+                        value={dadosEdicao.cod_credor}
+                        initialLabel={c?.nome_exibicao || c?.nome_credor || (c?.cod_credor ? `Cód: ${c.cod_credor}` : undefined)}
+                        onChange={(value, selectedItem: any) => setDadosEdicao(prev => ({
+                          ...prev,
+                          cod_credor: value,
+                          // fornecedor do exterior (codpais ≠ 1058) liga os campos de moeda, como no cadastro
+                          eh_internacional: selectedItem ? !!selectedItem.eh_internacional || prev.eh_internacional : prev.eh_internacional,
+                        }))}
+                        mapResponse={(data) => data.fornecedores || []}
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <Label>Conta Financeira</Label>
+                    <Autocomplete
+                      placeholder="Buscar conta financeira..."
+                      apiUrl="/api/contas-pagar/contas"
+                      value={dadosEdicao.pag_cof_id}
+                      initialLabel={
+                        c?.pag_cof_id && c?.descricao_conta_financeira
+                          ? `${c.pag_cof_id} - ${c.descricao_conta_financeira}`
+                          : undefined
+                      }
+                      onChange={(value, selectedItem: any) => setDadosEdicao(prev => ({
+                        ...prev,
+                        pag_cof_id: value,
+                        eh_internacional: selectedItem ? !!selectedItem.eh_internacional : prev.eh_internacional,
+                      }))}
+                      mapResponse={(data) => data.contas || []}
+                    />
+                  </div>
+                  <div>
+                    <Label>Código da Conta</Label>
+                    <Autocomplete
+                      placeholder="Buscar conta..."
+                      apiUrl="/api/contas-pagar/contas-dbconta"
+                      value={dadosEdicao.cod_conta}
+                      initialLabel={
+                        c?.cod_conta
+                          ? `${c.cod_conta}${c.descricao_conta ? ` - ${c.descricao_conta}` : ''}`
+                          : undefined
+                      }
+                      onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
+                      mapResponse={(data) => data.contas || []}
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <Label htmlFor="dt_venc_edit">Data de Vencimento *</Label>
-              <Input
-                id="dt_venc_edit"
-                type="date"
-                value={dadosEdicao.dt_venc}
-                onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_venc: e.target.value }))}
-                required
-              />
-            </div>
+                {/* Valores, datas e documentos */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <Label>Comprador</Label>
+                    <Autocomplete
+                      placeholder="Buscar..."
+                      apiUrl="/api/contas-pagar/compradores"
+                      value={dadosEdicao.cod_comprador}
+                      initialLabel={
+                        c?.codcomprador
+                          ? `${c.codcomprador}${(c as any).nome_comprador ? ` - ${(c as any).nome_comprador}` : ''}`
+                          : undefined
+                      }
+                      onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_comprador: value }))}
+                      mapResponse={(data) => data.compradores || []}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="dt_emissao_edit">Data de Emissão</Label>
+                    <Input
+                      id="dt_emissao_edit"
+                      type="date"
+                      value={String(dadosEdicao.dt_emissao || '').slice(0, 10)}
+                      onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_emissao: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="dt_venc_edit">Data de Vencimento *</Label>
+                    <Input
+                      id="dt_venc_edit"
+                      type="date"
+                      value={String(dadosEdicao.dt_venc || '').slice(0, 10)}
+                      onChange={(e) => setDadosEdicao(prev => ({ ...prev, dt_venc: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="valor_pgto_edit">Valor {inter ? '(Calculado)' : '*'}</Label>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
+                        R$
+                      </span>
+                      <Input
+                        id="valor_pgto_edit"
+                        type="text"
+                        value={inter
+                          ? (valorReaisCalc > 0 ? valorReaisCalc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
+                          : dadosEdicao.valor_pgto}
+                        onChange={(e) => {
+                          const mascarado = mascaraInputBRL(e.target.value);
+                          setDadosEdicao(prev => ({ ...prev, valor_pgto: mascarado }));
+                        }}
+                        disabled={inter}
+                        className={`pl-8 ${inter ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
+                        placeholder={inter ? 'Calculado automaticamente' : '0,00'}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
 
-            <div>
-              <Label>Fornecedor/Credor</Label>
-              <Autocomplete
-                placeholder="Buscar fornecedor..."
-                apiUrl="/api/contas-pagar/fornecedores"
-                value={dadosEdicao.cod_credor}
-                initialLabel={modais.contaSelecionada?.nome_exibicao || modais.contaSelecionada?.nome_credor || (modais.contaSelecionada?.cod_credor ? `Cód: ${modais.contaSelecionada.cod_credor}` : undefined)}
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_credor: value }))}
-                mapResponse={(data) => data.fornecedores || []}
-              />
-            </div>
+                {/* Documentos fiscais (internacional: invoice e contrato, como no cadastro) */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <Label htmlFor="nro_nf_edit">Nº NF</Label>
+                    <Input
+                      id="nro_nf_edit"
+                      value={dadosEdicao.nro_nf}
+                      onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_nf: e.target.value }))}
+                      placeholder="Ex: 12345"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="nro_dup_edit">Nº Duplicata</Label>
+                    <Input
+                      id="nro_dup_edit"
+                      value={dadosEdicao.nro_dup}
+                      maxLength={20}
+                      onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_dup: e.target.value }))}
+                      placeholder="Ex: bc223/01"
+                    />
+                  </div>
+                  {inter && (
+                    <>
+                      <div>
+                        <Label htmlFor="nro_invoice_edit">Número da Invoice</Label>
+                        <Input
+                          id="nro_invoice_edit"
+                          value={dadosEdicao.nro_invoice}
+                          maxLength={30}
+                          onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_invoice: e.target.value }))}
+                          placeholder="Ex: INV-2025-001"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="nro_contrato_edit">Número do Contrato</Label>
+                        <Input
+                          id="nro_contrato_edit"
+                          value={dadosEdicao.nro_contrato}
+                          maxLength={30}
+                          onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_contrato: e.target.value }))}
+                          placeholder="Ex: CONT-2025-001"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
 
-            <div>
-              <Label htmlFor="valor_pgto_edit">Valor *</Label>
-              <div className="relative">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">
-                  R$
-                </span>
-                <Input
-                  id="valor_pgto_edit"
-                  type="text"
-                  value={dadosEdicao.valor_pgto}
-                  onChange={(e) => {
-                    const mascarado = mascaraInputBRL(e.target.value);
-                    setDadosEdicao(prev => ({ ...prev, valor_pgto: mascarado }));
-                  }}
-                  className="pl-8"
-                  placeholder="0,00"
-                  required
-                />
-              </div>
-            </div>
-          </div>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={inter}
+                    onChange={(e) => setDadosEdicao(prev => ({ ...prev, eh_internacional: e.target.checked }))}
+                  />
+                  Conta internacional (moeda estrangeira)
+                </label>
 
-          {/* Linha 2: Conta Financeira + Conta + NF + Duplicata (igual ao cadastro) */}
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <Label>Conta Financeira</Label>
-              <Autocomplete
-                placeholder="Buscar conta financeira..."
-                apiUrl="/api/contas-pagar/contas"
-                value={dadosEdicao.pag_cof_id}
-                initialLabel={
-                  modais.contaSelecionada?.pag_cof_id &&
-                  modais.contaSelecionada?.descricao_conta_financeira
-                    ? `${modais.contaSelecionada.pag_cof_id} - ${modais.contaSelecionada.descricao_conta_financeira}`
-                    : undefined
-                }
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, pag_cof_id: value }))}
-                mapResponse={(data) => data.contas || []}
-              />
-            </div>
+                {/* Conversão de moeda estrangeira — igual ao cadastro */}
+                {inter && (
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-900/50">
+                    <h4 className="text-xs font-semibold mb-2 text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                      Conversão de Moeda Estrangeira
+                    </h4>
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <Label>Moeda *</Label>
+                        <Select
+                          value={dadosEdicao.moeda}
+                          onValueChange={(value) => setDadosEdicao(prev => ({ ...prev, moeda: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a moeda" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="EUR">EUR - Euro (€)</SelectItem>
+                            <SelectItem value="USD">USD - Dólar Americano ($)</SelectItem>
+                            <SelectItem value="GBP">GBP - Libra Esterlina (£)</SelectItem>
+                            <SelectItem value="JPY">JPY - Iene Japonês (¥)</SelectItem>
+                            <SelectItem value="CNY">CNY - Yuan Chinês (¥)</SelectItem>
+                            <SelectItem value="CHF">CHF - Franco Suíço (CHF)</SelectItem>
+                            <SelectItem value="CAD">CAD - Dólar Canadense (C$)</SelectItem>
+                            <SelectItem value="AUD">AUD - Dólar Australiano (A$)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Taxa de Conversão (Convenção) *</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">
+                            {dadosEdicao.moeda ? obterIconeMoeda(dadosEdicao.moeda) : '💱'}
+                          </span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={taxaEdicaoInput}
+                            onChange={(e) => {
+                              const texto = textoTaxa6(e.target.value);
+                              setTaxaEdicaoInput(texto);
+                              const taxa = numeroTaxa6(texto);
+                              setDadosEdicao(prev => ({ ...prev, taxa_conversao: taxa }));
+                            }}
+                            onBlur={() => {
+                              const taxa = numeroTaxa6(taxaEdicaoInput);
+                              setTaxaEdicaoInput(taxa > 0 ? formatarTaxa6(taxa) : '');
+                            }}
+                            placeholder="0,000000"
+                            className="pl-10"
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {dadosEdicao.taxa_conversao > 0
+                            ? `1 ${dadosEdicao.moeda || 'Moeda'} = R$ ${formatarTaxa6(dadosEdicao.taxa_conversao)}`
+                            : 'Até 6 casas decimais (ex: 5,4321 vira 5,432100)'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Valor na Moeda Estrangeira *</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">
+                            {dadosEdicao.moeda ? obterIconeMoeda(dadosEdicao.moeda) : '💵'}
+                          </span>
+                          <Input
+                            type="text"
+                            value={valorMoedaEdicaoInput}
+                            onChange={(e) => {
+                              const mascarado = mascaraInputBRL(e.target.value);
+                              setValorMoedaEdicaoInput(mascarado);
+                              setDadosEdicao(prev => ({ ...prev, valor_moeda: desmascarar(mascarado) }));
+                            }}
+                            placeholder="0,00"
+                            className="pl-10"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Valor em Reais (Calculado)</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">R$</span>
+                          <Input
+                            type="text"
+                            value={valorReaisCalc > 0 ? valorReaisCalc.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}
+                            placeholder="Calculado automaticamente"
+                            disabled
+                            className="pl-10 bg-gray-100 dark:bg-gray-800"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {dadosEdicao.moeda && dadosEdicao.taxa_conversao > 0 && dadosEdicao.valor_moeda > 0 && (
+                      <p className="mt-2 text-xs text-blue-800 dark:text-blue-200">
+                        💱 {obterIconeMoeda(dadosEdicao.moeda)} {dadosEdicao.valor_moeda.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} × {formatarTaxa6(dadosEdicao.taxa_conversao)} = R$ {valorReaisCalc.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-            <div>
-              <Label>Conta</Label>
-              <Autocomplete
-                placeholder="Buscar conta..."
-                apiUrl="/api/contas-pagar/contas-dbconta"
-                value={dadosEdicao.cod_conta}
-                initialLabel={
-                  modais.contaSelecionada?.cod_conta
-                    ? `${modais.contaSelecionada.cod_conta}${
-                        modais.contaSelecionada.descricao_conta
-                          ? ` - ${modais.contaSelecionada.descricao_conta}`
-                          : ''
-                      }`
-                    : undefined
-                }
-                onChange={(value) => setDadosEdicao(prev => ({ ...prev, cod_conta: value }))}
-                mapResponse={(data) => data.contas || []}
-              />
-            </div>
+                {c?.parcela_atual && (
+                  <p className="text-xs text-muted-foreground">
+                    Parcela {c.parcela_atual} — cada parcela é um título próprio; a edição altera só este título.
+                  </p>
+                )}
 
-            <div>
-              <Label htmlFor="nro_nf_edit">Nº NF</Label>
-              <Input
-                id="nro_nf_edit"
-                value={dadosEdicao.nro_nf}
-                onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_nf: e.target.value }))}
-                placeholder="Ex: 12345"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="nro_dup_edit">Nº Duplicata</Label>
-              <Input
-                id="nro_dup_edit"
-                value={dadosEdicao.nro_dup}
-                onChange={(e) => setDadosEdicao(prev => ({ ...prev, nro_dup: e.target.value }))}
-                placeholder="Ex: bc223/01"
-              />
-            </div>
-          </div>
-
-          {/* Linha 3: Observações */}
-          <div>
-            <Label htmlFor="obs_edit">Observações</Label>
-            <Textarea
-              id="obs_edit"
-              name="obs_edit"
-              value={dadosEdicao.obs}
-              onChange={(e) => setDadosEdicao(prev => ({ ...prev, obs: e.target.value }))}
-              rows={2}
-              placeholder="Observações sobre a conta"
-            />
-          </div>
+                {/* Observações */}
+                <div>
+                  <Label htmlFor="obs_edit">Observações</Label>
+                  <Textarea
+                    id="obs_edit"
+                    name="obs_edit"
+                    value={dadosEdicao.obs}
+                    onChange={(e) => setDadosEdicao(prev => ({ ...prev, obs: e.target.value }))}
+                    rows={2}
+                    placeholder="Observações sobre a conta"
+                  />
+                </div>
+              </>
+            );
+          })()}
 
           <div className="flex gap-2 justify-end pt-3 border-t">
             <AuxButton

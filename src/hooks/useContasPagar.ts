@@ -125,6 +125,15 @@ export interface EditarContaData {
   cod_conta?: string;
   pag_cof_id?: string | number;
   cod_ccusto?: string;
+  // mesmos campos do cadastro
+  cod_transp?: string;
+  cod_comprador?: string;
+  eh_internacional?: boolean;
+  moeda?: string;
+  taxa_conversao?: number;
+  valor_moeda?: number;
+  nro_invoice?: string;
+  nro_contrato?: string;
 }
 
 export function useContasPagar() {
