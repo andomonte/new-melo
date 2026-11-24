@@ -3150,7 +3150,7 @@ export function ContasAPagar() {
               <option value="em_recebimento">Em recebimento</option>
               <option value="nao_recebida">Não recebida</option>
               <option value="cancelada">NFe Cancelada</option>
-              <option value="avulso">Avulso (com NF)</option>
+              <option value="avulso">Avulso (NF fora do sistema)</option>
             </select>
           </div>
           {/* Legenda de cores (fonte da linha) */}
@@ -3159,7 +3159,8 @@ export function ContasAPagar() {
             <span className="flex items-center gap-1" title="Conferência em andamento, ou só parte das notas do título recebida — clique no Nº NF para ver cada nota"><span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" /> Em recebimento</span>
             <span className="flex items-center gap-1" title="A mercadoria ainda não chegou"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Não recebida</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block" /> NFe Cancelada</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-black dark:bg-white inline-block" /> Avulso (c/ NF)</span>
+            <span className="flex items-center gap-1" title="NF digitada no título que não está na tabela de entradas"><span className="w-3 h-3 rounded-sm bg-purple-600 inline-block" /> Avulso (NF fora do sistema)</span>
+            <span className="flex items-center gap-1" title="Título sem NF e fora do Compras (ex.: impostos, despesas)"><span className="w-3 h-3 rounded-sm bg-gray-900 dark:bg-gray-100 inline-block" /> Sem NF</span>
           </div>
         </div>
 

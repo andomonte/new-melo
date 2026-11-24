@@ -30,7 +30,8 @@ const corEntradaStatus = (status: any): string => {
     case 'em_recebimento': return 'text-blue-600 dark:text-blue-400';    // em conferência / parte das notas
     case 'nao_recebida': return 'text-yellow-600 dark:text-yellow-400';  // ainda não chegou
     case 'cancelada': return 'text-red-600 dark:text-red-400';           // entrada da NF cancelada
-    case 'avulso': return 'text-black dark:text-white font-medium';      // avulso com NF fora do sistema
+    case 'avulso': return 'text-purple-700 dark:text-purple-400';        // avulso com NF fora do sistema
+    // sem situação (sem NF e fora do Compras): cor padrão do texto — "Sem NF" na legenda
     default: return '';
   }
 };
@@ -841,7 +842,7 @@ export default function DataTableContasPagar({
                   return sortedRows;
                 })().map((row, rowIndex) => {
                   // Cor da fonte da linha conforme o RECEBIMENTO da nota (Contas a Pagar):
-                  // verde=recebida, azul=em recebimento, amarelo=não recebida, vermelho=cancelada, preto=avulso c/ NF.
+                  // verde=recebida, azul=em recebimento, amarelo=não recebida, vermelho=cancelada, roxo=avulso c/ NF, padrão=sem NF.
                   const corLinha = corEntradaStatus((row as any).entradaStatus);
                   return (
                   <tr
