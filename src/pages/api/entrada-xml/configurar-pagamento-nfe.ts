@@ -2,7 +2,10 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
 import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
-import { codigoBanco, contaFinanceiraFornecedor, duplicataNota, proximoCodPgto, ufDaFilial } from '@/lib/compras/tituloCompras';
+import {
+  associarNotaAoAdiantamento, atendidoEmOutrasNotas, atualizarNfDoTitulo, codigoBanco, contaFinanceiraFornecedor,
+  dadosNota, duplicataNota, proximoCodPgto, ufDaFilial, vincularNotaTitulo,
+} from '@/lib/compras/tituloCompras';
 
 const parcelaSchema = z.object({
   numero_parcela: z.number(),
@@ -205,10 +208,10 @@ export default async function handler(
       orcIdsAnt = rOrc.rows.map((r) => Number(r.orc));
     }
     let antTotal = 0, antPago = 0;
-    const antTitulos: { cod_pgto: string; orc_id: number; valor_pgto: number; valor_pago: number }[] = [];
+    const antTitulos: { cod_pgto: string; orc_id: number; valor_pgto: number; valor_pago: number; nro_dup: string | null; atendido: number }[] = [];
     if (orcIdsAnt.length > 0) {
       const ai = await client.query(`
-        SELECT p.cod_pgto, opc.orc_id,
+        SELECT p.cod_pgto, opc.orc_id, p.nro_dup,
                COALESCE(p.valor_pgto,0) AS valor_pgto, COALESCE(p.valor_pago,0) AS valor_pago
         FROM dbpgto p
         INNER JOIN ordem_pagamento_conta opc ON p.cod_pgto = opc.cod_pgto
@@ -217,7 +220,7 @@ export default async function handler(
       for (const r of ai.rows) {
         const vp = parseFloat(r.valor_pgto), vpg = parseFloat(r.valor_pago);
         antTotal += vp; antPago += vpg;
-        antTitulos.push({ cod_pgto: r.cod_pgto, orc_id: Number(r.orc_id), valor_pgto: vp, valor_pago: vpg });
+        antTitulos.push({ cod_pgto: r.cod_pgto, orc_id: Number(r.orc_id), valor_pgto: vp, valor_pago: vpg, nro_dup: r.nro_dup ?? null, atendido: 0 });
       }
     }
     const TOL_EXC = 0.10;
@@ -325,24 +328,27 @@ export default async function handler(
       const orcIds = ordensComValores.map(o => o.orcId);
       const placeholders = orcIds.map((_, i) => `$${i + 1}`).join(', ');
 
-      // Buscar TODOS os cod_pgto de todas as ordens em uma única query
+      // Parcelas a refazer: as DESTA NF (reconfiguração) e as configuradas na própria ordem.
+      // Uma ordem pode atender várias notas: as parcelas de OUTRA NF da mesma ordem ficam.
       const pgtoAntigosResult = await client.query(`
-        SELECT cod_pgto, orc_id FROM ordem_pagamento_conta
-        WHERE orc_id IN (${placeholders}) AND numero_parcela > 0
-      `, orcIds);
+        SELECT DISTINCT opc.cod_pgto FROM ordem_pagamento_conta opc
+          JOIN dbpgto p ON p.cod_pgto = opc.cod_pgto
+         WHERE opc.orc_id = ANY($1::bigint[]) AND opc.numero_parcela > 0
+           AND (p.obs ILIKE 'Pagamento ref. Ordem de Compra%'
+                OR p.obs ILIKE $2
+                OR EXISTS (SELECT 1 FROM dbpgto_nota t WHERE t.cod_pgto = p.cod_pgto AND t.codnfe_ent = $3)
+                OR NOT EXISTS (SELECT 1 FROM dbpgto_nota t WHERE t.cod_pgto = p.cod_pgto))
+      `, [orcIds, `Pagamento ref. NFe ${nfeId} -%`, nfeId]);
 
       const codPgtosParaDeletar = pgtoAntigosResult.rows.map(r => r.cod_pgto);
 
-      // Deletar de dbpgto em batch (se houver cod_pgtos)
       if (codPgtosParaDeletar.length > 0) {
-        const pgtoPlaceholders = codPgtosParaDeletar.map((_, i) => `$${i + 1}`).join(', ');
-        await client.query(`DELETE FROM dbpgto WHERE cod_pgto IN (${pgtoPlaceholders})`, codPgtosParaDeletar);
+        await client.query(`DELETE FROM dbpgto_nota WHERE cod_pgto = ANY($1::varchar[])`, [codPgtosParaDeletar]);
+        await client.query(`DELETE FROM dbpgto WHERE cod_pgto = ANY($1::varchar[])`, [codPgtosParaDeletar]);
+        await client.query(
+          `DELETE FROM ordem_pagamento_conta WHERE cod_pgto = ANY($1::varchar[]) AND numero_parcela > 0`,
+          [codPgtosParaDeletar]);
       }
-
-      // Deletar de ordem_pagamento_conta em batch
-      await client.query(`
-        DELETE FROM ordem_pagamento_conta WHERE orc_id IN (${placeholders}) AND numero_parcela > 0
-      `, orcIds);
 
       // Deletar de ordem_pagamento_parcelas em batch
       await client.query(`
@@ -366,6 +372,7 @@ export default async function handler(
     const ufFilial = ufDaFilial(String(process.env.DB_SCHEMA || 'db_manaus').replace(/^db_/, ''));
     const pagCofIdNfe = await contaFinanceiraFornecedor(client, fornecedorCod, { ufFilial, importacao: ehImportacao });
     const bancoCodigo = await codigoBanco(client, banco);
+    const notaNF = await dadosNota(client, nfeId);
     console.log(`🔢 Conta financeira das parcelas: ${pagCofIdNfe} · banco ${bancoCodigo}\n`);
 
     // 8. Criar registros em dbpgto APENAS para parcelas > 0
@@ -426,13 +433,16 @@ export default async function handler(
         'N',                                                        // paga (não)
         'N',                                                        // cancel (não)
         'F',                                                        // tipo (F = Fornecedor)
-        nfeId,                                                      // nro_nf
+        notaNF.nnf,                                                 // nro_nf (nº real da NF; antes o código interno)
         nroDup,                                                     // nro_dup (formato: OC{orc_id}/{parcela})
         pagCofIdNfe,                                                // pag_cof_id (conta financeira, regra D1)
         bancoCodigo,                                                // banco (código dbbanco)
         ordemCompraJson,                                            // ordem_compra (JSON com lista de ordens)
         xmlNf || null                                               // xml_nf
       ]);
+
+      // Vínculo título ↔ nota (dbpgto_nota, migration 089)
+      await vincularNotaTitulo(client, codPgto, notaNF, 'PARCELA', parcela.valor_parcela, userName);
 
       // OTIMIZADO: Coletar inserts e executar em paralelo
       const insertPromises = ordensComValores.map(ordem => {
@@ -500,6 +510,37 @@ export default async function handler(
         await client.query(`UPDATE ordem_pagamento_parcelas SET status = 'CANCELADO' WHERE orc_id = $1 AND numero_parcela = 0`, [t.orc_id]);
       }
       console.log(`🚫 ${antTitulos.length} antecipado(s) NAO pago(s) cancelado(s) (A >= NF). Cobranca gerada pelas parcelas.`);
+    }
+
+    // 8.2 Adiantamento ↔ nota (roteiro etapas 3/4, decisão D5): o adiantamento continua título
+    // próprio; ganha o nº da NF no campo NF (várias por "/"), tem_nota='S', a observação
+    // "NF … associada em …: R$ … atendido" e o vínculo em dbpgto_nota (histórico/modal).
+    // Atendido = o que foi abatido da NF (quitou: o valor da NF; entrada: o antecipado
+    // considerado), distribuído pelos títulos sem passar do que sobra de cada um.
+    if (!cancelaAntecipado && antTitulos.length > 0) {
+      let aDistribuir = Math.round((quitaPorAntecipado ? valorTotalNFe : valorAntecipado) * 100) / 100;
+      const usados = new Set<string>();
+      for (const t of antTitulos) {
+        if (aDistribuir <= 0.005) break;
+        const sobra = Math.max(0, t.valor_pgto - (await atendidoEmOutrasNotas(client, t.cod_pgto, nfeId)));
+        const parte = Math.round(Math.min(sobra, aDistribuir) * 100) / 100;
+        if (parte <= 0.005) continue;
+        await associarNotaAoAdiantamento(client, t.cod_pgto, notaNF, parte, userName);
+        t.atendido = parte;
+        usados.add(t.cod_pgto);
+        aDistribuir = Math.round((aDistribuir - parte) * 100) / 100;
+      }
+      // reconfiguração: título que deixou de atender esta NF perde o vínculo
+      const antigos = await client.query(
+        `DELETE FROM dbpgto_nota WHERE codnfe_ent = $1 AND tipo = 'ADIANTAMENTO' AND NOT (cod_pgto = ANY($2::varchar[]))
+         RETURNING cod_pgto`, [nfeId, Array.from(usados)]);
+      for (const r of antigos.rows) {
+        await atualizarNfDoTitulo(client, r.cod_pgto);
+        await client.query(
+          `UPDATE dbpgto SET nro_nf = NULL, tem_nota = 'N'
+            WHERE cod_pgto = $1 AND NOT EXISTS (SELECT 1 FROM dbpgto_nota WHERE cod_pgto = $1)`, [r.cod_pgto]);
+      }
+      console.log(`🔗 Adiantamento(s) vinculado(s) à NF ${notaNF.nnf}: ${Array.from(usados).join(', ') || 'nenhum'}`);
     }
 
     // 9. Marcar NFe como com pagamento configurado
@@ -578,6 +619,8 @@ export default async function handler(
               orc_id: t.orc_id,
               valor: t.valor_pgto,
               pago: t.valor_pago,
+              nro_dup: t.nro_dup,
+              atendido: t.atendido,
             })),
           },
         }

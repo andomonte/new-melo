@@ -8,6 +8,7 @@ import { DefaultButton, AuxButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
 import Modal from '@/components/common/Modal';
 import ModalNotasAssociadas from '@/components/common/ModalNotasAssociadas';
+import ModalNotasDoTitulo from './ModalNotasDoTitulo';
 import ModalFiltrosExportacao from '@/components/common/ModalFiltrosExportacao';
 import ModalExportarExcel from '@/components/common/modalExportarExcel';
 import { Label } from '@/components/ui/label';
@@ -248,6 +249,8 @@ export function ContasAPagar() {
   } | null>(null);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
   const [detalhesParcela, setDetalhesParcela] = useState<any>(null);
+  // Modal "notas do título" (coluna NF): cod_pgto do título aberto
+  const [notasDoTitulo, setNotasDoTitulo] = useState<string | null>(null);
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
   const [pagamentoParaCancelar, setPagamentoParaCancelar] = useState<any>(null);
 
@@ -1460,13 +1463,31 @@ export function ContasAPagar() {
             {conta.valor_juros ? formatarMoeda(conta.valor_juros) : '-'}
           </span>
         ),
-        // Nº NF
-        <span className="text-xs">{conta.nro_nf || '-'}</span>,
-        // Nº Duplicata — troca o sufixo "/NN" pela fração da parcela ("1/3")
+        // Nº NF — várias notas ("78239/78301") mostram a primeira + "…"; o clique abre as
+        // notas do título (valor de cada uma e quanto foi atendido). Roteiro etapa 3.
+        (() => {
+          const nf = String(conta.nro_nf || '').trim();
+          if (!nf) return <span className="text-xs">-</span>;
+          const varias = nf.includes('/');
+          const doCompras = !!conta.ordem_compra && !['[]', ''].includes(String(conta.ordem_compra));
+          if (!varias && !doCompras) return <span className="text-xs">{nf}</span>;
+          return (
+            <button
+              type="button"
+              className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+              title={varias ? `Notas: ${nf.split('/').join(', ')}` : 'Ver notas do título'}
+              onClick={(e) => { e.stopPropagation(); setNotasDoTitulo(String(conta.id)); }}
+            >
+              {varias ? `${nf.split('/')[0]}…` : nf}
+            </button>
+          );
+        })(),
+        // Nº Duplicata — no padrão novo ("OC123/1/3", "78239/2/2") já vem com a fração; no
+        // antigo ("OC27915/01") troca o sufixo "/NN" pela fração da parcela ("1/3")
         (
           <span className="text-xs font-mono">
             {conta.nro_dup
-              ? (conta.parcela_atual
+              ? (conta.parcela_atual && !/\/\d+\/\d+$/.test(conta.nro_dup)
                   ? conta.nro_dup.replace(/\/\d+$/, '/' + conta.parcela_atual.replace(' de ', '/'))
                   : conta.nro_dup)
               : '-'}
@@ -5216,6 +5237,9 @@ export function ContasAPagar() {
           </div>
         </div>
       </Modal>
+
+      {/* Notas do título (coluna NF: adiantamento com várias NFs / parcela da NF) */}
+      <ModalNotasDoTitulo codPgto={notasDoTitulo} onFechar={() => setNotasDoTitulo(null)} />
 
       {/* Modal Notas Associadas */}
       <ModalNotasAssociadas

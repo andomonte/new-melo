@@ -94,3 +94,84 @@ export async function codigoBanco(client: PoolClient, banco?: string | null): Pr
   if (r.rows[0]?.exato || r.rows.length === 1) return r.rows[0].cod_banco;
   return b; // sem cadastro (ou ambíguo): mantém o que veio, não perde a informação
 }
+
+// ---------------------------------------------------------------------------------------------
+// Notas do título (dbpgto_nota, migration 089) — roteiro, etapas 3 e 4.
+// Cada NF que um título atendeu: o ADIANTAMENTO (parcela 0 da ordem; pode atender várias notas)
+// e as PARCELAS geradas pela NF. dbpgto.nro_nf guarda os números juntos por "/" (até 200).
+// ---------------------------------------------------------------------------------------------
+
+export interface NotaDoTitulo {
+  codnfe_ent: string;
+  nnf: string;
+  serie?: string | null;
+  chave?: string | null;
+  valor_nf: number;
+}
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const hojeBR = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' });
+
+/** Dados da NF para o vínculo (número real, série, chave, valor). */
+export async function dadosNota(client: PoolClient, codnfeEnt: string): Promise<NotaDoTitulo> {
+  const r = await client.query(
+    `SELECT codnfe_ent, nnf::text AS nnf, serie::text AS serie, chave, COALESCE(vnf,0) AS vnf
+       FROM dbnfe_ent WHERE codnfe_ent = $1`, [codnfeEnt]);
+  const n = r.rows[0];
+  return {
+    codnfe_ent: codnfeEnt,
+    nnf: String(n?.nnf || '').trim() || String(codnfeEnt).replace(/^0+/, ''),
+    serie: n?.serie ?? null,
+    chave: n?.chave ?? null,
+    valor_nf: Number(n?.vnf || 0),
+  };
+}
+
+/** Grava (ou atualiza) o vínculo título ↔ nota. Devolve true se o vínculo é NOVO. */
+export async function vincularNotaTitulo(
+  client: PoolClient, codPgto: string, nota: NotaDoTitulo,
+  tipo: 'ADIANTAMENTO' | 'PARCELA', valorAtendido: number, usuario?: string | null,
+): Promise<boolean> {
+  const r = await client.query(
+    `INSERT INTO dbpgto_nota (cod_pgto, codnfe_ent, nnf, serie, chave, tipo, valor_nf, valor_atendido, usuario)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT (cod_pgto, codnfe_ent) DO UPDATE
+       SET valor_atendido = EXCLUDED.valor_atendido, valor_nf = EXCLUDED.valor_nf, usuario = EXCLUDED.usuario
+     RETURNING (xmax = 0) AS novo`,
+    [codPgto, nota.codnfe_ent, nota.nnf, nota.serie ?? null, nota.chave ?? null, tipo,
+     nota.valor_nf, Math.round(valorAtendido * 100) / 100, usuario ? String(usuario).slice(0, 60) : null]);
+  return !!r.rows[0]?.novo;
+}
+
+/** Quanto do título já foi usado em OUTRAS notas (para o adiantamento não cobrir duas vezes). */
+export async function atendidoEmOutrasNotas(client: PoolClient, codPgto: string, codnfeEnt: string): Promise<number> {
+  const r = await client.query(
+    `SELECT COALESCE(SUM(valor_atendido),0) AS v FROM dbpgto_nota WHERE cod_pgto = $1 AND codnfe_ent <> $2`,
+    [codPgto, codnfeEnt]);
+  return Number(r.rows[0]?.v || 0);
+}
+
+/** Refaz dbpgto.nro_nf (números por "/") e tem_nota a partir dos vínculos do título. */
+export async function atualizarNfDoTitulo(client: PoolClient, codPgto: string): Promise<void> {
+  await client.query(
+    `UPDATE dbpgto p SET nro_nf = x.notas, tem_nota = 'S'
+       FROM (SELECT left(string_agg(nnf, '/' ORDER BY criado_em, id), 200) AS notas
+               FROM dbpgto_nota WHERE cod_pgto = $1) x
+      WHERE p.cod_pgto = $1 AND x.notas IS NOT NULL`, [codPgto]);
+}
+
+/**
+ * Associa a NF ao título de ADIANTAMENTO: vínculo, campo NF ("78239/78301") e, se o vínculo
+ * é novo, a observação "NF 78239 associada em 24/11/2026: R$ 1.000,00 atendido".
+ */
+export async function associarNotaAoAdiantamento(
+  client: PoolClient, codPgto: string, nota: NotaDoTitulo, valorAtendido: number, usuario?: string | null,
+): Promise<void> {
+  const novo = await vincularNotaTitulo(client, codPgto, nota, 'ADIANTAMENTO', valorAtendido, usuario);
+  await atualizarNfDoTitulo(client, codPgto);
+  if (novo) {
+    const txt = ` | NF ${nota.nnf} associada em ${hojeBR()}: R$ ${brl(valorAtendido)} atendido`;
+    await client.query(
+      `UPDATE dbpgto SET obs = left(COALESCE(obs,'') || $2, 500) WHERE cod_pgto = $1`, [codPgto, txt]);
+  }
+}

@@ -207,8 +207,9 @@ export const HistoricoNFeModal: React.FC<HistoricoNFeModalProps> = ({
             </p>
             {Array.isArray(parsed.antecipado.titulos) && parsed.antecipado.titulos.map((t: any) => (
               <p key={t.cod_pgto} className="ml-3 text-xs">
-                Título {t.cod_pgto} · OC {t.orc_id} · {formatCurrency(t.valor)}
+                {t.nro_dup ? `Adiantamento ${t.nro_dup}` : `Título ${t.cod_pgto}`} · OC {t.orc_id} · {formatCurrency(t.valor)}
                 {t.pago > 0 ? ` · pago ${formatCurrency(t.pago)}` : ' · não pago'}
+                {t.atendido > 0 ? ` · atendeu ${formatCurrency(t.atendido)} desta NF` : ''}
               </p>
             ))}
           </div>

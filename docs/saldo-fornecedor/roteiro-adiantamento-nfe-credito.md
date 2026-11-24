@@ -1,6 +1,6 @@
 # Roteiro para aprovação: adiantamento a fornecedor, NF no título e Crédito de Fornecedor
 
-**Data:** 24/11/2026. **Situação:** todas as decisões aprovadas em 24/11. Fase 1 feita, com as migrations 086, 087 e 088 aplicadas no banco de teste. Fases 2 a 4 a fazer.
+**Data:** 24/11/2026. **Situação:** todas as decisões aprovadas em 24/11. Fases 1 e 2 feitas, com as migrations 086 a 089 aplicadas no banco de teste. Fases 3 e 4 a fazer.
 
 **Decisões tomadas (24/11/2026):**
 - **D1:** aprovada como proposta. Implementada em `src/lib/compras/tituloCompras.ts`; títulos existentes corrigidos pela migration 086.
@@ -172,6 +172,22 @@ A regra fica numa rotina única, chamada por todas.
 | 4 | Tela Crédito de Fornecedor (lista, detalhe, histórico, Usar crédito, estorno) e selo no Contas a Pagar | Forma ABATIMENTO DE SALDO (já existe na migration 053) |
 
 As mudanças no banco entram como migrations novas e precisam rodar em produção ao subir.
+
+### Fase 2: o que foi feito (24/11/2026)
+- **Migration 089:** `dbpgto.nro_nf` com 200 caracteres; tabela `dbpgto_nota` (notas do título: título, NF, nº, série, chave, tipo ADIANTAMENTO/PARCELA, valor da NF, valor atendido, data, usuário).
+- **Correção dos existentes:**
+  - 47 parcelas de NF em Manaus, 1 em Roraima e 1 em Rondônia passaram do código interno para o nº real da nota;
+  - 3 adiantamentos de Manaus (027890, 027898, 027920) ganharam a nota e `tem_nota='S'`.
+  - Cópia em `dbpgto_bkp_089`.
+- **Configurar pagamento da NF** (`configurar-pagamento-nfe.ts`):
+  - parcelas gravam o nº real e o vínculo;
+  - o adiantamento ganha a nota no campo NF (várias com `/`), a observação e o vínculo, sem passar do que sobra dele;
+  - a reconfiguração não apaga mais as parcelas de **outra** NF da mesma ordem.
+- **Histórico da NF:** mostra a duplicata do adiantamento e quanto ele atendeu da nota.
+- **Contas a Pagar:**
+  - coluna NF com `78239…` e o modal das notas (`/api/contas-pagar/{id}/notas`);
+  - a duplicata no padrão novo não é mais remontada na tela.
+- **Pendente:** com a mesma ordem em duas notas, o valor antecipado que a tela de configuração considera continua sendo o adiantamento inteiro. O vínculo limita o atendido ao que sobra, mas a validação das parcelas ainda usa o valor cheio. Entra junto com a fase 3 (consumo do crédito).
 
 ## 6. Fora deste roteiro
 - **Crédito entre filiais da MELO** (Manaus usar crédito de Roraima): são bancos diferentes; já estava adiado na spec.
