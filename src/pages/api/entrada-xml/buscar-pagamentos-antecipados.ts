@@ -137,9 +137,10 @@ export default async function handler(
     const codCredor = credorResult.rows[0].cod_credor;
     console.log(`👤 Código do credor: ${codCredor}`);
 
-    // 3. Buscar pagamentos antecipados (parcela 0) do mesmo fornecedor, não cancelados.
-    // Fase 3 do roteiro: o PAGO também entra (vale pelo crédito disponível); o valor mostrado
-    // é o que o adiantamento ainda abate desta NF (sem o que outras notas já usaram).
+    // 3. Buscar pagamentos antecipados (parcela 0) do mesmo fornecedor, NÃO pagos e não
+    // cancelados. O valor mostrado é o que ainda não foi usado em outra NF.
+    // Adiantamento PAGO virou crédito do fornecedor: não aparece aqui — o crédito de outro
+    // pedido só é usado pela tela Crédito de Fornecedor (abatimento manual, 24/11/2026).
     const pagamentosResult = await client.query(`
       SELECT DISTINCT
         opc.orc_id as ordem_id,
@@ -171,7 +172,10 @@ export default async function handler(
       (await adiantamentosDisponiveis(client, Array.from(new Set(pagamentosResult.rows.map((r: any) => Number(r.ordem_id)))), nfeId))
         .map((a) => [a.cod_pgto, a]));
     const pagamentos: PagamentoAntecipado[] = pagamentosResult.rows
-      .filter((row: any) => (disponiveis.get(row.cod_pgto)?.disponivel || 0) > 0.005)
+      .filter((row: any) => {
+        const d = disponiveis.get(row.cod_pgto);
+        return !!d && !d.creditoId && d.valor_pago <= 0.005 && d.disponivel > 0.005;
+      })
       .map((row: any) => ({
       ordem_id: Number(row.ordem_id),
       req_id_composto: row.req_id_composto || '',

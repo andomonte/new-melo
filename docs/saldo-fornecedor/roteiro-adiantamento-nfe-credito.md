@@ -211,7 +211,8 @@ As mudanças no banco entram como migrations novas e precisam rodar em produçã
   - **NF maior:** consome o crédito todo e as parcelas ficam só com o restante. Antes, esse caso era recusado na conferência das parcelas.
   - **Reconfiguração:** devolve o consumo anterior antes de recalcular.
   - **Cancelamento do antecipado não pago:** só cancela título que não atende outra NF.
-- **Mesma conta nas telas:** a sugestão de parcelas (`parcelas-sugeridas-v2`) e a seleção manual (`buscar-pagamentos-antecipados`, que agora lista também os pagos com saldo) usam a mesma conta do servidor. A tela reconhece adiantamento pago também no fluxo automático.
+- **Mesma conta nas telas:** a sugestão de parcelas (`parcelas-sugeridas-v2`) e a seleção manual (`buscar-pagamentos-antecipados`) usam a mesma conta do servidor.
+- **Regra (24/11):** no Compras, a nota só usa automaticamente o adiantamento do **próprio pedido**, inclusive a sobra de uma nota anterior. A seleção manual lista só adiantamentos **não pagos**. O crédito de fornecedor vindo de outro pedido ou de título avulso **não aparece no Compras**: é usado na tela Crédito de Fornecedor, por abatimento manual dos títulos em aberto do fornecedor ou das filiais dele. A tela reconhece adiantamento pago também no fluxo automático.
 - **Migration 090:**
   - `credor_credito_uso` com `nfe_id` e campos de estorno do uso;
   - um crédito por título;
