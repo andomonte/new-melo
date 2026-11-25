@@ -861,8 +861,9 @@ export default function DataTableContasPagar({
                       if (!colunasVisiveis.includes(header) || cellIndex === -1) return null;
                       const value = row[cellIndex];
                       const isLastColumn = cellIndex === headers.length - 1;
-                      // Preserva os badges (Status/Tipo/Ações/☑️) com a cor original; colore o resto da linha.
-                      const preservarCor = ['Ações', 'Status', 'Tipo', '☑️'].includes(header);
+                      // Preserva as colunas com etiqueta (badge) na cor original: a cor da linha forçada
+                      // dentro da etiqueta deixava o texto ilegível (roxo sobre preto no modo claro).
+                      const preservarCor = ['Ações', 'Status', 'Tipo', '☑️', 'Tem Nota', 'Tem Cobrança', 'Internacional'].includes(header);
                       const corCel = (corLinha && !preservarCor) ? `${corLinha} [&_*]:!text-inherit` : 'text-gray-900 dark:text-gray-100';
                       return (
                         <td
