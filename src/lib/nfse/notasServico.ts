@@ -134,7 +134,8 @@ export async function gerarTitulosNfs(db: Consultavel, codfat: string, op: Opcoe
 export interface EntradaNota extends EntradaValores {
   codcli: string;
   nroform: string;
-  verificacao: string;
+  verificacao?: string | null; // código de verificação (NFS-e da prefeitura, até 2025)
+  chave_acesso?: string | null; // chave de acesso de 50 dígitos (NFS-e nacional, 2026+)
   dtemissao: string;          // yyyy-mm-dd
   competencia: string;        // MM/AAAA
   sen_id: string;             // dbservico_nfs
@@ -153,9 +154,11 @@ const texto = (v: any, max: number) => {
 export async function lancarNotaServico(db: Consultavel, e: EntradaNota, codusr?: string | null) {
   const nroform = texto(e.nroform, 15);
   const verificacao = texto(e.verificacao, 50);
+  const chave = String(e.chave_acesso || '').replace(/\D/g, '') || null;
   if (!e.codcli) throw new NfsValidacaoError('Informe o cliente (tomador).');
   if (!nroform) throw new NfsValidacaoError('Informe o número da nota.');
-  if (!verificacao) throw new NfsValidacaoError('Informe o código de verificação.');
+  if (chave && chave.length !== 50) throw new NfsValidacaoError('A chave de acesso da NFS-e nacional tem 50 dígitos.');
+  if (!verificacao && !chave) throw new NfsValidacaoError('Informe a chave de acesso (nota nacional) ou o código de verificação (nota da prefeitura).');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(e.dtemissao || ''))) throw new NfsValidacaoError('Informe a data de emissão.');
   if (!/^(0[1-9]|1[0-2])\/\d{4}$/.test(String(e.competencia || ''))) throw new NfsValidacaoError('Competência no formato MM/AAAA.');
   if (!e.sen_id) throw new NfsValidacaoError('Escolha o serviço.');
@@ -168,10 +171,13 @@ export async function lancarNotaServico(db: Consultavel, e: EntradaNota, codusr?
   if (!cli) throw new NfsValidacaoError('Cliente não encontrado.');
   const serv = (await db.query(`SELECT 1 FROM dbservico_nfs WHERE sen_id = $1`, [e.sen_id])).rowCount;
   if (!serv) throw new NfsValidacaoError('Serviço não encontrado no cadastro.');
-  // VALIDA_NF_SERVICO: mesma nota (nº + verificação) ativa
+  // VALIDA_NF_SERVICO: mesma nota ativa — pela chave (nacional) ou nº + verificação (prefeitura)
   const dup = (await db.query(
-    `SELECT codfat FROM nfs_nota WHERE nroform = $1 AND upper(verificacao) = upper($2) AND cancel = 'N' LIMIT 1`,
-    [nroform, verificacao])).rows[0];
+    `SELECT codfat FROM nfs_nota
+      WHERE cancel = 'N' AND (($3::text IS NOT NULL AND chave_acesso = $3)
+                              OR ($2::text IS NOT NULL AND nroform = $1 AND upper(verificacao) = upper($2)))
+      LIMIT 1`,
+    [nroform, verificacao, chave])).rows[0];
   if (dup) throw new NfsValidacaoError(`Esta nota já foi lançada (fatura ${dup.codfat}).`);
 
   // FATURA_NFS_INCLUIR: codfat = maior + 1 (8 dígitos), com trava
@@ -180,17 +186,17 @@ export async function lancarNotaServico(db: Consultavel, e: EntradaNota, codusr?
     `SELECT COALESCE(MAX(codfat::bigint), 0) + 1 AS n FROM nfs_nota WHERE codfat ~ '^[0-9]+$'`)).rows[0].n)).padStart(8, '0');
 
   await db.query(
-    `INSERT INTO nfs_nota (codfat, nroform, verificacao, codcli, dtemissao, competencia, data, totalnfs, totalfat,
+    `INSERT INTO nfs_nota (codfat, nroform, verificacao, chave_acesso, codcli, dtemissao, competencia, data, totalnfs, totalfat,
         tipofat, valor_servico, valor_desconto, valor_deducoes, issqn_basecalculo, issqn_aliquota, issqn_retido,
         issqn_valor, pis_valor, cofins_valor, ir_valor, inss_valor, csll_valor, outros_valor, aliquota_pis,
         aliquota_cofins, aliquota_ir, aliquota_inss, aliquota_csll, cst_pis, cst_cofins, obs, tipo, cancel, origem, codusr)
-     VALUES ($1,$2,$3,$4,$5,$6,(now() AT TIME ZONE 'America/Manaus')::date,$7,$7,'4',$8,$9,$10,$11,$12,$13,$14,$15,$16,
+     VALUES ($1,$2,$3,$30,$4,$5,$6,(now() AT TIME ZONE 'America/Manaus')::date,$7,$7,'4',$8,$9,$10,$11,$12,$13,$14,$15,$16,
              $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,2,'N','WEB',$29)`,
     [codfat, nroform, verificacao, e.codcli, e.dtemissao, e.competencia, v.valor_liquido,
      v.valor_servico, v.valor_desconto, v.valor_deducoes, v.issqn_basecalculo, v.issqn_aliquota, v.issqn_retido,
      v.issqn_valor, v.pis_valor, v.cofins_valor, v.ir_valor, v.inss_valor, v.csll_valor, v.outros_valor,
      v.aliquota_pis, v.aliquota_cofins, v.aliquota_ir, v.aliquota_inss, v.aliquota_csll,
-     texto(e.cst_pis, 2), texto(e.cst_cofins, 2), texto(e.obs, 255), codusr ? String(codusr).slice(0, 4) : null]);
+     texto(e.cst_pis, 2), texto(e.cst_cofins, 2), texto(e.obs, 255), codusr ? String(codusr).slice(0, 4) : null, chave]);
   await db.query(
     `INSERT INTO nfs_nota_servico (codfat, sen_id, descr, qtde, prunit) VALUES ($1,$2,$3,1,$4)`,
     [codfat, e.sen_id, texto(e.descr, 2000), v.valor_servico]);

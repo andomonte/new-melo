@@ -32,7 +32,7 @@ async function listar(req: NextApiRequest, res: NextApiResponse) {
   const termo = String(q.q || '').trim();
   if (termo) {
     const p = add(`%${termo}%`);
-    cond.push(`(n.nroform ILIKE ${p} OR n.verificacao ILIKE ${p} OR c.nome ILIKE ${p} OR n.codcli ILIKE ${p}
+    cond.push(`(n.nroform ILIKE ${p} OR n.verificacao ILIKE ${p} OR n.chave_acesso ILIKE ${p} OR c.nome ILIKE ${p} OR n.codcli ILIKE ${p}
                OR n.codfat ILIKE ${p} OR EXISTS (SELECT 1 FROM nfs_nota_servico s WHERE s.codfat = n.codfat AND s.descr ILIKE ${p}))`);
   }
   const limit = Math.min(Math.max(parseInt(q.limit || '50', 10) || 50, 1), 1000);
@@ -45,7 +45,7 @@ async function listar(req: NextApiRequest, res: NextApiResponse) {
               COALESCE(sum(n.valor_servico - n.valor_desconto - n.totalfat),0) retencoes, COALESCE(sum(n.totalfat),0) liquido
          ${base}`, vals)).rows[0];
     const rows = (await pool.query(
-      `SELECT n.codfat, n.nroform, n.verificacao, n.dtemissao::text, n.competencia, n.data::text AS data,
+      `SELECT n.codfat, n.nroform, n.verificacao, n.chave_acesso, n.dtemissao::text, n.competencia, n.data::text AS data,
               n.codcli, c.nome AS nome_cliente, n.valor_servico, n.valor_desconto, n.issqn_aliquota, n.issqn_retido,
               n.issqn_valor, (n.valor_servico - n.valor_desconto - n.totalfat) AS retencoes, n.totalfat AS valor_liquido,
               n.cancel, n.origem, n.frmfat,

@@ -41,7 +41,7 @@ const secundario = `${botao} border border-gray-300 dark:border-zinc-600 hover:b
 const perigo = `${botao} bg-red-600 text-white hover:bg-red-700`;
 
 interface NotaLista {
-  codfat: string; nroform: string; verificacao: string; dtemissao: string; competencia: string; data: string;
+  codfat: string; nroform: string; verificacao: string; chave_acesso?: string | null; dtemissao: string; competencia: string; data: string;
   codcli: string; nome_cliente: string; valor_servico: number; issqn_aliquota: number; issqn_retido: string;
   issqn_valor: number; retencoes: number; valor_liquido: number; cancel: string; origem: string;
   descr: string; sen_codigo: string; qtd_titulos: number; recebido: number;
@@ -147,7 +147,7 @@ export default function NotasServico() {
         <table className="w-full">
           <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-zinc-800">
             <tr>
-              <th className={th}>Nº</th><th className={th}>Verificação</th><th className={th}>Emissão</th>
+              <th className={th}>Nº</th><th className={th}>Verificação / chave</th><th className={th}>Emissão</th>
               <th className={th}>Compet.</th><th className={th}>Cliente</th><th className={th}>Serviço</th>
               <th className={`${th} ${num}`}>Valor serviço</th><th className={`${th} ${num}`}>ISS</th>
               <th className={`${th} ${num}`}>Retenções</th><th className={`${th} ${num}`}>Líquido</th>
@@ -161,7 +161,7 @@ export default function NotasServico() {
             {notas.map((n) => (
               <tr key={n.codfat} className={`border-t border-gray-100 hover:bg-blue-50 dark:border-zinc-700 dark:hover:bg-zinc-700/60 ${n.cancel === 'S' ? 'text-red-600 line-through decoration-1 dark:text-red-400' : ''}`}>
                 <td className={`${td} font-mono`}>{n.nroform}</td>
-                <td className={`${td} font-mono text-xs`}>{n.verificacao}</td>
+                <td className={`${td} font-mono text-xs`} title={n.chave_acesso || ''}>{n.chave_acesso ? `…${n.chave_acesso.slice(-12)}` : n.verificacao}</td>
                 <td className={td}>{dataBR(n.dtemissao)}</td>
                 <td className={td}>{n.competencia || '-'}</td>
                 <td className={`${td} max-w-[220px] truncate`} title={n.nome_cliente}>{n.nome_cliente || n.codcli}</td>
@@ -262,7 +262,7 @@ function CamposCobranca({ valor, emissao, cob, setCob }: {
 
 function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (codfat: string) => void }) {
   const [f, setF] = useState({
-    codcli: '', nroform: '', verificacao: '', dtemissao: hojeISO(), competencia: `${hojeISO().slice(5, 7)}/${hojeISO().slice(0, 4)}`,
+    codcli: '', nroform: '', verificacao: '', chave_acesso: '', dtemissao: hojeISO(), competencia: `${hojeISO().slice(5, 7)}/${hojeISO().slice(0, 4)}`,
     sen_id: '', descr: '', valor_servico: '', valor_desconto: '', valor_deducoes: '', issqn_aliquota: '', issqn_retido: false,
     aliquota_pis: '', aliquota_cofins: '', aliquota_ir: '', aliquota_inss: '', aliquota_csll: '', outros_valor: '', obs: '',
   });
@@ -282,7 +282,7 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
     setGravando(true);
     try {
       const nota = {
-        codcli: f.codcli, nroform: f.nroform, verificacao: f.verificacao, dtemissao: f.dtemissao, competencia: f.competencia,
+        codcli: f.codcli, nroform: f.nroform, verificacao: f.verificacao || null, chave_acesso: f.chave_acesso || null, dtemissao: f.dtemissao, competencia: f.competencia,
         sen_id: f.sen_id, descr: f.descr, obs: f.obs || null,
         valor_servico: v.valor_servico, valor_desconto: v.valor_desconto, valor_deducoes: v.valor_deducoes,
         issqn_aliquota: v.issqn_aliquota, issqn_retido: v.issqn_retido, aliquota_pis: v.aliquota_pis,
@@ -323,7 +323,7 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Lançar nota de serviço</DialogTitle>
-          <DialogDescription>Dados da NFS-e já emitida no portal da prefeitura.</DialogDescription>
+          <DialogDescription>Dados da NFS-e já emitida (portal nacional: informe a chave de acesso; notas antigas da prefeitura: o código de verificação).</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -334,7 +334,13 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
                 value={f.codcli} onChange={(val) => set('codcli', val)} placeholder="Buscar cliente..." />
             </div>
             <div><Label>Número da nota *</Label><Input value={f.nroform} onChange={(e) => set('nroform', e.target.value)} /></div>
-            <div><Label>Código de verificação *</Label><Input value={f.verificacao} onChange={(e) => set('verificacao', e.target.value)} placeholder="Ex.: 0219.0329.10F9" /></div>
+            <div><Label>Código de verificação</Label><Input value={f.verificacao} onChange={(e) => set('verificacao', e.target.value)} placeholder="Nota da prefeitura (até 2025)" /></div>
+            <div className="md:col-span-2">
+              <Label>Chave de acesso (NFS-e nacional)</Label>
+              <Input value={f.chave_acesso} maxLength={60} placeholder="50 dígitos — notas de 2026 em diante"
+                onChange={(e) => set('chave_acesso', e.target.value.replace(/\D/g, '').slice(0, 50))} />
+              {f.chave_acesso && f.chave_acesso.length !== 50 && <p className="text-xs text-red-600">{f.chave_acesso.length}/50 dígitos</p>}
+            </div>
             <div><Label>Emissão *</Label>
               <Input type="date" value={f.dtemissao} onChange={(e) => {
                 const d = e.target.value;
@@ -479,7 +485,9 @@ function ModalDetalhe({ codfat, usuario, onFechar, onAlterado }: {
             <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
               <div>
                 {linha('Cliente', `${n.codcli} - ${n.nome_cliente || ''}`)}
-                {linha('Verificação', <span className="font-mono">{n.verificacao}</span>)}
+                {n.chave_acesso
+                  ? linha('Chave de acesso', <span className="break-all font-mono text-xs">{n.chave_acesso}</span>)
+                  : linha('Verificação', <span className="font-mono">{n.verificacao}</span>)}
                 {linha('Emissão / competência', `${dataBR(n.dtemissao)} · ${n.competencia || '-'}`)}
                 {linha('Serviço', d.servicos?.[0] ? `${d.servicos[0].sen_codigo || ''} ${d.servicos[0].sen_atividade || ''}` : '-')}
               </div>
