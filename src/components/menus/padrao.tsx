@@ -103,6 +103,7 @@ import ConsultaFaturasPage from '../corpo/faturamento/ConsultaFatura/ConsultaFat
 const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
 const ConfigOrcamento = lazy(() => import('@/components/corpo/admin/configuracoes/orcamento'));
 const CreditoFornecedor = lazy(() => import('@/components/corpo/admin/financeiro/creditoFornecedor'));
+const NotasServico = lazy(() => import('@/components/corpo/faturamento/notasServico'));
 const NovasVendas = lazy(() => import('@/components/corpo/vendas/novaVenda'));
 const NovaVendaV2 = lazy(() => import('@/components/corpo/vendas/novaVendaV2'));
 const CentralVendas = lazy(() => import('@/components/corpo/vendas/centralVendas'));
@@ -803,6 +804,13 @@ export const menus = [
             href: '/faturamento/historicoNF',
             icon: LiaFileInvoiceSolid,
             corpo: HistoricoNF,
+          },
+          {
+            // NFS-e prestadas (Delphi: Faturamento > Nota Fiscal de Serviço > Prestado)
+            name: 'Notas de Serviço',
+            href: '/faturamento/notasServico',
+            icon: LiaFileInvoiceSolid,
+            corpo: NotasServico,
           },
           // "Fechar Vendas" virou ação no Novo Faturamento (fecha as vendas selecionadas).
           // Tela dedicada aposentada — endpoint fechar-vendas.ts reutilizado lá.
