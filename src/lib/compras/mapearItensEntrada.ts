@@ -35,6 +35,27 @@ const N = (v: unknown): number => (v == null ? 0 : Number(v));
 const c2 = (v: number): number => Number(v.toFixed(2));
 
 /**
+ * Quantidade quebrada (ex.: 80,4 de uma NF em litros/metros) → inteiros para o ESTOQUE, que é
+ * inteiro em dbprod (qtest, qtdreservada). Regra do usuário (25/11/2026): sobe para o próximo
+ * inteiro — 80,4 → 81. Com o item dividido entre pedidos, o total arredondado é repartido sem
+ * inflar (40,2 + 40,2 → 41 + 40 = 81): parte inteira de cada um e o que falta vai para as
+ * maiores frações. Quantidades já inteiras não mudam.
+ */
+export function distribuirInteiros(qtds: number[]): number[] {
+  const q = qtds.map((x) => Math.max(0, N(x)));
+  const eps = 1e-9;
+  const total = Math.ceil(q.reduce((s, x) => s + x, 0) - eps);
+  const base = q.map((x) => Math.floor(x + eps));
+  let falta = total - base.reduce((s, x) => s + x, 0);
+  const ordem = q.map((x, i) => ({ i, frac: x - Math.floor(x + eps) })).sort((a, b) => b.frac - a.frac);
+  for (const o of ordem) {
+    if (falta <= 0) break;
+    if (o.frac > eps) { base[o.i] += 1; falta -= 1; }
+  }
+  return base;
+}
+
+/**
  * Desconto de ICMS SUFRAMA por item. Retorna o vICMS quando o benefício se aplica, senão 0.
  * Nacional: desc_icms_sufra=1, strib[0] ∈ {0,3,4,5,8}, percsubst=0.
  * Importado: desc_icms_sufra_importado=1, strib[0] ∈ {1,2,6,7}, percsubst=0.
@@ -113,9 +134,14 @@ export function montarLinhasDbitent(
     ? pedidos
     : [{ req_id: '0', quantidade: N(assoc.quantidade_associada), valor_unitario: assoc.valor_unitario }];
 
-  return destino.map((ped) => {
-    const quant = N(ped.quantidade);
-    const fator = qcom > 0 ? quant / qcom : 0;
+  // estoque é inteiro: 80,4 → 81 (ver distribuirInteiros)
+  const inteiras = distribuirInteiros(destino.map((p) => N(p.quantidade)));
+
+  return destino.map((ped, idx) => {
+    const quantFiscal = N(ped.quantidade);           // parte da quantidade da NF (pode ser quebrada)
+    const quant = inteiras[idx];                      // quantidade que entra no estoque (inteira)
+    // impostos rateados pela quantidade FISCAL (a nota não muda por causa do arredondamento)
+    const fator = qcom > 0 ? quantFiscal / qcom : 0;
     // Preço unitário da NFe (VUNCOM do XML; fallback vprod/qcom). Validado no
     // Delphi (UniExecEntrada.pas 3203-3223): no caso NORMAL é ele que vira
     // PRUNIT, e é SEMPRE o PRUNITNF. O preço da OC NUNCA vira custo do item.
@@ -125,11 +151,14 @@ export function montarLinhasDbitent(
     // PRUNIT (custo): normal = preço da NFe; meia nota = preço real declarado.
     // NUNCA o preço da OC (valor_unitario) — só como último fallback se, por
     // algum motivo, não houver preço da NFe no XML.
-    const prunit = meia
+    const prunitFiscal = meia
       ? N(assoc.preco_unitario_nf)
       : xmlNfUnit || N(assoc.preco_real) || N(assoc.valor_unitario) || N(ped.valor_unitario);
+    // quantidade arredondada para cima: o custo unitário cai na mesma proporção, para o valor
+    // total do item continuar o da nota (80,4 × 10,00 = 81 × 9,93)
+    const prunit = quant > 0 && quant !== quantFiscal ? (prunitFiscal * quantFiscal) / quant : prunitFiscal;
     // PRUNITNF: sempre o preço FISCAL da nota (VUNCOM), independente de meia nota.
-    const prunitnf = xmlNfUnit || prunit;
+    const prunitnf = xmlNfUnit || prunitFiscal;
 
     const vIcmsRateado = N(det?.vicms) * fator;
     const totalicmsdesconto = descontoIcmsSuframa(regra, prod, vIcmsRateado);
@@ -140,7 +169,7 @@ export function montarLinhasDbitent(
       codprod: assoc.produto_cod,
       codreq: ped.req_id || '0',
       quant,
-      quantnf: N(assoc.quantidade_nf) || quant,
+      quantnf: N(assoc.quantidade_nf) || quantFiscal,
       prunit: c2(prunit),
       prunitnf: c2(prunitnf),
       valor_icms: c2(valor_icms),

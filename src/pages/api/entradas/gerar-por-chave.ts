@@ -104,11 +104,9 @@ export default async function handler(
     const associacoesSalvas = associacoesQuery.rows;
     console.log(`📦 Gerando entrada para NFe ${nfe.numero_nf} (chave: ${chaveLimpa.slice(-8)}...) - ${associacoesSalvas.length} associações`);
 
-    // 5. Pedidos a validar + estoque a atualizar
+    // 5. Pedidos a validar (o estoque é atualizado no passo 10 pelo que entrou em dbitent)
     const associacoesParaValidar: { pedidoId: string; produtoCod: string; quantidade: number }[] = [];
-    const estoquesParaAtualizar: Map<string, number> = new Map();
     for (const itemSalvo of associacoesSalvas) {
-      const quantidadeFloat = parseFloat(itemSalvo.quantidade_associada.toString());
       if (itemSalvo.associacoes && itemSalvo.associacoes[0] !== null) {
         for (const associacao of itemSalvo.associacoes) {
           const isTestOrder = associacao.pedidoId?.toString().startsWith('99') ||
@@ -123,7 +121,6 @@ export default async function handler(
           }
         }
       }
-      estoquesParaAtualizar.set(itemSalvo.produto_cod, (estoquesParaAtualizar.get(itemSalvo.produto_cod) || 0) + quantidadeFloat);
     }
 
     // 6. Validar quantidades nos pedidos
@@ -258,6 +255,18 @@ export default async function handler(
     }
     const itensProcessados = rDbent.itens.length;
 
+    // Quantidades INTEIRAS que entraram: dbitent.quant já vem arredondado para cima quando a NF
+    // traz quantidade quebrada (80,4 → 81; ver distribuirInteiros). Pedido e estoque usam estas,
+    // para os três baterem (o estoque em dbprod é inteiro).
+    const inteiroPorPedido = new Map<string, number>();
+    const inteiroPorProduto = new Map<string, number>();
+    for (const it of rDbent.itens) {
+      const q = Number(it.quant) || 0;
+      const chavePed = `${it.codreq}|${it.codprod}`;
+      inteiroPorPedido.set(chavePed, (inteiroPorPedido.get(chavePed) || 0) + q);
+      inteiroPorProduto.set(it.codprod, (inteiroPorProduto.get(it.codprod) || 0) + q);
+    }
+
     // Marca a NFe como PROCESSADA ('S') SÓ agora que o dbent existe (geração
     // atômica na mesma transação). Se algo acima falhar, o rollback mantém a
     // NFe como Associada ('C') — sem estado órfão.
@@ -274,11 +283,13 @@ export default async function handler(
         const key = `${assoc.pedidoId}|${assoc.produtoCod}`;
         updatesAgrupados.set(key, (updatesAgrupados.get(key) || 0) + assoc.quantidade);
       }
-      await Promise.all(Array.from(updatesAgrupados.entries()).map(([key, quantidade]) => {
+      await Promise.all(Array.from(updatesAgrupados.entries()).map(([key, quantidadeNf]) => {
         const [pedidoId, produtoCod] = key.split('|');
+        // inteira (a que entrou no estoque), limitada ao que foi pedido
+        const quantidade = inteiroPorPedido.get(key) ?? Math.ceil(quantidadeNf - 1e-9);
         return client.query(`
           UPDATE cmp_it_requisicao ri
-          SET itr_quantidade_atendida = COALESCE(itr_quantidade_atendida, 0) + $1
+          SET itr_quantidade_atendida = LEAST(ri.itr_quantidade, COALESCE(itr_quantidade_atendida, 0) + $1)
           FROM cmp_ordem_compra o
           WHERE o.orc_id = $2 AND ri.itr_req_id = o.orc_req_id
             AND ri.itr_req_versao = o.orc_req_versao AND ri.itr_codprod = $3
@@ -311,7 +322,7 @@ export default async function handler(
     }
 
     // 10. Atualizar estoque (reserva a quantidade que entrou)
-    await Promise.all(Array.from(estoquesParaAtualizar.entries()).map(([codprod, quantidade]) =>
+    await Promise.all(Array.from(inteiroPorProduto.entries()).map(([codprod, quantidade]) =>
       client.query(`
         UPDATE dbprod
         SET qtest = COALESCE(qtest, 0) + $1, qtdreservada = COALESCE(qtdreservada, 0) + $1
