@@ -19,6 +19,8 @@ export interface EntradaValores {
   aliquota_inss?: number;
   aliquota_csll?: number;
   outros_valor?: number;
+  /** Valores já prontos (ex.: lidos do XML da NFS-e nacional) — quando vierem, valem no lugar do cálculo pela alíquota. */
+  informados?: Partial<Record<'issqn_valor' | 'pis_valor' | 'cofins_valor' | 'ir_valor' | 'inss_valor' | 'csll_valor', number>>;
 }
 
 export interface ValoresCalculados {
@@ -40,12 +42,14 @@ export function calcularValoresNota(e: EntradaValores): ValoresCalculados {
   const pct = (a: number) => r2((base * a) / 100);
   const retido = e.issqn_retido === true || e.issqn_retido === 'S';
   const issAliq = aliq(e.issqn_aliquota);
-  const iss = pct(issAliq);
-  const pis = pct(aliq(e.aliquota_pis));
-  const cofins = pct(aliq(e.aliquota_cofins));
-  const ir = pct(aliq(e.aliquota_ir));
-  const inss = pct(aliq(e.aliquota_inss));
-  const csll = pct(aliq(e.aliquota_csll));
+  const inf = e.informados || {};
+  const ou = (k: keyof NonNullable<EntradaValores['informados']>, calc: number) => (inf[k] != null ? r2(inf[k]) : calc);
+  const iss = ou('issqn_valor', pct(issAliq));
+  const pis = ou('pis_valor', pct(aliq(e.aliquota_pis)));
+  const cofins = ou('cofins_valor', pct(aliq(e.aliquota_cofins)));
+  const ir = ou('ir_valor', pct(aliq(e.aliquota_ir)));
+  const inss = ou('inss_valor', pct(aliq(e.aliquota_inss)));
+  const csll = ou('csll_valor', pct(aliq(e.aliquota_csll)));
   const outros = r2(e.outros_valor);
   const retencoes = r2((retido ? iss : 0) + pis + cofins + ir + inss + csll + outros);
   return {

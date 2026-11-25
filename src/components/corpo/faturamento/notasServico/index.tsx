@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Ban, Eye, FileText, Loader2, Plus, Receipt, RefreshCw, Search } from 'lucide-react';
+import { Ban, CloudDownload, Eye, FileText, Loader2, Plus, Receipt, RefreshCw, Search } from 'lucide-react';
 import { AuthContext } from '@/contexts/authContexts';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Autocomplete } from '@/components/common/Autocomplete';
 import { mascaraInputBRL, desmascarar } from '@/utils/monetario';
 import { calcularValoresNota, dividirParcelas } from '@/lib/nfse/calculoNota';
+import ModalBuscaAdn from './ModalBuscaAdn';
 
 const API = '/api/nfse';
 const moeda = (v: any) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
@@ -67,6 +68,7 @@ export default function NotasServico() {
   const [carregando, setCarregando] = useState(false);
   const [lancarAberto, setLancarAberto] = useState(false);
   const [detalhe, setDetalhe] = useState<string | null>(null);
+  const [adnAberto, setAdnAberto] = useState(false);
 
   const carregar = useCallback(async (p = 1) => {
     setCarregando(true);
@@ -97,6 +99,9 @@ export default function NotasServico() {
         <h1 className="mr-auto flex items-center gap-2 text-lg font-semibold">
           <Receipt className="h-5 w-5 text-blue-600" /> Notas de Serviço
         </h1>
+        <button className={secundario} onClick={() => setAdnAberto(true)} title="Buscar as NFS-e emitidas no portal nacional (ADN)">
+          <CloudDownload className="h-4 w-4" /> Buscar no portal
+        </button>
         <button className={primario} onClick={() => setLancarAberto(true)}><Plus className="h-4 w-4" /> Lançar nota</button>
       </div>
 
@@ -200,6 +205,9 @@ export default function NotasServico() {
       {lancarAberto && (
         <ModalLancar onFechar={() => setLancarAberto(false)}
           onSalvo={(codfat) => { setLancarAberto(false); carregar(1); setDetalhe(codfat); }} />
+      )}
+      {adnAberto && (
+        <ModalBuscaAdn usuario={usuario} onFechar={() => setAdnAberto(false)} onImportou={() => carregar(1)} />
       )}
       {detalhe && (
         <ModalDetalhe codfat={detalhe} usuario={usuario} onFechar={() => setDetalhe(null)} onAlterado={() => carregar(pagina)} />

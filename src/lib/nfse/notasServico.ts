@@ -151,7 +151,10 @@ const texto = (v: any, max: number) => {
 };
 
 /** Lança a nota (e o serviço). Devolve o codfat. Valida duplicidade como o Delphi (nº + verificação). */
-export async function lancarNotaServico(db: Consultavel, e: EntradaNota, codusr?: string | null) {
+export async function lancarNotaServico(
+  db: Consultavel, e: EntradaNota, codusr?: string | null,
+  extra: { origem?: 'WEB' | 'NACIONAL'; xml?: string | null } = {},
+) {
   const nroform = texto(e.nroform, 15);
   const verificacao = texto(e.verificacao, 50);
   const chave = String(e.chave_acesso || '').replace(/\D/g, '') || null;
@@ -191,12 +194,14 @@ export async function lancarNotaServico(db: Consultavel, e: EntradaNota, codusr?
         issqn_valor, pis_valor, cofins_valor, ir_valor, inss_valor, csll_valor, outros_valor, aliquota_pis,
         aliquota_cofins, aliquota_ir, aliquota_inss, aliquota_csll, cst_pis, cst_cofins, obs, tipo, cancel, origem, codusr)
      VALUES ($1,$2,$3,$30,$4,$5,$6,(now() AT TIME ZONE 'America/Manaus')::date,$7,$7,'4',$8,$9,$10,$11,$12,$13,$14,$15,$16,
-             $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,2,'N','WEB',$29)`,
+             $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,2,'N',$31,$29)`,
     [codfat, nroform, verificacao, e.codcli, e.dtemissao, e.competencia, v.valor_liquido,
      v.valor_servico, v.valor_desconto, v.valor_deducoes, v.issqn_basecalculo, v.issqn_aliquota, v.issqn_retido,
      v.issqn_valor, v.pis_valor, v.cofins_valor, v.ir_valor, v.inss_valor, v.csll_valor, v.outros_valor,
      v.aliquota_pis, v.aliquota_cofins, v.aliquota_ir, v.aliquota_inss, v.aliquota_csll,
-     texto(e.cst_pis, 2), texto(e.cst_cofins, 2), texto(e.obs, 255), codusr ? String(codusr).slice(0, 4) : null, chave]);
+     texto(e.cst_pis, 2), texto(e.cst_cofins, 2), texto(e.obs, 255), codusr ? String(codusr).slice(0, 4) : null, chave,
+     extra.origem || 'WEB']);
+  if (extra.xml) await db.query(`UPDATE nfs_nota SET xml = $2 WHERE codfat = $1`, [codfat, extra.xml]);
   await db.query(
     `INSERT INTO nfs_nota_servico (codfat, sen_id, descr, qtde, prunit) VALUES ($1,$2,$3,1,$4)`,
     [codfat, e.sen_id, texto(e.descr, 2000), v.valor_servico]);
