@@ -1,6 +1,6 @@
 # Notas Fiscais de Serviço (NFS-e)
 
-Tela: **Faturamento > Notas de Serviço** (`/faturamento/notasServico`).
+Tela: **Financeiro > Notas de Serviço** (`/admin/financeiro/notasServico`).
 
 ## Origem das notas
 - **Até 2025:** NFS-e da Prefeitura de Manaus (nota.manaus.am.gov.br), lançadas à mão com o **código de verificação**.

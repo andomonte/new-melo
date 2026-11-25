@@ -1,5 +1,5 @@
 /**
- * Faturamento → Notas de Serviço (/faturamento/notasServico) — NFS-e PRESTADAS.
+ * Financeiro → Notas de Serviço (/admin/financeiro/notasServico) — NFS-e PRESTADAS.
  * Fluxo do Delphi (Faturamento > Nota Fiscal de Serviço > Prestado): a nota é emitida no portal
  * da prefeitura e LANÇADA aqui (nº, verificação, competência, valores, ISS e retenções); depois
  * geram-se os títulos a receber (dbreceb tipo 'S'); cancelar cancela nota e títulos.

@@ -1,5 +1,6 @@
 -- 094_tela_notas_servico.sql  (25/11/2026)
--- Tela Faturamento → Notas de Serviço (/faturamento/notasServico) — NFS-e prestadas (etapa 2).
+-- Tela Financeiro → Notas de Serviço (/admin/financeiro/notasServico) — NFS-e prestadas (etapa 2).
+-- (Primeira versão registrou em /faturamento/notasServico; se existir, é renomeada — mantém permissões.)
 -- Permissão copiada da tela irmã "/faturamento/consultaFatura", só para os grupos
 -- ADMINISTRAÇÃO e FATURAMENTO (lançar nota gera títulos a receber). Outros grupos: Acessos > Perfis.
 -- Idempotente. Depois de aplicar, o usuário precisa RE-LOGAR para ver o menu.
@@ -9,8 +10,8 @@ DECLARE
   s              text;
   v_codigo       integer;
   v_codigos_irma integer[];
-  v_path  constant text := '/faturamento/notasServico';
-  v_nome  constant text := 'Faturamento - Notas de Serviço';
+  v_path  constant text := '/admin/financeiro/notasServico';
+  v_nome  constant text := 'Financeiro - Notas de Serviço';
 BEGIN
   FOR s IN
     SELECT table_schema FROM information_schema.tables
@@ -31,6 +32,10 @@ BEGIN
         'SELECT setval(%L, GREATEST((SELECT COALESCE(MAX(id),0) FROM %I."tb_grupo_Permissao"), (SELECT last_value FROM %I."tb_grupo_Permissao_id_seq")), true)',
         s || '."tb_grupo_Permissao_id_seq"', s, s);
     END IF;
+
+    -- caminho antigo (1ª versão desta migration) → novo, mantendo o código da tela e as permissões
+    EXECUTE format('UPDATE %I.tb_telas SET "PATH_TELA" = %L, "NOME_TELA" = %L WHERE "PATH_TELA" = %L',
+      s, v_path, v_nome, '/faturamento/notasServico');
 
     EXECUTE format('SELECT "CODIGO_TELA" FROM %I.tb_telas WHERE "PATH_TELA" = %L LIMIT 1', s, v_path) INTO v_codigo;
     IF v_codigo IS NULL THEN

@@ -483,6 +483,13 @@ export const menus = [
             corpo: CreditoFornecedor,
           },
           {
+            // NFS-e prestadas (no Delphi ficava em Faturamento > Nota Fiscal de Serviço > Prestado)
+            name: 'Notas de Serviço',
+            href: '/admin/financeiro/notasServico',
+            icon: LiaFileInvoiceSolid,
+            corpo: NotasServico,
+          },
+          {
             name: 'Contas a Receber',
             href: '/admin/financeiro/contasAReceber',
             icon: HandCoinsIcon,
@@ -805,13 +812,7 @@ export const menus = [
             icon: LiaFileInvoiceSolid,
             corpo: HistoricoNF,
           },
-          {
-            // NFS-e prestadas (Delphi: Faturamento > Nota Fiscal de Serviço > Prestado)
-            name: 'Notas de Serviço',
-            href: '/faturamento/notasServico',
-            icon: LiaFileInvoiceSolid,
-            corpo: NotasServico,
-          },
+
           // "Fechar Vendas" virou ação no Novo Faturamento (fecha as vendas selecionadas).
           // Tela dedicada aposentada — endpoint fechar-vendas.ts reutilizado lá.
         ],
