@@ -153,15 +153,18 @@ const texto = (v: any, max: number) => {
 /** Lança a nota (e o serviço). Devolve o codfat. Valida duplicidade como o Delphi (nº + verificação). */
 export async function lancarNotaServico(
   db: Consultavel, e: EntradaNota, codusr?: string | null,
-  extra: { origem?: 'WEB' | 'NACIONAL'; xml?: string | null } = {},
+  extra: { origem?: 'WEB' | 'NACIONAL' | 'EMITIDA'; xml?: string | null; pendenteEmissao?: boolean } = {},
 ) {
   const nroform = texto(e.nroform, 15);
   const verificacao = texto(e.verificacao, 50);
   const chave = String(e.chave_acesso || '').replace(/\D/g, '') || null;
   if (!e.codcli) throw new NfsValidacaoError('Informe o cliente (tomador).');
-  if (!nroform) throw new NfsValidacaoError('Informe o número da nota.');
-  if (chave && chave.length !== 50) throw new NfsValidacaoError('A chave de acesso da NFS-e nacional tem 50 dígitos.');
-  if (!verificacao && !chave) throw new NfsValidacaoError('Informe a chave de acesso (nota nacional) ou o código de verificação (nota da prefeitura).');
+  // emissão pelo sistema: o número e a chave chegam depois, na resposta da Sefin
+  if (!extra.pendenteEmissao) {
+    if (!nroform) throw new NfsValidacaoError('Informe o número da nota.');
+    if (chave && chave.length !== 50) throw new NfsValidacaoError('A chave de acesso da NFS-e nacional tem 50 dígitos.');
+    if (!verificacao && !chave) throw new NfsValidacaoError('Informe a chave de acesso (nota nacional) ou o código de verificação (nota da prefeitura).');
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(e.dtemissao || ''))) throw new NfsValidacaoError('Informe a data de emissão.');
   if (!/^(0[1-9]|1[0-2])\/\d{4}$/.test(String(e.competencia || ''))) throw new NfsValidacaoError('Competência no formato MM/AAAA.');
   if (!e.sen_id) throw new NfsValidacaoError('Escolha o serviço.');
@@ -175,7 +178,7 @@ export async function lancarNotaServico(
   const serv = (await db.query(`SELECT 1 FROM dbservico_nfs WHERE sen_id = $1`, [e.sen_id])).rowCount;
   if (!serv) throw new NfsValidacaoError('Serviço não encontrado no cadastro.');
   // VALIDA_NF_SERVICO: mesma nota ativa — pela chave (nacional) ou nº + verificação (prefeitura)
-  const dup = (await db.query(
+  const dup = extra.pendenteEmissao ? null : (await db.query(
     `SELECT codfat FROM nfs_nota
       WHERE cancel = 'N' AND (($3::text IS NOT NULL AND chave_acesso = $3)
                               OR ($2::text IS NOT NULL AND nroform = $1 AND upper(verificacao) = upper($2)))

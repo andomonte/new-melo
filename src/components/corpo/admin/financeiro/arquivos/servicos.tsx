@@ -6,6 +6,7 @@
 //   - na EDIÇÃO o Delphi trava código, CNAE e atividade — só grupo contábil e
 //     ISSQN podem mudar (btnAlterarServicoClick);
 //   - alíquota de ISSQN zerada apenas avisa, não impede.
+//   - Web: códigos da NFS-e nacional (tributação nacional/municipal e NBS), editáveis sempre.
 
 import React, { useEffect } from 'react';
 import { z } from 'zod';
@@ -34,6 +35,7 @@ const colunas: CrudColumn<ServicoNfs>[] = [
   { header: 'sen_codigo', cell: (i) => i.sen_codigo },
   { header: 'sen_cnae', cell: (i) => i.sen_cnae },
   { header: 'sen_atividade', cell: (i) => i.sen_atividade },
+  { header: 'sen_ctribnac', cell: (i) => i.sen_ctribnac || '-' },
   { header: 'gpcontabil', cell: (i) => i.gpcontabil || i.sen_codgpc || '-' },
   {
     header: 'sen_issqn',
@@ -55,6 +57,9 @@ const rotulos = {
   gpcontabil: 'GRUPO CONTÁBIL',
   sen_issqn: 'ALÍQ. ISSQN',
   sen_excluido: 'EXCLUÍDO',
+  sen_ctribnac: 'CÓD. NACIONAL',
+  sen_ctribmun: 'CÓD. MUNICIPAL',
+  sen_cnbs: 'NBS',
 };
 
 const schema = z.object({
@@ -84,6 +89,9 @@ const schema = z.object({
   sen_codgpc: z.string().trim().min(1, 'Informe o grupo contábil do serviço.'),
   gpcontabil: z.string().optional(),
   sen_excluido: z.union([z.string(), z.number()]).optional(),
+  sen_ctribnac: z.string().nullish().refine((v) => !v || /^\d{6}$/.test(v), 'O código nacional tem 6 dígitos (item + subitem + desdobro).'),
+  sen_ctribmun: z.string().nullish().refine((v) => !v || /^\d{3}$/.test(v), 'O código municipal tem 3 dígitos.'),
+  sen_cnbs: z.string().nullish().refine((v) => !v || /^\d{9}$/.test(v), 'O NBS tem 9 dígitos.'),
 });
 
 const vazio: ServicoNfs = {
@@ -182,6 +190,42 @@ const Formulario: React.FC<FormComponentProps<ServicoNfs>> = ({
           required
         />
       </div>
+      <div className="md:col-span-3 -mb-3 text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">
+        NFS-e nacional
+      </div>
+      <FormInput
+        name="sen_ctribnac"
+        label="Cód. tributação nacional"
+        value={formData.sen_ctribnac || ''}
+        onChange={(e) => onFormChange('sen_ctribnac', e.target.value.replace(/\D/g, '').slice(0, 6))}
+        error={errors.sen_ctribnac}
+        maxLength={6}
+        inputMode="numeric"
+        placeholder="Ex.: 140101 (em branco: do código)"
+        type=""
+      />
+      <FormInput
+        name="sen_ctribmun"
+        label="Cód. tributação municipal"
+        value={formData.sen_ctribmun || ''}
+        onChange={(e) => onFormChange('sen_ctribmun', e.target.value.replace(/\D/g, '').slice(0, 3))}
+        error={errors.sen_ctribmun}
+        maxLength={3}
+        inputMode="numeric"
+        placeholder="Opcional (3 dígitos)"
+        type=""
+      />
+      <FormInput
+        name="sen_cnbs"
+        label="NBS"
+        value={formData.sen_cnbs || ''}
+        onChange={(e) => onFormChange('sen_cnbs', e.target.value.replace(/\D/g, '').slice(0, 9))}
+        error={errors.sen_cnbs}
+        maxLength={9}
+        inputMode="numeric"
+        placeholder="Opcional (9 dígitos)"
+        type=""
+      />
     </div>
   );
 };

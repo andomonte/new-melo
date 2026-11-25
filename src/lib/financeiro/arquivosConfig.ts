@@ -199,6 +199,20 @@ export const CONTAS_BANCARIAS: ConfigArquivo = {
   },
 };
 
+function digitosOpcionais(v: any, tamanho: number, campo: string): string | null {
+  const d = String(v ?? '').replace(/\D/g, '');
+  if (!d) return null;
+  if (d.length !== tamanho) throw new ErroValidacao(`Informe ${campo} com ${tamanho} dígitos.`);
+  return d;
+}
+
+function codigoNacional(v: any, codigo: string | null): string | null {
+  const informado = digitosOpcionais(v, 6, 'o código de tributação nacional');
+  if (informado) return informado;
+  const m = String(codigo || '').replace(/\s/g, '').match(/^(\d{1,2})\.(\d{1,2})$/);
+  return m ? `${m[1].padStart(2, '0')}${m[2].padStart(2, '0')}01` : null;
+}
+
 /** Financeiro > Arquivos > Serviços — SERVIÇO/UnitFormServico.pas (SEN_* / dbservico_nfs). */
 export const SERVICOS: ConfigArquivo = {
   tabela: 'dbservico_nfs',
@@ -212,15 +226,19 @@ export const SERVICOS: ConfigArquivo = {
     { prop: 'sen_issqn', coluna: 'sen_issqn' },
     { prop: 'sen_codgpc', coluna: 'sen_codgpc' },
     { prop: 'sen_excluido', coluna: 'sen_excluido' },
+    { prop: 'sen_ctribnac', coluna: 'sen_ctribnac' },
+    { prop: 'sen_ctribmun', coluna: 'sen_ctribmun' },
+    { prop: 'sen_cnbs', coluna: 'sen_cnbs' },
   ],
-  colunasBusca: ['s.sen_codigo', 's.sen_cnae', 's.sen_atividade'],
+  colunasBusca: ['s.sen_codigo', 's.sen_cnae', 's.sen_atividade', 's.sen_ctribnac'],
   ordem: 's.sen_codigo ASC',
   aliasTabela: 's',
   fromLista: 'dbservico_nfs s LEFT JOIN dbgpprod_contabil g ON g.codgpc = s.sen_codgpc',
   selectLista: `s.sen_id AS sen_id, s.sen_codigo AS sen_codigo, s.sen_cnae AS sen_cnae,
                 s.sen_codunico AS sen_codunico, s.sen_atividade AS sen_atividade,
                 s.sen_issqn AS sen_issqn, s.sen_codgpc AS sen_codgpc,
-                g.descr AS gpcontabil, s.sen_excluido AS sen_excluido`,
+                g.descr AS gpcontabil, s.sen_excluido AS sen_excluido,
+                s.sen_ctribnac AS sen_ctribnac, s.sen_ctribmun AS sen_ctribmun, s.sen_cnbs AS sen_cnbs`,
   normalizar: (body) => {
     const codigo = texto(body.sen_codigo, { campo: 'o código do serviço', max: 5, obrigatorio: true });
     const cnae = texto(body.sen_cnae, { campo: 'o CNAE do serviço', max: 9, obrigatorio: true });
@@ -233,6 +251,11 @@ export const SERVICOS: ConfigArquivo = {
       sen_issqn: decimal(body.sen_issqn, { campo: 'a alíquota de ISSQN', min: 0, max: 99.99 }) ?? 0,
       sen_codgpc: texto(body.sen_codgpc, { campo: 'o grupo contábil do serviço', max: 4, obrigatorio: true }),
       sen_excluido: Number(body.sen_excluido ?? 0) || 0,
+      // NFS-e nacional (migration 096): cTribNac = item + subitem + desdobro (6 dígitos);
+      // em branco, deriva do código "14.01" → "140101".
+      sen_ctribnac: codigoNacional(body.sen_ctribnac, codigo),
+      sen_ctribmun: digitosOpcionais(body.sen_ctribmun, 3, 'o código de tributação municipal'),
+      sen_cnbs: digitosOpcionais(body.sen_cnbs, 9, 'o código NBS'),
     };
   },
   antesDeSalvar: async (client, v) => {

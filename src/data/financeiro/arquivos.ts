@@ -135,6 +135,9 @@ export interface ServicoNfs {
   sen_codgpc: string;
   gpcontabil?: string;
   sen_excluido?: number;
+  sen_ctribnac?: string | null; // NFS-e nacional: tributação nacional (6 dígitos)
+  sen_ctribmun?: string | null; // tributação municipal (3 dígitos, opcional)
+  sen_cnbs?: string | null;     // NBS (9 dígitos, opcional)
 }
 
 /** tb_user_perfil.cod_conta (+ dados da conta dbconta vinculada) */

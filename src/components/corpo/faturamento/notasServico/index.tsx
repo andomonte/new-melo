@@ -1,13 +1,13 @@
 /**
  * Financeiro → Notas de Serviço (/admin/financeiro/notasServico) — NFS-e PRESTADAS.
- * Fluxo do Delphi (Faturamento > Nota Fiscal de Serviço > Prestado): a nota é emitida no portal
- * da prefeitura e LANÇADA aqui (nº, verificação, competência, valores, ISS e retenções); depois
- * geram-se os títulos a receber (dbreceb tipo 'S'); cancelar cancela nota e títulos.
+ * Duas formas: EMITIR pelo sistema (DPS assinada e transmitida à Sefin Nacional — src/lib/nfse/sefin) ou
+ * LANÇAR uma nota já emitida fora (nº, verificação/chave, valores, ISS e retenções), como no Delphi.
+ * Depois geram-se os títulos a receber (dbreceb tipo 'S'); cancelar cancela nota e títulos (no portal, se nacional).
  * Regras: src/lib/nfse/notasServico.ts e calculoNota.ts.
  */
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Ban, CloudDownload, Eye, FileText, Loader2, Plus, Receipt, RefreshCw, Search } from 'lucide-react';
+import { Ban, CloudDownload, Eye, FileText, Loader2, Plus, Printer, Receipt, RefreshCw, Search } from 'lucide-react';
 import { AuthContext } from '@/contexts/authContexts';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -102,7 +102,7 @@ export default function NotasServico() {
         <button className={secundario} onClick={() => setAdnAberto(true)} title="Buscar as NFS-e emitidas no portal nacional (ADN)">
           <CloudDownload className="h-4 w-4" /> Buscar no portal
         </button>
-        <button className={primario} onClick={() => setLancarAberto(true)}><Plus className="h-4 w-4" /> Lançar nota</button>
+        <button className={primario} onClick={() => setLancarAberto(true)}><Plus className="h-4 w-4" /> Nova nota</button>
       </div>
 
       {/* Filtros */}
@@ -277,7 +277,16 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
   const [gerarCobranca, setGerarCobranca] = useState(true);
   const [cob, setCob] = useState({ banco: '5', forma: 'CARTEIRA', prazos: '30' });
   const [gravando, setGravando] = useState(false);
+  const [modo, setModo] = useState<'emitir' | 'lancar'>('emitir');
+  const [config, setConfig] = useState<{ emissao: 'PRODUCAO' | 'RESTRITA'; serie: string; certificadoTeste: boolean } | null>(null);
+  const [errosSefin, setErrosSefin] = useState<string[]>([]);
   const set = (k: keyof typeof f, v: any) => setF((p) => ({ ...p, [k]: v }));
+  const emitir = modo === 'emitir';
+  const producao = config?.emissao === 'PRODUCAO';
+
+  useEffect(() => {
+    fetch(`${API}/configuracao`).then((r) => r.json()).then(setConfig).catch(() => undefined);
+  }, []);
 
   const v = useMemo(() => calcularValoresNota({
     valor_servico: desmascarar(f.valor_servico), valor_desconto: desmascarar(f.valor_desconto),
@@ -287,10 +296,13 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
   }), [f]);
 
   const salvar = async () => {
+    if (emitir && producao && !window.confirm(`Emitir a NFS-e de ${moeda(v.valor_servico)} no ambiente de PRODUÇÃO? A nota terá valor fiscal.`)) return;
     setGravando(true);
+    setErrosSefin([]);
     try {
       const nota = {
-        codcli: f.codcli, nroform: f.nroform, verificacao: f.verificacao || null, chave_acesso: f.chave_acesso || null, dtemissao: f.dtemissao, competencia: f.competencia,
+        codcli: f.codcli, nroform: emitir ? '' : f.nroform, verificacao: emitir ? null : f.verificacao || null,
+        chave_acesso: emitir ? null : f.chave_acesso || null, dtemissao: emitir ? hojeISO() : f.dtemissao, competencia: f.competencia,
         sen_id: f.sen_id, descr: f.descr, obs: f.obs || null,
         valor_servico: v.valor_servico, valor_desconto: v.valor_desconto, valor_deducoes: v.valor_deducoes,
         issqn_aliquota: v.issqn_aliquota, issqn_retido: v.issqn_retido, aliquota_pis: v.aliquota_pis,
@@ -300,13 +312,24 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
       const cobranca = gerarCobranca
         ? { banco: cob.banco, forma: cob.banco === '5' ? cob.forma : null, prazos: lerPrazos(cob.prazos) }
         : null;
-      const r = await fetch(`${API}/notas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nota, cobranca }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.erro || 'Erro ao lançar a nota');
-      toast.success(`Nota lançada (fatura ${j.codfat})${j.cobranca ? ` com ${j.cobranca.titulos.length} título(s)` : ''}.`);
+      const r = await fetch(`${API}/notas${emitir ? '/emitir' : ''}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nota, cobranca }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = String(j?.erro || (emitir ? 'Erro ao emitir a NFS-e' : 'Erro ao lançar a nota'));
+        if (emitir) setErrosSefin(msg.replace(/^A Sefin Nacional rejeitou a nota:\s*/, '').split(' | '));
+        throw new Error(msg);
+      }
+      if (emitir) {
+        toast.success(`NFS-e ${j.numero || ''} emitida${j.ambiente === 'RESTRITA' ? ' (ambiente de TESTES)' : ''} — fatura ${j.codfat}.`);
+        (j.alertas || []).forEach((a: string) => toast.warning(a, { duration: 12000 }));
+      } else {
+        toast.success(`Nota lançada (fatura ${j.codfat})${j.cobranca ? ` com ${j.cobranca.titulos.length} título(s)` : ''}.`);
+      }
       onSalvo(j.codfat);
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(e.message, { duration: 10000 });
     } finally {
       setGravando(false);
     }
@@ -330,17 +353,48 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
     <Dialog open onOpenChange={(o) => !o && !gravando && onFechar()}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Lançar nota de serviço</DialogTitle>
-          <DialogDescription>Dados da NFS-e já emitida (portal nacional: informe a chave de acesso; notas antigas da prefeitura: o código de verificação).</DialogDescription>
+          <DialogTitle>{emitir ? 'Emitir nota de serviço (NFS-e nacional)' : 'Lançar nota de serviço já emitida'}</DialogTitle>
+          <DialogDescription>
+            {emitir
+              ? 'A nota é gerada aqui e transmitida à Sefin Nacional; número e chave de acesso vêm do portal.'
+              : 'Dados da NFS-e emitida fora do sistema (portal nacional: informe a chave de acesso; notas antigas da prefeitura: o código de verificação).'}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-md border border-gray-300 p-0.5 dark:border-zinc-600">
+              {([['emitir', 'Emitir pelo sistema'], ['lancar', 'Lançar nota já emitida']] as const).map(([k, l]) => (
+                <button key={k} type="button" disabled={gravando} onClick={() => { setModo(k); setErrosSefin([]); }}
+                  className={`rounded px-3 py-1 text-sm ${modo === k ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-zinc-700'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {emitir && config && (
+              <span className={`rounded px-2 py-1 text-xs font-semibold ${producao
+                ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
+                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>
+                {producao ? 'PRODUÇÃO — nota com valor fiscal' : 'AMBIENTE DE TESTES (produção restrita) — sem valor fiscal'}
+                {` · série ${config.serie}`}{config.certificadoTeste ? ' · certificado de teste' : ''}
+              </span>
+            )}
+          </div>
+
+          {errosSefin.length > 0 && (
+            <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+              <div className="mb-1 font-semibold">Nota não emitida — nada foi gravado:</div>
+              <ul className="list-disc pl-5">{errosSefin.map((m, i) => <li key={i}>{m}</li>)}</ul>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <div className="md:col-span-2">
               <Label>Cliente (tomador) *</Label>
               <Autocomplete apiUrl="/api/contas-receber/clientes" mapResponse={(d) => d.clientes || []}
                 value={f.codcli} onChange={(val) => set('codcli', val)} placeholder="Buscar cliente..." />
             </div>
+            {!emitir && <>
             <div><Label>Número da nota *</Label><Input value={f.nroform} onChange={(e) => set('nroform', e.target.value)} /></div>
             <div><Label>Código de verificação</Label><Input value={f.verificacao} onChange={(e) => set('verificacao', e.target.value)} placeholder="Nota da prefeitura (até 2025)" /></div>
             <div className="md:col-span-2">
@@ -349,8 +403,10 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
                 onChange={(e) => set('chave_acesso', e.target.value.replace(/\D/g, '').slice(0, 50))} />
               {f.chave_acesso && f.chave_acesso.length !== 50 && <p className="text-xs text-red-600">{f.chave_acesso.length}/50 dígitos</p>}
             </div>
+            </>}
             <div><Label>Emissão *</Label>
-              <Input type="date" value={f.dtemissao} onChange={(e) => {
+              <Input type="date" value={emitir ? hojeISO() : f.dtemissao} disabled={emitir}
+                title={emitir ? 'A emissão é sempre na data de hoje' : undefined} onChange={(e) => {
                 const d = e.target.value;
                 setF((p) => ({ ...p, dtemissao: d, competencia: /^\d{4}-\d{2}/.test(d) ? `${d.slice(5, 7)}/${d.slice(0, 4)}` : p.competencia }));
               }} />
@@ -415,8 +471,10 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
 
         <DialogFooter>
           <button className={secundario} onClick={onFechar} disabled={gravando}>Cancelar</button>
-          <button className={primario} onClick={salvar} disabled={gravando || v.valor_servico <= 0}>
-            {gravando && <Loader2 className="h-4 w-4 animate-spin" />} Lançar nota
+          <button className={emitir && producao ? perigo : primario} onClick={salvar}
+            disabled={gravando || v.valor_servico <= 0 || !f.codcli || !f.sen_id || !f.descr.trim() || (!emitir && !f.nroform.trim())}>
+            {gravando && <Loader2 className="h-4 w-4 animate-spin" />}
+            {emitir ? (gravando ? 'Transmitindo…' : 'Emitir NFS-e') : 'Lançar nota'}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -434,6 +492,7 @@ function ModalDetalhe({ codfat, usuario, onFechar, onAlterado }: {
   const [modo, setModo] = useState<'ver' | 'cobranca' | 'cancelar'>('ver');
   const [cob, setCob] = useState({ banco: '5', forma: 'CARTEIRA', prazos: '30' });
   const [motivo, setMotivo] = useState('');
+  const [cMotivo, setCMotivo] = useState<'1' | '2' | '9'>('1');
   const [gravando, setGravando] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -470,6 +529,9 @@ function ModalDetalhe({ codfat, usuario, onFechar, onAlterado }: {
 
   const n = d?.nota;
   const titulosAtivos = (d?.titulos || []).filter((t: any) => t.cancel !== 'S');
+  // nota nacional emitida pela empresa: o cancelamento vai primeiro ao portal (evento 101101)
+  const noPortal = !!n && ['EMITIDA', 'NACIONAL'].includes(n.origem) && String(n.chave_acesso || '').length === 50;
+  const motivoOk = motivo.trim().length >= (noPortal ? 15 : 1);
   const linha = (rot: string, val: React.ReactNode) => (
     <div className="flex justify-between gap-4 border-b border-gray-100 py-1 text-sm dark:border-zinc-700">
       <span className="text-gray-500">{rot}</span><span className="text-right">{val}</span>
@@ -483,6 +545,7 @@ function ModalDetalhe({ codfat, usuario, onFechar, onAlterado }: {
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" /> NFS-e nº {n?.nroform || '...'}
             {n?.cancel === 'S' && <span className="rounded bg-red-100 px-2 text-xs text-red-700 dark:bg-red-900/40 dark:text-red-300">CANCELADA</span>}
+            {n?.ambiente_nfse === 'RESTRITA' && <span className="rounded bg-amber-100 px-2 text-xs text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">TESTE — sem valor fiscal</span>}
           </DialogTitle>
           <DialogDescription>Fatura {codfat}{n ? ` · lançada em ${dataBR(n.data)} · origem ${n.origem}` : ''}</DialogDescription>
         </DialogHeader>
@@ -553,13 +616,32 @@ function ModalDetalhe({ codfat, usuario, onFechar, onAlterado }: {
             )}
             {modo === 'cancelar' && (
               <div className="rounded-md border border-red-200 p-3 dark:border-red-900">
-                <Label>Motivo do cancelamento *</Label>
-                <Textarea rows={2} maxLength={120} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
-                <p className="mt-1 text-xs text-gray-500">A nota e os títulos em aberto serão cancelados. Título com recebimento impede o cancelamento.</p>
+                {noPortal && (
+                  <div className="mb-2">
+                    <Label>Motivo (portal nacional) *</Label>
+                    <select className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                      value={cMotivo} onChange={(e) => setCMotivo(e.target.value as '1' | '2' | '9')}>
+                      <option value="1">1 - Erro na emissão</option>
+                      <option value="2">2 - Serviço não prestado</option>
+                      <option value="9">9 - Outros</option>
+                    </select>
+                  </div>
+                )}
+                <Label>{noPortal ? 'Justificativa *' : 'Motivo do cancelamento *'}</Label>
+                <Textarea rows={2} maxLength={255} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+                {noPortal && motivo.trim().length > 0 && motivo.trim().length < 15 && (
+                  <p className="text-xs text-red-600">Mínimo de 15 caracteres ({motivo.trim().length}/15).</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  {noPortal
+                    ? 'A NFS-e será cancelada no portal nacional (Sefin) e, aceito o evento, a nota e os títulos em aberto serão cancelados aqui. Título com recebimento impede o cancelamento.'
+                    : 'A nota e os títulos em aberto serão cancelados. Título com recebimento impede o cancelamento.'}
+                </p>
                 <div className="mt-3 flex justify-end gap-2">
                   <button className={secundario} onClick={() => setModo('ver')} disabled={gravando}>Voltar</button>
-                  <button className={perigo} disabled={gravando || !motivo.trim()}
-                    onClick={() => acao(`${API}/notas/${codfat}/cancelar`, { motivo, usuario }, 'Nota cancelada.')}>
+                  <button className={perigo} disabled={gravando || !motivoOk}
+                    onClick={() => acao(`${API}/notas/${codfat}/cancelar`, { motivo, cMotivo, usuario },
+                      noPortal ? 'NFS-e cancelada no portal nacional e no sistema.' : 'Nota cancelada.')}>
                     {gravando && <Loader2 className="h-4 w-4 animate-spin" />} Cancelar nota
                   </button>
                 </div>
@@ -567,12 +649,17 @@ function ModalDetalhe({ codfat, usuario, onFechar, onAlterado }: {
             )}
           </div>
         )}
-        {d && n?.cancel !== 'S' && modo === 'ver' && (
+        {d && modo === 'ver' && (
           <DialogFooter>
-            {titulosAtivos.length === 0 && (
+            <button className={secundario} onClick={() => window.open(`${API}/notas/${codfat}/danfse`, '_blank')}>
+              <Printer className="h-4 w-4" /> {n?.chave_acesso ? 'Imprimir DANFSe' : 'Imprimir'}
+            </button>
+            {n?.cancel !== 'S' && titulosAtivos.length === 0 && (
               <button className={primario} onClick={() => setModo('cobranca')}><RefreshCw className="h-4 w-4" /> Gerar títulos</button>
             )}
-            <button className={perigo} onClick={() => setModo('cancelar')}><Ban className="h-4 w-4" /> Cancelar nota</button>
+            {n?.cancel !== 'S' && (
+              <button className={perigo} onClick={() => setModo('cancelar')}><Ban className="h-4 w-4" /> Cancelar nota</button>
+            )}
           </DialogFooter>
         )}
       </DialogContent>

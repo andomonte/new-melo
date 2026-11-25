@@ -18,6 +18,8 @@ export interface Consultavel {
 
 export interface CertificadoAdn {
   agent: https.Agent;
+  keyPem: string;              // para assinar a DPS / eventos
+  certPem: string;
   cnpjCertificado: string | null;
   origem: 'TESTE_PFX' | 'CADASTRO';
 }
@@ -42,6 +44,8 @@ export async function certificadoAdn(db: Consultavel, cnpjConsulta: string): Pro
     });
     return {
       agent: new https.Agent({ key: c.certificadoKey, cert: c.certificadoCrt, ca: c.cadeiaCrt || undefined }),
+      keyPem: c.certificadoKey,
+      certPem: c.certificadoCrt,
       cnpjCertificado: silencioso(() => extrairCNPJDoCertificado(c.certificadoCrt)),
       origem: 'TESTE_PFX',
     };
@@ -62,6 +66,8 @@ export async function certificadoAdn(db: Consultavel, cnpjConsulta: string): Pro
   if (!key || !cert) throw new Error('Não foi possível abrir o certificado da empresa (verifique a CRYPTO_MASTER_KEY do servidor).');
   return {
     agent: new https.Agent({ key, cert, ca: ca || undefined }),
+    keyPem: key,
+    certPem: cert,
     cnpjCertificado: soDigitos(e.cgc),
     origem: 'CADASTRO',
   };
