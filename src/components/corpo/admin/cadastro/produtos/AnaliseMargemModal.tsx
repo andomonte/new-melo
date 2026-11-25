@@ -60,6 +60,16 @@ const moeda = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 const num2 = (v: number) =>
   (v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Máscara de valor (2 casas, dígitos entram pela direita): "4400" → "44,00",
+ *  "123456" → "1.234,56". Aceita sinal negativo (margem abaixo de zero). */
+const mascaraValor = (s: string) => {
+  const neg = /^\s*-/.test(s);
+  const dig = s.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  if (!dig) return neg ? '-' : '';
+  const n = parseInt(dig, 10) / 100;
+  return (neg ? '-' : '') + num2(n);
+};
+
 const parseNum = (s: string) => {
   const t = String(s).trim();
   // aceita "1.234,56", "1234,56" e "1234.56"
@@ -366,7 +376,7 @@ export default function AnaliseMargemModal({ isOpen, onClose, codprods, buscaIni
         <input
           data-celula="1"
           value={editando ? edit[k] : num2(atual)}
-          onChange={(e) => setEdit((p) => ({ ...p, [k]: e.target.value }))}
+          onChange={(e) => setEdit((p) => ({ ...p, [k]: mascaraValor(e.target.value) }))}
           onFocus={(e) => {
             setEdit((p) => ({ ...p, [k]: num2(atual) }));
             e.currentTarget.select();
@@ -590,7 +600,7 @@ export default function AnaliseMargemModal({ isOpen, onClose, codprods, buscaIni
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Margem líquida (%) *</label>
                   <input
                     value={margemLote}
-                    onChange={(e) => setMargemLote(e.target.value)}
+                    onChange={(e) => setMargemLote(mascaraValor(e.target.value))}
                     onKeyDown={(e) => { if (e.key === 'Enter') confirmarMargemLote(); }}
                     inputMode="decimal"
                     placeholder="0,00"
