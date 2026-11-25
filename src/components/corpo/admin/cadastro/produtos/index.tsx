@@ -194,6 +194,7 @@ const ProdutosPage = () => {
   const [produtoToCopiar, setProdutoToCopiar] = useState<any>(null);
   const [isAlteracaoMassaOpen, setIsAlteracaoMassaOpen] = useState(false);
   const [isAnaliseMargemOpen, setIsAnaliseMargemOpen] = useState(false);
+  const [codprodsMargem, setCodprodsMargem] = useState<string[] | undefined>(undefined);
   const [isCamposListaOpen, setIsCamposListaOpen] = useState(false);
   const [isSubstituirOpen, setIsSubstituirOpen] = useState(false);
   const [produtoToSubstituir, setProdutoToSubstituir] = useState<any>(null);
@@ -894,6 +895,17 @@ const ProdutosPage = () => {
   };
 
   /**
+   * Análise de Margem de Preço (Delphi Ctrl+M).
+   * - Individual (Ctrl+M / ação da linha): só o produto da linha.
+   * - Opções: os produtos selecionados; sem seleção, o filtro atual (como antes).
+   */
+  const abrirAnaliseMargem = (codprods?: string[]) => {
+    setCodprodsMargem(codprods && codprods.length > 0 ? codprods : undefined);
+    setIsAnaliseMargemOpen(true);
+    closeAllDropdowns();
+  };
+
+  /**
    * Transferência de Armazém (individual)
    */
   const handleTransferencia = (produto: any) => {
@@ -1193,6 +1205,10 @@ const ProdutosPage = () => {
       onEnter: (row) => {
         if (row?.codprod) abrirEdicaoComNav(row.codprod);
       },
+      // Ctrl+M (como no Delphi): Análise de Margem / tela de preço do produto da linha.
+      atalhos: userPermissions.editar
+        ? [{ key: 'm', ctrl: true, handler: (row) => { if (row?.codprod) abrirAnaliseMargem([String(row.codprod)]); } }]
+        : [],
     });
 
   const codprodSelecionado =
@@ -1413,6 +1429,18 @@ const ProdutosPage = () => {
                           size={16}
                         />
                         Editar
+                      </button>
+                    )}
+
+                    {/* Análise de Margem / preço (Delphi Ctrl+M) */}
+                    {userPermissions.editar && (
+                      <button
+                        onClick={() => abrirAnaliseMargem([String(produto.codprod)])}
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700 w-full text-left"
+                        title="Política de preço do produto (Ctrl+M)"
+                      >
+                        <Percent className="mr-2 text-[#347AB6]" size={16} />
+                        Margem de Preço (Ctrl+M)
                       </button>
                     )}
 
@@ -1757,9 +1785,10 @@ const ProdutosPage = () => {
               )}
 
               {userPermissions.editar && (
-                <DropdownMenuItem onClick={() => setIsAnaliseMargemOpen(true)}>
+                <DropdownMenuItem onClick={() => abrirAnaliseMargem(Array.from(selectedProducts))}>
                   <Percent className="mr-2 size-4 text-[#347AB6]" />
                   Análise de Margem de Preço
+                  {selectedProducts.size > 0 ? ` (${selectedProducts.size})` : ''}
                 </DropdownMenuItem>
               )}
 
@@ -1880,9 +1909,10 @@ const ProdutosPage = () => {
         onSuccess={handleCopiarSuccess}
       />
 
-      {/* Modal Análise de Margem de Preço (Delphi Ctrl+M) — abre com a lista do filtro atual */}
+      {/* Modal Análise de Margem de Preço (Delphi Ctrl+M) — produtos escolhidos; sem escolha, o filtro atual */}
       <AnaliseMargemModal
         isOpen={isAnaliseMargemOpen}
+        codprods={codprodsMargem}
         buscaInicial={search}
         onClose={() => setIsAnaliseMargemOpen(false)}
       />

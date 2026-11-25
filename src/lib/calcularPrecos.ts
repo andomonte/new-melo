@@ -68,7 +68,7 @@ export const TIPOS_PRECO = {
 /**
  * Mapeamento TIPOPRECO -> coluna em DBPRECO (se existir)
  */
-const DBPRECO_COLUMNS: Record<number, string> = {
+export const DBPRECO_COLUMNS: Record<number, string> = {
   0: 'prbalcao',
   1: 'prrev30',
   2: 'prrev45',
@@ -143,6 +143,47 @@ export function calcularPrecoVenda(
     (form.COFINS || 0) + (form.COMISSAO || 0) + (form.TAXACARTAO || 0));
   if (fator === 0) return null;
   return roundHalfAway(precoMargem / (fator / 100), 2) + ipiVal + iiVal;
+}
+
+/**
+ * Margem líquida a partir de um PREÇO DE VENDA informado — inverso de calcularPrecoVenda.
+ * Porte de POLITICA_PRECO_VENDA.CALCULAR_POR_PRECO (Delphi: editar "Pr. Venda" na Análise de
+ * Margem, ATUALIZAR_PRECO pTipoAtualizacao='PRECO'):
+ *   margem = round((((preço − IPI − II) × fator/100 − custo) / custo) × 100, 2)
+ * com o mesmo custo ajustado "fora do estado" e a mesma zeragem de IPI/II por faixa.
+ * Usa os componentes tributários já gravados na faixa (como calcularPrecoVenda).
+ */
+export function calcularMargemPorPreco(
+  base: number,
+  form: Omit<ComponentesPreco, 'MARGEMLIQUIDA'>,
+  prod: { dolar?: string; codgpp?: string; codmarca?: string; strib?: string },
+  precoVenda: number,
+): number | null {
+  const tp = form.TIPOPRECO;
+  const s1 = (prod.strib || '').charAt(0);
+  const foraEstado = [3, 4, 5].includes(tp) && prod.dolar !== 'S';
+
+  let custo = base;
+  let ipiVal: number;
+  let iiVal: number;
+  if (foraEstado) {
+    const gpp = ['00302', '00524', '01763', '01743', '01750', '01762', '00008', '01436'];
+    let div: number;
+    if (gpp.includes(prod.codgpp || '')) div = 1.19;
+    else if (prod.codmarca === '02543') div = 1.17;
+    else if (['1', '2', '3', '8'].includes(s1)) div = 1.30;
+    else div = 1.21;
+    custo = roundHalfAway(base / div, 2);
+    ipiVal = 0;
+    iiVal = 0;
+  } else {
+    ipiVal = tp === 7 ? 0 : roundHalfAway((base * (form.IPI || 0)) / 100, 2);
+    iiVal = [0, 1, 2, 7].includes(tp) ? 0 : roundHalfAway((base * (form.DCI || 0)) / 100, 2);
+  }
+  if (!custo) return null;
+  const fator = 100 - ((form.ICMSDEVOL || 0) + (form.ICMS || 0) + (form.PIS || 0) +
+    (form.COFINS || 0) + (form.COMISSAO || 0) + (form.TAXACARTAO || 0));
+  return roundHalfAway((((precoVenda - ipiVal - iiVal) * (fator / 100) - custo) / custo) * 100, 2);
 }
 
 // --- FUNÇÕES PRINCIPAIS ---
