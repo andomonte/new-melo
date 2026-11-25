@@ -75,7 +75,22 @@ Código: `src/lib/nfse/sefin/` (`xml.ts`, `assinatura.ts`, `cliente.ts`, `emissa
 | `NFSE_SEFIN_AMBIENTE` | `RESTRITA` (**padrão**; testes do governo, sem valor fiscal) ou `PRODUCAO`. Só mudar para `PRODUCAO` quando for emitir de verdade. |
 | `NFSE_DPS_SERIE` | Série da DPS (padrão `1`). |
 | `NFSE_CMUN_EMISSOR` | Código IBGE do município emissor, se o de Dados Empresa não servir. |
+| `NFSE_PTOTTRIB_FED`, `NFSE_PTOTTRIB_EST` | Totais aproximados dos tributos (%) informados na nota. O padrão é federais 13,45 e estaduais 0, como a Melo informa no Emissor Nacional; a parte municipal é a alíquota do ISS. Com `NFSE_PTOTTRIB_FED=nao`, a nota sai como "não informado". |
+
+**Testes:** emissão e cancelamento **só em homologação** (`RESTRITA`). Não emitir em produção.
+
+**Referência:** NFS-e nº 24 da Melo (08/06/2026, Emissor Nacional):
+- inscrição municipal 1521101; não optante do Simples; regime especial "Nenhum";
+- serviço 14.01.01, com código municipal 100; ISS 5% não retido;
+- DPS da série 70000, que é a do Emissor Nacional. O sistema usa a série 1, com numeração própria, então não há conflito.
 
 ### Testado em 25/11/2026
 - **DPS e pedido de cancelamento:** os XMLs validam nos XSDs dos dois ambientes. O de produção restrita tem `finNFSe` e outra ordem no `cServ`, e o sistema monta conforme o ambiente.
 - **Envio à produção restrita:** a assinatura e o mTLS foram aceitos. A nota parou na regra **E0116** (inscrição municipal × cadastro CNC do ambiente de testes), que é uma limitação do cadastro de testes do governo. Na rejeição, nada ficou gravado.
+
+## Títulos das notas antigas
+A migração do Contas a Receber trouxe, de 2022 a 2024, só os títulos **em aberto**. Os títulos já recebidos das notas de serviço foram importados à parte, em 25/11/2026, por `docs/scripts/importar-titulos-nfse-oracle.cjs` (prévia por padrão; `--aplicar` grava):
+- 274 títulos, R$ 1.476.169,69;
+- 417 baixas em `dbfreceb`. Em `dbfreceb`, a baixa é identificada pelo par (`cod_receb`, `cod_freceb`), porque `cod_freceb` é a sequência dentro do título.
+
+As 45 notas de 2008–2011 que continuam sem título também não têm título no Oracle.

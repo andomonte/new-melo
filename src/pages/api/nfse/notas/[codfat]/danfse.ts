@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const serv = (await pool.query(
-      `SELECT s.descr, sv.sen_codigo, sv.sen_atividade, sv.sen_ctribnac FROM nfs_nota_servico s
+      `SELECT s.descr, sv.sen_codigo, sv.sen_atividade, sv.sen_ctribnac, sv.sen_ctribmun FROM nfs_nota_servico s
          LEFT JOIN dbservico_nfs sv ON sv.sen_id = s.sen_id WHERE s.codfat = $1 ORDER BY s.id`, [codfat])).rows;
     const emp = (await pool.query(
       `SELECT cgc, nomecontribuinte, inscricaomunicipal, logradouro, numero, bairro, municipio, uf, cep, telefone, email
@@ -75,6 +75,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const retido = n.issqn_retido === 'S';
     const fed = Number(n.pis_valor) + Number(n.cofins_valor) + Number(n.csll_valor) + Number(n.ir_valor) + Number(n.inss_valor) + Number(n.outros_valor);
     const totalRet = (retido ? Number(n.issqn_valor) : 0) + fed;
+    // DPS: Id = "DPS" + cMun(7) + tipo(1) + inscrição(14) + série(5) + nº(15)
+    const dps = /^DPS\d{42}$/.test(String(n.dps_id || '')) ? { serie: String(Number(n.dps_id.slice(25, 30))), numero: String(Number(n.dps_id.slice(30))) } : null;
+    const ctn = String(serv[0]?.sen_ctribnac || '');
+    const codNac = ctn.length === 6 ? `${ctn.slice(0, 2)}.${ctn.slice(2, 4)}.${ctn.slice(4)}` : '';
+    const pFed = Number(String(process.env.NFSE_PTOTTRIB_FED ?? '13.45').replace(',', '.')) || 0;
     const consulta = chave.length === 50 ? `https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=${chave}` : '';
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>NFS-e ${esc(n.nroform || codfat)}</title>
 <style>
@@ -96,6 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
    <div><div class="l">Competência</div><div class="v">${esc(n.competencia || '-')}</div></div>
    <div><div class="l">${chave ? 'Ambiente' : 'Código de verificação'}</div><div class="v">${chave ? (n.ambiente_nfse === 'RESTRITA' ? '<span class="aviso">TESTES — SEM VALOR FISCAL</span>' : 'Produção') : esc(n.verificacao || '-')}</div></div>
   </div>
+  ${dps ? `<div class="g" style="margin-top:4px"><div><div class="l">Número da DPS</div><div class="v">${esc(dps.numero)}</div></div><div><div class="l">Série da DPS</div><div class="v">${esc(dps.serie)}</div></div></div>` : ''}
   ${chave ? `<div style="margin-top:4px"><span class="l">Chave de acesso: </span><span class="mono v">${chave}</span></div>` : ''}
   ${n.cancel === 'S' ? '<div class="aviso" style="margin-top:4px">NOTA CANCELADA</div>' : ''}
  </div>
@@ -111,7 +117,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
  </div>
  <div class="sec"><h2>Discriminação do serviço</h2>
   <div style="white-space:pre-wrap">${esc(serv.map((s) => s.descr).join('\n'))}</div>
-  ${serv[0] ? `<div style="margin-top:4px" class="l">Serviço: ${esc(serv[0].sen_codigo || '')} ${esc(serv[0].sen_atividade || '')}${serv[0].sen_ctribnac ? ` · código nacional ${esc(serv[0].sen_ctribnac)}` : ''}</div>` : ''}
+  ${serv[0] ? `<div class="g" style="margin-top:6px">
+   <div style="grid-column:span 2"><div class="l">Código de tributação nacional</div><div>${esc(codNac || serv[0].sen_codigo || '-')} - ${esc(serv[0].sen_atividade || '')}</div></div>
+   <div><div class="l">Código de tributação municipal</div><div>${esc(serv[0].sen_ctribmun || '-')}</div></div>
+   <div><div class="l">Local da prestação</div><div>${esc(emp.municipio || '')}${emp.uf ? ` - ${esc(emp.uf)}` : ''}</div></div>
+  </div>` : ''}
  </div>
  <div class="sec"><h2>Valores</h2>
   <table><tr><th>Valor do serviço</th><th>Desconto</th><th>Deduções</th><th>Base de cálculo</th><th>Alíquota ISS</th><th>Valor do ISS</th></tr>
@@ -120,6 +130,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
    <tr><td>${moeda(n.pis_valor)}</td><td>${moeda(n.cofins_valor)}</td><td>${moeda(n.csll_valor)}</td><td>${moeda(n.ir_valor)}</td><td>${moeda(n.inss_valor)}</td><td>${moeda(n.outros_valor)}</td><td>${moeda(totalRet)}</td><td><b>${moeda(n.totalfat)}</b></td></tr></table>
  </div>
  <div class="sec"><h2>Outras informações</h2>
+  ${chave ? `<div>Totais aproximados dos tributos: federais ${moeda(pFed)}% · estaduais 0,00% · municipais ${moeda(n.issqn_aliquota)}%</div>` : ''}
   <div>ISS de responsabilidade do ${retido ? 'tomador (retido)' : 'prestador'}.${n.obs ? ` ${esc(n.obs)}` : ''}</div>
   ${consulta ? `<div>Consulte a autenticidade em <span class="mono">${consulta}</span></div>` : ''}
   ${chave ? '<div class="l" style="margin-top:4px">Representação gerada pelo sistema; a DANFSe oficial estava indisponível no portal no momento da impressão.</div>' : ''}

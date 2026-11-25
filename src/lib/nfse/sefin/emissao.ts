@@ -77,6 +77,18 @@ async function tomador(db: Consultavel, codcli: string) {
   };
 }
 
+/**
+ * Totais aproximados dos tributos (Lei 12.741), como a Melo informa no Emissor Nacional:
+ * federais 13,45% e estaduais 0% (NFSE_PTOTTRIB_FED / NFSE_PTOTTRIB_EST); municipais = alíquota do ISS.
+ * NFSE_PTOTTRIB_FED=nao → não informa (indTotTrib 0).
+ */
+function totaisAproximados(aliquotaIss: number) {
+  const fed = String(process.env.NFSE_PTOTTRIB_FED ?? '13.45').trim();
+  if (/^n/i.test(fed)) return null;
+  const n = (x: string) => Math.max(0, Number(String(x).replace(',', '.')) || 0);
+  return { fed: n(fed), est: n(process.env.NFSE_PTOTTRIB_EST || '0'), mun: Number(aliquotaIss) || 0 };
+}
+
 export type EntradaEmissao = Omit<EntradaNota, 'nroform' | 'verificacao' | 'chave_acesso'>;
 
 export async function emitirNotaServico(
@@ -122,6 +134,7 @@ export async function emitirNotaServico(
       servico: v.valor_servico, descontoIncond: v.valor_desconto,
       issRetido: v.issqn_retido === 'S', issAliquota: v.issqn_retido === 'S' ? v.issqn_aliquota : null,
       pis: v.pis_valor, cofins: v.cofins_valor, inss: v.inss_valor, ir: v.ir_valor, csll: v.csll_valor,
+      totTribPerc: totaisAproximados(v.issqn_aliquota),
     },
   });
   const assinada = assinarXmlNfse(dps.xml, 'infDPS', cert.keyPem, cert.certPem);

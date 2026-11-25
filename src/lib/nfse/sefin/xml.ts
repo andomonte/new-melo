@@ -39,6 +39,8 @@ export interface DadosDps {
     servico: number; descontoIncond?: number;
     issRetido: boolean; issAliquota?: number | null;
     pis?: number; cofins?: number; inss?: number; ir?: number; csll?: number;
+    /** Totais aproximados dos tributos (Lei 12.741) em %; sem ele vai indTotTrib = 0 (não informado). */
+    totTribPerc?: { fed: number; est: number; mun: number } | null;
   };
   verAplic?: string;
 }
@@ -91,7 +93,9 @@ export function montarDps(d: DadosDps): { id: string; xml: string } {
         + ((Number(v.ir) || 0) > 0 ? tag('vRetIRRF', dec(v.ir!)) : '')
         + ((Number(v.csll) || 0) > 0 ? tag('vRetCSLL', dec(v.csll!)) : '')
         + `</tribFed>` : '')
-    + `<totTrib>${tag('indTotTrib', '0')}</totTrib></trib></valores>`
+    + `<totTrib>${v.totTribPerc
+        ? `<pTotTrib>${tag('pTotTribFed', dec(v.totTribPerc.fed))}${tag('pTotTribEst', dec(v.totTribPerc.est))}${tag('pTotTribMun', dec(v.totTribPerc.mun))}</pTotTrib>`
+        : tag('indTotTrib', '0')}</totTrib></trib></valores>`
     + `</infDPS></DPS>`;
   return { id, xml };
 }
