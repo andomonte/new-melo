@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import Modal from '@/components/common/Modal';
 import ModalNotasAssociadas from '@/components/common/ModalNotasAssociadas';
 import ModalNotasDoTitulo from './ModalNotasDoTitulo';
+import ModalAjustarParcelamento from './ModalAjustarParcelamento';
 import ModalFiltrosExportacao from '@/components/common/ModalFiltrosExportacao';
 import ModalExportarExcel from '@/components/common/modalExportarExcel';
 import { Label } from '@/components/ui/label';
@@ -2350,6 +2351,8 @@ export function ContasAPagar() {
     }
   };
 
+  const [ajusteParcelamentoAberto, setAjusteParcelamentoAberto] = useState(false);
+
   const handleEditar = async () => {
     if (!modais.contaSelecionada) return;
 
@@ -4093,11 +4096,17 @@ export function ContasAPagar() {
                   </div>
                 )}
 
-                {c?.parcela_atual && (
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">
-                    Parcela {c.parcela_atual} — cada parcela é um título próprio; a edição altera só este título.
+                    {c?.parcela_atual
+                      ? `Parcela ${c.parcela_atual} — cada parcela é um título próprio; a edição altera só este título.`
+                      : 'Título único — para dividir em parcelas use Ajustar parcelamento.'}
                   </p>
-                )}
+                  <button type="button" onClick={() => setAjusteParcelamentoAberto(true)}
+                    className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950/40">
+                    Ajustar parcelamento
+                  </button>
+                </div>
 
                 {/* Observações */}
                 <div>
@@ -4129,6 +4138,19 @@ export function ContasAPagar() {
           </div>
         </div>
       </Modal>
+
+      <ModalAjustarParcelamento
+        aberto={ajusteParcelamentoAberto}
+        codPgto={modais.contaSelecionada?.cod_pgto || modais.contaSelecionada?.id || null}
+        usuario={user?.usuario}
+        onFechar={() => setAjusteParcelamentoAberto(false)}
+        onAjustado={() => {
+          setAjusteParcelamentoAberto(false);
+          modais.setModalEditarAberto(false);
+          consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
+        }}
+      />
+
 
       {/* Modal Cancelar */}
       <Modal
