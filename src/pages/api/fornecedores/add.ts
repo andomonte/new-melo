@@ -6,6 +6,7 @@ import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import { serializeBigInt } from '@/utils/serializeBigInt';
 import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 import { separarDadosFornecedor, regraComPadrao } from '@/lib/fornecedores/colunasFornecedor';
+import { municipioPorCidade } from '@/lib/fornecedores/municipio';
 
 export default async function handle(
   req: NextApiRequest,
@@ -29,6 +30,10 @@ export default async function handle(
     client = await pool.connect();
     // Fornecedor e regra de faturamento entram juntos ou nenhum dos dois.
     await client.query('BEGIN');
+
+    // Município pela cidade + UF (o do bairro podia faltar ou ser de outra cidade)
+    const mun = await municipioPorCidade(client, fornecedorData.cidade, fornecedorData.uf);
+    if (mun) fornecedorData.codmunicipio = mun;
 
     // ✅ PASSO 1: Buscar o próximo código disponível (ignora 99999 se já existir)
     const nextCodeQuery = await client.query(`

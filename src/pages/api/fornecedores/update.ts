@@ -5,6 +5,7 @@ import { PoolClient } from 'pg';
 import { Fornecedor } from '@/data/fornecedores/fornecedores';
 import { syncPessoaIntegridade } from '@/lib/syncPessoaIntegridade';
 import { COLUNAS_DBCREDOR, COLUNAS_REGRA_FATURAMENTO } from '@/lib/fornecedores/colunasFornecedor';
+import { municipioPorCidade } from '@/lib/fornecedores/municipio';
 
 export default async function handle(
   req: NextApiRequest,
@@ -34,6 +35,12 @@ export default async function handle(
     const pool = await getPgPoolPorNomeFilial(filial);
     client = await pool.connect();
     await client.query('BEGIN');
+
+    // Município pela cidade + UF (o do bairro podia faltar ou ser de outra cidade)
+    if (allData.cidade !== undefined || allData.uf !== undefined) {
+      const mun = await municipioPorCidade(client, allData.cidade, allData.uf);
+      if (mun) allData.codmunicipio = mun;
+    }
 
     // Mesmas listas do cadastro (src/lib/fornecedores/colunasFornecedor.ts)
     const colunasDbCredor: readonly string[] = COLUNAS_DBCREDOR;

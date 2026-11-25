@@ -96,11 +96,14 @@ export async function insertFornecedor(
 ): Promise<Fornecedor> {
   let fornecedorInserted: Fornecedor = {} as Fornecedor;
 
-  const bairro = await getBairroByDescricao(fornecedor.bairro);
-
-  fornecedor.codbairro = bairro.codbairro;
-  fornecedor.codpais = bairro.codpais;
-  fornecedor.codmunicipio = bairro.codmunicipio;
+  // Bairro sem cadastro (ex.: TAMBORE) vinha null e quebrava o salvar ("reading 'codbairro'").
+  // Sem bairro cadastrado, salva assim mesmo; o município vem de cidade + UF na API.
+  const bairro = fornecedor.bairro ? await getBairroByDescricao(fornecedor.bairro) : null;
+  if (bairro) {
+    fornecedor.codbairro = bairro.codbairro;
+    fornecedor.codpais = fornecedor.codpais || bairro.codpais;
+    fornecedor.codmunicipio = bairro.codmunicipio;
+  }
 
   try {
     const response = await api.post('/api/fornecedores/add', fornecedor);
