@@ -33,6 +33,18 @@ const silencioso = <T>(fn: () => T): T => {
   try { return fn(); } finally { console.log = log; }
 };
 
+/**
+ * Agente mTLS do portal nacional (ADN/Sefin).
+ * A cadeia ICP-Brasil do certificado da empresa vai JUNTO do certificado (o portal precisa das
+ * intermediárias para validar o cliente). NÃO pode ir em `ca`: `ca` substitui as raízes confiáveis
+ * do Node, e os servidores do portal usam Let's Encrypt (ADN) e GlobalSign (Sefin) — com a cadeia
+ * em `ca` a conexão falhava com UNABLE_TO_GET_ISSUER_CERT_LOCALLY (certificado da Melo, 25/11/2026).
+ */
+function agenteNfse(key: string, cert: string, cadeia?: string | null): https.Agent {
+  const certCompleto = cadeia && cadeia.trim() ? `${cert.trim()}\n${cadeia.trim()}\n` : cert;
+  return new https.Agent({ key, cert: certCompleto });
+}
+
 export async function certificadoAdn(db: Consultavel, cnpjConsulta: string): Promise<CertificadoAdn> {
   const pfxPath = process.env.NFSE_TESTE_PFX;
   if (pfxPath) {
@@ -43,7 +55,7 @@ export async function certificadoAdn(db: Consultavel, cnpjConsulta: string): Pro
       try { return extrairCertificado(buf, senha); } catch { return extrairCertificadoOpenssl(buf, senha); }
     });
     return {
-      agent: new https.Agent({ key: c.certificadoKey, cert: c.certificadoCrt, ca: c.cadeiaCrt || undefined }),
+      agent: agenteNfse(c.certificadoKey, c.certificadoCrt, c.cadeiaCrt),
       keyPem: c.certificadoKey,
       certPem: c.certificadoCrt,
       cnpjCertificado: silencioso(() => extrairCNPJDoCertificado(c.certificadoCrt)),
@@ -65,7 +77,7 @@ export async function certificadoAdn(db: Consultavel, cnpjConsulta: string): Pro
   const ca = e.cadeiaCrt ? await decrypt(e.cadeiaCrt) : null;
   if (!key || !cert) throw new Error('Não foi possível abrir o certificado da empresa (verifique a CRYPTO_MASTER_KEY do servidor).');
   return {
-    agent: new https.Agent({ key, cert, ca: ca || undefined }),
+    agent: agenteNfse(key, cert, ca),
     keyPem: key,
     certPem: cert,
     cnpjCertificado: soDigitos(e.cgc),
