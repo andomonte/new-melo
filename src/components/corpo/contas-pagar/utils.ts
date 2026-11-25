@@ -8,7 +8,8 @@ export const formatarMoeda = (valor: number): string => {
 export const formatarData = (data: string | null | undefined): string => {
   if (!data) return '-';
   try {
-    const [ano, mes, dia] = data.split('T')[0].split('-');
+    // Aceita '2026-11-25', '2026-11-25T04:00:00Z' e '2026-11-25 00:00:00' (timestamp como texto).
+    const [ano, mes, dia] = String(data).split(/[T ]/)[0].split('-');
     return `${dia}/${mes}/${ano}`;
   } catch {
     return '-';

@@ -27,8 +27,8 @@ interface Nota {
 
 const RECEB: Record<string, { rotulo: string; cor: string }> = {
   recebida: { rotulo: 'Recebida', cor: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
-  em_recebimento: { rotulo: 'Em recebimento', cor: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
-  nao_recebida: { rotulo: 'Não recebida', cor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
+  em_recebimento: { rotulo: 'Saldo Parcial', cor: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+  nao_recebida: { rotulo: 'Pendente', cor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
   cancelada: { rotulo: 'Cancelada', cor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
 };
 const ETAPA: Record<string, string> = {

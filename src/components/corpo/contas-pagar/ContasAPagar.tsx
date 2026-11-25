@@ -59,6 +59,15 @@ const formatarTaxa6 = (v: number) => (Number(v) || 0).toFixed(6).replace('.', ',
 
 export function ContasAPagar() {
   const { user } = useContext(AuthContext);
+  // Usuário logado p/ gravar em pagamentos e estornos (antes o lote e o estorno não enviavam → 'Sistema').
+  const usuarioLogado = (): string => {
+    if (user?.usuario) return String(user.usuario);
+    try {
+      const perfil = JSON.parse(localStorage.getItem('perfilUserMelo') || 'null');
+      if (perfil?.usuario) return String(perfil.usuario);
+    } catch { /* ignora */ }
+    return 'Sistema';
+  };
 
   const { contasPagar: contasPagarOriginal, paginacao, carregando, erro, consultarContasPagar: consultarOriginal, marcarComoPago, editarConta, cancelarConta } = useContasPagar();
 
@@ -400,6 +409,8 @@ export function ContasAPagar() {
   const [bancoLote, setBancoLote] = useState('');
   const [dataPagamentoLote, setDataPagamentoLote] = useState('');
   const [obsPagamentoLote, setObsPagamentoLote] = useState('');
+  const [formaPgtoLote, setFormaPgtoLote] = useState('');
+  const [nroChequeLote, setNroChequeLote] = useState('');
   const [taxaConversaoInput, setTaxaConversaoInput] = useState('');
   const [valorPgtoInput, setValorPgtoInput] = useState('');
   const [valorMoedaInput, setValorMoedaInput] = useState('');
@@ -1068,6 +1079,11 @@ export function ContasAPagar() {
       toast.error('Selecione pelo menos um título para pagamento');
       return;
     }
+    // Mesma regra do pagamento individual: começa na última forma usada (letra), senão Dinheiro.
+    let ultimaForma = localStorage.getItem('ultimaFormaPgto') || 'D';
+    if (ultimaForma.length !== 1) ultimaForma = 'D';
+    setFormaPgtoLote(ultimaForma);
+    setNroChequeLote('');
     setModalPagamentoLoteAberto(true);
   };
 
@@ -1086,10 +1102,17 @@ export function ContasAPagar() {
   };
 
   const handlePagamentoLote = async () => {
-    if (!bancoLote || !dataPagamentoLote) {
+    if (!bancoLote || !dataPagamentoLote || !formaPgtoLote) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
+    if (formaPgtoLote === 'C' && !nroChequeLote.trim()) {
+      toast.error('Número do cheque é obrigatório');
+      return;
+    }
+    localStorage.setItem('ultimaFormaPgto', formaPgtoLote);
+    // Observação: só grava se o operador digitou algo; vazio mantém a obs do título.
+    const obsLote = obsPagamentoLote.trim() || null;
 
     const titulos = getTitulosSelecionadosDetalhes();
     
@@ -1125,7 +1148,11 @@ export function ContasAPagar() {
             valor_juros: 0,
             banco: bancoLote,
             cod_conta: bancoLote, // Usar conta ao invés de banco
-            obs: obsPagamentoLote || 'Pagamento em lote',
+            obs: obsLote,
+            forma_pgto: formaPgtoLote, // cod_fpgto = letra do cadastro (igual ao pagamento individual)
+            tp_pgto: formaPgtoLote,
+            nro_cheque: formaPgtoLote === 'C' ? nroChequeLote.trim() : null,
+            username: usuarioLogado(),
           }),
         });
 
@@ -2216,6 +2243,7 @@ export function ContasAPagar() {
         body: JSON.stringify({
           cod_pgto: modais.contaSelecionada.id,
           fpg_cof_id: pagamentoParaCancelar.fpg_cof_id,
+          username: usuarioLogado(),
         }),
       });
 
@@ -2305,9 +2333,7 @@ export function ContasAPagar() {
     // A mesma letra vai para tp_pgto e cod_fpgto (convenção MELO: D/C/B/A/F/R/V/N).
     try {
       // Capturar username do sessionStorage
-      const perfilUserMelo = localStorage.getItem('perfilUserMelo');
-      const userInfo = perfilUserMelo ? JSON.parse(perfilUserMelo) : null;
-      const username = userInfo?.usuario || 'Sistema';
+      const username = usuarioLogado();
 
       await marcarComoPago(modais.contaSelecionada.id, {
         dt_pgto: dataPagamento,
@@ -3187,8 +3213,8 @@ export function ContasAPagar() {
             >
               <option value="">Todas</option>
               <option value="recebida">Recebida</option>
-              <option value="em_recebimento">Em recebimento</option>
-              <option value="nao_recebida">Não recebida</option>
+              <option value="em_recebimento">Saldo Parcial</option>
+              <option value="nao_recebida">Pendente</option>
               <option value="cancelada">NFe Cancelada</option>
               <option value="avulso">Avulso (NF fora do sistema)</option>
             </select>
@@ -3196,8 +3222,8 @@ export function ContasAPagar() {
           {/* Legenda de cores (fonte da linha) */}
           <div className="flex flex-wrap items-center gap-3 text-[11px]">
             <span className="flex items-center gap-1" title="Conferência finalizada na tela de Recebimento (entradas antigas do Delphi contam como recebidas)"><span className="w-3 h-3 rounded-sm bg-green-600 inline-block" /> Recebida</span>
-            <span className="flex items-center gap-1" title="Conferência em andamento, ou só parte das notas do título recebida — clique no Nº NF para ver cada nota"><span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" /> Em recebimento</span>
-            <span className="flex items-center gap-1" title="A mercadoria ainda não chegou"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Não recebida</span>
+            <span className="flex items-center gap-1" title="Conferência em andamento, ou só parte das notas do título recebida — clique no Nº NF para ver cada nota"><span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" /> Saldo Parcial</span>
+            <span className="flex items-center gap-1" title="A mercadoria ainda não chegou"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block" /> Pendente</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block" /> NFe Cancelada</span>
             <span className="flex items-center gap-1" title="NF digitada no título que não está na tabela de entradas"><span className="w-3 h-3 rounded-sm bg-purple-600 inline-block" /> Avulso (NF fora do sistema)</span>
             <span className="flex items-center gap-1" title="Título sem NF e fora do Compras (ex.: impostos, despesas)"><span className="w-3 h-3 rounded-sm bg-gray-900 dark:bg-gray-100 inline-block" /> Sem NF</span>
@@ -3335,6 +3361,35 @@ export function ContasAPagar() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="min-w-0">
+                <Label htmlFor="forma-lote">Forma de Pagamento *</Label>
+                <Select value={formaPgtoLote} onValueChange={setFormaPgtoLote}>
+                  <SelectTrigger id="forma-lote" className="mt-1">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formasPgtoOpcoes.map((f) => (
+                      <SelectItem key={f.letra} value={f.letra}>
+                        {f.letra} - {f.descricao}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {formaPgtoLote === 'C' && (
+                <div className="min-w-0">
+                  <Label htmlFor="cheque-lote">Nº Cheque *</Label>
+                  <Input
+                    id="cheque-lote"
+                    value={nroChequeLote}
+                    onChange={(e) => setNroChequeLote(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+              )}
+            </div>
+
             <div>
               <Label htmlFor="obs-lote">Observações</Label>
               <Textarea
@@ -3342,7 +3397,7 @@ export function ContasAPagar() {
                 name="obs-lote"
                 value={obsPagamentoLote}
                 onChange={(e) => setObsPagamentoLote(e.target.value)}
-                placeholder="Observações sobre o pagamento em lote..."
+                placeholder="Opcional — em branco, mantém a observação de cada título"
                 className="mt-1"
                 rows={3}
               />
@@ -3365,7 +3420,7 @@ export function ContasAPagar() {
               size="default"
               onClick={handlePagamentoLote}
               text={`Confirmar Pagamento (${titulosSelecionados.size})`}
-              disabled={!bancoLote || !dataPagamentoLote}
+              disabled={!bancoLote || !dataPagamentoLote || !formaPgtoLote || (formaPgtoLote === 'C' && !nroChequeLote.trim())}
             />
           </div>
         </div>
@@ -4534,9 +4589,17 @@ export function ContasAPagar() {
                           </td>
                           <td className="py-2 px-3 text-center">
                             {estaCancelado ? (
-                              <Badge variant="destructive" className="text-xs">
-                                Cancelado
-                              </Badge>
+                              <div className="flex flex-col items-center gap-0.5">
+                                <Badge variant="destructive" className="text-xs">
+                                  Cancelado
+                                </Badge>
+                                {pagamento.cancel_username && (
+                                  <span className="text-[11px] text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                                    por {pagamento.cancel_username}
+                                    {pagamento.dt_cancel ? ` em ${new Date(pagamento.dt_cancel).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <Badge variant="default" className="text-xs bg-green-600">
                                 Ativo
@@ -4822,6 +4885,9 @@ export function ContasAPagar() {
           // pré-selecionados — o usuário decide quais dar baixa (pode não pagar algum hoje).
           await consultarContasPagar(paginaConsulta, limiteConsulta, filtros);
           setTitulosSelecionados(new Set(codPgtos));
+          const ult = localStorage.getItem('ultimaFormaPgto') || 'D';
+          setFormaPgtoLote(ult.length === 1 ? ult : 'D');
+          setNroChequeLote('');
           setModalPagamentoLoteAberto(true);
         }}
       />

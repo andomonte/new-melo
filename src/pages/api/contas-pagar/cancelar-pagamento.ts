@@ -1,5 +1,6 @@
 import { getPgPool } from '@/lib/pg';
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { parseCookies } from 'nookies';
 import { CreditoUsadoError, LETRA_ABATIMENTO, devolverUsosDoLancamento, sincronizarCreditoTitulo } from '@/lib/compras/creditoFornecedor';
 
 export default async function handler(
@@ -11,6 +12,7 @@ export default async function handler(
   }
 
   const { cod_pgto, fpg_cof_id } = req.body;
+  const usuario = String(req.body?.username || parseCookies({ req }).userName || 'Sistema').slice(0, 100);
 
   if (!cod_pgto || !fpg_cof_id) {
     return res.status(400).json({ erro: 'Código do título e identificador do pagamento são obrigatórios' });
@@ -52,9 +54,9 @@ export default async function handler(
     // 2. Cancelar o pagamento (marcar cancel = 'S')
     await db.query(`
       UPDATE dbfpgto
-      SET cancel = 'S'
+      SET cancel = 'S', cancel_username = $3, dt_cancel = now(), updatedat = now()
       WHERE cod_pgto = $1 AND fpg_cof_id = $2
-    `, [cod_pgto, fpg_cof_id]);
+    `, [cod_pgto, fpg_cof_id, usuario]);
 
     console.log(`✅ [API] Pagamento ${fpg_cof_id} do título ${cod_pgto} cancelado com sucesso`);
 
@@ -99,11 +101,11 @@ export default async function handler(
     // Baixa feita com crédito de fornecedor (forma Z): o valor volta para o crédito.
     if (String(pagamento.cod_fpgto || '').trim() === LETRA_ABATIMENTO) {
       await devolverUsosDoLancamento(db, String(cod_pgto), fpg_cof_id,
-        'Estorno do pagamento no Contas a Pagar', req.body?.username || 'Sistema');
+        'Estorno do pagamento no Contas a Pagar', usuario);
     }
 
     // Crédito de fornecedor gerado por este título: baixa junto. Se já foi usado, bloqueia.
-    await sincronizarCreditoTitulo(db, String(cod_pgto), req.body?.username || null);
+    await sincronizarCreditoTitulo(db, String(cod_pgto), usuario);
 
     await db.query('COMMIT');
 

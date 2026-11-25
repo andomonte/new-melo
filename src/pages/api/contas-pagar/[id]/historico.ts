@@ -19,6 +19,8 @@ export interface HistoricoPagamento {
   multa: number;
   desconto: number;
   username: string;
+  cancel_username?: string | null;
+  dt_cancel?: string | null;
   forma_descricao?: string;
 }
 
@@ -56,7 +58,9 @@ export default async function handler(
         COALESCE(f.juros, 0) / 100.0 as juros,
         COALESCE(f.multa, 0) / 100.0 as multa,
         COALESCE(f.desconto, 0) / 100.0 as desconto,
-        f.username
+        f.username,
+        f.cancel_username,
+        f.dt_cancel
       FROM dbfpgto f
       WHERE f.cod_pgto = $1
       ORDER BY f.dt_pgto DESC, f.fpg_cof_id DESC
