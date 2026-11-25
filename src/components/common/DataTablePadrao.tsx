@@ -67,6 +67,9 @@ interface DataTablePadraoProps {
   carregando?: boolean;
   noDataMessage?: string | React.ReactNode;
   onFiltroChange?: (filtros: { campo: string; tipo: string; valor: string }[]) => void;
+  /** Chamado pelo botão "Limpar filtros" — a tela zera busca e filtros no seu estado.
+   *  Sem ele, o grid avisa onFiltroChange([]) e onSearch(''). */
+  onLimparFiltros?: () => void;
   colunasFiltro?: string[];
   /** Colunas (pelo header/campo) que NÃO devem ter o input de filtro na linha
    *  de filtros — ex.: status filtrado por um dropdown à parte. */
@@ -158,6 +161,7 @@ export default function DataTablePadrao({
   ordenacaoServidor = false,
   noDataMessage = 'Nenhum dado encontrado.',
   onFiltroChange,
+  onLimparFiltros,
   colunasFiltro = [],
   colunasSemFiltro = [],
   onExportarExcel,
@@ -561,6 +565,20 @@ export default function DataTablePadrao({
     aplicarFiltro(novos);
   };
 
+  /** Botão "Limpar filtros": zera filtros de coluna e a busca global. Telas cuja busca só
+   *  vale no Enter/blur passam `onLimparFiltros` para zerar a busca aplicada. */
+  const limparTodosFiltros = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setFiltrosColuna({});
+    setTermoBuscaGlobal('');
+    if (onLimparFiltros) {
+      onLimparFiltros();
+    } else {
+      onFiltroChange?.([]);
+      onSearch?.({ target: { value: '' } } as ChangeEvent<HTMLInputElement>);
+    }
+  };
+
   const aplicarFiltro = (
     base: Record<string, { tipo: string; valor: string }> = filtrosColuna,
   ) => {
@@ -706,6 +724,21 @@ export default function DataTablePadrao({
                   {dicaFiltro}
                 </div>
               </div>
+            )}
+
+            {/* Limpar filtros (padrão de Contas a Pagar) — só com filtro de coluna ou busca ativos */}
+            {(Object.values(filtrosColuna).some(
+              (f) => (f?.valor ?? '') !== '' || SEM_VALOR.includes(f?.tipo),
+            ) ||
+              termoBuscaGlobal.trim() !== '') && (
+              <button
+                type="button"
+                onClick={limparTodosFiltros}
+                className="inline-flex items-center gap-1 px-2 py-1 border rounded-md border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200 dark:hover:bg-amber-900/50 text-xs"
+                title="Limpar busca e filtros das colunas"
+              >
+                <FilterX size={14} /> Limpar filtros
+              </button>
             )}
 
             {/* Botão Opções com Dropdown */}

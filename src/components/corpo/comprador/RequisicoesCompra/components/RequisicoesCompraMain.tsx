@@ -130,6 +130,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
     handleSearchBlur,
     handleSearchKeyDown,
     handleFiltroChange,
+    limparFiltros,
   } = useRequisicoesTable(colunasDbRequisicao);
 
   // Filtro por status via Select (o filtro rápido de coluna usava "contém" com
@@ -1364,6 +1365,7 @@ export const RequisicoesCompraMain: React.FC<RequisicoesCompraMainProps> = ({
             searchInputPlaceholder="Pesquisar por requisição, fornecedor, comprador..."
             colunasFiltro={colunasDbRequisicao.map((c) => c.campo)}
             onFiltroChange={handleFiltroChange}
+            onLimparFiltros={() => { limparFiltros(); setStatusFiltro(''); }}
             mostrarFiltrosSempre
             onExportarExcel={handleExportarLista}
             searchRightSlot={

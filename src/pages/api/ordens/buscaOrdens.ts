@@ -20,9 +20,9 @@ const filtroParaColunaSQL: Record<string, string> = {
   previsaoChegada: 'o.orc_previsao_chegada',
   localEntrega: 'ue.unm_nome',
   localDestino: 'ud.unm_nome',
-  prazoEntrega: 'prazo_entrega',
-  fornecedorCod: 'o.orc_fornecedor_cod',
-  dataFinalizacao: 'o.orc_data_finalizacao',
+  prazoEntrega: "(EXTRACT(DAY FROM (COALESCE(o.orc_previsao_chegada, r.req_previsao_chegada) - o.orc_data))::INTEGER)", // dias (igual à coluna exibida)
+  fornecedorCod: 'r.req_cod_credor',
+  dataFinalizacao: "(CASE WHEN o.orc_status = 'F' THEN o.orc_data END)", // igual ao list.ts
   usuarioResponsavel: 'o.orc_usuario_responsavel',
 };
 
@@ -179,8 +179,8 @@ export default async function handler(
     }
 
     // Identificar tipos de campo
-    const camposData = ['dataOrdem', 'dataFinalizacao', 'previsaoChegada', 'prazoEntrega'];
-    const camposNumerico = ['ordem', 'valorTotal'];
+    const camposData = ['dataOrdem', 'dataFinalizacao', 'previsaoChegada'];
+    const camposNumerico = ['ordem', 'requisicao', 'valorTotal', 'prazoEntrega'];
     const operadoresTextuais = ['contém', 'começa', 'termina'];
     
     const isCampoData = camposData.includes(campo);
@@ -353,8 +353,6 @@ export default async function handler(
     const countResult = await client.query(countQuery, params.slice(0, -2)); // Remove limit e offset
     const total = parseInt(countResult.rows[0].total) || 0;
 
-    client.release();
-
     const meta = {
       total,
       currentPage: Number(page),
@@ -379,7 +377,7 @@ export default async function handler(
       req_id_composto: ordem.req_id_composto || `${ordem.orc_req_id}`,
       req_status: ordem.req_status || 'ÓRFÃ',
       req_previsao_chegada: ordem.req_previsao_chegada,
-      observacao: ordem.req_observacao || `Ordem órfã de ${ordem.orc_data?.toISOString().split('T')[0] || 'data desconhecida'} - requisição ${ordem.orc_req_id} não encontrada`,
+      observacao: ordem.req_observacao || `Ordem órfã de ${(ordem.orc_data ? String(ordem.orc_data instanceof Date ? ordem.orc_data.toISOString() : ordem.orc_data).slice(0, 10) : 'data desconhecida')} - requisição ${ordem.orc_req_id} não encontrada`,
 
       // Concatenar código + nome do fornecedor (com fallback consistente)
       fornecedor_codigo: ordem.fornecedor_codigo,
@@ -415,14 +413,15 @@ export default async function handler(
     });
 
   } catch (error) {
-    if (client) {
-      client.release();
-    }
     console.error('Erro ao buscar ordens com filtros:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       error: 'Erro interno do servidor',
       details: error instanceof Error ? error.message : 'Erro desconhecido'
     });
+  } finally {
+    // Libera UMA vez só (antes liberava no meio e de novo no catch → "Release called on
+    // client which has already been released" derrubava o filtro por coluna).
+    if (client) client.release();
   }
 }

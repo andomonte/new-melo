@@ -181,6 +181,7 @@ export default function OrdensComprasListImproved({
     handleSearchBlur,
     handleSearchKeyDown,
     handleFiltroChange,
+    limparFiltros,
   } = useOrdensTableImproved(colunasDbOrdem);
 
   // Filtro por status via Select (mesmo motivo das requisições: o filtro rápido
@@ -975,6 +976,7 @@ export default function OrdensComprasListImproved({
         searchInputPlaceholder="Pesquisar por ordem, requisição, fornecedor..."
         colunasFiltro={colunasDbOrdem.map((c) => c.campo)}
         onFiltroChange={handleFiltroChange}
+        onLimparFiltros={() => { limparFiltros(); setStatusFiltro(''); }}
         mostrarFiltrosSempre
         onExportarExcel={handleExportarListaOrdem}
         searchRightSlot={

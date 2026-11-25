@@ -248,6 +248,14 @@ export const useRequisicoesTable = (colunas: any[]) => {
     });
   }, [headers]);
 
+  /** Botão "Limpar filtros" do grid: zera busca global e filtros de coluna. */
+  const limparFiltros = useCallback(() => {
+    setInputSearch('');
+    setSearch('');
+    setFiltros([]);
+    setPage(1);
+  }, []);
+
   return {
     // State
     inputSearch,
@@ -269,5 +277,6 @@ export const useRequisicoesTable = (colunas: any[]) => {
     handleSearchBlur,
     handleSearchKeyDown,
     handleFiltroChange,
+    limparFiltros,
   };
 };

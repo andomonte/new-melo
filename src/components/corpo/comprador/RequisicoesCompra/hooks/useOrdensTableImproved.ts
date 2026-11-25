@@ -140,6 +140,14 @@ export const useOrdensTableImproved = (colunas: any[]) => {
     setPage(1); // Reset to first page when filters change
   }, []);
 
+  /** Botão "Limpar filtros" do grid: zera busca global e filtros de coluna. */
+  const limparFiltros = useCallback(() => {
+    setInputSearch('');
+    setSearch('');
+    setFiltros([]);
+    setPage(1);
+  }, []);
+
   return {
     // State
     inputSearch,
@@ -161,5 +169,6 @@ export const useOrdensTableImproved = (colunas: any[]) => {
     handleSearchBlur,
     handleSearchKeyDown,
     handleFiltroChange,
+    limparFiltros,
   };
 };

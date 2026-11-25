@@ -259,7 +259,7 @@ export default async function handler(
       let valor = '';
       
       // Determinar o tipo do campo
-      const isCampoData = ['dataRequisicao', 'previsaoChegada'].includes(campo);
+      const isCampoData = ['dataRequisicao', 'previsaoChegada', 'dataOrdem'].includes(campo);
       const isCampoNumerico = ['versao', 'ordemCompra', 'situacao', 'valorTotal'].includes(campo);
       const isCampoConcatenado = ['fornecedorCompleto', 'compradorCompleto', 'requisicao'].includes(campo);
 
