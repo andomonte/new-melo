@@ -178,3 +178,33 @@ Extratos (9, 10, 11, 12), Resumos de documentos (18, 26), Notas sem cobrança (2
 - Produto sem Demanda: filtro Grupo/Marca.
 - SQL montado no front (`FILTRO`, `vFiltro` do CMV), laços N+1 e `UNION` sem `ALL`.
 - Campos `dbprod.curva_sugerido`/`qtestmin_sugerido` estão parados (jobs Oracle `JOBS.PROJECAO_*` quebrados) — Saturado/Crítico precisam de recálculo próprio no web.
+
+## 7. Situação no web — Relatórios › Gerenciais (25/11/2026)
+Menu **Relatórios › Gerenciais**, com os 47 itens na ordem do Delphi.
+- Rota de cada relatório: `/relatorios/gerenciais/<slug>`. As telas foram criadas pela migration 099.
+- Código: `src/lib/relatorios/gerenciais/<slug>.ts`, o catálogo em `catalogo.ts`, a tela `RelatorioPadrao` e a API `/api/relatorios/gerenciais/[slug]`.
+- Cada relatório roda em transação somente leitura, com limite de 120 s.
+
+**Implementados (39):**
+- Cautelas em Aberto; Extrato de Itens; Extrato Raio-X; Extrato de Item de NF; Extrato Detalhado
+- Faturas sem Títulos; Listagem de Vendas; Produtos para N.E.; Pendência de Produtos; Produtos em Promoção (modelo `dbpromocao`)
+- Resumo Doctos Grupo/Marca; Produto sem Demanda; Ranking de Vendedores; Notas sem Cobrança; Listagem de Vendas Diária
+- Resumo de Documentos; Vendas Telemarketing; Análise de Faturamento; Análise Detalhada; Análise Telemarketing
+- Análise de Vendas; CMV; Vendas Desbloqueadas; Análise de Compra e Vendas; Projeção de Compra (somente leitura)
+- Pedidos/Entradas por Comprador; Compras Origem AB; Curva ABC; Projetar Vendas (somente leitura); Estoque Suprido
+- Saída de Produto por Vendedor; Estoque Saturado; Estoque Crítico; Produtos sem Entrada; Licitações
+- Acompanhamento SONY, HBuster e SACHS (marca como filtro); Produtos por Clientes e FAGs
+
+**Pendentes (8)** — ficam no menu com o motivo na tela:
+| Relatório | Motivo |
+|---|---|
+| Comissão Gerencial, Comissão Financeiro, Comissão por Cliente | Dependem de `dbprod_comissao`, `dbclivend` e `dbgpfaturareceb`, além da decisão entre a regra do Delphi e a do web. |
+| Metas por Perfil, Metas por Cliente | Tabelas `PERFIL_GPP` e de campanha não existem; os packages estão inválidos no Oracle. |
+| Acompanhamento de Vendas | Faltam as tabelas do Super Master. |
+| Faturamento do 2º Vendedor | Falta `dbclivend`. |
+| Produtos por FAG e NF (DI) | Faltam `dbdocinterno`; também falta o modelo de DI na importação nova. |
+
+**Limitações de dados que os relatórios avisam:**
+- **Vendas e itens migrados** vão só até 06/2025, e o web começa em 08/2026. De 07/2025 a 07/2026 quase não há vendas.
+- **Datas de início:** os itens de fatura (`dbprodfat`) começam em 08/2026, as entradas em 07/2025 e os títulos a receber em 08/2025.
+- **Desempenho:** as tabelas do `db_manaus` nunca passaram por `ANALYZE`, e `dbitvenda` não tem índice por `codvenda`. Os relatórios desligam o laço aninhado (`SET LOCAL enable_nestloop = off`) para não estourar o tempo.

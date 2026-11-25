@@ -1,10 +1,9 @@
 import type { Relatorio } from '../tipos';
+import { relatorioEstoqueMinimo } from './estoqueSaturado';
 
-/** Relatórios › Gerenciais › Estoque Crítico — análise em docs/relatorios-delphi/. */
-export const relatorio: Relatorio = {
-  slug: 'estoqueCritico',
-  titulo: 'Estoque Crítico',
-  filtros: [],
-  colunas: [],
-  pendente: 'Relatório em desenvolvimento.',
-};
+/**
+ * Relatórios › Gerenciais › Estoque Crítico (Delphi: frmEstoqueCritico / RELATORIOS.ESTOQUE_CRITICO).
+ * Inverso do Estoque Saturado: estoque físico abaixo do mínimo. Mesma implementação (ver
+ * estoqueSaturado.ts para as diferenças em relação ao legado).
+ */
+export const relatorio: Relatorio = relatorioEstoqueMinimo('falta', 'estoqueCritico', 'Estoque Crítico');
