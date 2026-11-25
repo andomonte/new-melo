@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import https from 'https';
 import { getPgPool } from '@/lib/pg';
 import { certificadoAdn } from '@/lib/nfse/adn/certificado';
-import { cnpjPadraoAdn } from '@/lib/nfse/adn/distribuicao';
+import { cnpjAtualNfse, cnpjPadraoAdn } from '@/lib/nfse/adn/distribuicao';
 
 /**
  * Impressão da nota de serviço.
@@ -71,7 +71,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
          LEFT JOIN dbservico_nfs sv ON sv.sen_id = s.sen_id WHERE s.codfat = $1 ORDER BY s.id`, [codfat])).rows;
     const emp = (await pool.query(
       `SELECT cgc, nomecontribuinte, inscricaomunicipal, logradouro, numero, bairro, municipio, uf, cep, telefone, email
-         FROM dadosempresa WHERE "certificadoKey" IS NOT NULL ORDER BY cgc LIMIT 1`)).rows[0] || {};
+         FROM dadosempresa WHERE regexp_replace(cgc, '\\D', '', 'g') = $1
+        ORDER BY ("certificadoKey" IS NOT NULL) DESC LIMIT 1`, [await cnpjAtualNfse(pool)])).rows[0] || {};
     const retido = n.issqn_retido === 'S';
     const fed = Number(n.pis_valor) + Number(n.cofins_valor) + Number(n.csll_valor) + Number(n.ir_valor) + Number(n.inss_valor) + Number(n.outros_valor);
     const totalRet = (retido ? Number(n.issqn_valor) : 0) + fed;

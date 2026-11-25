@@ -97,7 +97,7 @@ export default function NotasServico() {
     <div className="flex h-full flex-col gap-3 p-4 text-gray-900 dark:text-gray-100">
       <div className="flex flex-wrap items-end gap-3">
         <h1 className="mr-auto flex items-center gap-2 text-lg font-semibold">
-          <Receipt className="h-5 w-5 text-blue-600" /> Notas de Serviço
+          <Receipt className="h-5 w-5 text-blue-600" /> Notas de Serviço — Prestadas
         </h1>
         <button className={secundario} onClick={() => setAdnAberto(true)} title="Buscar as NFS-e emitidas no portal nacional (ADN)">
           <CloudDownload className="h-4 w-4" /> Buscar no portal
@@ -309,7 +309,8 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
         aliquota_cofins: v.aliquota_cofins, aliquota_ir: v.aliquota_ir, aliquota_inss: v.aliquota_inss,
         aliquota_csll: v.aliquota_csll, outros_valor: v.outros_valor,
       };
-      const cobranca = gerarCobranca
+      // emissão: o título a receber é gerado depois, manualmente, no detalhe da nota
+      const cobranca = gerarCobranca && !emitir
         ? { banco: cob.banco, forma: cob.banco === '5' ? cob.forma : null, prazos: lerPrazos(cob.prazos) }
         : null;
       const r = await fetch(`${API}/notas${emitir ? '/emitir' : ''}`, {
@@ -458,6 +459,11 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
             </div>
           </div>
 
+          {emitir ? (
+            <p className="rounded-md bg-gray-50 p-2 text-xs text-gray-600 dark:bg-zinc-800 dark:text-gray-300">
+              Depois de emitida, abra a nota na lista e use <b>Gerar títulos</b> para criar o título a receber.
+            </p>
+          ) : (
           <div className="rounded-md border border-gray-200 p-3 dark:border-zinc-700">
             <label className="mb-2 flex items-center gap-2 text-sm font-medium">
               <input type="checkbox" checked={gerarCobranca} onChange={(e) => setGerarCobranca(e.target.checked)} />
@@ -465,6 +471,7 @@ function ModalLancar({ onFechar, onSalvo }: { onFechar: () => void; onSalvo: (co
             </label>
             {gerarCobranca && <CamposCobranca valor={v.valor_liquido} emissao={hojeISO()} cob={cob} setCob={setCob} />}
           </div>
+          )}
 
           <div><Label>Observação</Label><Input maxLength={255} value={f.obs} onChange={(e) => set('obs', e.target.value)} /></div>
         </div>

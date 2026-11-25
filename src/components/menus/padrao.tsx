@@ -104,6 +104,7 @@ const Vendas = lazy(() => import('@/components/corpo/admin/vendas'));
 const ConfigOrcamento = lazy(() => import('@/components/corpo/admin/configuracoes/orcamento'));
 const CreditoFornecedor = lazy(() => import('@/components/corpo/admin/financeiro/creditoFornecedor'));
 const NotasServico = lazy(() => import('@/components/corpo/faturamento/notasServico'));
+const NotasServicoTomadas = lazy(() => import('@/components/corpo/faturamento/notasServico/Tomadas'));
 const NovasVendas = lazy(() => import('@/components/corpo/vendas/novaVenda'));
 const NovaVendaV2 = lazy(() => import('@/components/corpo/vendas/novaVendaV2'));
 const CentralVendas = lazy(() => import('@/components/corpo/vendas/centralVendas'));
@@ -483,11 +484,22 @@ export const menus = [
             corpo: CreditoFornecedor,
           },
           {
-            // NFS-e prestadas (no Delphi ficava em Faturamento > Nota Fiscal de Serviço > Prestado)
+            // NFS-e (no Delphi: Financeiro > Nota Fiscal de Serviço > Prestado / Tomado)
             name: 'Notas de Serviço',
-            href: '/admin/financeiro/notasServico',
             icon: LiaFileInvoiceSolid,
-            corpo: NotasServico,
+            hasSubmenu: true,
+            subMenuItems: [
+              {
+                name: 'Prestadas',
+                href: '/admin/financeiro/notasServico',
+                corpo: NotasServico,
+              },
+              {
+                name: 'Tomadas',
+                href: '/admin/financeiro/notasServicoTomadas',
+                corpo: NotasServicoTomadas,
+              },
+            ],
           },
           {
             name: 'Contas a Receber',

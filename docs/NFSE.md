@@ -20,6 +20,21 @@ Tela: **Financeiro > Notas de Serviço** (`/admin/financeiro/notasServico`).
 
 Código: `src/lib/nfse/notasServico.ts`, `src/lib/nfse/calculoNota.ts`.
 
+## Menu
+Em **Financeiro > Notas de Serviço**, como no Delphi:
+- **Prestadas** (`/admin/financeiro/notasServico`): emitir a NFS-e e importar do portal as notas que a Melo emitiu.
+  - O título a receber é gerado **depois**, manualmente, no detalhe da nota (**Gerar títulos**).
+- **Tomadas** (`/admin/financeiro/notasServicoTomadas`, migration 098): notas emitidas **para** a Melo, baixadas do portal pela mesma busca. **Não há lançamento manual.**
+  - Em cada nota, **Gerar título a pagar**, feito manualmente. O fornecedor é sugerido pelo CNPJ do prestador.
+  - O valor é o **líquido**. O que a Melo reteve (ISS, IR, INSS, PIS/COFINS/CSLL) ela mesma recolhe.
+  - Pode ter uma ou mais parcelas, com duplicata `{nº}/{parcela}/{total}`. O vínculo fica em `nfs_tomada_titulo`.
+  - Nota cancelada no portal não gera título. Uma nota com título ativo também não gera outro: é preciso cancelar o título no Contas a Pagar.
+  - Contam como cancelada os eventos `CANCELAMENTO`, `CANCELAMENTO_POR_SUBSTITUICAO`, `CANCELAMENTO_DEFERIDO_ANALISE_FISCAL` e `CANCELAMENTO_POR_OFICIO`. A *solicitação* de cancelamento não conta.
+  - As tomadas antigas do Delphi (DBENTRADA_NFS2, 2014–2015) não foram importadas.
+  - Código: `src/lib/nfse/tomadas.ts`.
+
+**Empresa:** Melo (`04618302000189`, constante `CNPJ_PADRAO_NFSE`), com o certificado de Admin > Dados Empresa. Isso vale para a busca, a emissão e a impressão. `NFSE_ADN_CNPJ` muda a empresa. As listas do portal mostram só os documentos dessa empresa.
+
 ## Busca no portal nacional (ADN)
 - **API:** `GET https://adn.nfse.gov.br/contribuintes/DFe/{NSU}?cnpjConsulta=<CNPJ>&lote=true`, com mTLS usando o certificado A1 da empresa.
 - **Paginação:** devolve até 50 documentos **depois** do NSU informado. O sistema guarda o último NSU lido em `nfs_adn_controle`.
@@ -94,3 +109,10 @@ A migração do Contas a Receber trouxe, de 2022 a 2024, só os títulos **em ab
 - 417 baixas em `dbfreceb`. Em `dbfreceb`, a baixa é identificada pelo par (`cod_receb`, `cod_freceb`), porque `cod_freceb` é a sequência dentro do título.
 
 As 45 notas de 2008–2011 que continuam sem título também não têm título no Oracle.
+
+## Homologação
+1. As migrations 093 a 098 já foram aplicadas no banco, que é o mesmo da homologação.
+2. **Não** configurar `NFSE_TESTE_PFX` no servidor. Assim o certificado vem de Dados Empresa da Melo, e o servidor precisa da `CRYPTO_MASTER_KEY`.
+3. `NFSE_SEFIN_AMBIENTE` fica sem valor ou `RESTRITA`: emissão e cancelamento **só em testes**.
+4. A busca no portal (`NFSE_ADN_AMBIENTE`, padrão `PRODUCAO`) só lê as notas reais da Melo.
+5. Re-logar para ver o menu Notas de Serviço > Prestadas / Tomadas.

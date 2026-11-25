@@ -19,13 +19,33 @@ export function ambienteAdn(): AmbienteAdn {
   return String(process.env.NFSE_ADN_AMBIENTE || 'PRODUCAO').toUpperCase() === 'RESTRITA' ? 'RESTRITA' : 'PRODUCAO';
 }
 
-/** CNPJ consultado: NFSE_ADN_CNPJ, senão (com certificado de teste) o CNPJ do próprio certificado, senão a 1ª empresa com certificado. */
+/** Empresa das NFS-e (emitente das prestadas e tomadora das tomadas): Melo Distribuidora (matriz, Manaus). */
+export const CNPJ_PADRAO_NFSE = '04618302000189';
+
+/**
+ * CNPJ da NFS-e (busca, emissão, impressão): NFSE_ADN_CNPJ; senão, com certificado de teste
+ * (só desenvolvimento), o CNPJ do certificado; senão a Melo (CNPJ_PADRAO_NFSE), se tiver
+ * certificado em Dados Empresa; senão a empresa com certificado e inscrição municipal.
+ */
 export async function cnpjPadraoAdn(db: Consultavel, cnpjCertificadoTeste?: string | null): Promise<string> {
   if (process.env.NFSE_ADN_CNPJ) return so(process.env.NFSE_ADN_CNPJ);
   if (process.env.NFSE_TESTE_PFX && cnpjCertificadoTeste) return so(cnpjCertificadoTeste);
-  const r = await db.query(`SELECT cgc FROM dadosempresa WHERE "certificadoKey" IS NOT NULL ORDER BY cgc LIMIT 1`);
+  const r = await db.query(
+    `SELECT cgc FROM dadosempresa WHERE "certificadoKey" IS NOT NULL
+      ORDER BY (regexp_replace(cgc, '\\D', '', 'g') = $1) DESC, (COALESCE(trim(inscricaomunicipal), '') <> '') DESC, cgc
+      LIMIT 1`, [CNPJ_PADRAO_NFSE]);
   if (!r.rows[0]) throw new Error('Nenhuma empresa com certificado cadastrado (Admin > Dados Empresa).');
   return so(r.rows[0].cgc);
+}
+
+let cnpjTesteCache: string | null = null;
+/** CNPJ em uso nas telas (lista do portal, tomadas, impressão) — o mesmo que a busca usa. */
+export async function cnpjAtualNfse(db: Consultavel): Promise<string> {
+  if (process.env.NFSE_TESTE_PFX && !process.env.NFSE_ADN_CNPJ) {
+    if (!cnpjTesteCache) cnpjTesteCache = so((await certificadoAdn(db, '')).cnpjCertificado);
+    if (cnpjTesteCache) return cnpjTesteCache;
+  }
+  return cnpjPadraoAdn(db);
 }
 
 export async function sincronizarAdn(db: Consultavel, opts: { cnpj?: string | null; ambiente?: AmbienteAdn } = {}) {

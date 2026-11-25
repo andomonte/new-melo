@@ -2,7 +2,7 @@
  * Notas de Serviço → "Buscar no portal": NFS-e nacionais baixadas do ADN.
  *   Pendentes : notas em que a empresa é PRESTADORA, para conferir e importar (cliente e serviço
  *               sugeridos pelo CNPJ do tomador e pelo código nacional; títulos opcionais).
- *   Tomadas   : notas que a empresa RECEBEU (registro; Contas a Pagar em etapa futura).
+ *   (As notas TOMADAS — que a empresa recebeu — ficam na tela Notas de Serviço > Tomadas.)
  *   Eventos   : cancelamentos e outros eventos — avisa quando se referem a uma nota já importada.
  *   Tratadas  : importadas ou ignoradas.
  * Regras: src/lib/nfse/adn/distribuicao.ts.
@@ -34,7 +34,7 @@ const num = 'text-right tabular-nums whitespace-nowrap';
 const botao = 'inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed';
 const primario = `${botao} bg-blue-600 text-white hover:bg-blue-700`;
 const secundario = `${botao} border border-gray-300 dark:border-zinc-600 hover:bg-gray-100 dark:hover:bg-zinc-700`;
-const ABAS = [['pendentes', 'Pendentes'], ['tomadas', 'Tomadas'], ['eventos', 'Eventos'], ['tratadas', 'Tratadas']] as const;
+const ABAS = [['pendentes', 'Pendentes'], ['eventos', 'Eventos'], ['tratadas', 'Tratadas']] as const;
 type Aba = typeof ABAS[number][0];
 
 export default function ModalBuscaAdn({ usuario, onFechar, onImportou }: { usuario: string; onFechar: () => void; onImportou: () => void }) {
@@ -215,7 +215,7 @@ export default function ModalBuscaAdn({ usuario, onFechar, onImportou }: { usuar
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-zinc-800"><tr>
                 <th className={th}>Nº</th><th className={th}>Emissão</th>
-                <th className={th}>{aba === 'tomadas' ? 'Prestador' : 'Tomador'}</th>
+                <th className={th}>Tomador</th>
                 <th className={th}>Serviço</th><th className={`${th} ${num}`}>Valor</th><th className={`${th} ${num}`}>Líquido</th>
                 {aba === 'pendentes' && <><th className={th}>Cliente no sistema</th><th className={th}>Serviço no cadastro</th><th className={th} /></>}
                 {aba === 'tratadas' && <><th className={th}>Situação</th><th className={th}>Fatura</th></>}
@@ -227,8 +227,8 @@ export default function ModalBuscaAdn({ usuario, onFechar, onImportou }: { usuar
                     <td className={`${td} font-mono`}>{d.numero}</td>
                     <td className={`${td} whitespace-nowrap`}>{dataBR(d.dt_emissao)}</td>
                     <td className={`${td} max-w-[220px]`}>
-                      <div className="truncate" title={aba === 'tomadas' ? d.nome_prestador : d.nome_tomador}>{(aba === 'tomadas' ? d.nome_prestador : d.nome_tomador) || '-'}</div>
-                      <div className="text-xs text-gray-500">{doc(aba === 'tomadas' ? d.cnpj_prestador : d.doc_tomador)}</div>
+                      <div className="truncate" title={d.nome_tomador}>{d.nome_tomador || '-'}</div>
+                      <div className="text-xs text-gray-500">{doc(d.doc_tomador)}</div>
                     </td>
                     <td className={`${td} max-w-[260px]`}><div className="truncate" title={d.descricao}>{d.cod_servico} · {d.descricao}</div></td>
                     <td className={`${td} ${num}`}>{moeda(d.valor_servico)}</td>
