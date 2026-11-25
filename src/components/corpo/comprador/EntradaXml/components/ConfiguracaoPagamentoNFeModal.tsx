@@ -76,6 +76,9 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
   const [prazoInput, setPrazoInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pagamentoConfigurado, setPagamentoConfigurado] = useState(false);
+  // Adiantamento(s) da ordem ainda não pago(s): travam a cobrança (regra de 25/11/2026)
+  const [adiantamentosNaoPagos, setAdiantamentosNaoPagos] = useState<any[]>([]);
+  const bloqueadoPorAdiantamento = !pagamentoConfigurado && adiantamentosNaoPagos.length > 0;
 
   // Data mínima: amanhã (pelo menos 1 dia após hoje)
   const getDataMinima = () => {
@@ -178,7 +181,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
     setError(null);
     try {
       const response = await fetch(
-        `/api/entrada-xml/parcelas-sugeridas-v2?nfeId=${nfeId}`,
+        `/api/entrada-xml/parcelas-sugeridas-v2?nfeId=${nfeId}${ordensAntecipadas && ordensAntecipadas.length ? `&ordens=${ordensAntecipadas.join(',')}` : ''}`,
       );
       const data = await response.json();
 
@@ -189,6 +192,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
         }
 
         setParcelasSugeridas(data.data);
+        setAdiantamentosNaoPagos(data.adiantamentosNaoPagos || []);
         setValorNFe(data.debug?.valorTotalNFe || 0);
 
         // Se tem parcela 0 (antecipado), habilitar entrada automaticamente
@@ -346,8 +350,9 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
         onSuccess();
         onClose();
       } else {
+        if (data.adiantamentosNaoPagos) setAdiantamentosNaoPagos(data.adiantamentosNaoPagos);
         setError(data.error || 'Erro ao configurar pagamento');
-        toast.error(data.error || 'Erro ao configurar pagamento');
+        toast.error(data.error || 'Erro ao configurar pagamento', { duration: 10000 });
       }
     } catch (err) {
       console.error('Erro ao salvar:', err);
@@ -801,6 +806,34 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
                 </div>
               </div>
 
+              {/* Adiantamento não pago: trava a cobrança — o comprador pede o pagamento ao Financeiro */}
+              {bloqueadoPorAdiantamento && (
+                <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800">
+                  <div className="flex items-start gap-3">
+                    <Lock className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+                    <div className="text-sm">
+                      <h4 className="font-semibold text-red-800 dark:text-red-200">
+                        Cobrança travada: pagamento antecipado não pago
+                      </h4>
+                      <p className="text-red-700 dark:text-red-300 mt-1">
+                        A ordem desta NF tem adiantamento que ainda não foi pago. Solicite ao <b>Financeiro</b> o
+                        pagamento do(s) título(s) abaixo e depois volte para concluir a geração da cobrança.
+                      </p>
+                      <ul className="mt-2 list-disc pl-5 text-red-800 dark:text-red-200">
+                        {adiantamentosNaoPagos.map((a) => (
+                          <li key={a.cod_pgto}>
+                            Título <b>{a.nro_dup || a.cod_pgto}</b> · ordem {a.orc_id} · em aberto{' '}
+                            <b>R$ {Number(a.em_aberto).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</b>
+                            {Number(a.valor_pago) > 0 && <> (pago R$ {Number(a.valor_pago).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} de R$ {Number(a.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</>}
+                            {a.data_vencimento && <> · venc. {String(a.data_vencimento).slice(0, 10).split('-').reverse().join('/')}</>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Quitação por antecipado: NF coberta pelo antecipado, sem parcelas */}
               {quitadoPorAntecipado && (
                 <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
@@ -827,7 +860,7 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
               )}
 
               {/* Antecipado(s) não pago(s) ≥ NF → serão cancelados; cobrança = NF inteira */}
-              {cancelaAntecipado && (
+              {cancelaAntecipado && !bloqueadoPorAdiantamento && (
                 <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" size={20} />
@@ -950,7 +983,8 @@ export const ConfiguracaoPagamentoNFeModal: React.FC<
           ) : (
             <button
               onClick={handleSalvar}
-              disabled={loading || !banco || (!quitadoPorAntecipado && parcelas.length === 0) || !isValido}
+              disabled={loading || bloqueadoPorAdiantamento || !banco || (!quitadoPorAntecipado && parcelas.length === 0) || !isValido}
+              title={bloqueadoPorAdiantamento ? 'Há pagamento antecipado não pago — solicite o pagamento ao Financeiro' : undefined}
               className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
             >
               {loading ? 'Salvando...' : 'Confirmar Pagamento'}

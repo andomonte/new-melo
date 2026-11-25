@@ -280,6 +280,35 @@ export async function adiantamentosDisponiveis(
   return out;
 }
 
+export interface AdiantamentoEmAberto extends AdiantamentoDisponivel {
+  /** quanto do título ainda não foi pago */
+  em_aberto: number;
+}
+
+/**
+ * Adiantamentos (parcela 0 da ordem) que entram nesta NF e ainda NÃO foram pagos (no todo ou em
+ * parte). Regra de 25/11/2026: com adiantamento em aberto a cobrança da NF NÃO é gerada — o
+ * comprador pede ao Financeiro o pagamento do título e depois conclui. (Antes, o não pago que
+ * cobria a NF era cancelado e a cobrança saía pela NF inteira.)
+ */
+export function adiantamentosEmAberto(lista: AdiantamentoDisponivel[]): AdiantamentoEmAberto[] {
+  return lista
+    .filter((a) => a.disponivel > 0.005 && r2(a.valor_pgto - a.valor_pago) > 0.005)
+    .map((a) => ({ ...a, em_aberto: r2(a.valor_pgto - a.valor_pago) }));
+}
+
+/** Mensagem para a tela/erro quando há adiantamento em aberto. */
+export function mensagemAdiantamentoEmAberto(lista: AdiantamentoEmAberto[]): string {
+  const dataBR = (s: string | null) => {
+    const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : '-';
+  };
+  const itens = lista.map((a) =>
+    `título ${a.nro_dup || a.cod_pgto} da ordem ${a.orc_id} (R$ ${a.em_aberto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em aberto, venc. ${dataBR(a.data_vencimento)})`);
+  return `A cobrança desta NF não pode ser gerada: há pagamento antecipado ainda não pago — ${itens.join('; ')}. `
+    + 'Solicite ao Financeiro o pagamento do adiantamento e depois conclua a geração da cobrança.';
+}
+
 // ---------------------------------------------------------------------------------------------
 // Tela Crédito de Fornecedor (fase 4): lista, detalhe, títulos em aberto, usar e estornar uso.
 // O grupo é o fornecedor + filiais (raiz do CNPJ; override em credor_grupo).

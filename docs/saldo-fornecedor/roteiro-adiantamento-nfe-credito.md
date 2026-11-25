@@ -250,3 +250,20 @@ As mudanças no banco entram como migrations novas e precisam rodar em produçã
 - **Crédito entre filiais da MELO** (Manaus usar crédito de Roraima): são bancos diferentes; já estava adiado na spec.
 - **Contabilização** do adiantamento.
 - **Valor das duplicatas do XML:** o campo `dbnfe_ent_cobr.vdup` é inteiro e corta os centavos. É um problema à parte, para corrigir em seguida.
+
+## Mudança de regra — 25/11/2026: adiantamento não pago trava a cobrança
+**Antes:** o adiantamento (parcela 0 da ordem) **não pago** era tratado assim:
+- quando cobria a NF, era **cancelado**, e a cobrança saía pela NF inteira;
+- quando era menor que a NF, era abatido da cobrança.
+
+**Agora:** se qualquer adiantamento das ordens da NF tem saldo em aberto, a geração da cobrança é **recusada** (HTTP 409).
+- A recusa vale também para o pago só em parte.
+- A mensagem traz o título, a ordem, o valor em aberto e o vencimento.
+- O comprador pede ao **Financeiro** o pagamento do título e depois conclui a cobrança.
+
+**Onde está no código:**
+- regra: `adiantamentosEmAberto` e `mensagemAdiantamentoEmAberto`, em `src/lib/compras/creditoFornecedor.ts`;
+- trava no servidor: `configurar-pagamento-nfe.ts`;
+- aviso antecipado na tela: `parcelas-sugeridas-v2.ts` (aceita `?ordens=`), que trava o botão Confirmar no `ConfiguracaoPagamentoNFeModal`.
+
+O ramo "cancelar antecipado não pago" (`cancelaAntecipado`) ficou no código, mas não é mais alcançado.

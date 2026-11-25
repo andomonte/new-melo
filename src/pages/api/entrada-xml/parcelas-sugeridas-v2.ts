@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPgPool } from '@/lib/pgClient';
-import { adiantamentosDisponiveis } from '@/lib/compras/creditoFornecedor';
+import { adiantamentosDisponiveis, adiantamentosEmAberto, mensagemAdiantamentoEmAberto } from '@/lib/compras/creditoFornecedor';
 
 interface DetalhePagamentoAntecipado {
   ordemId: string;
@@ -25,6 +25,9 @@ interface ParcelasSugeridasResponse {
   data?: ParcelaSugerida[];
   message?: string;
   pagamentoConfigurado?: boolean;
+  /** adiantamentos não pagos: travam a geração da cobrança (regra de 25/11/2026) */
+  adiantamentosNaoPagos?: any[];
+  mensagemAdiantamento?: string | null;
   debug?: {
     totalEntrada: number;
     valorTotalNFe: number;
@@ -78,8 +81,11 @@ export default async function handler(
     // Quanto cada adiantamento ainda abate desta NF (fase 3 do roteiro): o pago vale pelo
     // crédito disponível, o não pago pelo que não foi usado em outra NF; cancelados ficam fora.
     // Mesma conta do configurar-pagamento-nfe (src/lib/compras/creditoFornecedor.ts).
-    const adiantamentos = await adiantamentosDisponiveis(
-      client, ordensAssociadas.rows.map((r: any) => Number(r.req_id)), String(nfeId));
+    // ordens escolhidas à mão na tela "Selecionar Pagamentos" (?ordens=1,2) somam às associadas
+    const ordensManuais = String(req.query.ordens || '').split(',').map((x) => Number(x)).filter((x) => x > 0);
+    const orcIds = Array.from(new Set([...ordensAssociadas.rows.map((r: any) => Number(r.req_id)), ...ordensManuais]));
+    const adiantamentos = await adiantamentosDisponiveis(client, orcIds, String(nfeId));
+    const naoPagos = adiantamentosEmAberto(adiantamentos);
     for (const a of adiantamentos) {
       if (a.disponivel <= 0.005) continue;
       totalEntrada += a.disponivel;
@@ -202,6 +208,11 @@ export default async function handler(
       success: true,
       data: parcelasSugeridas,
       pagamentoConfigurado,
+      adiantamentosNaoPagos: naoPagos.map((a) => ({
+        cod_pgto: a.cod_pgto, nro_dup: a.nro_dup, orc_id: a.orc_id, valor: a.valor_pgto,
+        valor_pago: a.valor_pago, em_aberto: a.em_aberto, data_vencimento: a.data_vencimento,
+      })),
+      mensagemAdiantamento: naoPagos.length ? mensagemAdiantamentoEmAberto(naoPagos) : null,
       debug: {
         totalEntrada,
         valorTotalNFe,

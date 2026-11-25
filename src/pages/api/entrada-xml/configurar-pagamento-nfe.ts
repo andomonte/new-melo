@@ -3,7 +3,7 @@ import { getPgPool } from '@/lib/pgClient';
 import { z } from 'zod';
 import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
 import {
-  adiantamentosDisponiveis, consumirCreditoNaNota, desfazerConsumoDaNota, sincronizarCreditoAposBaixa,
+  adiantamentosDisponiveis, adiantamentosEmAberto, mensagemAdiantamentoEmAberto, consumirCreditoNaNota, desfazerConsumoDaNota, sincronizarCreditoAposBaixa,
 } from '@/lib/compras/creditoFornecedor';
 import {
   associarNotaAoAdiantamento, atualizarNfDoTitulo, codigoBanco, contaFinanceiraFornecedor,
@@ -45,7 +45,7 @@ interface ConfigurarPagamentoResponse {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<ConfigurarPagamentoResponse | { error: string }>
+  res: NextApiResponse<ConfigurarPagamentoResponse | { error: string; adiantamentosNaoPagos?: any[] }>
 ) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -187,6 +187,19 @@ export default async function handler(
       for (const r of pagosAnt.rows) await sincronizarCreditoAposBaixa(client, r.cod_pgto, userName, { emTransacao: true });
     }
     const adiantamentos = await adiantamentosDisponiveis(client, orcIdsAnt, nfeId);
+    // Regra de 25/11/2026: adiantamento NÃO PAGO trava a cobrança da NF (não cancela mais o
+    // título nem gera a cobrança da NF inteira). O comprador pede o pagamento ao Financeiro.
+    const emAberto = adiantamentosEmAberto(adiantamentos);
+    if (emAberto.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: mensagemAdiantamentoEmAberto(emAberto),
+        adiantamentosNaoPagos: emAberto.map((a) => ({
+          cod_pgto: a.cod_pgto, nro_dup: a.nro_dup, orc_id: a.orc_id, valor: a.valor_pgto,
+          valor_pago: a.valor_pago, em_aberto: a.em_aberto, data_vencimento: a.data_vencimento,
+        })),
+      });
+    }
     // só os que ainda têm o que abater
     const antTitulos = adiantamentos
       .filter((a) => a.disponivel > 0.005)
