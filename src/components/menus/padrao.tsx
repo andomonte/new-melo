@@ -147,7 +147,7 @@ const UnidadesMeloMain = lazy(() => import('@/components/corpo/comprador/Unidade
 
 // Relatórios / Config / Acessos / Estoque
 import Estoque from '@/components/corpo/admin/estoque';
-import Relatorios from '@/components/corpo/admin/relatorios';
+import { MENU_RELATORIOS_GERENCIAIS } from '@/components/corpo/relatorios/gerenciais';
 import Parametros from '@/components/corpo/admin/configuracoes/parametros';
 import Funcoes from '@/components/corpo/admin/controleAcesso/funcoes';
 import Filiais from '@/components/corpo/admin/controleAcesso/filiais';
@@ -724,11 +724,21 @@ export const menus = [
           },
         ],
       },
+      // ======= RELATÓRIOS (menu &Relatórios do Delphi) =======
       {
         name: 'Relatórios',
         icon: ChartLineIcon,
-        href: '/admin/relatorios',
-        corpo: Relatorios,
+        href: '',
+        corpo: '',
+        subItems: [
+          {
+            // Relatórios › Gerenciais — mesma ordem do Delphi (src/lib/relatorios/gerenciais/catalogo.ts)
+            name: 'Gerenciais',
+            icon: ChartLineIcon,
+            hasSubmenu: true,
+            subMenuItems: MENU_RELATORIOS_GERENCIAIS,
+          },
+        ],
       },
 
       // ======= CONFIGURAÇÕES =======
