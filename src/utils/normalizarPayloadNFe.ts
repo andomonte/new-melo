@@ -4,6 +4,10 @@ import { ALIQUOTA_IBS_2026, ALIQUOTA_CBS_2026 } from '@/constants/tributacao2026
 export async function normalizarPayloadNFe(payload: any) {
   // A 'payload' já contém 'emitente', então não precisamos buscar de novo.
   const { dbclien, dbvenda, dbitvenda, dbfatura, emitente } = payload;
+  // Modo espelho (NF de devolução de compra): os itens já trazem alíquotas, bases,
+  // desconto/outros e ICMS desonerado exatos (espelho da NF do fornecedor). Nada é
+  // recalculado nem rateado. A venda não liga este modo — comportamento inalterado.
+  const modoEspelho = payload?.modoEspelho === true;
 
   // ===============================
   // VALIDAÇÕES
@@ -52,6 +56,7 @@ export async function normalizarPayloadNFe(payload: any) {
     isuframa: dbclien?.isuframa ?? '',
     ipi: dbclien?.ipi ?? 'N',
     icms: parseFloat(dbclien?.icms ?? '0'),
+    codmunicipio: String(dbclien?.codmunicipio ?? '').replace(/\D/g, ''),
   };
 
   // ===============================
@@ -87,6 +92,58 @@ export async function normalizarPayloadNFe(payload: any) {
     const vIBSMun = Math.round(vProd * pIBSMun) / 100;
     const vIBSItem = Math.round((vIBSUF + vIBSMun) * 100) / 100;
     const vCBSItem = Math.round(vProd * pCBS) / 100;
+
+    if (modoEspelho) {
+      // Valores exatos do espelho (dbprodfat da devolução): alíquota informada, base de
+      // IPI/PIS/COFINS próprias, origem do ICMS pelo CST de 3 dígitos, desoneração.
+      const cst3 = String(item.csticms ?? '').replace(/\D/g, '');
+      const vDeson = Math.round(Number(item.totalicmsdesconto ?? 0) * 100) / 100;
+      return {
+        codprod: item.codprod ?? `P${index + 1}`,
+        nome: prod.descr?.trim() || `Produto ${index + 1}`,
+        qtde,
+        preco,
+        ncm: /^[0-9]{8}$/.test(prod.clasfiscal) ? prod.clasfiscal : '87089990',
+        vProd,
+        icms: {
+          origem: cst3.length === 3 ? cst3.charAt(0) : '0',
+          pICMS: Number(item.aliquota_icms ?? item.icms ?? 0),
+          vICMS,
+          baseICMS: Math.round(Number(item.baseicms ?? 0) * 100) / 100,
+          cstICMS: (cst3 || '90').padStart(2, '0').slice(-2),
+          ...(vDeson > 0 ? { vICMSDeson: vDeson, motDesICMS: String(item.motdesicms ?? '7') } : {}),
+        },
+        ipi: {
+          pIPI: Number(item.aliquota_ipi ?? item.ipi ?? 0),
+          vIPI,
+          baseIPI: Math.round(Number(item.baseipi ?? 0) * 100) / 100,
+          cstIPI: item.cstipi ?? '53',
+          // Enquadramento como o Delphi (FATURAMENTOS_NF_ELETRONICA_2): CST 05/55 → 143.
+          cEnq: ['05', '55'].includes(String(item.cstipi ?? '')) ? '143' : '999',
+        },
+        pis: { pPIS: Number(item.pis ?? 0), vPIS, cstPIS: item.cstpis ?? '08' },
+        cofins: { pCOFINS: Number(item.cofins ?? 0), vCOFINS, cstCOFINS: item.cstcofins ?? '08' },
+        fcp: { vFCP: 0 },
+        cfop: item.cfop ?? '5202',
+        // % devolvido da NF de origem (grupo impostoDevol, como o Delphi).
+        pDevol: Math.min(100, Math.max(0, Number(item.pdevol ?? 0))),
+        vDescFixo: Math.round(Number(item.desconto ?? 0) * 100) / 100,
+        vOutroFixo: Math.round(Number(item.acrescimo ?? 0) * 100) / 100,
+        vICMSDeson: vDeson,
+        ibscbs: {
+          cst: (item.cstibscbs ?? '000').toString().padStart(3, '0'),
+          cClassTrib: (item.cclasstrib ?? '000001').toString().padStart(6, '0'),
+          vBC: vProd,
+          pIBSUF,
+          vIBSUF,
+          pIBSMun,
+          vIBSMun,
+          vIBS: vIBSItem,
+          pCBS,
+          vCBS: vCBSItem,
+        },
+      };
+    }
 
     return {
       codprod: item.codprod ?? `P${index + 1}`,
@@ -169,8 +226,13 @@ export async function normalizarPayloadNFe(payload: any) {
     total > 0 && totalProdutos > 0 ? (ult ? r2n(total - acum) : r2n(vProd * total / totalProdutos)) : 0;
   produtos.forEach((p: any, i: number) => {
     const ult = i === produtos.length - 1;
-    p.vDesc = descPercNf > 0 ? (ult ? r2n(descTotalAlvo - dAcum) : r2n(p.vProd * descPercNf / 100)) : 0;
-    p.vOutro = acrePercNf > 0 ? (ult ? r2n(acreTotalAlvo - aAcum) : r2n(p.vProd * acrePercNf / 100)) : 0;
+    if (modoEspelho) {
+      p.vDesc = p.vDescFixo ?? 0;
+      p.vOutro = p.vOutroFixo ?? 0;
+    } else {
+      p.vDesc = descPercNf > 0 ? (ult ? r2n(descTotalAlvo - dAcum) : r2n(p.vProd * descPercNf / 100)) : 0;
+      p.vOutro = acrePercNf > 0 ? (ult ? r2n(acreTotalAlvo - aAcum) : r2n(p.vProd * acrePercNf / 100)) : 0;
+    }
     p.vFrete = rateioProp(freteNum, fAcum, p.vProd, ult);
     p.vSeg = rateioProp(seguroNum, sAcum, p.vProd, ult);
     dAcum += p.vDesc;
@@ -179,7 +241,7 @@ export async function normalizarPayloadNFe(payload: any) {
     sAcum += p.vSeg;
     // Redução da base/valor de ICMS pelo desconto (proporcional, preservando qualquer
     // redução de base já existente no item). Para item isento/ZFM (base 0) é no-op.
-    if (p.vDesc > 0 && p.vProd > 0) {
+    if (!modoEspelho && p.vDesc > 0 && p.vProd > 0) {
       const fator = (p.vProd - p.vDesc) / p.vProd;
       p.icms.baseICMS = r2n(p.icms.baseICMS * fator);
       p.icms.vICMS = r2n(p.icms.vICMS * fator);
@@ -194,8 +256,11 @@ export async function normalizarPayloadNFe(payload: any) {
     p.ibscbs.vIBS = r2n(p.ibscbs.vIBSUF + p.ibscbs.vIBSMun);
     p.ibscbs.vCBS = Math.round(baseOperIbsCbs * (p.ibscbs.pCBS || 0)) / 100;
   });
-  const descontoNum = descTotalAlvo;   // = Σ p.vDesc
-  const acrescimoNum = acreTotalAlvo;  // = Σ p.vOutro
+  const somaItens = (f: (p: any) => number) => produtos.reduce((a: number, p: any) => r2n(a + (f(p) || 0)), 0);
+  const descontoNum = modoEspelho ? somaItens((p) => p.vDesc) : descTotalAlvo;   // = Σ p.vDesc
+  const acrescimoNum = modoEspelho ? somaItens((p) => p.vOutro) : acreTotalAlvo;  // = Σ p.vOutro
+  // ICMS desonerado deduzido do total (indDeduzDeson=1) — só existe no modo espelho.
+  const totalICMSDeson = modoEspelho ? somaItens((p) => p.vICMSDeson) : 0;
 
   // CALCULAR TOTAIS DE IMPOSTOS (aritmética de centavos) — já com a base de ICMS líquida
   const totalICMS = produtos.reduce((acc: number, p: any) => {
@@ -231,7 +296,7 @@ export async function normalizarPayloadNFe(payload: any) {
   // declarados lá, antes dos totais de imposto, p/ compor a base de IBS/CBS).
 
   // Para Regime Normal com IPI por fora: vNF = vProd + vFrete + vSeg + vOutro - vDesc + vIPI
-  const totalNF = Math.round((totalProdutos + freteNum + seguroNum + acrescimoNum - descontoNum + totalIPI) * 100) / 100;
+  const totalNF = Math.round((totalProdutos + freteNum + seguroNum + acrescimoNum - descontoNum + totalIPI - totalICMSDeson) * 100) / 100;
 
   console.log(`🔍 [normalizarPayloadNFe] Totais calculados:`, {
     totalProdutos,
@@ -305,6 +370,7 @@ export async function normalizarPayloadNFe(payload: any) {
     totalIBS,
     totalCBS,
     totalNF,
+    totalICMSDeson,
     desconto: descontoNum.toFixed(2),
     acrescimo: acrescimoNum.toFixed(2),
     frete: freteNum.toFixed(2),

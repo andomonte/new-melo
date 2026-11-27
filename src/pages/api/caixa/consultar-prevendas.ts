@@ -4,7 +4,7 @@ import { getPgPoolFilial } from '@/lib/pg';
 /**
  * GET /api/caixa/consultar-prevendas?desde=yyyy-mm-dd&termo=&limit=
  * Consulta (SOMENTE LEITURA) de PRÉ-PEDIDOS/pré-vendas para o operador de caixa
- * localizar e copiar o número. Faturável = status NOT IN ('F','B','C') AND cancel='N'
+ * localizar e copiar o número. Faturável = status NOT IN ('F','B','C','D') AND cancel='N' (D = devolução de compra)
  * (mesma regra do faturar do caixa) — são os pré-pedidos pendentes.
  * Filtros: "a partir de" (data) e Localizar (nº da venda, código ou nome do cliente).
  */
@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const params: any[] = [];
     let idx = 1;
-    let where = `v.status NOT IN ('F','B','C') AND COALESCE(v.cancel,'N') = 'N'`;
+    let where = `v.status NOT IN ('F','B','C','D') AND COALESCE(v.cancel,'N') = 'N'`;
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(desde)) {
       where += ` AND v.data >= $${idx++}`;

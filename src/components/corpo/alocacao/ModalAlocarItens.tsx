@@ -28,6 +28,7 @@ import {
   getItensEntradaAlocacao,
   alocarItemMultiplo,
   finalizarAlocacao,
+  type DevolucaoIniciada,
 } from '@/data/alocacao/alocacaoService';
 
 interface ModalAlocarItensProps {
@@ -57,6 +58,7 @@ const ModalAlocarItens: React.FC<ModalAlocarItensProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [devolucaoIniciada, setDevolucaoIniciada] = useState<DevolucaoIniciada | null>(null);
   const [selectedItem, setSelectedItem] = useState<ItemEntradaAlocacao | null>(null);
   const [modoAvancado, setModoAvancado] = useState(false);
   const [isFirstLoad, setIsFirstLoad] = useState(true); // Controla auto-selecao apenas na primeira carga
@@ -326,11 +328,13 @@ const ModalAlocarItens: React.FC<ModalAlocarItensProps> = ({
 
     setIsFinishing(true);
     try {
-      await finalizarAlocacao({
+      const resp = await finalizarAlocacao({
         entradaId: entrada.entrada_id,
         matricula: alocador.matricula,
       });
-      onFinish();
+      // divergência: mostra a devolução iniciada antes de fechar
+      if (resp?.devolucao) setDevolucaoIniciada(resp.devolucao);
+      else onFinish();
     } catch (error) {
       console.error('Erro ao finalizar alocacao:', error);
       if (error instanceof Error && 'response' in error) {
@@ -359,6 +363,66 @@ const ModalAlocarItens: React.FC<ModalAlocarItensProps> = ({
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
+
+  if (devolucaoIniciada) {
+    const d = devolucaoIniciada;
+    const motivo: Record<string, string> = { FALTA: 'Falta', DANIFICADO: 'Danificado', ERRADO: 'Errado' };
+    return (
+      <div className="fixed inset-0 z-50 bg-black/50 flex justify-center items-center px-2">
+        <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+          <div className="p-4 border-b border-gray-200 dark:border-zinc-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Alocação finalizada com divergência
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+              A entrada {entrada.numero_entrada} ficou com a quantidade da nota. Os itens abaixo foram
+              para o armazém <strong>DEVOLUCAO/FALTA</strong>, reservados (não ficam disponíveis para venda), e foi
+              iniciada a devolução <strong>{d.devId}</strong>
+              {d.nrovenda ? <> com o pré-pedido <strong>{d.nrovenda}</strong></> : null}.
+              A NF de devolução é emitida em Faturamento › Devolução.
+            </p>
+            {d.clienteCriado && (
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                O fornecedor não tinha cadastro de cliente: foi cadastrado automaticamente como cliente{' '}
+                <strong>{d.codcli}</strong> (dados da NF e do fornecedor, sem limite de crédito).
+              </p>
+            )}
+            {d.semCliente && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
+                O fornecedor não tem CNPJ/CPF para virar cliente: o pré-pedido será gerado na tela de Devolução.
+              </p>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-zinc-700">
+                  <th className="px-3 py-2 text-left">Produto</th>
+                  <th className="px-3 py-2 text-center">Qtd devolução</th>
+                  <th className="px-3 py-2 text-center">Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.itens.map((it, i) => (
+                  <tr key={`${it.codprod}-${i}`} className="border-t border-gray-200 dark:border-zinc-700">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{it.codprod}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{it.descr}</div>
+                    </td>
+                    <td className="px-3 py-2 text-center font-medium text-red-600 dark:text-red-400">{it.qtd}</td>
+                    <td className="px-3 py-2 text-center">{motivo[it.motivo] || it.motivo}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 border-t border-gray-200 dark:border-zinc-700 flex justify-end">
+            <DefaultButton text="Entendi" size="sm" onClick={() => { setDevolucaoIniciada(null); onFinish(); }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

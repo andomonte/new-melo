@@ -119,6 +119,36 @@ export interface LinhaDbitent {
 }
 
 /**
+ * Junta linhas com o mesmo (codprod, codreq) — o mesmo produto em duas linhas da NF para o
+ * mesmo pedido. Como no Delphi (Inc_ItEntrada), soma quantidades e impostos numa linha só.
+ * Os preços unitários viram a média ponderada pela quantidade, o que preserva o valor total
+ * (com preços iguais, que é o caso comum, o preço não muda).
+ */
+export function juntarLinhasDbitent(linhas: LinhaDbitent[]): LinhaDbitent[] {
+  const porChave = new Map<string, LinhaDbitent>();
+  for (const ln of linhas) {
+    const k = `${ln.codprod}|${ln.codreq}`;
+    const ac = porChave.get(k);
+    if (!ac) { porChave.set(k, { ...ln }); continue; }
+    const q = ac.quant + ln.quant;
+    const media = (a: number, b: number) => (q > 0 ? c2((a * ac.quant + b * ln.quant) / q) : a);
+    ac.prunit = media(ac.prunit, ln.prunit);
+    ac.prunitnf = media(ac.prunitnf, ln.prunitnf);
+    ac.prtransf = media(ac.prtransf, ln.prtransf);
+    ac.quant = q;
+    ac.quantnf = ac.quantnf + ln.quantnf;
+    ac.valor_icms = c2(ac.valor_icms + ln.valor_icms);
+    ac.valor_ipi = c2(ac.valor_ipi + ln.valor_ipi);
+    ac.valor_icms_subst = c2(ac.valor_icms_subst + ln.valor_icms_subst);
+    ac.pis = c2(ac.pis + ln.pis);
+    ac.cofins = c2(ac.cofins + ln.cofins);
+    ac.totalicmsdesconto = c2(ac.totalicmsdesconto + ln.totalicmsdesconto);
+    ac.fis_icmsdeson = c2(ac.fis_icmsdeson + ln.fis_icmsdeson);
+  }
+  return [...porChave.values()];
+}
+
+/**
  * Monta as linhas de dbitent de UMA associação (uma por pedido; se não houver pedido,
  * uma única linha com codreq '0'). Rateia o imposto do det pela fração quant/qcom.
  */

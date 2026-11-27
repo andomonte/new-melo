@@ -43,12 +43,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `SELECT i.codprod, i.qtd, i.prunit, i.ref, i.descr, i.arm_id,
               p.unimed, p.codmarca,
               m.descr as marca_nome,
-              COALESCE(loc.apl_descricao, p.local, '') as locacao
+              COALESCE(NULLIF(loc.locacao, ''), p.local, '') as locacao
        FROM dbitvenda i
        LEFT JOIN dbprod p ON i.codprod = p.codprod
        LEFT JOIN dbmarcas m ON p.codmarca = m.codmarca
-       LEFT JOIN cad_armazem_produto_locacao loc
-         ON loc.apl_codprod = i.codprod AND loc.apl_arm_id = i.arm_id::numeric
+       -- todas as localizações do produto no armazém, numa linha só (o item não se repete)
+       LEFT JOIN LATERAL (
+         SELECT string_agg(trim(l.apl_descricao), ' / ' ORDER BY l.apl_id) AS locacao
+           FROM cad_armazem_produto_locacao l
+          WHERE l.apl_codprod = i.codprod AND l.apl_arm_id = i.arm_id::numeric
+       ) loc ON true
        WHERE i.codvenda = $1
        ORDER BY i.codprod`, [codvenda]);
 

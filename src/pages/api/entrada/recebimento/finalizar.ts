@@ -130,17 +130,20 @@ export default async function handler(
         [armId, entradaItemId, entradaId]);
     }
 
-    // Devolução automática (itens com FALTA)
+    // Devolução automática: itens com FALTA, DANIFICADO ou ERRADO ("Qtd Recebida" = peças
+    // boas). Aqui só fica registrada; estoque, devolução e pré-pedido nascem na finalização
+    // da alocação (lib/compras/devolucaoEntrada.ts).
     if (temDivergencia) {
       const itensFalta = await client.query(
         `SELECT eir.id as eir_id, eir.produto_cod,
                 COALESCE(p.descr, eir.produto_cod) as produto_nome,
                 COALESCE(p.unimed, 'UN') as unidade,
-                eir.qtd_esperada, eir.qtd_recebida,
+                eir.qtd_esperada, eir.qtd_recebida, eir.status_item as motivo,
                 (eir.qtd_esperada - eir.qtd_recebida) as qtd_devolucao
            FROM entrada_itens_recebimento eir
            LEFT JOIN dbprod p ON p.codprod = eir.produto_cod
-          WHERE eir.codent = $1 AND eir.status_item = 'FALTA' AND eir.qtd_recebida < eir.qtd_esperada`,
+          WHERE eir.codent = $1 AND eir.status_item IN ('FALTA','DANIFICADO','ERRADO')
+            AND eir.qtd_recebida < eir.qtd_esperada`,
         [entradaId]);
 
       if (itensFalta.rows.length > 0) {
@@ -165,9 +168,10 @@ export default async function handler(
         for (const item of itensFalta.rows) {
           await client.query(
             `INSERT INTO devolucao_itens (devolucao_id, entrada_item_id, produto_cod, produto_nome, unidade, qtd_esperada, qtd_recebida, qtd_devolucao, motivo)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'FALTA')`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [devolucaoId, item.eir_id, item.produto_cod, item.produto_nome, item.unidade,
-             parseFloat(item.qtd_esperada), parseFloat(item.qtd_recebida), parseFloat(item.qtd_devolucao)]);
+             parseFloat(item.qtd_esperada), parseFloat(item.qtd_recebida), parseFloat(item.qtd_devolucao),
+             item.motivo]);
         }
       }
     }

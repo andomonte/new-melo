@@ -65,7 +65,7 @@ export default async function handler(
           // só as fechadas ADMINISTRATIVAMENTE (reversíveis): têm registro codfat NULL.
           `EXISTS (SELECT 1 FROM dbfecharvendas fv WHERE fv.codvenda = v.codvenda AND fv.codfat IS NULL)`,
         ]
-      : [`v.status NOT IN ('F', 'B', 'C')`, `v.cancel = 'N'`];
+      : [`v.status NOT IN ('F', 'B', 'C', 'D')`, `v.cancel = 'N'`];
   const whereOR: string[] = [];
 
   // Busca global por termo (pesquisa em múltiplos campos)

@@ -45,10 +45,35 @@ export function montarGrupoICMS(icms: any, vProdStr: string): Record<string, any
     case '20':
       return { ICMS20: { orig, CST: cst, modBC, pRedBC: Number(icms?.pRedBC ?? 0).toFixed(2), vBC, pICMS, vICMS } };
 
+    case '30': {
+      // Isenta/não tributada com cobrança de ST. ICMS desonerado só quando vier no item
+      // (devolução de compra em modo espelho), deduzido do total como no ICMS40.
+      const grupo: Record<string, any> = { orig, CST: cst, modBCST, vBCST, pICMSST, vICMSST };
+      if (Number(icms?.vICMSDeson ?? 0) > 0) {
+        grupo.vICMSDeson = Number(icms.vICMSDeson).toFixed(2);
+        grupo.motDesICMS = String(icms?.motDesICMS || '7');
+        grupo.indDeduzDeson = '1';
+      }
+      return { ICMS30: grupo };
+    }
+
     case '40':
     case '41':
     case '50':
-      // Isenta / não tributada / suspensão: apenas origem e CST.
+      // Isenta / não tributada / suspensão: apenas origem e CST. ICMS desonerado
+      // (ex.: Suframa, motDesICMS 7) só quando vier no item — hoje só a devolução de
+      // compra (modo espelho) manda; deduzido do total da NF (indDeduzDeson=1).
+      if (Number(icms?.vICMSDeson ?? 0) > 0) {
+        return {
+          ICMS40: {
+            orig,
+            CST: cst,
+            vICMSDeson: Number(icms.vICMSDeson).toFixed(2),
+            motDesICMS: String(icms?.motDesICMS || '7'),
+            indDeduzDeson: '1',
+          },
+        };
+      }
       return { ICMS40: { orig, CST: cst } };
 
     case '51':
@@ -71,8 +96,8 @@ export function montarGrupoICMS(icms: any, vProdStr: string): Record<string, any
       return { ICMS70: { orig, CST: cst, modBC, pRedBC: Number(icms?.pRedBC ?? 0).toFixed(2), vBC, pICMS, vICMS, modBCST, vBCST, pICMSST, vICMSST } };
 
     default:
-      // Catch-all schema-válido: <ICMS90> exige CST 90.
-      return { ICMS90: { orig, CST: '90', modBC, vBC, pICMS, vICMS, vBCST, pICMSST, vICMSST } };
+      // Catch-all schema-válido: <ICMS90> exige CST 90; o bloco de ST começa por modBCST.
+      return { ICMS90: { orig, CST: '90', modBC, vBC, pICMS, vICMS, modBCST, vBCST, pICMSST, vICMSST } };
   }
 }
 
@@ -92,7 +117,8 @@ export function montarGrupoIPI(ipi: any, vProdStr: string): Record<string, any> 
       },
     };
   }
-  return { cEnq: '999', IPINT: { CST: cst } };
+  // cEnq informado pelo chamador (devolução de compra: CST 05/55 → 143, como o Delphi).
+  return { cEnq: /^\d{3}$/.test(String(ipi?.cEnq ?? '')) ? String(ipi.cEnq) : '999', IPINT: { CST: cst } };
 }
 
 // Monta o grupo de PIS conforme o CST. Tributado por alíquota (01,02) -> <PISAliq>;
@@ -351,7 +377,9 @@ export function gerarXMLNFe(dados: any): string {
       xLgr: cliente?.ender ?? '',
       nro: cliente?.numero ?? 'S/N',
       xBairro: cliente?.bairro ?? '',
-      cMun: '1302603', // Manaus
+      // Município do destinatário: o chamador pode informar (devolução de compra a
+      // fornecedor de outra cidade); senão Manaus, como sempre foi na venda.
+      cMun: /^\d{7}$/.test(String(dados?.cMunDest ?? '')) ? String(dados.cMunDest) : '1302603',
       xMun: cliente?.cidade ?? '',
       UF: cliente?.uf ?? '',
       CEP: cliente?.cep?.replace(/\D/g, '') ?? '',
@@ -391,7 +419,8 @@ export function gerarXMLNFe(dados: any): string {
           dhEmi: formatarDataSefaz(dhEmi),
           // tpNF: 0=entrada (devolução), 1=saída (venda, padrão)
           tpNF: String(dados?.tpNF ?? '1'),
-          idDest: '1',
+          // 1 = interna, 2 = interestadual (informado pela devolução de compra; venda = 1).
+          idDest: ['1', '2', '3'].includes(String(dados?.idDest ?? '')) ? String(dados.idDest) : '1',
           cMunFG: '1302603',
           tpImp: '1',
           tpEmis,
@@ -399,7 +428,8 @@ export function gerarXMLNFe(dados: any): string {
           tpAmb,
           // finNFe: 1=normal (padrão), 4=devolução de mercadoria
           finNFe: String(dados?.finNFe ?? '1'),
-          indFinal: '1',
+          // Consumidor final: 1 na venda; a devolução de compra manda 0 (fornecedor), como o Delphi.
+          indFinal: ['0', '1'].includes(String(dados?.indFinal ?? '')) ? String(dados.indFinal) : '1',
           indPres: '1',
           procEmi: '0',
           verProc: '1.0',
@@ -464,6 +494,17 @@ export function gerarXMLNFe(dados: any): string {
               // IBS/CBS (Reforma Tributária 2026)
               IBSCBS: montarGrupoIBSCBS(item.ibscbs, vProd.toFixed(2)),
             },
+            // Devolução de compra (finNFe 4): % devolvido + IPI devolvido, como o Delphi
+            // (FATURAMENTOS_NF_ELETRONICA_2: pDevol = itd_percentual, vIPIDevol = 0 — o
+            // IPI vai no grupo IPI do item). Só sai quando o item traz pDevol.
+            ...(String(dados?.finNFe) === '4' && item.pDevol != null
+              ? {
+                  impostoDevol: {
+                    pDevol: Number(item.pDevol).toFixed(2),
+                    IPI: { vIPIDevol: Number(item.vIPIDevol ?? 0).toFixed(2) },
+                  },
+                }
+              : {}),
           };
         }),
         total: {
@@ -471,7 +512,7 @@ export function gerarXMLNFe(dados: any): string {
             // Soma EXATA dos vBC/vICMS escritos por item (evita rejeição 531/529).
             vBC: totalVbcXml,
             vICMS: totalVicmsXml,
-            vICMSDeson: '0.00',
+            vICMSDeson: Number(dados?.totalICMSDeson ?? 0).toFixed(2),
             vFCP: '0.00', // Somar FCP se houver
             vBCST: '0.00',
             vST: '0.00',

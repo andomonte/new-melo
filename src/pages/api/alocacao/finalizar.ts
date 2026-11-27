@@ -2,7 +2,8 @@
  * Finalizar alocação — modelo dbent/dbent_recebimento.
  * PUT /api/alocacao/finalizar
  * Body: entradaId (codent), matricula, observacao?
- * Marca ALOCADO + DISPONIVEL_VENDA, libera reserva e move estoque para os armazéns (romaneio).
+ * Marca ALOCADO + DISPONIVEL_VENDA, libera a reserva do que chegou bom e, se houver divergência,
+ * inicia a devolução (armazém 1004 + fat_devolucao + pré-pedido; ver lib/compras/devolucaoEntrada.ts).
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import { parseCookies } from 'nookies';
@@ -10,6 +11,7 @@ import { poolEstacaoEntrada } from '@/lib/recebimentoEntrada/filial';
 import { PoolClient } from 'pg';
 import { creditarSemReserva, liberarReserva, posicionarReserva } from '@/lib/compras/estoqueEntrada';
 import { precoConfirmadoDaEntrada, MSG_PRECO_PENDENTE_ALOCACAO } from '@/lib/recebimentoEntrada/status';
+import { iniciarDevolucaoEntrada, itensParaDevolver, ResultadoDevolucao } from '@/lib/compras/devolucaoEntrada';
 
 interface FinalizarRequest {
   entradaId: string; // codent
@@ -20,6 +22,7 @@ interface FinalizarRequest {
 interface FinalizarResponse {
   success: boolean;
   message: string;
+  devolucao?: ResultadoDevolucao | null;
 }
 
 const GET_ALOCACOES_QUERY = `
@@ -74,7 +77,8 @@ export default async function handler(
     await client.query(`SET LOCAL search_path TO ${schema}, public`);
 
     // Quantidade de cada produto: a recebida, limitada à da nota. O excesso não entra no
-    // estoque (como no Delphi, vale a nota) e a falta segue reservada até resolver a devolução.
+    // estoque (como no Delphi, vale a nota); o que veio a menos/danificado/errado vai para o
+    // armazém de devolução no passo 5, ainda reservado.
     const itensResult = await client.query(
       `SELECT ie.codprod,
               SUM(ie.quant) AS qtd_nota,
@@ -162,29 +166,44 @@ export default async function handler(
         }
       }
 
-      // 4. Localização física
-      if (localizacao && localizacao.trim() !== '') {
-        const locTrimmed = localizacao.trim();
-        const existingLoc = await client.query(
-          `SELECT apl_id FROM cad_armazem_produto_locacao WHERE apl_arm_id = $1 AND apl_codprod = $2 LIMIT 1`,
-          [arm_id, cod_produto]);
-        if (existingLoc.rows.length > 0) {
-          await client.query(
-            `UPDATE cad_armazem_produto_locacao SET apl_descricao = $1 WHERE apl_arm_id = $2 AND apl_codprod = $3`,
-            [locTrimmed, arm_id, cod_produto]);
-        } else {
-          const nextIdResult = await client.query(
-            `SELECT COALESCE(MAX(apl_id), 0) + 1 as next_id FROM cad_armazem_produto_locacao WHERE apl_arm_id = $1 AND apl_codprod = $2`,
-            [arm_id, cod_produto]);
-          await client.query(
-            `INSERT INTO cad_armazem_produto_locacao (apl_arm_id, apl_codprod, apl_id, apl_descricao) VALUES ($1, $2, $3, $4)`,
-            [arm_id, cod_produto, nextIdResult.rows[0].next_id, locTrimmed]);
-        }
+      // 4. Localização física: o produto pode ter várias no armazém (como no Delphi).
+      //    A digitada entra como mais uma; as que já existem ficam como estão.
+      const locTrimmed = String(localizacao ?? '').trim().toUpperCase().slice(0, 15);
+      if (locTrimmed !== '') {
+        await client.query(
+          `INSERT INTO cad_armazem_produto_locacao (apl_arm_id, apl_codprod, apl_id, apl_descricao)
+           SELECT $1::numeric, $2::varchar, COALESCE(MAX(apl_id), 0) + 1, $3::varchar
+             FROM cad_armazem_produto_locacao
+            WHERE apl_arm_id = $1::numeric AND apl_codprod = $2::varchar
+           HAVING NOT bool_or(upper(trim(apl_descricao)) = $3::varchar) OR count(*) = 0`,
+          [arm_id, cod_produto, locTrimmed]);
       }
     }
 
+    // 5. Divergência (falta, danificado, errado): como no Delphi, a entrada fica com toda a
+    //    quantidade da nota — o que não chegou bom vai, reservado, para o armazém virtual e
+    //    nasce a devolução aberta com o pré-pedido para o fornecedor. Mesma transação: a
+    //    falta nunca fica disponível para venda.
+    let devolucao: ResultadoDevolucao | null = null;
+    const itensDev = await itensParaDevolver(client, entradaId);
+    if (itensDev.length) {
+      const receb = await client.query(
+        `SELECT id FROM devolucoes WHERE numero_entrada = $1 AND status = 'PENDENTE' ORDER BY id DESC LIMIT 1`,
+        [entradaId]);
+      devolucao = await iniciarDevolucaoEntrada(client, entradaId, itensDev, {
+        matricula,
+        devolucaoRecebId: receb.rows[0]?.id ?? null,
+      });
+    }
+
     await client.query('COMMIT');
-    return res.status(200).json({ success: true, message: 'Alocacao finalizada com sucesso' });
+    return res.status(200).json({
+      success: true,
+      message: devolucao
+        ? `Alocacao finalizada. Devolucao ${devolucao.devId} iniciada para ${devolucao.itens.length} item(ns) com divergencia`
+        : 'Alocacao finalizada com sucesso',
+      devolucao,
+    });
   } catch (error) {
     if (client) await client.query('ROLLBACK');
     console.error('Erro ao finalizar alocacao:', error);

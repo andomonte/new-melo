@@ -174,6 +174,7 @@ import ArqAgencias from '../corpo/admin/financeiro/arquivos/agencias';
 import ArqContasBancarias from '../corpo/admin/financeiro/arquivos/contasBancarias';
 import ArqOperadorCaixa from '../corpo/admin/financeiro/arquivos/operadorCaixa';
 import ArqServicos from '../corpo/admin/financeiro/arquivos/servicos';
+import { useAlertaDevolucoes } from '../corpo/comprador/Devolucao/useAlertaDevolucoes';
 
 
 export const menus = [
@@ -649,12 +650,6 @@ export const menus = [
             corpo: GerarEntradaImportacaoMain,
           },
           {
-            name: 'Devolução',
-            icon: RotateCcw,
-            href: '/compras/devolucao',
-            corpo: DevolucaoMain,
-          },
-          {
             name: 'Recebimento',
             href: '/entrada/recebimento',
             icon: PackageCheck,
@@ -834,6 +829,14 @@ export const menus = [
             icon: LiaFileInvoiceSolid,
             corpo: HistoricoNF,
           },
+          {
+            // Como no Delphi (Financeiro › Faturamento › Devolução): a NF de devolução de
+            // compra é emitida daqui. O path continua /compras/devolucao (permissões em tb_telas).
+            name: 'Devolução',
+            icon: RotateCcw,
+            href: '/compras/devolucao',
+            corpo: DevolucaoMain,
+          },
 
           // "Fechar Vendas" virou ação no Novo Faturamento (fecha as vendas selecionadas).
           // Tela dedicada aposentada — endpoint fechar-vendas.ts reutilizado lá.
@@ -954,6 +957,8 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
   const handleTelaMudou = (newTela: string) => setTelaMudou(newTela);
 
   const [valorF, setValorF] = React.useState<any[]>([]);
+  // Faturamento: devoluções de compra aguardando NF (contador no menu + alerta de nova).
+  const devolucoesPendentes = useAlertaDevolucoes((permissoes ?? []).includes('/compras/devolucao'));
   const corpoAtual = encontrarCorpoPorTela(tela, valorF);
 
   React.useEffect(() => {
@@ -1015,7 +1020,6 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
         'Gerar Entrada (Importação)',
         'Recebimento',
         'Alocação',
-        'Devolução',
         'Histórico de Compras',
       ];
       itensFiltrados.forEach((it) => {
@@ -1050,11 +1054,22 @@ const PageSidebar: React.FC<PageSidebarProps> = ({ tela, permissoes }) => {
       const outros = itensFiltrados.filter((i) => i.name !== 'DashBoard');
       outros.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-      return { ...menu, items: dash ? [dash, ...outros] : outros };
+      const itensFinais = (dash ? [dash, ...outros] : outros).map((it) =>
+        devolucoesPendentes > 0 && it.subItems?.some((s) => s.href === '/compras/devolucao')
+          ? {
+              ...it,
+              // objeto novo: os itens do menu são compartilhados (não mutar o original)
+              subItems: it.subItems.map((s) =>
+                s.href === '/compras/devolucao' ? { ...s, name: `${s.name} (${devolucoesPendentes})` } : s,
+              ),
+            }
+          : it,
+      );
+      return { ...menu, items: itensFinais };
     });
 
     setValorF(novoValorF);
-  }, [permissoes, tela]);
+  }, [permissoes, tela, devolucoesPendentes]);
 
   return (
     <div className="flex w-full flex-col bg-muted/40">

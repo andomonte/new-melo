@@ -4,7 +4,7 @@ import { getPgPoolFilial } from '@/lib/pg';
 /**
  * GET /api/caixa/buscar-prevenda?termo=
  * Lista PRÉ-VENDAS faturáveis (dbvenda) para o Caixa faturar.
- * Faturável = status NOT IN ('F','B','C') AND cancel='N' (F=faturada, B=bloqueada, C=cancelada) —
+ * Faturável = status NOT IN ('F','B','C','D') AND cancel='N' (F=faturada, B=bloqueada, C=cancelada, D=pré-pedido de devolução de compra) —
  * mesma regra de /api/faturamento/listar-vendas.
  * Busca por nº da venda (nrovenda) OU código/nome do cliente.
  * Somente leitura — não altera nada.
@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              COALESCE(v.total, 0) AS total
         FROM dbvenda v
         LEFT JOIN dbclien c ON c.codcli = v.codcli
-       WHERE v.status NOT IN ('F','B','C')
+       WHERE v.status NOT IN ('F','B','C','D')
          AND COALESCE(v.cancel,'N') = 'N'
          AND ${filtro}
        ORDER BY v.data DESC, v.nrovenda DESC

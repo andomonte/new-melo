@@ -16,7 +16,7 @@
  */
 import { calcularCustoItem, freteConhecimento, EmpresaZona } from './custoEntrada';
 import { calcularMedia } from './custoMedio';
-import { montarLinhasDbitent, LinhaDbitent } from './mapearItensEntrada';
+import { montarLinhasDbitent, juntarLinhasDbitent, LinhaDbitent } from './mapearItensEntrada';
 import { recalcularPrecosProduto } from '../calcularPrecos';
 
 export interface HeaderEntrada {
@@ -135,29 +135,32 @@ export async function gerarEntradaDbent(client: any, opts: GerarEntradaOpts): Pr
         [opts.codCredor])).rows[0] || null
     : null;
 
-  // 5) monta e insere as linhas de dbitent (insumos; custos = 0, feitos no confirmar-preço)
-  const itensOut: LinhaDbitent[] = [];
+  // 5) monta as linhas de dbitent (insumos; custos = 0, feitos no confirmar-preço).
+  //    O mesmo produto pode vir em duas linhas da NF para o mesmo pedido; a chave de dbitent é
+  //    (codent, codprod, codreq), então as linhas são somadas numa só, como no Delphi
+  //    (ENTRADASEFAZ Inc_AuxItEnt/Inc_ItEntrada: Quant/Quantnf/impostos somados).
+  const linhasTodas: LinhaDbitent[] = [];
   for (const a of assocs) {
     const peds = (await client.query(
       `select req_id, quantidade, valor_unitario from nfe_item_pedido_associacao where nfe_associacao_id=$1`,
       [a.id])).rows;
-    const linhas = montarLinhasDbitent(a, a, { strib: a.strib, percsubst: a.percsubst }, regra, peds);
+    linhasTodas.push(...montarLinhasDbitent(a, a, { strib: a.strib, percsubst: a.percsubst }, regra, peds));
+  }
+  const itensOut = juntarLinhasDbitent(linhasTodas);
 
-    for (const ln of linhas) {
-      await client.query(
-        `insert into dbitent
-           (codent, codprod, codreq, quant, quantnf, prunit, prunitnf,
-            valor_icms, valor_ipi, valor_icms_subst, pis, cofins,
-            totalicmsdesconto, fis_icmsdeson, prtransf, qtd_transferido,
-            prcusto, prcusto_zf, prcusto_fe, prcusto_contabil,
-            prtransferencia_liquido, prtransferencia_bruto)
-         values ($1,$2,$3,$4,$5,$6,$7, $8,$9,$10,$11,$12, $13,$14,$15, 0,
-                 0,0,0,0,0,0)`,
-        [codent, ln.codprod, ln.codreq, ln.quant, ln.quantnf, ln.prunit, ln.prunitnf,
-         ln.valor_icms, ln.valor_ipi, ln.valor_icms_subst, ln.pis, ln.cofins,
-         ln.totalicmsdesconto, ln.fis_icmsdeson, ln.prtransf]);
-      itensOut.push(ln);
-    }
+  for (const ln of itensOut) {
+    await client.query(
+      `insert into dbitent
+         (codent, codprod, codreq, quant, quantnf, prunit, prunitnf,
+          valor_icms, valor_ipi, valor_icms_subst, pis, cofins,
+          totalicmsdesconto, fis_icmsdeson, prtransf, qtd_transferido,
+          prcusto, prcusto_zf, prcusto_fe, prcusto_contabil,
+          prtransferencia_liquido, prtransferencia_bruto)
+       values ($1,$2,$3,$4,$5,$6,$7, $8,$9,$10,$11,$12, $13,$14,$15, 0,
+               0,0,0,0,0,0)`,
+      [codent, ln.codprod, ln.codreq, ln.quant, ln.quantnf, ln.prunit, ln.prunitnf,
+       ln.valor_icms, ln.valor_ipi, ln.valor_icms_subst, ln.pis, ln.cofins,
+       ln.totalicmsdesconto, ln.fis_icmsdeson, ln.prtransf]);
   }
 
   return { codent, itens: itensOut };

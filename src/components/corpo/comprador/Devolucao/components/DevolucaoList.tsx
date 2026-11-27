@@ -1,11 +1,13 @@
 /**
- * Lista de Devoluções
- * Layout e tabela idênticos ao ImportacaoList
+ * Lista de Devoluções de compra (fat_devolucao) — as iniciadas no web pela alocação
+ * (falta, danificado, errado) e o histórico do Delphi. Abre nas abertas: aguardando a
+ * emissão da NF de devolução.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Eye, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DefaultButton } from '@/components/common/Buttons';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -19,18 +21,21 @@ import SelectInput from '@/components/common/SelectPadrao';
 import api from '@/components/services/api';
 
 interface DevolucaoListProps {
-  onVerDetalhe: (id: number) => void;
+  onVerDetalhe: (id: string) => void;
+  onNova?: () => void;
   refreshKey?: number;
 }
 
 interface DevolucaoRow {
-  id: number;
-  entrada_id: number;
+  id: string;
   numero_entrada: string;
   fornecedor: string;
-  nfe_numero: string;
-  nfe_serie: string;
+  nfe_numero: string | null;
   status: string;
+  origem: string;
+  programa?: string | null;
+  observacao: string | null;
+  codvenda: string | null;
   total_itens: number;
   qtd_total_devolucao: number;
   created_at: string;
@@ -44,9 +49,9 @@ interface Pagination {
 }
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  PENDENTE: { label: 'Pendente', variant: 'secondary' },
-  EM_PROCESSAMENTO: { label: 'Em Processamento', variant: 'default' },
-  CONCLUIDA: { label: 'Concluída', variant: 'outline' },
+  ABERTA: { label: 'Aguardando emissão', variant: 'default' },
+  NF_PENDENTE: { label: 'NF pendente (transmitir)', variant: 'destructive' },
+  FINALIZADA: { label: 'NF emitida', variant: 'outline' },
   CANCELADA: { label: 'Cancelada', variant: 'destructive' },
 };
 
@@ -54,10 +59,13 @@ const HEADERS = [
   { key: 'acoes', label: 'Ações', fixed: true },
   { key: 'id', label: 'Nº Devolução', fixed: false },
   { key: 'numero_entrada', label: 'Nº Entrada', fixed: false },
+  { key: 'nfe_numero', label: 'NF', fixed: false },
   { key: 'fornecedor', label: 'Fornecedor', fixed: false },
+  { key: 'observacao', label: 'Obs.', fixed: false },
   { key: 'total_itens', label: 'Itens', fixed: false },
   { key: 'qtd_total_devolucao', label: 'Qtd Total', fixed: false },
   { key: 'status', label: 'Status', fixed: false },
+  { key: 'origem', label: 'Origem', fixed: false },
   { key: 'created_at', label: 'Data', fixed: false },
 ];
 
@@ -69,15 +77,15 @@ const PER_PAGE_OPTIONS = [
 ];
 
 const STATUS_FILTER_OPTIONS = [
-  { value: 'ALL', label: 'Todos' },
-  { value: 'PENDENTE', label: 'Pendente' },
-  { value: 'EM_PROCESSAMENTO', label: 'Em Processamento' },
-  { value: 'CONCLUIDA', label: 'Concluída' },
+  { value: 'ABERTA', label: 'Aguardando emissão' },
+  { value: 'FINALIZADA', label: 'NF emitida' },
   { value: 'CANCELADA', label: 'Cancelada' },
+  { value: 'ALL', label: 'Todas' },
 ];
 
 export const DevolucaoList: React.FC<DevolucaoListProps> = ({
   onVerDetalhe,
+  onNova,
   refreshKey,
 }) => {
   const [data, setData] = useState<DevolucaoRow[]>([]);
@@ -85,7 +93,8 @@ export const DevolucaoList: React.FC<DevolucaoListProps> = ({
   const [loading, setLoading] = useState(false);
   const [perPage, setPerPage] = useState(25);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ABERTA');
+  const [abertasWeb, setAbertasWeb] = useState(0);
 
   const fetchData = useCallback(async (page = 1, busca = '', status = '') => {
     setLoading(true);
@@ -101,6 +110,7 @@ export const DevolucaoList: React.FC<DevolucaoListProps> = ({
       if (response.data?.success) {
         setData(response.data.data || []);
         setPagination(response.data.pagination || { page: 1, limit: 25, total: 0, totalPages: 0 });
+        setAbertasWeb(Number(response.data.abertasWeb) || 0);
       }
     } catch (err) {
       console.error('Erro ao carregar devoluções:', err);
@@ -160,7 +170,15 @@ export const DevolucaoList: React.FC<DevolucaoListProps> = ({
       case 'created_at':
         return fmtDate(row.created_at);
       case 'id':
-        return <span className="font-medium">#{row.id}</span>;
+        return <span className="font-medium">{row.id}</span>;
+      case 'nfe_numero':
+        return row.nfe_numero || '-';
+      case 'observacao':
+        return <span className="truncate max-w-[220px] inline-block">{row.observacao || '-'}</span>;
+      case 'origem':
+        return row.origem === 'WEB'
+          ? <Badge variant="secondary">{row.programa === 'WEB MANUAL' ? 'Web · manual' : 'Web · alocação'}</Badge>
+          : <Badge variant="outline">Delphi</Badge>;
       case 'numero_entrada':
         return <span className="font-medium">{row.numero_entrada}</span>;
       case 'fornecedor':
@@ -180,9 +198,21 @@ export const DevolucaoList: React.FC<DevolucaoListProps> = ({
       <div className="px-10 pt-4 pb-1 flex-shrink-0">
         <div className="flex justify-between items-center mb-2">
           <div className="text-lg font-bold text-[#347AB6] dark:text-gray-200">
-            Devoluções
+            Devoluções de compra
           </div>
+          {onNova && (
+            <DefaultButton text="Nova devolução" size="sm" icon={<Plus className="w-4 h-4" />} onClick={onNova} />
+          )}
         </div>
+        {abertasWeb > 0 && (
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ABERTA')}
+            className="mb-1 w-full text-left text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700 px-3 py-2"
+          >
+            {abertasWeb} devoluç{abertasWeb === 1 ? 'ão' : 'ões'} aguardando emissão da NF.
+          </button>
+        )}
       </div>
 
       {/* Conteúdo */}
@@ -248,7 +278,7 @@ export const DevolucaoList: React.FC<DevolucaoListProps> = ({
                         ) : data.length === 0 ? (
                           <tr>
                             <td colSpan={HEADERS.length} className="py-20 text-center">
-                              Sem devoluções até o momento.
+                              Nenhuma devolução neste filtro.
                             </td>
                           </tr>
                         ) : (

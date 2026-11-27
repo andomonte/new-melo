@@ -84,6 +84,11 @@ const ItemCard: React.FC<ItemCardProps> = ({
             step="0.01"
             min="0"
           />
+          {(item.statusLocal === 'DANIFICADO' || item.statusLocal === 'ERRADO') && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+              Informe só as peças boas; o restante da nota vai para devolução.
+            </p>
+          )}
         </div>
 
         {/* Status */}

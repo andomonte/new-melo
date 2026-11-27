@@ -52,11 +52,12 @@ const SQL_ITENS = `
 
 const SQL_ROMANEIO = `
   SELECT da.codprod, da.arm_id, ca.arm_descricao, SUM(da.qtd) AS qtd,
-         COALESCE(NULLIF(MAX(loc.apl_descricao), ''), MAX(da.localizacao), '') AS locacao
+         COALESCE(NULLIF((SELECT string_agg(trim(l.apl_descricao), ' / ' ORDER BY l.apl_id)
+                            FROM cad_armazem_produto_locacao l
+                           WHERE l.apl_arm_id = da.arm_id AND l.apl_codprod = da.codprod), ''),
+                  MAX(da.localizacao), '') AS locacao
   FROM dbitent_armazem da
   JOIN cad_armazem ca ON ca.arm_id = da.arm_id
-  LEFT JOIN cad_armazem_produto_locacao loc
-    ON loc.apl_arm_id = da.arm_id AND loc.apl_codprod = da.codprod
   WHERE da.codent = $1
   GROUP BY da.codprod, da.arm_id, ca.arm_descricao`;
 

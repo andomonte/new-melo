@@ -225,8 +225,25 @@ export async function finalizarAlocacao(payload: {
   entradaId: number;
   matricula: string;
   observacao?: string;
-}): Promise<void> {
-  await api.put('/api/alocacao/finalizar', payload);
+}): Promise<FinalizarAlocacaoResposta> {
+  const response = await api.put('/api/alocacao/finalizar', payload);
+  return response.data;
+}
+
+/** Devolução iniciada na finalização (itens com falta, danificado ou errado). */
+export interface DevolucaoIniciada {
+  devId: string;
+  codvenda: string | null;
+  nrovenda: string | null;
+  codcli: string | null;
+  semCliente: boolean;
+  clienteCriado?: boolean;
+  itens: { codprod: string; descr: string; qtd: number; motivo: string; prunit: number }[];
+}
+export interface FinalizarAlocacaoResposta {
+  success: boolean;
+  message: string;
+  devolucao?: DevolucaoIniciada | null;
 }
 
 /**

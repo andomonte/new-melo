@@ -72,11 +72,11 @@ const ITENS_QUERY = `
 const ROMANEIO_QUERY = `
   SELECT
     da.codprod as produto_cod, da.arm_id, ca.arm_descricao, da.qtd,
-    loc.apl_descricao as localizacao_existente
+    (SELECT loc.apl_descricao FROM cad_armazem_produto_locacao loc
+      WHERE loc.apl_arm_id = da.arm_id AND loc.apl_codprod = da.codprod
+      ORDER BY loc.apl_id LIMIT 1) as localizacao_existente
   FROM dbitent_armazem da
   INNER JOIN cad_armazem ca ON ca.arm_id = da.arm_id
-  LEFT JOIN cad_armazem_produto_locacao loc
-    ON loc.apl_arm_id = da.arm_id AND loc.apl_codprod = da.codprod
   WHERE da.codent = $1
   ORDER BY da.codprod, da.arm_id
 `;
