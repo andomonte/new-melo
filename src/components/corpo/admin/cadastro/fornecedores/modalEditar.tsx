@@ -324,6 +324,13 @@ export default function CustomModal({
           dadosParaValidacao.codcf,
         );
 
+        // Validação: Exterior não pode ter Brasil como país
+        if (fornecedor.tipo === 'X' && Number(fornecedor.codpais) === 1058) {
+          toast({ description: 'Fornecedor do exterior: o país não pode ser Brasil.', variant: 'destructive' });
+          setActiveTab('dadosCadastrais');
+          return;
+        }
+
         // Validação: Exterior exige Conta Contábil
         if (fornecedor.tipo === 'X' && !fornecedor.codccontabil) {
           toast({ description: 'Conta Contábil é obrigatória para fornecedor Exterior.', variant: 'destructive' });

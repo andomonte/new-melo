@@ -27,9 +27,14 @@ interface CountryComboboxProps {
   onChange: (value: string | number) => void;
   disabled?: boolean;
   className?: string;
+  /** Códigos que não podem ser escolhidos (ex.: [1058] quando o tipo é Exterior). */
+  excluir?: number[];
 }
 
-export function CountryCombobox({ value, onChange, disabled, className }: CountryComboboxProps) {
+/** Brasil na tabela de países (BACEN). */
+export const PAIS_BRASIL = 1058;
+
+export function CountryCombobox({ value, onChange, disabled, className, excluir }: CountryComboboxProps) {
   const [open, setOpen] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,7 +120,7 @@ export function CountryCombobox({ value, onChange, disabled, className }: Countr
             {!loading && countries.length === 0 && <CommandEmpty>Nenhum país encontrado.</CommandEmpty>}
             {!loading && (
                 <CommandGroup>
-                {countries.map((country) => (
+                {countries.filter((c) => !excluir?.includes(Number(c.codpais))).map((country) => (
                     <CommandItem
                     key={country.codpais}
                     value={String(country.codpais)}

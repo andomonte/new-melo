@@ -4,7 +4,7 @@ import { buscaCep, ViaCepResponse } from '@/data/cep';
 import { useToast } from '@/hooks/use-toast';
 import { isValidCpfCnpj } from '@/utils/validacoes';
 import { formatarDocumento } from '@/utils/mascaraDocumento';
-import { CountryCombobox } from '@/components/common/CountryCombobox';
+import { CountryCombobox, PAIS_BRASIL } from '@/components/common/CountryCombobox';
 
 // Mapeamento UF -> código IBGE (primeiros 2 dígitos do código de município)
 const UF_IBGE: Record<string, string> = {
@@ -95,7 +95,7 @@ export default function DadosCadastrais({
           handleTransportadoraChange('uf', resultado.uf);
         }
         // CEP válido = endereço no Brasil → preenche o País (igual cliente/fornecedor)
-        if (resultado.uf || resultado.localidade) {
+        if ((resultado.uf || resultado.localidade) && transportadora.tipo !== 'X') {
           handleTransportadoraChange('codpais', 1058);
         }
       } catch (error) {
@@ -151,7 +151,13 @@ export default function DadosCadastrais({
           <select
             id="tipo"
             value={transportadora.tipo || 'J'}
-            onChange={(e) => handleTransportadoraChange('tipo', e.target.value)}
+            onChange={(e) => {
+              handleTransportadoraChange('tipo', e.target.value);
+              // Exterior: país não pode ser Brasil — limpa para escolher o estrangeiro
+              if (e.target.value === 'X' && Number(transportadora.codpais) === PAIS_BRASIL) {
+                handleTransportadoraChange('codpais', null as any);
+              }
+            }}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           >
             <option value="J">JURÍDICA</option>
@@ -428,6 +434,7 @@ export default function DadosCadastrais({
             </label>
             <CountryCombobox
               value={transportadora.codpais || undefined}
+              excluir={transportadora.tipo === 'X' ? [PAIS_BRASIL] : undefined}
               onChange={(v) =>
                 handleTransportadoraChange('codpais', Number(v))
               }

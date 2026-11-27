@@ -223,6 +223,10 @@ export const clientSchema = z.object({
   habilitasuframa: z.enum(['S', 'N']).optional().nullable(), // Hab. Suframa (Sim/Não no Delphi)
   habilitarLocalEntrega: z.enum(['0', '1']).optional().nullable(),
 }).superRefine((data, ctx) => {
+  // Exterior não pode ter Brasil como país
+  if (data.tipoPessoa === 'E' && Number(data.pais) === 1058) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cliente do exterior: o país não pode ser Brasil', path: ['pais'] });
+  }
   // Inscrições: obrigatório preencher OU marcar isento
   if (!data.isentoIE && (!data.inscricaoEstadual || data.inscricaoEstadual.trim() === '')) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Inscrição Estadual é obrigatória (ou marque como Isento)', path: ['inscricaoEstadual'] });

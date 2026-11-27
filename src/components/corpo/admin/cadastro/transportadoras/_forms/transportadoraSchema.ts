@@ -80,6 +80,13 @@ export const cadastroTransportadoraSchema = z.object({
   // Documento deve corresponder ao Tipo (J=CNPJ 14 díg., F=CPF 11 díg.). X=Exterior não valida.
   const tipo = (data as any).tipo || 'J';
   const doc = limparDocumentoAlfa(String((data as any).cpfcgc || ''));
+  if (tipo === 'X' && Number((data as any).codpais) === 1058) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Transportadora do exterior: o país não pode ser Brasil.',
+      path: ['codpais'],
+    });
+  }
   if (tipo === 'J' && doc.length !== 14) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,

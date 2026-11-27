@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Loader2, AlertTriangle, Phone, Smartphone, Building2, MessageCircle, Mail, User, Briefcase, Cake } from 'lucide-react';
 import InputMask from 'react-input-mask';
 import SelectPadrao from '@/components/common/SelectPadrao';
-import { CountryCombobox } from '@/components/common/CountryCombobox';
+import { CountryCombobox, PAIS_BRASIL } from '@/components/common/CountryCombobox';
 import { buscaCep } from '@/data/cep';
 import { buscaCnpj } from '@/data/cnpj';
 import { mascaraCnpjAlfa } from '@/utils/cnpjAlfanumerico';
@@ -124,7 +124,7 @@ export function RegistrationTab({
         if (data.municipio) setValue('cidade', data.municipio);
         if (data.uf) setValue('uf', data.uf);
         if (data.cep) setValue('cep', data.cep.replace(/\D/g, ''));
-        setValue('pais', '1058'); // Brasil
+        if (getValues('tipoPessoa') !== 'E') setValue('pais', '1058'); // Brasil
 
         toast.success('Dados do CNPJ preenchidos automaticamente!', {
           description: `${data.razao_social} - ${data.descricao_situacao_cadastral || ''}`,
@@ -155,7 +155,7 @@ export function RegistrationTab({
         setValue('bairro', data.bairro);
         setValue('cidade', data.localidade);
         setValue('uf', data.uf);
-        setValue('pais', '1058'); // Default to Brasil if found via CEP
+        if (getValues('tipoPessoa') !== 'E') setValue('pais', '1058'); // Brasil (exterior não usa Brasil)
         // Focus number field if possible (optional, requires ref)
       }
     } catch (error) {
@@ -182,6 +182,10 @@ export function RegistrationTab({
       setValue('suframa', 'ISENTO');
       setValue('situacaoTributaria', '1'); // 1 = Não Contribuinte
       setValue('tipoEmpresa', 'PF'); // PF = Pessoa Física
+    }
+    // Exterior: o país não pode ser Brasil — limpa para o usuário escolher o país estrangeiro
+    if (tipoPessoa === 'E' && Number(getValues('pais')) === PAIS_BRASIL) {
+      setValue('pais', '' as any);
     }
     tipoPessoaAnterior.current = tipoPessoa;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -747,10 +751,11 @@ export function RegistrationTab({
               <CountryCombobox
                 value={field.value}
                 onChange={(val) => field.onChange(val)}
+                excluir={tipoPessoa === 'E' ? [PAIS_BRASIL] : undefined}
               />
             )}
           />
-          {errors.pais && <p className="text-xs text-red-500 mt-0.5">País é obrigatório</p>}
+          {errors.pais && <p className="text-xs text-red-500 mt-0.5">{(errors.pais.message as string) || 'País é obrigatório'}</p>}
         </div>
       </div>
 

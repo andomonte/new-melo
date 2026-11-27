@@ -146,7 +146,8 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
     }),
   );
 
-  const paisesOptions = options.paises?.data?.map((pais) => ({
+  // Exterior não pode ter Brasil (1058) como país
+  const paisesOptions = options.paises?.data?.filter((pais) => !(fornecedor.tipo === 'X' && Number(pais.codpais) === 1058)).map((pais) => ({
     value: pais.codpais,
     label: `${pais.codpais} - ${pais.descricao}`,
   }));
@@ -159,8 +160,9 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
       handleFornecedorChange('cidade', resultCep.localidade);
     if (resultCep.uf) handleFornecedorChange('uf', resultCep.uf);
     // CEP válido = endereço no Brasil → preenche o País (Brasil = 1058), igual ao cliente
-    if (resultCep.uf || resultCep.localidade)
+    if ((resultCep.uf || resultCep.localidade) && fornecedor.tipo !== 'X')
       handleFornecedorChange('codpais', 1058);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultCep, handleFornecedorChange]);
 
   // Validar município x UF sempre que um deles mudar
@@ -188,6 +190,8 @@ const DadosCadastrais: React.FC<DadosCadastraisProps> = ({
                 if (value === 'X') {
                   handleFornecedorChange('cpf_cgc', 'EXTERIOR');
                   handleFornecedorChange('tipofornecedor', '');
+                  // Exterior: país não pode ser Brasil — limpa para escolher o estrangeiro
+                  if (Number(fornecedor.codpais) === 1058) handleFornecedorChange('codpais', '' as any);
                 } else if (fornecedor.cpf_cgc === 'EXTERIOR') {
                   handleFornecedorChange('cpf_cgc', '');
                 }
