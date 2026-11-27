@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
+import { sqlFornecedorExterior } from '@/lib/compras/tituloCompras';
 
 export default async function handler(
   req: NextApiRequest,
@@ -118,6 +119,7 @@ export default async function handler(
         CAST(f.cod_credor AS TEXT) as fornecedor_codigo,
         f.nome as fornecedor_nome,
         f.cpf_cgc as fornecedor_cpf_cnpj,
+        COALESCE(${sqlFornecedorExterior('f')}, false) as fornecedor_exterior,
 
         -- Dados do comprador
         CAST(c.codcomprador AS TEXT) as comprador_codigo,
@@ -193,6 +195,7 @@ export default async function handler(
         `${ordem.fornecedor_codigo} - ${ordem.fornecedor_nome}` :
         ordem.req_status === 'ÓRFÃ' ? '📋 Dados perdidos (Req: ' + ordem.orc_req_id + ')' : '',
       fornecedor_cpf_cnpj: ordem.fornecedor_cpf_cnpj || '',
+      fornecedor_exterior: !!ordem.fornecedor_exterior,
 
       // Comprador
       comprador_codigo: ordem.comprador_codigo || '',

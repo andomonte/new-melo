@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { registrarHistoricoOrdem } from '@/lib/compras/ordemHistoricoHelper';
+import { MSG_ANTECIPADO_EXTERIOR, sqlFornecedorExterior } from '@/lib/compras/tituloCompras';
 
 interface MarcarPagamentoAntecipadoRequest {
   pagamento_antecipado: boolean;
@@ -38,7 +39,11 @@ export default async function handler(
 
     // Verificar se a ordem existe
     const checkResult = await client.query(
-      'SELECT orc_id, orc_status FROM cmp_ordem_compra WHERE orc_id = $1',
+      `SELECT o.orc_id, o.orc_status, COALESCE(${sqlFornecedorExterior('f')}, false) AS exterior
+         FROM cmp_ordem_compra o
+         LEFT JOIN cmp_requisicao r ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
+         LEFT JOIN dbcredor f ON f.cod_credor = r.req_cod_credor
+        WHERE o.orc_id = $1`,
       [ordemId]
     );
 
@@ -51,6 +56,11 @@ export default async function handler(
     }
 
     const ordem = checkResult.rows[0];
+
+    if (pagamento_antecipado && ordem.exterior) {
+      client.release();
+      return res.status(400).json({ success: false, message: MSG_ANTECIPADO_EXTERIOR });
+    }
 
     // Verificar se a ordem pode ser marcada como pagamento antecipado
     if (ordem.orc_status === 'C' || ordem.orc_status === 'F') {

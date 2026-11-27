@@ -387,7 +387,6 @@ export default async function handler(
       const codPgto = await proximoCodPgto(client);
 
       // Label da parcela
-      const labelParcela = `Parcela ${parcela.numero_parcela}/${totalParcelasNormais} - ${parcela.tipo_documento}`;
 
       // Duplicata (decisão D2, 24/11/2026): {duplicata do XML}/{parcela}/{total}.
       // Se o XML traz só a sequência ("001") ou nada, usa o nº da NF: NF 78239 → 78239/1/2, 78239/2/2.
@@ -422,7 +421,7 @@ export default async function handler(
         fornecedorCod,                                              // cod_credor
         parcela.data_vencimento,                                    // dt_venc
         parcela.valor_parcela,                                      // valor_pgto
-        `Pagamento ref. NFe ${nfeId} - ${labelParcela}`,           // obs
+        null,                                                       // obs: exclusiva do Financeiro (NF em nro_nf, xml_nf e dbpgto_nota)
         'N',                                                        // paga (não)
         'N',                                                        // cancel (não)
         'F',                                                        // tipo (F = Fornecedor)
@@ -502,8 +501,8 @@ export default async function handler(
       for (const t of antTitulos) {
         if (t.creditoId || t.disponivel < t.valor_pgto - 0.005) continue; // atende outra NF
         await client.query(
-          `UPDATE dbpgto SET cancel = 'S', obs = left(COALESCE(obs,'') || $2, 500) WHERE cod_pgto = $1`,
-          [t.cod_pgto, ` [CANCELADO: antecipado nao pago substituido pela cobranca do XML da NFe ${notaNF.nnf}]`]);
+          // obs é do Financeiro: o motivo fica em ordem_pagamento_conta/parcelas (CANCELADO)
+          `UPDATE dbpgto SET cancel = 'S' WHERE cod_pgto = $1`, [t.cod_pgto]);
         await client.query(`UPDATE ordem_pagamento_conta SET status = 'CANCELADO' WHERE cod_pgto = $1 AND numero_parcela = 0`, [t.cod_pgto]);
         await client.query(`UPDATE ordem_pagamento_parcelas SET status = 'CANCELADO' WHERE orc_id = $1 AND numero_parcela = 0`, [t.orc_id]);
         cancelados++;

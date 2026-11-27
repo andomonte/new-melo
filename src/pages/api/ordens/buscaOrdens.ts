@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
+import { sqlFornecedorExterior } from '@/lib/compras/tituloCompras';
 
 // Mapeamento das colunas para filtros de ordens
 // IMPORTANTE: usar apenas campos que existem na tabela real ou usar aliases da query
@@ -309,6 +310,7 @@ export default async function handler(
         CAST(f.cod_credor AS TEXT) as fornecedor_codigo,
         f.nome as fornecedor_nome,
         f.cpf_cgc as fornecedor_cpf_cnpj,
+        COALESCE(${sqlFornecedorExterior('f')}, false) as fornecedor_exterior,
         COALESCE(f.cod_credor || ' - ' || f.nome, '') as fornecedor_completo,
         CAST(c.codcomprador AS TEXT) as comprador_codigo,
         c.nome as comprador_nome,
@@ -386,6 +388,7 @@ export default async function handler(
         `${ordem.fornecedor_codigo} - ${ordem.fornecedor_nome}` :
         `📋 Dados perdidos (Req: ${ordem.orc_req_id})`,
       fornecedor_cpf_cnpj: ordem.fornecedor_cpf_cnpj,
+      fornecedor_exterior: !!ordem.fornecedor_exterior,
 
       // Concatenar código + nome do comprador (com fallback consistente)
       comprador_codigo: ordem.comprador_codigo,

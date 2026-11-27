@@ -169,6 +169,24 @@ export const PagamentoAntecipadoModal: React.FC<
 
   if (!isOpen) return null;
 
+  // Fornecedor do exterior não tem pagamento antecipado (o servidor também recusa)
+  if (ordem?.fornecedor_exterior) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+          <h2 className="text-lg font-semibold mb-2">Pagamento antecipado não permitido</h2>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
+            O fornecedor desta ordem é do exterior. Ordem de compra de fornecedor do exterior não pode ter
+            pagamento antecipado: o pagamento segue pelo processo da importação.
+          </p>
+          <div className="flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 rounded bg-gray-200 dark:bg-zinc-700 text-sm">Fechar</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <style>{`

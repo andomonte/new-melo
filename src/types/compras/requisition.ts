@@ -254,6 +254,8 @@ export interface OrdemCompraDTO {
   req_status?: string;
   fornecedor_nome?: string;
   fornecedor_codigo?: string;
+  /** Fornecedor do exterior: a OC não pode ter pagamento antecipado. */
+  fornecedor_exterior?: boolean;
   comprador_nome?: string;
   orc_valor_total?: number;
   orc_observacao?: string;

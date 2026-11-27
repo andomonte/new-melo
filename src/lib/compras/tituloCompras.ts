@@ -30,6 +30,25 @@ const UF_FILIAL: Record<string, string> = { MANAUS: 'AM', RORAIMA: 'RR', BOAVIST
 export const ufDaFilial = (filial?: string | null) =>
   UF_FILIAL[String(filial || '').trim().toUpperCase().replace(/\s+/g, '')] || 'AM';
 
+/**
+ * Fornecedor do exterior (mesmo critério da conta FORNECEDOR INTERNACIONAL): tipo 'X', UF 'EX'
+ * ou país diferente de Brasil. `f` = alias de dbcredor na consulta.
+ */
+export const sqlFornecedorExterior = (f = 'f') =>
+  `(upper(COALESCE(${f}.tipo::text,'')) = 'X' OR upper(btrim(COALESCE(${f}.uf::text,''))) = 'EX'
+    OR (btrim(COALESCE(${f}.codpais::text,'')) NOT IN ('', '1058')))`;
+
+/** Pagamento antecipado não é permitido para fornecedor do exterior (pago pelo processo da importação). */
+export const MSG_ANTECIPADO_EXTERIOR =
+  'Fornecedor do exterior: a ordem de compra não pode ter pagamento antecipado. O pagamento segue pelo processo da importação.';
+
+export async function fornecedorEhExterior(client: Pick<PoolClient, 'query'>, codCredor: string | null | undefined): Promise<boolean> {
+  if (!codCredor) return false;
+  const r = await client.query(
+    `SELECT ${sqlFornecedorExterior('f')} AS ext FROM dbcredor f WHERE f.cod_credor = $1`, [codCredor]);
+  return !!r.rows[0]?.ext;
+}
+
 /** Conta financeira do título de fornecedor (regra D1). */
 export async function contaFinanceiraFornecedor(
   client: PoolClient,
@@ -109,8 +128,6 @@ export interface NotaDoTitulo {
   valor_nf: number;
 }
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const hojeBR = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Manaus' });
 
 /** Dados da NF para o vínculo (número real, série, chave, valor). */
 export async function dadosNota(client: PoolClient, codnfeEnt: string): Promise<NotaDoTitulo> {
@@ -161,17 +178,12 @@ export async function atualizarNfDoTitulo(client: PoolClient, codPgto: string): 
 }
 
 /**
- * Associa a NF ao título de ADIANTAMENTO: vínculo, campo NF ("78239/78301") e, se o vínculo
- * é novo, a observação "NF 78239 associada em 24/11/2026: R$ 1.000,00 atendido".
+ * Associa a NF ao título de ADIANTAMENTO: vínculo (dbpgto_nota, com valor atendido e data) e
+ * campo NF ("78239/78301"). A observação do título é do Financeiro: o Compras não escreve nela.
  */
 export async function associarNotaAoAdiantamento(
   client: PoolClient, codPgto: string, nota: NotaDoTitulo, valorAtendido: number, usuario?: string | null,
 ): Promise<void> {
-  const novo = await vincularNotaTitulo(client, codPgto, nota, 'ADIANTAMENTO', valorAtendido, usuario);
+  await vincularNotaTitulo(client, codPgto, nota, 'ADIANTAMENTO', valorAtendido, usuario);
   await atualizarNfDoTitulo(client, codPgto);
-  if (novo) {
-    const txt = ` | NF ${nota.nnf} associada em ${hojeBR()}: R$ ${brl(valorAtendido)} atendido`;
-    await client.query(
-      `UPDATE dbpgto SET obs = left(COALESCE(obs,'') || $2, 500) WHERE cod_pgto = $1`, [codPgto, txt]);
-  }
 }

@@ -8,6 +8,8 @@ import {
   codigoBanco,
   contaFinanceiraFornecedor,
   duplicataOrdem,
+  fornecedorEhExterior,
+  MSG_ANTECIPADO_EXTERIOR,
   proximoCodPgto,
   ufDaFilial,
 } from '@/lib/compras/tituloCompras';
@@ -90,6 +92,13 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
 
     if (!ordemCompra.for_cod) {
       throw new Error('Fornecedor não encontrado para esta ordem');
+    }
+
+    // Exterior não tem pagamento antecipado (entrada / parcela 0)
+    const temAntecipado = (valorEntrada ?? 0) > 0 || parcelas.some((p) => p.numero_parcela === 0);
+    if (temAntecipado && (await fornecedorEhExterior(client, ordemCompra.for_cod))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: MSG_ANTECIPADO_EXTERIOR });
     }
 
     // Validar apenas se o valor total das parcelas não excede o valor da ordem
@@ -209,22 +218,6 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
       const codPgto = await proximoCodPgto(client);
       const pagCofId = parcela.numero_parcela === 0 ? COF_ADIANTAMENTO : cofFornecedor;
 
-      // Determinar label da parcela
-      let labelParcela = '';
-      // Contar apenas parcelas normais (excluir parcela 0 = entrada)
-      const parcelasNormais = todasParcelas.filter(p => p.numero_parcela > 0).length;
-
-      if (parcela.numero_parcela === 0) {
-        // Pagamento antecipado - se é a única parcela, mostrar "1 de 1"
-        if (parcelasNormais === 0) {
-          labelParcela = `Pagamento Antecipado (1 de 1) - ${tipoDocumento}`;
-        } else {
-          labelParcela = `Pagamento Antecipado (Entrada) - ${tipoDocumento}`;
-        }
-      } else {
-        labelParcela = `Parcela ${parcela.numero_parcela}/${parcelasNormais} - ${tipoDocumento}`;
-      }
-
       // Duplicata: OC{nº da ordem}/{posição}/{total} — antecipado único = OC{orc}/1/1;
       // entrada + 2 parcelas = /1/3 (entrada), /2/3, /3/3.
       const nroDup = duplicataOrdem(orcId, idx + 1, totalTitulos);
@@ -246,7 +239,7 @@ export default async function handle(req: NextApiRequest, res: NextApiResponse) 
           parcela.valor_parcela,                                      // valor_pgto
           0,                                                          // valor_pago (ainda não pago)
           null,                                                       // nro_nf (não tem nota ainda)
-          `Pagamento ref. Ordem de Compra #${orcId} - ${labelParcela}`, // obs
+          null,                                                       // obs: exclusiva do Financeiro (ordem em ordem_compra e na duplicata)
           'N',                                                        // tem_nota
           'F',                                                        // tipo (F = Fornecedor)
           'N',                                                        // paga (ainda não)

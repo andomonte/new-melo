@@ -29,6 +29,7 @@ interface OrdemCompraDTO {
   req_status?: string;
   fornecedor_nome?: string;
   fornecedor_codigo?: string;
+  fornecedor_exterior?: boolean;
   comprador_nome?: string;
   orc_valor_total?: number;
   orc_observacao?: string;
@@ -690,20 +691,23 @@ export default function OrdensComprasListImproved({
                   <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">X</kbd>
                 </button>
 
-                {/* Pagamento Antecipado */}
+                {/* Pagamento Antecipado (não permitido para fornecedor do exterior) */}
                 <button
                   onClick={() => {
+                    if (item.fornecedor_exterior) return;
                     closeAllDropdowns();
                     setPagamentoModal({
                       isOpen: true,
                       ordem: item
                     });
                   }}
-                  className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full"
+                  disabled={!!item.fornecedor_exterior}
+                  title={item.fornecedor_exterior ? 'Fornecedor do exterior: a ordem não pode ter pagamento antecipado (pago pelo processo da importação).' : undefined}
+                  className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:bg-gray-100 dark:focus:bg-slate-700 focus:text-gray-900 dark:focus:text-gray-100 w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   role="menuitem"
                 >
                   <DollarSign className="mr-2 text-orange-500 dark:text-orange-400" size={16} />
-                  Pagamento Antecipado
+                  Pagamento Antecipado{item.fornecedor_exterior ? ' (exterior)' : ''}
                   <kbd className="ml-auto rounded border border-gray-300 dark:border-gray-600 px-1.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400">G</kbd>
                 </button>
 
@@ -849,7 +853,17 @@ export default function OrdensComprasListImproved({
         { key: 'i', handler: (row) => row && handleVerItens(row) },
         { key: 'p', handler: (row) => row && window.open(`/api/ordens/${row.orc_id}/pdf`, '_blank') },
         { key: 'x', handler: (row) => row && handleExportExcel(row) },
-        { key: 'g', handler: (row) => row && setPagamentoModal({ isOpen: true, ordem: row }) },
+        {
+          key: 'g',
+          handler: (row) => {
+            if (!row) return;
+            if (row.fornecedor_exterior) {
+              toast({ description: 'Fornecedor do exterior: a ordem não pode ter pagamento antecipado (pago pelo processo da importação).', variant: 'destructive' });
+              return;
+            }
+            setPagamentoModal({ isOpen: true, ordem: row });
+          },
+        },
         {
           key: 'v',
           handler: (row) => {

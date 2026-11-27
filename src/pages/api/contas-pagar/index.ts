@@ -83,13 +83,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Filtro por origem no Compras (antecipado / XML / todos do Compras).
-    // Obs.: xml_nf pode não estar preenchido na base de teste — o sinal confiável do
-    // pagamento gerado pela NFe é a obs "Pagamento ref. NFe ..." (o antecipado usa
-    // "Pagamento ref. Ordem de Compra ... - Pagamento Antecipado"), além da parcela 0.
+    // O Compras não escreve mais na obs (é do Financeiro): a origem vem de ordem_compra,
+    // xml_nf e do vínculo título-nota (dbpgto_nota). A obs "Pagamento ref. ..." só existe
+    // nos títulos antigos e continua valendo para eles.
     if (origem_compras === 'antecipado') {
       whereClause += ` AND EXISTS (SELECT 1 FROM ordem_pagamento_conta opc WHERE opc.cod_pgto = p.cod_pgto AND opc.numero_parcela = 0)`;
     } else if (origem_compras === 'xml') {
-      whereClause += ` AND (p.xml_nf IS NOT NULL OR p.obs ILIKE 'Pagamento ref. NFe%')`;
+      whereClause += ` AND (p.xml_nf IS NOT NULL OR p.obs ILIKE 'Pagamento ref. NFe%'
+        OR EXISTS (SELECT 1 FROM dbpgto_nota tn WHERE tn.cod_pgto = p.cod_pgto AND tn.tipo = 'PARCELA'))`;
     } else if (origem_compras === 'compras') {
       whereClause += ` AND ((p.ordem_compra IS NOT NULL AND p.ordem_compra NOT IN ('[]', '')) OR p.obs ILIKE 'Pagamento ref.%')`;
     }
@@ -212,6 +213,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         OR p.nro_nf LIKE $${paramIndex + 2}
         OR p.nro_dup LIKE $${paramIndex + 3}
         OR p.obs LIKE $${paramIndex + 4}
+        OR p.ordem_compra LIKE $${paramIndex + 4}
       )`;
       params.push(`%${search}%`);
       params.push(`%${search}%`);
