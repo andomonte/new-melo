@@ -139,6 +139,8 @@ interface OrdemAutomatica {
     nItem_nfe?: string;      // Número do item na NFe (1, 2, 3...)
     cProd_nfe?: string;      // Código do produto na NFe (referência fornecedor)
     descricao_nfe?: string;  // Descrição do item na NFe
+    /** Como foi casado; 'descricao' é fraco (só sugestão, não associa direto). */
+    criterio?: 'codigo' | 'referencia' | 'aprendido' | 'ref_na_descricao' | 'preco' | 'descricao';
   }>;
   itens_oc?: ItemOC[]; // Todos os itens da OC para associação
 }
@@ -349,7 +351,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
             status: progressoItem.status,
             produtoAssociado: {
               id: progressoItem.produtoId,
-              referencia: progressoItem.produtoId,
+              referencia: (progressoItem as any).produtoReferencia || (progressoItem as any).produtoId,
               descricao: progressoItem.produtoDescricao || 'Produto associado',
               codigoBarras: item.codigo_barras,
               marca: 'TOYOTA',
@@ -443,9 +445,10 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
         const { metodo_utilizado, ordens, detalhes } = result.data;
 
         // Filtrar apenas ordens com pelo menos 1 match e ordenar por mais matches
+        const fortes = (o: any) => (o.itens_match || []).filter((m: any) => m.criterio !== 'descricao').length;
         const ordensComMatch = ordens
           .filter((o: any) => (o.itens_match?.length || 0) > 0)
-          .sort((a: any, b: any) => (b.itens_match?.length || 0) - (a.itens_match?.length || 0));
+          .sort((a: any, b: any) => (fortes(b) - fortes(a)) || ((b.itens_match?.length || 0) - (a.itens_match?.length || 0)));
 
         setOrdensAutomaticas(ordens); // Manter todas para referência
 
@@ -541,7 +544,8 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
     // "Associar" da tabela de correspondência) — sem mensagem guiada.
     if (ordemAutomatica && ordemAutomatica.itens_match && ordemAutomatica.itens_match.length > 0) {
       const match = ordemAutomatica.itens_match.find((m) => m.nItem_nfe === item.id);
-      if (match) {
+      // Casamento só por descrição é fraco: não associa direto, segue para a busca normal
+      if (match && match.criterio !== 'descricao') {
         const itemOC: ItemOC = {
           codprod: match.codprod,
           descricao: match.descricao,
@@ -603,7 +607,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
           const produtoMapeado: Produto = {
             id: produtoEncontrado.id,
-            referencia: produtoEncontrado.referencia,
+            referencia: produtoEncontrado.ref || produtoEncontrado.referencia,
             descricao: produtoEncontrado.descricao,
             codigoBarras: produtoEncontrado.codigoBarras,
             marca: produtoEncontrado.marca,
@@ -697,7 +701,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
 
       const updatedItem = {
         ...selectedItem,
-        produtoAssociado: selectedProduct,
+        produtoAssociado: { ...selectedProduct, referencia: selectedProduct.ref || selectedProduct.referencia },
         // Manter status como pending até associar com pedidos
         status: 'pending' as const
       };
@@ -766,7 +770,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
       // 2. Criar objeto do produto associado
       const produtoAssociado: Produto = {
         id: produto.id,
-        referencia: produto.referencia,
+        referencia: produto.ref || produto.referencia,
         descricao: produto.descricao,
         codigoBarras: produto.codigoBarras,
         marca: produto.marca,
@@ -1010,7 +1014,7 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
           status: isCompleto ? 'associated' : 'pending',
           produtoAssociado: {
             id: assoc.produtoId,
-            referencia: assoc.produtoId,
+            referencia: assoc.produtoReferencia || assoc.produtoId,
             descricao: assoc.produtoDescricao,
             marca: '',
             estoque: 0,
@@ -1461,6 +1465,17 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
                                   i.id === itemMatch.nItem_nfe
                                 );
                                 const jaAssociado = itemNFeCorrespondente?.status === 'associated';
+                                // associado, mas a outro produto (associação feita errada): oferece trocar
+                                const outroProduto = !!itemNFeCorrespondente?.produtoAssociado?.id &&
+                                  String(itemNFeCorrespondente.produtoAssociado.id) !== String(itemMatch.codprod);
+                                const itemOCDoMatch: ItemOC = {
+                                  codprod: itemMatch.codprod,
+                                  descricao: itemMatch.descricao,
+                                  quantidade_oc: itemMatch.quantidade_oc,
+                                  quantidade_atendida: itemMatch.quantidade_oc - itemMatch.quantidade_disponivel,
+                                  quantidade_disponivel: itemMatch.quantidade_disponivel,
+                                  valor_unitario: 0,
+                                };
 
                                 return (
                                   <tr
@@ -1496,27 +1511,41 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
                                       {itemMatch.quantidade_nfe}
                                     </td>
                                     <td className="px-2 py-1.5 text-center">
-                                      {jaAssociado ? (
+                                      {outroProduto && itemNFeCorrespondente ? (
+                                        <div className="flex flex-col items-center gap-0.5">
+                                          <span className="text-amber-700 dark:text-amber-300 text-[10px] font-medium" title={`Associado hoje a ${itemNFeCorrespondente.produtoAssociado?.referencia || itemNFeCorrespondente.produtoAssociado?.id}`}>
+                                            ≠ {itemNFeCorrespondente.produtoAssociado?.referencia || itemNFeCorrespondente.produtoAssociado?.id}
+                                          </span>
+                                          <button
+                                            className="px-2 py-0.5 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded font-medium"
+                                            title="Desfaz a associação atual deste item e associa ao produto sugerido"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDesassociarItem(itemNFeCorrespondente);
+                                              handleAssociarItemOC(itemOCDoMatch, {
+                                                ...itemNFeCorrespondente,
+                                                produtoAssociado: undefined,
+                                                associacoes: [],
+                                                status: 'pending',
+                                              });
+                                            }}
+                                          >
+                                            Trocar
+                                          </button>
+                                        </div>
+                                      ) : jaAssociado ? (
                                         <span className="text-green-700 dark:text-green-300 text-xs font-medium">✓ Feito</span>
                                       ) : itemNFeCorrespondente ? (
                                         <button
                                           className="px-2 py-0.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
+                                          title={itemMatch.criterio === 'descricao' ? 'Sugestão só pela descrição: confira o produto' : undefined}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            // Criar objeto ItemOC a partir do itemMatch
-                                            const itemOC: ItemOC = {
-                                              codprod: itemMatch.codprod,
-                                              descricao: itemMatch.descricao,
-                                              quantidade_oc: itemMatch.quantidade_oc,
-                                              quantidade_atendida: itemMatch.quantidade_oc - itemMatch.quantidade_disponivel,
-                                              quantidade_disponivel: itemMatch.quantidade_disponivel,
-                                              valor_unitario: 0
-                                            };
                                             // Passar o item da NFe diretamente para evitar problema de estado assíncrono
-                                            handleAssociarItemOC(itemOC, itemNFeCorrespondente);
+                                            handleAssociarItemOC(itemOCDoMatch, itemNFeCorrespondente);
                                           }}
                                         >
-                                          Associar
+                                          {itemMatch.criterio === 'descricao' ? 'Associar?' : 'Associar'}
                                         </button>
                                       ) : (
                                         <span className="text-amber-600 dark:text-amber-400 text-xs">?</span>
@@ -1816,8 +1845,8 @@ export const NFeItemsAssociationModal: React.FC<NFeItemsAssociationModalProps> =
                               <td className="px-2 py-1.5 text-right font-medium">{item.quantidade}</td>
                               <td className="px-2 py-1.5">
                                 {item.produtoAssociado ? (
-                                  <span className="text-blue-700 dark:text-blue-300">
-                                    {item.produtoAssociado.referencia} - {item.produtoAssociado.descricao}
+                                  <span className="text-blue-700 dark:text-blue-300" title={`Código Melo: ${item.produtoAssociado.id}`}>
+                                    {item.produtoAssociado.referencia || item.produtoAssociado.id} - {item.produtoAssociado.descricao}
                                   </span>
                                 ) : (
                                   <span className="text-gray-400">—</span>
@@ -2705,6 +2734,9 @@ const PedidosDisponiveisModal: React.FC<PedidosDisponiveisModalInternalProps> = 
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-zinc-700">
           <div>
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Ordens de Compra Disponíveis</h3>
+            <p className="text-sm font-medium text-blue-700 dark:text-blue-300" title={`Código Melo: ${item.codprod || item.produtoId || ''}`}>
+              {item.referencia || item.codprod} - {item.produtoDescricao}
+            </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Quantidade da nota: {item.quantidade} | 
               Associado: {totalAssociado} | 

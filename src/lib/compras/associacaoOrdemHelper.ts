@@ -72,6 +72,11 @@ export interface OrdemEncontrada {
     nItem_nfe?: string;      // Número do item na NFe (1, 2, 3...)
     cProd_nfe?: string;      // Código do produto na NFe (referência fornecedor)
     descricao_nfe?: string;  // Descrição do item na NFe
+    /**
+     * Como o item foi casado. Fortes: 'codigo', 'referencia', 'aprendido' (referência do
+     * fornecedor já associada antes), 'ref_na_descricao', 'preco'. Fraco: 'descricao'.
+     */
+    criterio?: 'codigo' | 'referencia' | 'aprendido' | 'ref_na_descricao' | 'preco' | 'descricao';
   }>;
   itens_oc?: ItemOC[]; // Todos os itens da OC para exibir no frontend
 }
@@ -117,7 +122,9 @@ function calcularSimilaridade(descricao1: string, descricao2: string): number {
     return texto.split(' ')
       .filter(p => p.length >= 2)
       .filter(p => !/^\d{1,2}$/.test(p))
-      .filter(p => !['DE', 'DA', 'DO', 'COM', 'SEM', 'PARA', 'POR', 'EM', 'NA', 'NO', 'AS', 'OS', 'UM', 'UMA'].includes(p));
+      .filter(p => !['DE', 'DA', 'DO', 'COM', 'SEM', 'PARA', 'POR', 'EM', 'NA', 'NO', 'AS', 'OS', 'UM', 'UMA'].includes(p))
+      // genéricas de autopeças: sozinhas casavam itens errados ("K 9112 STD WS" × "ANEL DO PISTAO STD")
+      .filter(p => !PALAVRAS_GENERICAS.has(p));
   };
 
   const palavras1 = extrairPalavras(texto1);
@@ -150,45 +157,63 @@ function calcularSimilaridade(descricao1: string, descricao2: string): number {
 // Threshold mínimo para considerar um match válido
 const THRESHOLD_SIMILARIDADE = 30;
 
+/** Palavras que não identificam a peça (medida padrão, kit, jogo…). */
+const PALAVRAS_GENERICAS = new Set([
+  'STD', 'WS', 'SEMI', 'MM', 'UN', 'PC', 'PCS', 'CJ', 'JG', 'KIT', 'JOGO', 'MOTOR', 'PECA', 'PECAS', 'REF',
+]);
+
+/** Só letras e números, maiúsculo ("K-9825 STD" → "K9825STD"). */
+const compactar = (v: string | null | undefined) =>
+  String(v ?? '').toUpperCase().normalize('NFD').replace(/[^A-Z0-9]/g, '');
+
+/** Números com 3+ dígitos ("PA9889 STD" → ["9889"]). */
+const numerosChave = (v: string | null | undefined) =>
+  (String(v ?? '').match(/\d{3,}/g) || []).filter((n) => !/^0+$/.test(n));
+
 // ============================================================================
 // FUNÇÃO AUXILIAR: BUSCAR ITENS DA OC E CALCULAR MATCH
 // ============================================================================
 
 /**
- * Busca os itens de uma OC e calcula match com itens da NFe
- * Usa similaridade de descrição quando códigos não batem diretamente
- *
- * IMPORTANTE: Permite que múltiplos itens da NFe com o mesmo produto
- * sejam associados ao mesmo item da OC (caso de split na NFe)
+ * Referências do fornecedor já aprendidas (associações anteriores, dbref_fabrica +
+ * dbprod_ref_fabrica): código do item na NF (cProd) → codprod(s) Melo.
  */
-async function calcularItensMatch(
+async function carregarRefsAprendidas(
   client: PoolClient,
-  orcId: number,
-  itensNFe: ItemNFe[]
-): Promise<{ itens_match: OrdemEncontrada['itens_match']; itens_oc: ItemOC[] }> {
-  const queryItens = `
-    SELECT
-      ri.itr_codprod as codprod,
-      COALESCE(p.descr, 'PRODUTO SEM DESCRIÇÃO') as descricao,
-      COALESCE(p.ref, '') as ref_fabricante,
-      ri.itr_quantidade as quantidade_oc,
-      COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
-      (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel,
-      ri.itr_pr_unitario as valor_unitario
-    FROM cmp_ordem_compra o
-    INNER JOIN cmp_it_requisicao ri
-      ON o.orc_req_id = ri.itr_req_id
-      AND o.orc_req_versao = ri.itr_req_versao
-    LEFT JOIN dbprod p ON ri.itr_codprod = p.codprod
-    WHERE o.orc_id = $1
-      AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
-  `;
+  codCredor: string | null,
+  itensNFe: ItemNFe[],
+): Promise<Map<string, Set<string>>> {
+  const aprendidos = new Map<string, Set<string>>();
+  if (!codCredor) return aprendidos;
+  const cProds = [...new Set(itensNFe.map((i) => String(i.cProd || '').trim().toUpperCase()).filter(Boolean))];
+  if (!cProds.length) return aprendidos;
+  const ap = await client.query(
+    `SELECT upper(btrim(r.referencia)) AS referencia, pr.codprod
+       FROM dbref_fabrica r JOIN dbprod_ref_fabrica pr ON pr.cod_id = r.cod_id
+      WHERE r.codcredor = $1 AND upper(btrim(r.referencia)) = ANY($2::text[])`,
+    [codCredor, cProds],
+  );
+  for (const row of ap.rows) {
+    const set = aprendidos.get(row.referencia) || new Set<string>();
+    set.add(String(row.codprod));
+    aprendidos.set(row.referencia, set);
+  }
+  return aprendidos;
+}
 
-  const result = await client.query(queryItens, [orcId]);
-  const itensOC = result.rows;
-
-  // Calcular match de produtos - DUAS PASSADAS para priorizar match exato
-  const itensMatch: OrdemEncontrada['itens_match'] = [];
+/**
+ * Casa os itens da NF com os itens (com saldo) de UMA ordem. Passadas, da mais confiável
+ * para a menos: código/referência idênticos ou referência aprendida → referência Melo no
+ * texto da NF → mesmo preço + mesmo número de peça → descrição parecida (fraco).
+ * Vários itens da NF podem cair no mesmo item da OC (split), até o saldo.
+ */
+export function casarItensNFeComOC(
+  itensOC: any[],
+  itensNFe: ItemNFe[],
+  aprendidos: Map<string, Set<string>> = new Map(),
+): NonNullable<OrdemEncontrada['itens_match']> {
+  // Calcular match de produtos - VÁRIAS PASSADAS, da mais confiável para a menos
+  const itensMatch: NonNullable<OrdemEncontrada['itens_match']> = [];
   const itensNFeMatcheados = new Set<string>(); // Evitar duplicatas de itens NFe
 
   // Track de quantidade restante por item OC (permite split na NFe)
@@ -197,45 +222,74 @@ async function calcularItensMatch(
   for (const oc of itensOC) {
     qtdRestantePorOC.set(oc.codprod, parseFloat(oc.quantidade_disponivel));
   }
+  const temSaldo = (oc: any) => (qtdRestantePorOC.get(oc.codprod) || 0) > 0;
+  const mesmoPreco = (oc: any, itemNFe: ItemNFe) =>
+    Number(oc.valor_unitario) > 0 && Math.abs(Number(oc.valor_unitario) - Number(itemNFe.vUnCom || 0)) <= 0.01;
 
-  // PASSADA 1: Match por código interno ou referência do fabricante (CONFIÁVEL)
-  for (const itemNFe of itensNFe) {
-    // 1. Primeiro tentar match exato por código interno
-    let itemOC = itensOC.find(i => {
-      const qtdRestante = qtdRestantePorOC.get(i.codprod) || 0;
-      return i.codprod === itemNFe.cProd && qtdRestante > 0;
+  const registrar = (itemNFe: ItemNFe, itemOC: any, criterio: NonNullable<OrdemEncontrada['itens_match']>[number]['criterio']) => {
+    const qtdRestante = qtdRestantePorOC.get(itemOC.codprod) || 0;
+    qtdRestantePorOC.set(itemOC.codprod, Math.max(0, qtdRestante - itemNFe.qCom));
+    itensNFeMatcheados.add(itemNFe.nItem);
+    itensMatch!.push({
+      codprod: itemOC.codprod,
+      referencia: itemOC.ref_fabricante || itemOC.codprod, // Referência Melo
+      descricao: itemOC.descricao,
+      quantidade_oc: parseFloat(itemOC.quantidade_oc),
+      quantidade_nfe: itemNFe.qCom,
+      quantidade_disponivel: parseFloat(itemOC.quantidade_disponivel),
+      nItem_nfe: itemNFe.nItem,
+      cProd_nfe: itemNFe.cProd,
+      descricao_nfe: itemNFe.xProd,
+      criterio,
     });
+  };
 
-    // 2. Se não achou por código, tentar por referência do fabricante (cProd da NFe = ref do produto)
-    if (!itemOC && itemNFe.cProd) {
-      const cProdNormalizado = itemNFe.cProd.trim().toUpperCase();
-      itemOC = itensOC.find(i => {
-        const qtdRestante = qtdRestantePorOC.get(i.codprod) || 0;
-        if (qtdRestante <= 0) return false;
-        const refNormalizada = (i.ref_fabricante || '').trim().toUpperCase();
-        return refNormalizada && refNormalizada === cProdNormalizado;
-      });
+  // PASSADA 1: código interno, referência Melo idêntica ou referência do fornecedor aprendida
+  for (const itemNFe of itensNFe) {
+    const cProdNormalizado = String(itemNFe.cProd || '').trim().toUpperCase();
+    let itemOC = itensOC.find((i) => temSaldo(i) && i.codprod === itemNFe.cProd);
+    let criterio: 'codigo' | 'referencia' | 'aprendido' = 'codigo';
+    if (!itemOC && cProdNormalizado) {
+      itemOC = itensOC.find((i) => temSaldo(i) && (i.ref_fabricante || '').trim().toUpperCase() === cProdNormalizado);
+      criterio = 'referencia';
     }
-
-    if (itemOC) {
-      const qtdRestante = qtdRestantePorOC.get(itemOC.codprod) || 0;
-
-      // Atualizar quantidade restante (subtrair quantidade da NFe)
-      qtdRestantePorOC.set(itemOC.codprod, Math.max(0, qtdRestante - itemNFe.qCom));
-
-      itensNFeMatcheados.add(itemNFe.nItem);
-      itensMatch.push({
-        codprod: itemOC.codprod,
-        referencia: itemOC.ref_fabricante || itemOC.codprod, // Referência Melo
-        descricao: itemOC.descricao,
-        quantidade_oc: parseFloat(itemOC.quantidade_oc),
-        quantidade_nfe: itemNFe.qCom,
-        quantidade_disponivel: parseFloat(itemOC.quantidade_disponivel),
-        nItem_nfe: itemNFe.nItem,
-        cProd_nfe: itemNFe.cProd,
-        descricao_nfe: itemNFe.xProd
-      });
+    if (!itemOC && cProdNormalizado && aprendidos.has(cProdNormalizado)) {
+      const cods = aprendidos.get(cProdNormalizado)!;
+      itemOC = itensOC.find((i) => temSaldo(i) && cods.has(String(i.codprod)));
+      criterio = 'aprendido';
     }
+    if (itemOC) registrar(itemNFe, itemOC, criterio);
+  }
+
+  // PASSADA 1b: referência Melo dentro do código/descrição da NF ("K9112 WS" em "K 9112 STD WS",
+  // "CO K-9825 STD" em "CO K 9825 STD"). Vence a referência mais longa; empate → mesmo preço.
+  for (const itemNFe of itensNFe) {
+    if (itensNFeMatcheados.has(itemNFe.nItem)) continue;
+    const textoNF = compactar(itemNFe.xProd) + '|' + compactar(itemNFe.cProd);
+    const candidatos = itensOC.filter((oc) => {
+      if (!temSaldo(oc)) return false;
+      const ref = compactar(oc.ref_fabricante);
+      if (ref.length < 4) return false;
+      // a ref sem o sufixo de medida genérico também vale ("K9112WS" → "K9112")
+      const semMedida = ref.replace(/(STD|WS|SEMI)+$/g, '');
+      return textoNF.includes(ref) || (semMedida.length >= 4 && /\d/.test(semMedida) && textoNF.includes(semMedida));
+    });
+    if (!candidatos.length) continue;
+    candidatos.sort((a, b) =>
+      (Number(mesmoPreco(b, itemNFe)) - Number(mesmoPreco(a, itemNFe))) ||
+      (compactar(b.ref_fabricante).length - compactar(a.ref_fabricante).length));
+    registrar(itemNFe, candidatos[0], 'ref_na_descricao');
+  }
+
+  // PASSADA 1c: mesmo preço unitário E o mesmo número de peça (ex.: 9889 em "PA9889 STD" e
+  // "PeA 9889 STD / S0181550"). Preço igual sozinho não basta.
+  for (const itemNFe of itensNFe) {
+    if (itensNFeMatcheados.has(itemNFe.nItem)) continue;
+    const numsNF = new Set([...numerosChave(itemNFe.xProd), ...numerosChave(itemNFe.cProd)]);
+    const candidatos = itensOC.filter((oc) =>
+      temSaldo(oc) && mesmoPreco(oc, itemNFe) &&
+      numerosChave(oc.ref_fabricante).some((n) => numsNF.has(n) || [...numsNF].some((m) => m.includes(n))));
+    if (candidatos.length === 1) registrar(itemNFe, candidatos[0], 'preco');
   }
 
   // PASSADA 2: Match por similaridade de descrição (APENAS para itens não matcheados)
@@ -274,11 +328,53 @@ async function calcularItensMatch(
           quantidade_disponivel: parseFloat(melhorMatch.quantidade_disponivel),
           nItem_nfe: itemNFe.nItem,
           cProd_nfe: itemNFe.cProd,
-          descricao_nfe: itemNFe.xProd
+          descricao_nfe: itemNFe.xProd,
+          criterio: 'descricao', // fraco: só sugestão, não associa direto
         });
       }
     }
   }
+
+  return itensMatch;
+}
+
+/**
+ * Busca os itens de uma OC e calcula match com itens da NFe
+ * Usa similaridade de descrição quando códigos não batem diretamente
+ *
+ * IMPORTANTE: Permite que múltiplos itens da NFe com o mesmo produto
+ * sejam associados ao mesmo item da OC (caso de split na NFe)
+ */
+async function calcularItensMatch(
+  client: PoolClient,
+  orcId: number,
+  itensNFe: ItemNFe[]
+): Promise<{ itens_match: OrdemEncontrada['itens_match']; itens_oc: ItemOC[] }> {
+  const queryItens = `
+    SELECT
+      ri.itr_codprod as codprod,
+      COALESCE(p.descr, 'PRODUTO SEM DESCRIÇÃO') as descricao,
+      COALESCE(p.ref, '') as ref_fabricante,
+      ri.itr_quantidade as quantidade_oc,
+      COALESCE(ri.itr_quantidade_atendida, 0) as quantidade_atendida,
+      (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) as quantidade_disponivel,
+      ri.itr_pr_unitario as valor_unitario,
+      r.req_cod_credor as cod_credor
+    FROM cmp_ordem_compra o
+    INNER JOIN cmp_it_requisicao ri
+      ON o.orc_req_id = ri.itr_req_id
+      AND o.orc_req_versao = ri.itr_req_versao
+    LEFT JOIN cmp_requisicao r ON r.req_id = o.orc_req_id AND r.req_versao = o.orc_req_versao
+    LEFT JOIN dbprod p ON ri.itr_codprod = p.codprod
+    WHERE o.orc_id = $1
+      AND (ri.itr_quantidade - COALESCE(ri.itr_quantidade_atendida, 0)) > 0
+  `;
+
+  const result = await client.query(queryItens, [orcId]);
+  const itensOC = result.rows;
+
+  const aprendidos = await carregarRefsAprendidas(client, itensOC[0]?.cod_credor ?? null, itensNFe);
+  const itensMatch = casarItensNFeComOC(itensOC, itensNFe, aprendidos);
 
   // Mapear todos os itens da OC para exibição
   const todosItensOC: ItemOC[] = itensOC.map(item => ({
@@ -682,6 +778,12 @@ export async function buscarSugestoesFornecedor(
   `;
 
   const itensResult = await client.query(queryItens, [ocIds]);
+  const credorSug = await client.query(
+    `SELECT cod_credor FROM dbcredor
+      WHERE upper(REPLACE(REPLACE(REPLACE(cpf_cgc, '.', ''), '-', ''), '/', '')) = $1 LIMIT 1`,
+    [cnpjLimpo],
+  );
+  const aprendidosFornecedor = await carregarRefsAprendidas(client, credorSug.rows[0]?.cod_credor ?? null, itens);
 
   // Agrupar itens por ordem
   const itensPorOC: Record<number, any[]> = {};
@@ -700,100 +802,10 @@ export async function buscarSugestoesFornecedor(
     const itensOC = itensPorOC[ordem.orc_id] || [];
     if (itensOC.length === 0) continue;
 
-    // Calcular match de produtos - DUAS PASSADAS para priorizar match exato
-    const itensMatch: OrdemEncontrada['itens_match'] = [];
-    const itensNFeMatcheados = new Set<string>(); // Evitar duplicatas de itens NFe
-    let produtosComum = 0;
-
-    // Track de quantidade restante por item OC (permite split na NFe)
-    const qtdRestantePorOC = new Map<string, number>();
-    for (const oc of itensOC) {
-      qtdRestantePorOC.set(oc.codprod, parseFloat(oc.quantidade_disponivel));
-    }
-
-    // PASSADA 1: Match por código interno ou referência do fabricante (CONFIÁVEL)
-    for (const itemNFe of itens) {
-      // 1. Primeiro tentar match exato por código interno
-      let itemOC = itensOC.find(i => {
-        const qtdRestante = qtdRestantePorOC.get(i.codprod) || 0;
-        return i.codprod === itemNFe.cProd && qtdRestante > 0;
-      });
-
-      // 2. Se não achou por código, tentar por referência do fabricante (cProd da NFe = ref do produto)
-      if (!itemOC && itemNFe.cProd) {
-        const cProdNormalizado = itemNFe.cProd.trim().toUpperCase();
-        itemOC = itensOC.find(i => {
-          const qtdRestante = qtdRestantePorOC.get(i.codprod) || 0;
-          if (qtdRestante <= 0) return false;
-          const refNormalizada = (i.ref_fabricante || '').trim().toUpperCase();
-          return refNormalizada && refNormalizada === cProdNormalizado;
-        });
-      }
-
-      if (itemOC) {
-        const qtdRestante = qtdRestantePorOC.get(itemOC.codprod) || 0;
-
-        // Atualizar quantidade restante
-        qtdRestantePorOC.set(itemOC.codprod, Math.max(0, qtdRestante - itemNFe.qCom));
-
-        itensNFeMatcheados.add(itemNFe.nItem);
-        produtosComum++;
-        itensMatch.push({
-          codprod: itemOC.codprod,
-          referencia: itemOC.ref_fabricante || itemOC.codprod, // Referência Melo
-          descricao: itemOC.descricao,
-          quantidade_oc: parseFloat(itemOC.quantidade_oc),
-          quantidade_nfe: itemNFe.qCom,
-          quantidade_disponivel: parseFloat(itemOC.quantidade_disponivel),
-          nItem_nfe: itemNFe.nItem,
-          cProd_nfe: itemNFe.cProd,
-          descricao_nfe: itemNFe.xProd
-        });
-      }
-    }
-
-    // PASSADA 2: Match por similaridade de descrição (APENAS para itens não matcheados)
-    for (const itemNFe of itens) {
-      // Pular se já matcheou na passada 1
-      if (itensNFeMatcheados.has(itemNFe.nItem)) continue;
-
-      if (itemNFe.xProd) {
-        let melhorScore = 0;
-        let melhorMatch: any = null;
-
-        for (const oc of itensOC) {
-          const qtdRestante = qtdRestantePorOC.get(oc.codprod) || 0;
-          if (qtdRestante <= 0) continue;
-
-          const score = calcularSimilaridade(itemNFe.xProd, oc.descricao);
-          if (score > melhorScore && score >= THRESHOLD_SIMILARIDADE) {
-            melhorScore = score;
-            melhorMatch = oc;
-          }
-        }
-
-        if (melhorMatch) {
-          const qtdRestante = qtdRestantePorOC.get(melhorMatch.codprod) || 0;
-
-          // Atualizar quantidade restante
-          qtdRestantePorOC.set(melhorMatch.codprod, Math.max(0, qtdRestante - itemNFe.qCom));
-
-          itensNFeMatcheados.add(itemNFe.nItem);
-          produtosComum++;
-          itensMatch.push({
-            codprod: melhorMatch.codprod,
-            referencia: melhorMatch.ref_fabricante || melhorMatch.codprod, // Referência Melo
-            descricao: melhorMatch.descricao,
-            quantidade_oc: parseFloat(melhorMatch.quantidade_oc),
-            quantidade_nfe: itemNFe.qCom,
-            quantidade_disponivel: parseFloat(melhorMatch.quantidade_disponivel),
-            nItem_nfe: itemNFe.nItem,
-            cProd_nfe: itemNFe.cProd,
-            descricao_nfe: itemNFe.xProd
-          });
-        }
-      }
-    }
+    // Mesmo casamento da busca por xPed/infCpl (casarItensNFeComOC); match fraco
+    // (só descrição) vale meio ponto no score.
+    const itensMatch = casarItensNFeComOC(itensOC, itens, aprendidosFornecedor);
+    const produtosComum = itensMatch.reduce((acc, m) => acc + (m.criterio === 'descricao' ? 0.5 : 1), 0);
 
     // Score baseado em % de produtos comum
     const scoreProdutos = itens.length > 0

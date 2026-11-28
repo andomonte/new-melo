@@ -112,3 +112,26 @@ export async function produtosDaReferencia(
   }
   return [];
 }
+
+/**
+ * Corrige o aprendizado: a referência do fornecedor fica vinculada só ao produto que acabou de ser
+ * associado. Se antes ela tinha sido associada a outro produto (associação feita errada), o vínculo
+ * antigo sai, para a próxima nota não sugerir o produto errado. Retorna quantos vínculos saíram.
+ */
+export async function desvincularReferenciaDeOutrosProdutos(
+  client: PoolClient,
+  referencia: string,
+  codCredor: string,
+  codprodCerto: string,
+): Promise<number> {
+  const r = await client.query(
+    `DELETE FROM dbprod_ref_fabrica prf
+      USING dbref_fabrica rf
+      WHERE prf.cod_id = rf.cod_id
+        AND rf.referencia = $1
+        AND rf.codcredor = $2
+        AND prf.codprod <> $3`,
+    [referencia, codCredor, codprodCerto],
+  );
+  return r.rowCount ?? 0;
+}

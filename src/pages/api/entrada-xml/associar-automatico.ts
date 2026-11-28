@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { limparDocumentoAlfa } from '@/utils/cnpjAlfanumerico';
 import { credoresDaNota, produtosDaReferencia } from '@/lib/compras/refFabrica';
+import { casarItensNFeComOC } from '@/lib/compras/associacaoOrdemHelper';
 
 interface ItemNFeInput {
   nItem: string;
@@ -58,7 +59,9 @@ function calcularSimilaridade(descricao1: string, descricao2: string): number {
     return texto.split(' ')
       .filter(p => p.length >= 2)
       .filter(p => !/^\d{1,2}$/.test(p))
-      .filter(p => !['DE', 'DA', 'DO', 'COM', 'SEM', 'PARA', 'POR', 'EM', 'NA', 'NO', 'AS', 'OS', 'UM', 'UMA'].includes(p));
+      .filter(p => !['DE', 'DA', 'DO', 'COM', 'SEM', 'PARA', 'POR', 'EM', 'NA', 'NO', 'AS', 'OS', 'UM', 'UMA'].includes(p))
+      // genéricas de autopeças não identificam a peça (ex.: "STD" casava itens errados)
+      .filter(p => !['STD', 'WS', 'SEMI', 'MM', 'UN', 'PC', 'PCS', 'CJ', 'JG', 'KIT', 'JOGO', 'MOTOR', 'PECA', 'PECAS', 'REF'].includes(p));
   };
 
   const palavras1 = extrairPalavras(texto1);
@@ -207,6 +210,21 @@ export default async function handler(
       qtdDisponivel.set(key, parseFloat(item.quantidade_disponivel));
     }
 
+    // Casamento forte por ordem (mesma regra da sugestão de ordem): referência Melo no texto da
+    // NF ou mesmo preço + número de peça. Vale a ordem com mais itens casados.
+    const casadoPorItem = new Map<string, { codprod: string; descricao: string }>();
+    const casamentos = ocIds.map((ocId: any) => ({
+      ocId,
+      itens: casarItensNFeComOC(itensPorOC[ocId] || [], itens as any).filter((m) => m.criterio !== 'descricao'),
+    })).sort((a: any, b: any) => b.itens.length - a.itens.length);
+    for (const c of casamentos) {
+      for (const m of c.itens) {
+        if (m.nItem_nfe && !casadoPorItem.has(m.nItem_nfe)) {
+          casadoPorItem.set(m.nItem_nfe, { codprod: m.codprod, descricao: m.descricao });
+        }
+      }
+    }
+
     // 4. Para cada item da NFe, tentar encontrar produto e alocar em OCs
     const associacoes: AssociacaoResultado[] = [];
 
@@ -255,6 +273,12 @@ export default async function handler(
           produtoEncontrado = { codprod: escolhido.codprod, descricao: escolhido.descricao };
           console.log(`🤖 [Auto] Item ${itemNFe.nItem}: Sugestão inteligente encontrou ${produtoEncontrado.codprod}`);
         }
+      }
+
+      // Estratégia 3b: referência Melo no texto da NF / mesmo preço + número de peça
+      if (!produtoEncontrado && casadoPorItem.has(itemNFe.nItem)) {
+        produtoEncontrado = casadoPorItem.get(itemNFe.nItem)!;
+        console.log(`🤖 [Auto] Item ${itemNFe.nItem}: casado pela referência/preço → ${produtoEncontrado.codprod}`);
       }
 
       // Estratégia 4: Similaridade de descrição (threshold mais alto para evitar erros)
@@ -370,9 +394,17 @@ export default async function handler(
 
     console.log('🤖 [Auto] Resultado:', stats);
 
+    // Referência Melo de cada produto (a tela mostra a referência, não o código)
+    const codigos = [...new Set(associacoes.map(a => a.produtoId).filter(Boolean))];
+    const refPorCodigo = new Map<string, string>();
+    if (codigos.length) {
+      const r = await client.query(`SELECT codprod, ref FROM dbprod WHERE codprod = ANY($1::varchar[])`, [codigos]);
+      for (const row of r.rows) refPorCodigo.set(String(row.codprod), row.ref || '');
+    }
+
     return res.status(200).json({
       success: true,
-      associacoes,
+      associacoes: associacoes.map(a => ({ ...a, produtoReferencia: refPorCodigo.get(a.produtoId) || '' })),
       stats
     });
 

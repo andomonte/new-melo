@@ -11,6 +11,7 @@ interface ItemProgresso {
   nfeItemId: string;
   produtoId: string;
   produtoDescricao?: string;
+  produtoReferencia?: string;
   associacoes: ItemAssociation[];
   status: 'associated' | 'partial';
   quantidadeTotal: number;
@@ -72,6 +73,7 @@ export default async function handler(
         nia.valor_unitario,
         nia.status,
         p.descr as produto_descricao,
+        p.ref as produto_referencia,
         COALESCE(
           json_agg(
             json_build_object(
@@ -86,7 +88,7 @@ export default async function handler(
       LEFT JOIN nfe_item_pedido_associacao nipa ON nia.id = nipa.nfe_associacao_id
       LEFT JOIN dbprod p ON nia.produto_cod = p.codprod
       WHERE nia.nfe_id = $1
-      GROUP BY nia.nfe_item_id, nia.produto_cod, nia.quantidade_associada, nia.valor_unitario, nia.status, p.descr
+      GROUP BY nia.nfe_item_id, nia.produto_cod, nia.quantidade_associada, nia.valor_unitario, nia.status, p.descr, p.ref
       ORDER BY nia.nfe_item_id
     `, [nfeId]);
 
@@ -94,6 +96,7 @@ export default async function handler(
       nfeItemId: row.nfe_item_id.toString(),
       produtoId: row.produto_cod,
       produtoDescricao: row.produto_descricao,
+      produtoReferencia: row.produto_referencia || undefined,
       associacoes: row.associacoes,
       status: row.status === 'ASSOCIADO' ? 'associated' : 'partial',
       quantidadeTotal: parseFloat(row.quantidade_associada || 0)

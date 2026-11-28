@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
-import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota } from '@/lib/compras/refFabrica';
+import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota, desvincularReferenciaDeOutrosProdutos } from '@/lib/compras/refFabrica';
 
 interface ItemAssociation {
   pedidoId: string;
@@ -214,6 +214,8 @@ export default async function handler(
 
               console.log(`  🧠 Aprendizado salvo: próximas NFes com "${referenciaTruncada}" sugerirão "${item.produtoId}"`);
             }
+            // associação corrigida: a referência deixa de apontar para o produto errado
+            await desvincularReferenciaDeOutrosProdutos(client, referenciaTruncada, codCredorTruncado, item.produtoId);
 
             // Liberar savepoint se tudo ok
             await client.query('RELEASE SAVEPOINT aprendizado');

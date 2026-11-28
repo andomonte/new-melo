@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { pool } from '@/lib/db';
 import { registrarHistoricoNfe, usuarioDoHistorico } from '@/lib/nfe/historicoNfeHelper';
-import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota } from '@/lib/compras/refFabrica';
+import { SQL_PROXIMO_COD_REF, credorParaAprender, credoresDaNota, desvincularReferenciaDeOutrosProdutos } from '@/lib/compras/refFabrica';
 
 interface ItemAssociation {
   pedidoId: string;
@@ -522,6 +522,8 @@ export default async function handler(
               } else {
                 console.log(`   ✅ Relacionamento produto-referência já existe`);
               }
+              // associação corrigida: a referência deixa de apontar para o produto errado
+              await desvincularReferenciaDeOutrosProdutos(client, item.referenciaNFe, codCredor, item.produtoId);
             } catch (learnError) {
               // Erro de item específico - continuar com próximo item
               console.error(`   ⚠️ Erro ao salvar aprendizado para item ${item.produtoId}:`, learnError);
